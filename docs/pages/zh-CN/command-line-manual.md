@@ -682,11 +682,19 @@ agent-compose status --json
 
 默认输出字段：
 
-- `STATUS`：daemon 响应状态。
+- `STATUS`：没有待处理的启动期删除任务时为 `OK`；正在恢复持久化 sandbox
+  删除任务时为 `RECOVERING`；删除日志无法读取或删除失败、需要后续 daemon
+  重启重试时为 `DEGRADED`。
 - `UPTIME`：daemon 返回的时间戳；如果 daemon 返回了时区信息，则按 daemon 时区展示。
 - `VERSION`：daemon 构建版本。
 
-自动化场景使用 `--json` 输出 daemon 原始 status 响应。
+status 请求的超时时间为五秒。自动化场景使用 `--json` 输出 daemon 原始
+status 响应。增量字段 `data.deletion_recovery` 包含 `in_progress`、`total`、
+成功 `completed`、`failed`、`remaining` 等删除计数，以及当前执行中的
+`active_sandbox_ids` 和存在错误时的最新 `last_error`。失败的删除仍计入
+`remaining`，因为对应持久化日志会在下一次 daemon 启动时重试。兼容性的响应
+信封仍保持 `msg: "OK"`，文本命令根据恢复对象计算 `RECOVERING` 或
+`DEGRADED`。
 
 ## 其他命令
 

@@ -7,6 +7,7 @@ import (
 	"agent-compose/pkg/fxgo/restful"
 	"agent-compose/pkg/fxgo/utils"
 	"agent-compose/pkg/health"
+	"agent-compose/pkg/sandboxes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -35,6 +36,8 @@ import (
 )
 
 type daemonRunner func(context.Context) error
+
+const daemonStatusTimeout = 5 * time.Second
 
 type DaemonOptions struct {
 	LoadDotEnv      bool
@@ -79,7 +82,7 @@ func NewEcho(di do.Injector) (*echo.Echo, error) {
 		now := time.Now()
 		timezone, timezoneOffset := now.Zone()
 		build := buildInfoForVersion(conf.Version)
-		return c.JSON(http.StatusOK, restful.NewResponse[map[string]any, restful.StrStatusResp[map[string]any]](nil, codes.OK.String(), map[string]any{
+		data := map[string]any{
 			"version":          build.Version,
 			"os":               build.OS,
 			"arch":             build.Arch,
@@ -87,7 +90,11 @@ func NewEcho(di do.Injector) (*echo.Echo, error) {
 			"timestamp":        float64(now.UnixNano()) / 1e9,
 			"timezone":         timezone,
 			"timezone_offset":  timezoneOffset,
-		}))
+		}
+		if recovery, err := do.Invoke[*sandboxes.DeletionRecovery](di); err == nil {
+			data["deletion_recovery"] = recovery.Status()
+		}
+		return c.JSON(http.StatusOK, restful.NewResponse[map[string]any, restful.StrStatusResp[map[string]any]](nil, codes.OK.String(), data))
 	})
 	e.GET("/api/null", echofn.EchoWrap(restful.NullHandler[restful.StrStatusResp[any]]))
 	return e, nil
@@ -392,13 +399,28 @@ func runDaemon(ctx context.Context) error {
 }
 
 func fetchDaemonVersion(ctx context.Context, clientConfig cliClientConfig) ([]byte, error) {
+	return fetchDaemonVersionWithTimeout(ctx, clientConfig, daemonStatusTimeout)
+}
+
+func fetchDaemonVersionWithTimeout(ctx context.Context, clientConfig cliClientConfig, timeout time.Duration) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	client := newDaemonHTTPClient(clientConfig)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientConfig.BaseURL+"/api/version", nil)
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, clientConfig.BaseURL+"/api/version", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create daemon request for %s %q: %w", clientConfig.Source, clientConfig.SourceValue, err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
+			return nil, commandExitError{
+				Code: exitCodeUnavailable,
+				Err:  fmt.Errorf("daemon status request via %s %q timed out after %s: %w", clientConfig.Source, clientConfig.SourceValue, timeout, err),
+			}
+		}
 		return nil, commandExitError{Code: exitCodeUnavailable, Err: fmt.Errorf("connect daemon via %s %q: %w", clientConfig.Source, clientConfig.SourceValue, err)}
 	}
 	defer func() {
@@ -424,13 +446,14 @@ type daemonStatusResponse struct {
 	Err  json.RawMessage `json:"err"`
 	Msg  string          `json:"msg"`
 	Data struct {
-		Timestamp       float64  `json:"timestamp"`
-		Timezone        string   `json:"timezone"`
-		TimezoneOffset  *int     `json:"timezone_offset"`
-		Version         string   `json:"version"`
-		OS              string   `json:"os"`
-		Arch            string   `json:"arch"`
-		CompiledDrivers []string `json:"compiled_drivers"`
+		Timestamp        float64                          `json:"timestamp"`
+		Timezone         string                           `json:"timezone"`
+		TimezoneOffset   *int                             `json:"timezone_offset"`
+		Version          string                           `json:"version"`
+		OS               string                           `json:"os"`
+		Arch             string                           `json:"arch"`
+		CompiledDrivers  []string                         `json:"compiled_drivers"`
+		DeletionRecovery sandboxes.DeletionRecoveryStatus `json:"deletion_recovery"`
 	} `json:"data"`
 }
 
@@ -446,6 +469,12 @@ func writeDaemonStatusText(out io.Writer, body []byte) error {
 	}
 	if len(response.Err) > 0 && string(response.Err) != "null" {
 		status = "error"
+	} else if response.Data.DeletionRecovery.InProgress {
+		status = "RECOVERING"
+	} else if response.Data.DeletionRecovery.Remaining > 0 ||
+		response.Data.DeletionRecovery.Failed > 0 ||
+		strings.TrimSpace(response.Data.DeletionRecovery.LastError) != "" {
+		status = "DEGRADED"
 	}
 	uptime := "-"
 	if response.Data.Timestamp > 0 {
