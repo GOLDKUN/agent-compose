@@ -456,6 +456,8 @@ agent-compose exec <sandbox> --prompt "..."
 | `--agent <agent>` | 兼容旧目标选择参数，会输出 deprecated warning；新命令应使用 `exec <sandbox>`。 |
 | `--run <run-id>` | 兼容旧目标选择参数，会输出 deprecated warning；新命令应使用 `exec <sandbox>`。 |
 
+位置参数 `<sandbox>` 与已弃用的 `--run` 目标互斥。如果同时提供，`exec` 会在解析任一目标或发送执行请求之前返回用法错误。
+
 示例：
 
 ```bash

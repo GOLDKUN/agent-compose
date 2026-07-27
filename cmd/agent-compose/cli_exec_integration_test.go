@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -177,5 +178,44 @@ agents:
 	}
 	if ambiguousOut != "" || !strings.Contains(ambiguousErr, "positional command cannot be combined with --command") {
 		t.Fatalf("exec --command ambiguous stdout/stderr = %q / %q", ambiguousOut, ambiguousErr)
+	}
+}
+
+func TestIntegrationCLIExecRejectsConflictingTargetsBeforeRPC(t *testing.T) {
+	composePath := writeComposeFile(t, t.TempDir(), `
+name: cli-exec-target-conflict
+agents:
+  reviewer:
+    provider: codex
+`)
+	var execStreamCalls atomic.Int32
+	server := newComposeServiceStubServer(t, composeServiceStubs{
+		exec: execServiceStub{
+			execStream: func(context.Context, *connect.Request[agentcomposev2.ExecRequest], *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error {
+				execStreamCalls.Add(1)
+				return nil
+			},
+		},
+	})
+	defer server.Close()
+
+	sandboxA := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	runB := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	stdout, stderr, _, exitCode := executeCLICommand(
+		"exec", "--host", server.URL, "--file", composePath,
+		sandboxA, "--run", runB, "--command", "cat /tmp/exec-target-marker",
+	)
+
+	if exitCode != exitCodeUsage {
+		t.Fatalf("exec conflicting targets exit code = %d, want %d; stderr=%q", exitCode, exitCodeUsage, stderr)
+	}
+	if stdout != "" || !strings.Contains(stderr, "exec target can only be specified once: use either <sandbox> or --run") {
+		t.Fatalf("exec conflicting targets stdout/stderr = %q / %q", stdout, stderr)
+	}
+	if strings.Contains(stderr, "deprecated") {
+		t.Fatalf("exec conflicting targets emitted deprecation warning: %q", stderr)
+	}
+	if calls := execStreamCalls.Load(); calls != 0 {
+		t.Fatalf("ExecStream calls = %d, want 0", calls)
 	}
 }

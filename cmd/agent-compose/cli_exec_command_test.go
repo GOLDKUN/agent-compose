@@ -70,6 +70,28 @@ func TestComposeExecCommandFromPositionalArgs(t *testing.T) {
 	}
 }
 
+func TestComposeExecRejectsConflictingTargets(t *testing.T) {
+	cmd := &cobra.Command{Use: "exec"}
+	cmd.Flags().String("run", "", "")
+	if err := cmd.Flags().Set("run", "run-b"); err != nil {
+		t.Fatalf("set exec run: %v", err)
+	}
+
+	args := []string{"sandbox-a"}
+	if err := composeExecArgs(cmd, args); commandExitCode(err) != exitCodeUsage || !strings.Contains(err.Error(), "use either <sandbox> or --run") {
+		t.Fatalf("composeExecArgs conflict err=%v code=%d", err, commandExitCode(err))
+	}
+
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+	if _, err := normalizeComposeExecRequest(cmd, cliServiceClients{}, "project-a", composeExecOptions{RunID: "run-b", Command: "true"}, args); commandExitCode(err) != exitCodeUsage || !strings.Contains(err.Error(), "use either <sandbox> or --run") {
+		t.Fatalf("normalizeComposeExecRequest conflict err=%v code=%d", err, commandExitCode(err))
+	}
+	if stderr.String() != "" {
+		t.Fatalf("normalizeComposeExecRequest conflict stderr=%q, want empty", stderr.String())
+	}
+}
+
 func TestCLIExecInteractiveReservedUnsupported(t *testing.T) {
 	stdout, stderr, _, exitCode := executeCLICommand("exec", "-t", "sandbox-1")
 	if exitCode != exitCodeUsage {
