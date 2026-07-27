@@ -618,6 +618,39 @@ describe("runner execution", () => {
     });
   });
 
+  it("recognizes current OpenCode CLI text events as a provider message", async () => {
+    const { OpenCodeRunner } = await import("../src/runners/opencode.js");
+    await withTempSession(async (root) => {
+      childProcessState.stdoutLines = [
+        JSON.stringify({
+          type: "step_start",
+          sessionID: "opencode-session",
+          part: { type: "step-start", messageID: "opencode-message" },
+        }),
+        JSON.stringify({
+          type: "text",
+          sessionID: "opencode-session",
+          part: { type: "text", messageID: "opencode-message", text: "OpenCode final" },
+        }),
+        JSON.stringify({
+          type: "step_finish",
+          sessionID: "opencode-session",
+          part: { type: "step-finish", messageID: "opencode-message", reason: "stop" },
+        }),
+      ];
+
+      const result = await new OpenCodeRunner(runnerOptions(root, "", "opencode")).runPrompt("prompt");
+
+      expect(result).toMatchObject({
+        threadId: "opencode-session",
+        stopReason: "stop",
+        finalText: "OpenCode final",
+        finalTextSource: "provider_message",
+        transcript: "OpenCode final",
+      });
+    });
+  });
+
   it("runs Gemini stream-json output and keeps stdout protocol clean", async () => {
     const { GeminiRunner } = await import("../src/runners/gemini.js");
     await withTempSession(async (root) => {
