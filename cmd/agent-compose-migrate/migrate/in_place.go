@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ const (
 	inPlaceStageSwitch    = "switch"
 )
 
-func runInPlaceMigration(ctx context.Context, report Report, sourceDB *sql.DB, root, runtimeRoot, fingerprint string) (Report, error) {
+func runInPlaceMigration(ctx context.Context, report Report, sourceDB *sql.DB, root, runtimeRoot string, progress io.Writer) (Report, error) {
 	fail := func(stage string, err error) (Report, error) {
 		report.Stage = stage
 		report.Error = err.Error()
@@ -41,11 +42,10 @@ func runInPlaceMigration(ctx context.Context, report Report, sourceDB *sql.DB, r
 		return fail("database", fmt.Errorf("create in-place backup: %w", err))
 	}
 	state := journal{
-		Mode:              inPlaceJournalMode,
-		SourceFingerprint: fingerprint,
-		SourceVersion:     report.SourceVersion,
-		RuntimeRoot:       runtimeRoot,
-		Stage:             "database",
+		Mode:          inPlaceJournalMode,
+		SourceVersion: report.SourceVersion,
+		RuntimeRoot:   runtimeRoot,
+		Stage:         "database",
 	}
 	if err := writeJournal(root, state); err != nil {
 		return fail("database", err)
@@ -54,10 +54,10 @@ func runInPlaceMigration(ctx context.Context, report Report, sourceDB *sql.DB, r
 		return fail("database", err)
 	}
 	report.Warnings = append([]string(nil), state.Warnings...)
-	return continueInPlaceMigration(ctx, report, root, runtimeRoot, state)
+	return continueInPlaceMigration(ctx, report, root, runtimeRoot, state, progress)
 }
 
-func resumeInPlaceMigration(ctx context.Context, report Report, root, runtimeRoot string) (Report, error) {
+func resumeInPlaceMigration(ctx context.Context, report Report, root, runtimeRoot string, progress io.Writer) (Report, error) {
 	fail := func(stage string, err error) (Report, error) {
 		report.Stage = stage
 		report.Error = err.Error()
@@ -95,7 +95,7 @@ func resumeInPlaceMigration(ctx context.Context, report Report, root, runtimeRoo
 			return fail("database", err)
 		}
 	}
-	return continueInPlaceMigration(ctx, report, root, runtimeRoot, state)
+	return continueInPlaceMigration(ctx, report, root, runtimeRoot, state, progress)
 }
 
 func prepareInPlaceDatabases(ctx context.Context, root, runtimeRoot string, sourceDB *sql.DB, state *journal) error {
@@ -158,25 +158,26 @@ func prepareInPlaceDatabases(ctx context.Context, root, runtimeRoot string, sour
 	return writeJournal(root, *state)
 }
 
-func continueInPlaceMigration(ctx context.Context, report Report, root, runtimeRoot string, state journal) (Report, error) {
+func continueInPlaceMigration(ctx context.Context, report Report, root, runtimeRoot string, state journal, progress io.Writer) (Report, error) {
 	fail := func(stage string, err error) (Report, error) {
 		report.Stage = stage
 		report.Error = err.Error()
 		return report, ErrReported
 	}
 	if state.Stage == inPlaceStagePrepared {
-		files, bytes, err := inspectAuthoritativeFiles(root, runtimeRoot, state.SchedulerIDs, state.AgentIDs)
+		writeMigrationProgress(progress, "files", "inspecting migration layout")
+		files, err := inspectInPlaceAuthoritativeFiles(ctx, root, runtimeRoot, state.SchedulerIDs, state.AgentIDs, progress)
 		if err != nil {
 			return fail("layout", err)
 		}
 		report.CheckedFiles = files
-		report.CheckedBytes = bytes
 		state.Stage = inPlaceStageLayout
 		if err := writeJournal(root, state); err != nil {
 			return fail("layout", err)
 		}
 	}
 	if state.Stage == inPlaceStageLayout {
+		writeMigrationProgress(progress, "layout", "applying in-place layout")
 		if err := applyInPlaceLayout(root, runtimeRoot, state.SchedulerIDs, state.AgentIDs); err != nil {
 			return fail("layout", err)
 		}
@@ -186,6 +187,7 @@ func continueInPlaceMigration(ctx context.Context, report Report, root, runtimeR
 		}
 	}
 	if state.Stage == inPlaceStageSwitch {
+		writeMigrationProgress(progress, "database", "activating migrated database")
 		if err := switchInPlaceDatabase(ctx, root); err != nil {
 			return fail("switch", err)
 		}
@@ -198,6 +200,7 @@ func continueInPlaceMigration(ctx context.Context, report Report, root, runtimeR
 	report.Stage = "complete"
 	report.TargetVersion = 7
 	report.Warnings = append([]string(nil), state.Warnings...)
+	writeMigrationProgress(progress, "complete", "in-place migration completed")
 	return report, nil
 }
 
@@ -286,6 +289,13 @@ func rewriteInPlaceSandboxJSON(root, runtimeRoot string, schedulerIDs map[string
 			return walkErr
 		}
 		if entry.IsDir() {
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			if skipInPlaceWorkspaceSubtree(rel) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, err := filepath.Rel(root, path)

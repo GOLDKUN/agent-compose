@@ -215,6 +215,55 @@ func TestValidateStoppedLegacySandboxesRejectsRunningSandbox(t *testing.T) {
 	}
 }
 
+func TestValidateStoppedLegacySandboxesReportsAllRunningSandboxes(t *testing.T) {
+	source := t.TempDir()
+	for _, fixture := range []struct {
+		rootName string
+		path     string
+		id       string
+		status   string
+	}{
+		{rootName: "sessions", path: "2026/07/27/zeta", id: "sandbox-zeta", status: "RUNNING"},
+		{rootName: "sessions", path: "2026/07/27/stopped", id: "sandbox-stopped", status: "STOPPED"},
+		{rootName: "sandboxes", path: "alpha", id: "sandbox-alpha", status: "running"},
+		{rootName: "sandboxes", path: "duplicate", id: "sandbox-zeta", status: "RUNNING"},
+	} {
+		writeMigrationJSON(t, filepath.Join(source, fixture.rootName, fixture.path, "metadata.json"), map[string]any{
+			"summary": map[string]any{"id": fixture.id, "vm_status": fixture.status},
+		})
+	}
+
+	err := validateStoppedLegacySandboxes(source)
+	want := "sandboxes sandbox-alpha, sandbox-zeta are still running; stop all sandboxes by full ID with the old daemon before migration"
+	if err == nil || err.Error() != want {
+		t.Fatalf("running sandbox validation error = %v, want %q", err, want)
+	}
+}
+
+func TestDryRunIgnoresNestedWorkspaceMetadataFiles(t *testing.T) {
+	source := t.TempDir()
+	writeMigrationJSON(t, filepath.Join(source, "sessions", "2026", "07", "24", "sandbox-1", "metadata.json"), map[string]any{
+		"summary": map[string]any{"id": "sandbox-1", "vm_status": "STOPPED"},
+	})
+	nested := filepath.Join(
+		source, "sessions", "2026", "07", "24", "sandbox-1", "workspace", ".cache", ".task_cache",
+		"python", "lib", "python3.10", "site-packages", "coreapi-2.3.3.dist-info", "metadata.json",
+	)
+	if err := os.MkdirAll(filepath.Dir(nested), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nested, []byte(`"Python package metadata"`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := validateStoppedLegacySandboxes(source); err != nil {
+		t.Fatalf("nested workspace metadata failed sandbox state validation: %v", err)
+	}
+	if _, _, err := inspectAuthoritativeFiles(source, "/data", nil, nil); err != nil {
+		t.Fatalf("nested workspace metadata failed dry-run file inspection: %v", err)
+	}
+}
+
 func writeMigrationJSON(t *testing.T, path string, value any) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

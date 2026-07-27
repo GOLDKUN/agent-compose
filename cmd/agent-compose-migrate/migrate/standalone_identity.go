@@ -57,20 +57,23 @@ func removeOnlyDeletedStandaloneAgents(ctx context.Context, db *sql.DB, ids []st
 
 func remapStandaloneAgentIdentities(ctx context.Context, tx *sql.Tx, agents []convertedStandaloneAgent) error {
 	legacyIDs := make(map[string]struct{}, len(agents))
-	nativeIDs := make(map[string]string, len(agents))
+	nativeIDs := make(map[string]convertedStandaloneAgent, len(agents))
 	for _, agent := range agents {
 		legacyIDs[agent.definition.id] = struct{}{}
-		if previous, exists := nativeIDs[agent.nativeID]; exists && previous != agent.definition.id {
-			return fmt.Errorf("standalone agents %s and %s map to duplicate native identity %s", previous, agent.definition.id, agent.nativeID)
+		if previous, exists := nativeIDs[agent.nativeID]; exists && previous.definition.id != agent.definition.id {
+			return fmt.Errorf("standalone agents %s and %s map to duplicate native identity %s", previous.definition.id, agent.definition.id, agent.nativeID)
 		}
-		nativeIDs[agent.nativeID] = agent.definition.id
+		nativeIDs[agent.nativeID] = agent
 	}
-	for nativeID, legacyID := range nativeIDs {
+	for nativeID, planned := range nativeIDs {
 		var existing string
 		err := tx.QueryRowContext(ctx, `SELECT id FROM agent_definition WHERE id=?`, nativeID).Scan(&existing)
 		if err == nil {
+			if planned.reuseExisting && existing == nativeID {
+				continue
+			}
 			if _, moving := legacyIDs[existing]; !moving {
-				return fmt.Errorf("standalone agent %s native identity %s conflicts with an existing agent", legacyID, nativeID)
+				return fmt.Errorf("standalone agent %s native identity %s conflicts with an existing agent", planned.definition.id, nativeID)
 			}
 			continue
 		}
@@ -81,6 +84,15 @@ func remapStandaloneAgentIdentities(ctx context.Context, tx *sql.Tx, agents []co
 
 	temporaryIDs := make(map[string]string, len(agents))
 	for _, agent := range agents {
+		if agent.reuseExisting {
+			if err := remapLegacyAgentReferences(ctx, tx, agent.definition.id, agent.nativeID); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `DELETE FROM agent_definition WHERE id=?`, agent.definition.id); err != nil {
+				return fmt.Errorf("remove reused standalone agent %s: %w", agent.definition.id, err)
+			}
+			continue
+		}
 		if agent.definition.id == agent.nativeID {
 			continue
 		}
@@ -89,12 +101,15 @@ func remapStandaloneAgentIdentities(ctx context.Context, tx *sql.Tx, agents []co
 		if _, err := tx.ExecContext(ctx, `UPDATE agent_definition SET id=? WHERE id=?`, temporaryID, agent.definition.id); err != nil {
 			return fmt.Errorf("stage standalone agent identity %s: %w", agent.definition.id, err)
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE loader SET agent_id=? WHERE agent_id=?`, temporaryID, agent.definition.id); err != nil {
-			return fmt.Errorf("stage standalone loader agent reference %s: %w", agent.definition.id, err)
+		if err := remapLegacyAgentReferences(ctx, tx, agent.definition.id, temporaryID); err != nil {
+			return err
 		}
 		temporaryIDs[agent.definition.id] = temporaryID
 	}
 	for _, agent := range agents {
+		if agent.reuseExisting {
+			continue
+		}
 		currentID := agent.definition.id
 		if temporaryID := strings.TrimSpace(temporaryIDs[currentID]); temporaryID != "" {
 			currentID = temporaryID
@@ -105,8 +120,23 @@ func remapStandaloneAgentIdentities(ctx context.Context, tx *sql.Tx, agents []co
 		if _, err := tx.ExecContext(ctx, `UPDATE agent_definition SET id=? WHERE id=?`, agent.nativeID, currentID); err != nil {
 			return fmt.Errorf("assign standalone agent native identity %s: %w", agent.definition.id, err)
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE loader SET agent_id=? WHERE agent_id=?`, agent.nativeID, currentID); err != nil {
-			return fmt.Errorf("remap standalone loader agent reference %s: %w", agent.definition.id, err)
+		if err := remapLegacyAgentReferences(ctx, tx, currentID, agent.nativeID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func remapLegacyAgentReferences(ctx context.Context, tx *sql.Tx, currentID, targetID string) error {
+	for _, update := range []struct {
+		operation string
+		query     string
+	}{
+		{operation: "remap standalone loader agent reference", query: `UPDATE loader SET agent_id=? WHERE agent_id=?`},
+		{operation: "remap standalone project run agent reference", query: `UPDATE project_run SET managed_agent_id=? WHERE managed_agent_id=?`},
+	} {
+		if _, err := tx.ExecContext(ctx, update.query, targetID, currentID); err != nil {
+			return fmt.Errorf("%s %s: %w", update.operation, currentID, err)
 		}
 	}
 	return nil

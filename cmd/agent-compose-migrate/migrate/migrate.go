@@ -31,7 +31,7 @@ var knownMigrationChecksums = map[int64]string{
 	4: "3d5c2ab028a6f7e1c461f0af3fc6d898807b60159f1625b8939987d6ce7b91cb",
 	5: "e43cc1ffdfcd45e5e81a8fc098a6e77299e6e437f8c447eb0db49443a3bd29d2",
 	6: "92da2ea1c85e7d1321ca1e4260370a3d12057219005a83808529dbdd8d25299a",
-	7: "3fa7341d89f6157a8d5ac700c92893a392060bd7303b46cfdccf8c78be05d0da",
+	7: "a8cb740e25992d3f3121bcfbff07c67cff699e8625d281edf60c0e76f91ce9ba",
 }
 
 var ErrReported = errors.New("migration failure is included in the report")
@@ -42,6 +42,7 @@ type Options struct {
 	RuntimeRoot string
 	DryRun      bool
 	JSON        bool
+	Progress    io.Writer
 }
 
 func Run(ctx context.Context, options Options) (Report, error) {
@@ -84,7 +85,7 @@ func Run(ctx context.Context, options Options) (Report, error) {
 	}
 	if inPlace && !options.DryRun {
 		if _, err := os.Stat(filepath.Join(source, journalName)); err == nil {
-			return resumeInPlaceMigration(ctx, report, source, runtimeRoot)
+			return resumeInPlaceMigration(ctx, report, source, runtimeRoot, options.Progress)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return fail(fmt.Errorf("inspect in-place migration journal: %w", err))
 		}
@@ -92,19 +93,16 @@ func Run(ctx context.Context, options Options) (Report, error) {
 	if err := validateSourceRoot(source); err != nil {
 		return fail(err)
 	}
+	writeMigrationProgress(options.Progress, "preflight", "checking sandbox states")
 	if err := validateStoppedLegacySandboxes(source); err != nil {
 		return fail(err)
 	}
+	writeMigrationProgress(options.Progress, "database", "creating source snapshot")
 	sourceSnapshot, err := openSourceDatabaseSnapshot(source)
 	if err != nil {
 		return fail(err)
 	}
 	defer func() { _ = sourceSnapshot.Close() }()
-	fingerprint, err := fingerprintRootFromDatabase(source, sourceSnapshot.path)
-	if err != nil {
-		return fail(err)
-	}
-	report.SourceFingerprint = fingerprint
 
 	sourceDB := sourceSnapshot.db
 	version, err := inspectVersion(ctx, sourceDB)
@@ -123,7 +121,7 @@ func Run(ctx context.Context, options Options) (Report, error) {
 		return fail(err)
 	}
 	if options.DryRun {
-		warnings, targetVersion, copiedFiles, copiedBytes, err := dryRunMigration(ctx, sourceDB, source, runtimeRoot)
+		warnings, targetVersion, copiedFiles, copiedBytes, err := dryRunMigration(ctx, sourceDB, source, runtimeRoot, inPlace, options.Progress)
 		if err != nil {
 			return fail(err)
 		}
@@ -137,12 +135,17 @@ func Run(ctx context.Context, options Options) (Report, error) {
 			report.CopiedBytes = copiedBytes
 		}
 		report.Stage = "eligible"
+		writeMigrationProgress(options.Progress, "complete", "data root is eligible")
 		return report, nil
 	}
 	if inPlace {
-		return runInPlaceMigration(ctx, report, sourceDB, source, runtimeRoot, fingerprint)
+		return runInPlaceMigration(ctx, report, sourceDB, source, runtimeRoot, options.Progress)
 	}
-
+	fingerprint, err := fingerprintRootFromDatabase(source, sourceSnapshot.path)
+	if err != nil {
+		return fail(err)
+	}
+	report.SourceFingerprint = fingerprint
 	state, err := prepareTarget(target, fingerprint, runtimeRoot)
 	if err != nil {
 		return fail(err)
@@ -236,7 +239,7 @@ func Run(ctx context.Context, options Options) (Report, error) {
 	return report, nil
 }
 
-func dryRunMigration(ctx context.Context, sourceDB *sql.DB, source, runtimeRoot string) ([]string, int64, int, int64, error) {
+func dryRunMigration(ctx context.Context, sourceDB *sql.DB, source, runtimeRoot string, inPlace bool, progress io.Writer) ([]string, int64, int, int64, error) {
 	temporaryRoot, err := os.MkdirTemp("", "agent-compose-migrate-dry-run-*")
 	if err != nil {
 		return nil, 0, 0, 0, fmt.Errorf("create dry-run workspace: %w", err)
@@ -251,6 +254,7 @@ func dryRunMigration(ctx context.Context, sourceDB *sql.DB, source, runtimeRoot 
 		return nil, 0, 0, 0, fmt.Errorf("open dry-run database: %w", err)
 	}
 	targetDB.SetMaxOpenConns(1)
+	writeMigrationProgress(progress, "database", "simulating schema and data migration")
 	warnings, schedulerIDs, agentIDs, err := prepareTargetDatabase(ctx, targetDB, source, runtimeRoot, nil, nil, nil, nil)
 	if err != nil {
 		_ = targetDB.Close()
@@ -264,11 +268,23 @@ func dryRunMigration(ctx context.Context, sourceDB *sql.DB, source, runtimeRoot 
 	if closeErr != nil {
 		return nil, 0, 0, 0, fmt.Errorf("close dry-run database: %w", closeErr)
 	}
+	writeMigrationProgress(progress, "files", "inspecting migration layout")
+	if inPlace {
+		checkedFiles, err := inspectInPlaceAuthoritativeFiles(ctx, source, runtimeRoot, schedulerIDs, agentIDs, progress)
+		return warnings, targetVersion, checkedFiles, 0, err
+	}
 	copiedFiles, copiedBytes, err := inspectAuthoritativeFiles(source, runtimeRoot, schedulerIDs, agentIDs)
 	if err != nil {
 		return nil, 0, 0, 0, err
 	}
 	return warnings, targetVersion, copiedFiles, copiedBytes, nil
+}
+
+func writeMigrationProgress(writer io.Writer, stage, message string) {
+	if writer == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(writer, "[%s] %s\n", stage, message)
 }
 
 func validateSourceRoot(source string) error {

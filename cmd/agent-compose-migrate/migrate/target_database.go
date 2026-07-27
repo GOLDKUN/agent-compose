@@ -56,35 +56,9 @@ func prepareTargetDatabase(
 	warnings := append([]string(nil), resumeWarnings...)
 	agentIDs := cloneStandaloneAgentIdentities(resumeAgentIDs)
 	if version == 4 {
-		alignmentWarnings, alignErr := alignManagedProjectionRevisions(ctx, db)
-		if alignErr != nil {
-			return nil, nil, nil, alignErr
-		}
-		warnings = append(warnings, alignmentWarnings...)
-		if checkpoint != nil && len(alignmentWarnings) > 0 {
-			if err := checkpoint(warnings, resumeSchedulerIDs, agentIDs); err != nil {
-				return nil, nil, nil, err
-			}
-		}
-		standaloneWarnings, convertedAgentIDs, convertErr := convertStandaloneV1(ctx, db, targetRoot, func(planned map[string]standaloneAgentIdentity) error {
-			agentIDs = cloneStandaloneAgentIdentities(planned)
-			if checkpoint == nil {
-				return nil
-			}
-			return checkpoint(warnings, resumeSchedulerIDs, agentIDs)
-		})
-		warnings = append(warnings, standaloneWarnings...)
-		err = convertErr
+		warnings, agentIDs, err = prepareLegacyProjectConversion(ctx, db, targetRoot, warnings, resumeSchedulerIDs, agentIDs, checkpoint)
 		if err != nil {
 			return nil, nil, nil, err
-		}
-		if convertedAgentIDs != nil {
-			agentIDs = cloneStandaloneAgentIdentities(convertedAgentIDs)
-		}
-		if checkpoint != nil && len(standaloneWarnings) > 0 {
-			if err := checkpoint(warnings, resumeSchedulerIDs, agentIDs); err != nil {
-				return nil, nil, nil, err
-			}
 		}
 	}
 	schedulerIDs := cloneSchedulerIDs(resumeSchedulerIDs)
@@ -105,6 +79,18 @@ func prepareTargetDatabase(
 	if version < 6 {
 		if err := rewriteLegacySchedulerArtifactPaths(ctx, db, sourceRoot, targetRoot, schedulerIDs); err != nil {
 			return nil, nil, nil, err
+		}
+	}
+	if version == 4 {
+		orphanWarnings, orphanErr := detachOrphanLegacyEventSchedulers(ctx, db)
+		if orphanErr != nil {
+			return nil, nil, nil, orphanErr
+		}
+		warnings = append(warnings, orphanWarnings...)
+		if checkpoint != nil && len(orphanWarnings) > 0 {
+			if err := checkpoint(warnings, schedulerIDs, agentIDs); err != nil {
+				return nil, nil, nil, err
+			}
 		}
 	}
 	if err := sqlite.Migrate(ctx, db); err != nil {

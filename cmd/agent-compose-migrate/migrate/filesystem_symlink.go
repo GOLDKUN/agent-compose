@@ -17,8 +17,8 @@ func validateMigratableSourceSymlink(rel string) error {
 	if len(parts) > 0 {
 		switch parts[0] {
 		case "sessions", "sandboxes":
-			isMetadata := len(parts) == 3 && parts[2] == "metadata.json"
-			isMountManifest := len(parts) == 4 && parts[2] == "vm" && parts[3] == "mount-manifest.json"
+			isMetadata := isSandboxMetadataPath(rel)
+			isMountManifest := isSandboxMountManifestPath(rel)
 			allowed = len(parts) >= 3 && parts[1] != ".lifecycle" && !isMetadata && !isMountManifest
 		case "workspaces":
 			allowed = len(parts) >= 4 && parts[2] == "content"
@@ -119,6 +119,9 @@ func rewriteInPlaceSymlinks(root, runtimeRoot string, schedulerIDs map[string]st
 			return err
 		}
 		if rel == inPlaceBackupName && entry.IsDir() {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() && skipInPlaceWorkspaceSubtree(rel) {
 			return filepath.SkipDir
 		}
 		if entry.Type()&os.ModeSymlink == 0 {

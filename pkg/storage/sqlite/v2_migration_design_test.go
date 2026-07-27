@@ -258,6 +258,78 @@ func TestV2MigrationDesignAppliesEachNewVersionIndependently(t *testing.T) {
 	assertNoForeignKeyViolations(t, db)
 }
 
+func TestV2MigrationDesignDeduplicatesEquivalentLegacyEventLinks(t *testing.T) {
+	ctx := context.Background()
+	db := newMemoryDB(t)
+	chain := loadV2MigrationDesignChain(t)
+	if err := applyMigrationSet(ctx, db, chain[:4]); err != nil {
+		t.Fatalf("apply v4 prefix: %v", err)
+	}
+	seedManagedV4Fixture(t, db)
+	if _, err := db.ExecContext(ctx, `INSERT INTO event_session_link(
+		event_id, session_id, relation, loader_id, run_id, trigger_id, loader_event_id, created_at
+	) SELECT event_id, sandbox_id, relation, loader_id, run_id, trigger_id, loader_event_id, created_at
+	  FROM event_sandbox_link WHERE event_id = 'topic-event-1' AND sandbox_id = 'sandbox-1'`); err != nil {
+		t.Fatalf("seed equivalent legacy event link: %v", err)
+	}
+
+	if err := applyMigrationSet(ctx, db, chain); err != nil {
+		t.Fatalf("migrate equivalent legacy event links: %v", err)
+	}
+	var count int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_sandbox_link
+		WHERE event_id='topic-event-1' AND sandbox_id='sandbox-1' AND relation='used' AND scheduler_run_id='scheduler-run-1'`).Scan(&count); err != nil {
+		t.Fatalf("count deduplicated event link: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("deduplicated event link count = %d, want 1", count)
+	}
+}
+
+func TestV2MigrationDesignRejectsConflictingLegacyEventLinks(t *testing.T) {
+	ctx := context.Background()
+	db := newMemoryDB(t)
+	chain := loadV2MigrationDesignChain(t)
+	if err := applyMigrationSet(ctx, db, chain[:4]); err != nil {
+		t.Fatalf("apply v4 prefix: %v", err)
+	}
+	seedManagedV4Fixture(t, db)
+	if _, err := db.ExecContext(ctx, `INSERT INTO event_session_link(
+		event_id, session_id, relation, loader_id, run_id, trigger_id, loader_event_id, created_at
+	) SELECT event_id, sandbox_id, relation, loader_id, run_id, 'conflicting-trigger', loader_event_id, created_at
+	  FROM event_sandbox_link WHERE event_id = 'topic-event-1' AND sandbox_id = 'sandbox-1'`); err != nil {
+		t.Fatalf("seed conflicting legacy event link: %v", err)
+	}
+	if err := applyMigrationSet(ctx, db, chain[:6]); err != nil {
+		t.Fatalf("apply v6 prefix: %v", err)
+	}
+
+	err := applyMigrationSet(ctx, db, chain)
+	if err == nil || !strings.Contains(err.Error(), "conflicting sandbox and session records") {
+		t.Fatalf("migration error = %v, want conflicting event link guard", err)
+	}
+	var historyCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&historyCount); err != nil {
+		t.Fatalf("count migration history after rollback: %v", err)
+	}
+	if historyCount != 6 {
+		t.Fatalf("migration history count after rollback = %d, want 6", historyCount)
+	}
+	assertSQLiteTablesPresent(t, db, "event_sandbox_link", "event_session_link")
+	var sandboxTrigger, sessionTrigger string
+	if err := db.QueryRowContext(ctx, `SELECT trigger_id FROM event_sandbox_link
+		WHERE event_id='topic-event-1' AND sandbox_id='sandbox-1' AND relation='used' AND run_id='scheduler-run-1'`).Scan(&sandboxTrigger); err != nil {
+		t.Fatalf("read sandbox link after conflict rollback: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT trigger_id FROM event_session_link
+		WHERE event_id='topic-event-1' AND session_id='sandbox-1' AND relation='used' AND run_id='scheduler-run-1'`).Scan(&sessionTrigger); err != nil {
+		t.Fatalf("read session link after conflict rollback: %v", err)
+	}
+	if sandboxTrigger != "trigger-1" || sessionTrigger != "conflicting-trigger" {
+		t.Fatalf("legacy links after conflict rollback = sandbox %q/session %q, want both source payloads preserved", sandboxTrigger, sessionTrigger)
+	}
+}
+
 func TestHistoricalMigrationChecksumsRemainImmutable(t *testing.T) {
 	want := []string{
 		"6d2a07e2df01c38a57989accc3eb265cc3238ae3322f5dd540383235e59e27a9",

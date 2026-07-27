@@ -30,10 +30,11 @@ type legacySchedulerDefinition struct {
 }
 
 type convertedStandaloneAgent struct {
-	definition legacyAgentDefinition
-	name       string
-	nativeID   string
-	scheduler  *legacySchedulerDefinition
+	definition    legacyAgentDefinition
+	name          string
+	nativeID      string
+	scheduler     *legacySchedulerDefinition
+	reuseExisting bool
 }
 
 func convertStandaloneV1(
@@ -62,12 +63,16 @@ func convertStandaloneV1(
 	}
 
 	projectID := identity.NewID(identity.ResourceProject, legacyDefaultProjectName, "")
+	existingAgents, err := loadExistingLegacyProjectAgents(ctx, db, projectID)
+	if err != nil {
+		return nil, nil, err
+	}
 	revision, err := nextLegacyRevision(ctx, db, projectID)
 	if err != nil {
 		return nil, nil, err
 	}
 	now := time.Now().UTC().Unix()
-	converted, err := planStandaloneAgents(projectID, agents, schedulers, now)
+	converted, err := planStandaloneAgents(projectID, agents, schedulers, existingAgents, now)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -107,8 +112,11 @@ func standaloneAgentIdentityMap(projectID string, agents []legacyAgentDefinition
 	return identities
 }
 
-func planStandaloneAgents(projectID string, agents []legacyAgentDefinition, schedulers []legacySchedulerDefinition, now int64) ([]convertedStandaloneAgent, error) {
-	usedNames := make(map[string]struct{}, len(agents)+len(schedulers))
+func planStandaloneAgents(projectID string, agents []legacyAgentDefinition, schedulers []legacySchedulerDefinition, existing map[string]legacyAgentDefinition, now int64) ([]convertedStandaloneAgent, error) {
+	usedNames := make(map[string]struct{}, len(existing)+len(agents)+len(schedulers))
+	for name := range existing {
+		usedNames[name] = struct{}{}
+	}
 	converted := make([]convertedStandaloneAgent, 0, len(agents)+len(schedulers))
 	agentIndexes := make(map[string]int, len(agents))
 	boundSchedulerCounts := make(map[string]int, len(schedulers))
@@ -116,7 +124,21 @@ func planStandaloneAgents(projectID string, agents []legacyAgentDefinition, sche
 		boundSchedulerCounts[strings.TrimSpace(scheduler.agentID)]++
 	}
 	for _, agent := range agents {
-		agentName := uniqueLegacyName(agent.name, agent.id, "agent", usedNames)
+		agentName := legacyBaseName(agent.name, "agent")
+		if existingAgent, ok := existing[agentName]; ok {
+			if !equivalentLegacyAgentDefinitions(agent, existingAgent) {
+				return nil, fmt.Errorf("standalone agent %s conflicts with existing project agent %s", agent.id, agentName)
+			}
+			agentIndexes[agent.id] = len(converted)
+			converted = append(converted, convertedStandaloneAgent{
+				definition:    agent,
+				name:          agentName,
+				nativeID:      existingAgent.id,
+				reuseExisting: true,
+			})
+			continue
+		}
+		agentName = uniqueLegacyName(agent.name, agent.id, "agent", usedNames)
 		nativeID, stableErr := domain.StableProjectAgentID(projectID, agentName)
 		if stableErr != nil {
 			return nil, fmt.Errorf("derive standalone agent identity %s: %w", agent.id, stableErr)
@@ -151,6 +173,10 @@ func planStandaloneAgents(projectID string, agents []legacyAgentDefinition, sche
 }
 
 func saveStandaloneConversion(ctx context.Context, db *sql.DB, targetRoot, projectID string, revision, now int64, agents []legacyAgentDefinition, deletedAgentIDs []string, converted []convertedStandaloneAgent, specWorkspaces, specOctoBusServers []map[string]any) error {
+	spec, existingSpecAgents, err := loadLegacyProjectSpec(ctx, db, projectID)
+	if err != nil {
+		return err
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin standalone conversion: %w", err)
@@ -171,51 +197,27 @@ func saveStandaloneConversion(ctx context.Context, db *sql.DB, targetRoot, proje
 		return err
 	}
 
-	specAgents := make([]map[string]any, 0, len(converted))
-	for index := range converted {
-		item := &converted[index]
-		if index >= len(agents) {
-			if err := insertSyntheticAgentDefinition(ctx, tx, projectID, revision, item.name, item.definition); err != nil {
-				return err
-			}
-		} else if _, err := tx.ExecContext(ctx, `UPDATE agent_definition SET managed_project_id=?, managed_project_revision=?, managed_agent_name=? WHERE id=?`, projectID, revision, item.name, item.nativeID); err != nil {
-			return fmt.Errorf("attach standalone agent %s: %w", item.definition.id, err)
-		}
-		var schedulerJSON map[string]any
-		if item.scheduler != nil {
-			schedulerJSON = legacySchedulerJSON(*item.scheduler)
-		}
-		specAgents = append(specAgents, legacyAgentJSON(item.definition, item.name, schedulerJSON))
-		if err := insertLegacyProjectAgent(ctx, tx, projectID, revision, item.name, item.nativeID, item.definition, item.scheduler != nil); err != nil {
-			return err
-		}
-		if item.scheduler == nil {
-			continue
-		}
-		scheduler := *item.scheduler
-		schedulerID, stableErr := domain.StableProjectSchedulerID(projectID, item.name, "")
-		if stableErr != nil {
-			return fmt.Errorf("derive standalone scheduler identity %s: %w", scheduler.id, stableErr)
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO project_scheduler(
-			id, short_id, project_id, scheduler_id, agent_name, managed_loader_id, revision, enabled, trigger_count, spec_json, created_at, updated_at
-		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, (SELECT COUNT(*) FROM loader_trigger WHERE loader_id=?), ?, ?, ?)`,
-			schedulerID, shortLegacyID(schedulerID), projectID, schedulerID, item.name, scheduler.id, revision,
-			scheduler.enabled, scheduler.id, mustJSON(schedulerJSON), scheduler.createdAt, scheduler.updatedAt); err != nil {
-			return fmt.Errorf("project standalone scheduler %s: %w", scheduler.id, err)
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE loader SET managed_project_id=?, managed_project_revision=?, managed_agent_name=?, managed_scheduler_id=? WHERE id=?`, projectID, revision, item.name, schedulerID, scheduler.id); err != nil {
-			return fmt.Errorf("attach standalone scheduler %s: %w", scheduler.id, err)
-		}
+	specAgents, err := saveStandaloneProjectMembers(ctx, tx, projectID, revision, len(agents), converted)
+	if err != nil {
+		return err
 	}
 
-	spec := map[string]any{"name": legacyDefaultProjectName, "agents": specAgents}
-	if len(specWorkspaces) > 0 {
-		spec["workspaces"] = specWorkspaces
+	mergedAgents, err := mergeLegacyProjectAgents(existingSpecAgents, specAgents)
+	if err != nil {
+		return err
 	}
-	if len(specOctoBusServers) > 0 {
-		spec["octobus_servers"] = specOctoBusServers
+	spec["name"] = legacyDefaultProjectName
+	spec["agents"] = mergedAgents
+	if err := mergeLegacyNamedSpecItems(spec, "workspaces", specWorkspaces); err != nil {
+		return err
 	}
+	if err := mergeLegacyNamedSpecItems(spec, "octobus_servers", specOctoBusServers); err != nil {
+		return err
+	}
+	if err := advanceLegacyProjectProjectionRevision(ctx, tx, projectID, revision); err != nil {
+		return err
+	}
+
 	specData, err := json.Marshal(spec)
 	if err != nil {
 		return fmt.Errorf("marshal standalone project revision: %w", err)
@@ -300,6 +302,17 @@ func legacySchedulerJSON(item legacySchedulerDefinition) map[string]any {
 }
 
 func uniqueLegacyName(preferred, id, prefix string, used map[string]struct{}) string {
+	base := legacyBaseName(preferred, prefix)
+	candidate := base
+	if _, exists := used[candidate]; exists {
+		sum := sha256.Sum256([]byte(id))
+		candidate = base + "-" + hex.EncodeToString(sum[:6])
+	}
+	used[candidate] = struct{}{}
+	return candidate
+}
+
+func legacyBaseName(preferred, prefix string) string {
 	base := strings.ToLower(strings.TrimSpace(preferred))
 	var cleaned strings.Builder
 	for _, char := range base {
@@ -314,13 +327,7 @@ func uniqueLegacyName(preferred, id, prefix string, used map[string]struct{}) st
 	if base[0] < 'a' || base[0] > 'z' {
 		base = prefix + "-" + base
 	}
-	candidate := base
-	if _, exists := used[candidate]; exists {
-		sum := sha256.Sum256([]byte(id))
-		candidate = base + "-" + hex.EncodeToString(sum[:6])
-	}
-	used[candidate] = struct{}{}
-	return candidate
+	return base
 }
 
 func schedulerCanReuseStandaloneAgent(agent legacyAgentDefinition, scheduler legacySchedulerDefinition) bool {

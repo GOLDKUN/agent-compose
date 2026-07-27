@@ -74,7 +74,7 @@ func TestIntegrationRunMigratesDataRootInPlaceWithoutCopyingSandboxData(t *testi
 	}
 
 	dryRun, err := Run(context.Background(), Options{Source: root, Target: root, DryRun: true})
-	if err != nil || dryRun.Stage != "eligible" || !dryRun.InPlace || dryRun.CheckedBytes < 8<<20 || dryRun.CopiedBytes != 0 {
+	if err != nil || dryRun.Stage != "eligible" || !dryRun.InPlace || dryRun.CheckedFiles == 0 || dryRun.CheckedBytes != 0 || dryRun.CopiedBytes != 0 {
 		t.Fatalf("in-place dry run report=%+v err=%v", dryRun, err)
 	}
 	for _, unchanged := range []string{
@@ -93,6 +93,9 @@ func TestIntegrationRunMigratesDataRootInPlaceWithoutCopyingSandboxData(t *testi
 	report, err := Run(context.Background(), Options{Source: root, Target: root})
 	if err != nil || report.Stage != "complete" || report.TargetVersion != 7 || !report.InPlace || report.CopiedBytes != 0 {
 		t.Fatalf("in-place migration report=%+v err=%v", report, err)
+	}
+	if report.SourceFingerprint != "" {
+		t.Fatalf("in-place migration calculated full source fingerprint %q", report.SourceFingerprint)
 	}
 	nativeState := filepath.Join(root, "sandboxes", sandboxID, "state.img")
 	nativeStateInfo, err := os.Stat(nativeState)
@@ -358,7 +361,7 @@ func TestIntegrationRunInPlaceDryRunRejectsLayoutConflictWithoutMutation(t *test
 		t.Fatal(err)
 	}
 	report, err := Run(context.Background(), Options{Source: root, Target: root, DryRun: true})
-	if err == nil || report.Stage != "validate" || !strings.Contains(report.Error, "both map") {
+	if err == nil || report.Stage != "validate" || !strings.Contains(report.Error, "target already exists") {
 		t.Fatalf("conflicting in-place dry run report=%+v err=%v", report, err)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "loaders", "loader-1")); statErr != nil {

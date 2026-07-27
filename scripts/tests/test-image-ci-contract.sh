@@ -425,19 +425,15 @@ for daemon_dockerfile in "$ROOT_DIR/Dockerfile" "$ROOT_DIR/Dockerfile.agent-comp
     continue
   }
   daemon_dockerfile_source=$(<"$daemon_dockerfile")
-  require_regex "$daemon_dockerfile_source" 'go build -o /out/agent-compose-migrate ./cmd/agent-compose-migrate' \
-    "migrator build in $(basename "$daemon_dockerfile")"
-  require_regex "$daemon_dockerfile_source" 'COPY[[:space:]]+--from=go-build[[:space:]]+/out/agent-compose-migrate[[:space:]]+/app/agent-compose-migrate' \
-    "migrator copy in $(basename "$daemon_dockerfile")"
-  require_regex "$daemon_dockerfile_source" 'ln -sf /app/agent-compose-migrate /usr/local/bin/agent-compose-migrate' \
-    "migrator command link in $(basename "$daemon_dockerfile")"
+  forbid_regex "$daemon_dockerfile_source" 'agent-compose-migrate' \
+    "transitional storage migrator in $(basename "$daemon_dockerfile")"
   forbid_regex "$daemon_dockerfile_source" '^[[:space:]]*ENV[[:space:]]+SANDBOX_ROOT=' \
     "sandbox root override in $(basename "$daemon_dockerfile"); daemon images must use the DATA_ROOT-derived application default"
 done
 
 image_verifier_source=$(<"$ROOT_DIR/scripts/verify-agent-compose-image.sh")
-require_regex "$image_verifier_source" 'test -x /app/agent-compose-migrate' \
-  'published daemon image migrator executable check'
+forbid_regex "$image_verifier_source" 'agent-compose-migrate' \
+  'transitional storage migrator check in the published daemon image verifier'
 if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
   archlinux_guest_source=$(<"$ARCHLINUX_GUEST_DOCKERFILE")
   require_regex "$archlinux_guest_source" 'FROM[[:space:]]+\$\{REGISTRY_MIRROR\}/library/archlinux:\$\{ARCHLINUX_TAG\}' \

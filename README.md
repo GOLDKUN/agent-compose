@@ -143,6 +143,98 @@ agent-compose down                                # stop sandboxes, disable sche
 More runnable examples (cron, timeout, scheduler scripts) live in
 [examples/agent-compose/](examples/agent-compose/).
 
+## One-time V2 storage migration
+
+`agent-compose-v2-storage-migrator` is a transitional, one-time tool for data
+roots created by the legacy storage layout. It is intentionally not included
+in daemon images or the default `task build`.
+
+Databases with a valid, versioned migration prefix and only project-managed
+agents and schedulers upgrade normally when opened by the new daemon. Use the
+migrator for legacy or unversioned roots, including standalone or mixed
+agent/loader layouts.
+
+### Stop running sandboxes
+
+Do not use `agent-compose down` for migration cutover. In legacy releases,
+`down` also marks the project removed, disables its schedulers, and removes
+its volume associations. Without the original compose file, the migrated
+project cannot be restored safely from those changes.
+
+Keep the old daemon running and stop every running sandbox by its full ID:
+
+```bash
+agent-compose stop <sandbox-id> [<sandbox-id>...]
+```
+
+Using a full ID does not require a compose file or project selection and also
+works for legacy standalone sandboxes. The dry run below reports all sandbox
+IDs whose persisted metadata is still `running`.
+
+Immediately after the last `stop` command, stop the old daemon and keep it
+stopped. A scheduler may create another sandbox in the short interval before
+daemon shutdown, so the post-shutdown dry run is the authority: if it reports
+any running IDs, restart the old daemon, stop every reported ID, stop the
+daemon again, and repeat the dry run. Do not use `docker stop` for sandboxes;
+the old daemon must persist their stopped state.
+
+### Build and run from source
+
+Build the migrator explicitly from the repository root, then select the
+resulting binary:
+
+```bash
+task build:migrator
+MIGRATOR=./build/agent-compose-migrate
+```
+
+The migrator is not built by the default `task build`.
+
+### Run a published binary
+
+Download `SHASUMS256.txt` and the matching manually published Linux release
+asset:
+
+- `agent-compose-v2-storage-migrator-linux-amd64`
+- `agent-compose-v2-storage-migrator-linux-arm64`
+
+Verify it, make it executable, and select it. For example, on amd64:
+
+```bash
+grep '  agent-compose-v2-storage-migrator-linux-amd64$' SHASUMS256.txt | sha256sum -c -
+chmod +x agent-compose-v2-storage-migrator-linux-amd64
+MIGRATOR=./agent-compose-v2-storage-migrator-linux-amd64
+```
+
+### Perform the migration
+
+Set `DATA_ROOT` to the deployment's data directory. Set `RUNTIME_ROOT` to the
+path that the new daemon will see (`/data` for the standard container
+deployment, or the same path as `DATA_ROOT` for a native daemon). You may run
+the read-only dry run while the old daemon is still available to discover all
+running sandbox IDs, then stop those IDs with the old CLI as described above.
+After stopping the old daemon, run the same dry run again before migration:
+
+```bash
+DATA_ROOT=/opt/agent-compose/data
+RUNTIME_ROOT=/data
+"$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
+  --runtime-root "$RUNTIME_ROOT" --dry-run
+```
+
+The post-shutdown dry run must succeed. Back up the complete data root, then
+run the migration without `--dry-run`:
+
+```bash
+"$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
+  --runtime-root "$RUNTIME_ROOT" --json
+```
+
+Keep the old daemon stopped until migration and validation finish. When a
+separate rollback copy is required, pass different `--source` and `--target`
+directories and set `--runtime-root` to the target path visible to the new
+daemon.
+
 ## The compose file
 
 **Top-level fields:** `name`, `env_file`, `variables`, `workspaces`, `agents`, `mcp_servers`, `volumes`.

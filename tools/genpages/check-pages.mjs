@@ -13,19 +13,16 @@ const manualNames = [
   "agent-compose-yaml-manual.md",
   "command-line-manual.md",
   "guest-image-abi.md",
-  "v2-storage-migration.md",
 ];
 const expectedOutput = new Set([
   "agent-compose-yaml-manual.html",
   "command-line-manual.html",
   "guest-image-abi.html",
-  "v2-storage-migration.html",
   "index.html",
   "manual.css",
   "zh-CN/agent-compose-yaml-manual.html",
   "zh-CN/command-line-manual.html",
   "zh-CN/guest-image-abi.html",
-  "zh-CN/v2-storage-migration.html",
 ]);
 
 await checkSourceLayout();
@@ -165,8 +162,6 @@ async function checkABILanguageSwitch() {
   const pairs = [
     ["guest-image-abi.html", "zh-CN/guest-image-abi.html"],
     ["zh-CN/guest-image-abi.html", "../guest-image-abi.html"],
-    ["v2-storage-migration.html", "zh-CN/v2-storage-migration.html"],
-    ["zh-CN/v2-storage-migration.html", "../v2-storage-migration.html"],
   ];
   for (const [source, alternate] of pairs) {
     const html = await readFile(path.join(outputDir, source), "utf8");

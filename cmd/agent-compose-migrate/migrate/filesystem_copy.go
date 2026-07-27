@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -158,8 +159,8 @@ func copyMigratedFile(sourcePath, destination, mappedRel, sourceRoot, runtimeRoo
 
 func rewriteMigratedJSON(sourcePath, mappedRel, sourceRoot, runtimeRoot string, schedulerIDs map[string]string, agentIDs map[string]standaloneAgentIdentity) ([]byte, bool, error) {
 	parts := strings.Split(filepath.ToSlash(mappedRel), "/")
-	isMetadata := len(parts) >= 3 && parts[0] == "sandboxes" && parts[len(parts)-1] == "metadata.json"
-	isManifest := len(parts) >= 4 && parts[0] == "sandboxes" && parts[len(parts)-2] == "vm" && parts[len(parts)-1] == "mount-manifest.json"
+	isMetadata := isSandboxMetadataPath(mappedRel)
+	isManifest := isSandboxMountManifestPath(mappedRel)
 	isLifecycle := len(parts) == 3 && parts[0] == "sandboxes" && parts[1] == ".lifecycle" && strings.HasSuffix(parts[2], ".json")
 	if !isMetadata && !isManifest && !isLifecycle {
 		return nil, false, nil
@@ -305,6 +306,7 @@ func migratedDataRootPath(rel string, schedulerIDs map[string]string) string {
 }
 
 func validateStoppedLegacySandboxes(source string) error {
+	running := make(map[string]struct{})
 	for _, rootName := range []string{"sessions", "sandboxes"} {
 		root := filepath.Join(source, rootName)
 		if _, err := os.Stat(root); errors.Is(err, os.ErrNotExist) {
@@ -312,13 +314,7 @@ func validateStoppedLegacySandboxes(source string) error {
 		} else if err != nil {
 			return fmt.Errorf("inspect legacy sandbox root %s: %w", rootName, err)
 		}
-		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if entry.IsDir() || entry.Name() != "metadata.json" {
-				return nil
-			}
+		err := visitSandboxMetadata(root, func(path string) error {
 			data, err := os.ReadFile(path)
 			if err != nil {
 				return fmt.Errorf("read sandbox metadata %s: %w", path, err)
@@ -333,13 +329,25 @@ func validateStoppedLegacySandboxes(source string) error {
 				return fmt.Errorf("decode sandbox metadata %s: %w", path, err)
 			}
 			if strings.EqualFold(strings.TrimSpace(metadata.Summary.VMStatus), "running") {
-				return fmt.Errorf("sandbox %s is still running; stop all sandboxes with the old daemon before migration", metadata.Summary.ID)
+				id := strings.TrimSpace(metadata.Summary.ID)
+				if id == "" {
+					return fmt.Errorf("running sandbox metadata %s has an empty ID", path)
+				}
+				running[id] = struct{}{}
 			}
 			return nil
 		})
 		if err != nil {
 			return err
 		}
+	}
+	if len(running) > 0 {
+		ids := make([]string, 0, len(running))
+		for id := range running {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		return fmt.Errorf("sandboxes %s are still running; stop all sandboxes by full ID with the old daemon before migration", strings.Join(ids, ", "))
 	}
 	return nil
 }

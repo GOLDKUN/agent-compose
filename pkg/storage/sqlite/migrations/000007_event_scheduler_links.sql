@@ -1,3 +1,29 @@
+CREATE TEMP TABLE migration_000007_guard(reason TEXT);
+CREATE TEMP TRIGGER migration_000007_abort
+BEFORE INSERT ON migration_000007_guard
+BEGIN
+    SELECT RAISE(ABORT, 'event link migration found conflicting sandbox and session records');
+END;
+
+INSERT INTO migration_000007_guard
+SELECT 'conflicting event sandbox/session link'
+WHERE EXISTS (
+    SELECT 1
+    FROM event_sandbox_link AS sandbox_link
+    JOIN event_session_link AS session_link
+      ON session_link.event_id = sandbox_link.event_id
+     AND session_link.session_id = sandbox_link.sandbox_id
+     AND session_link.relation = sandbox_link.relation
+     AND session_link.run_id = sandbox_link.run_id
+    WHERE session_link.loader_id <> sandbox_link.loader_id
+       OR session_link.trigger_id <> sandbox_link.trigger_id
+       OR session_link.loader_event_id <> sandbox_link.loader_event_id
+       OR session_link.created_at <> sandbox_link.created_at
+);
+
+DROP TRIGGER migration_000007_abort;
+DROP TABLE migration_000007_guard;
+
 DROP INDEX idx_event_delivery_run;
 DROP INDEX idx_event_delivery_status;
 DROP INDEX idx_event_delivery_loader_run;

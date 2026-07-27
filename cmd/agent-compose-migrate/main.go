@@ -24,6 +24,7 @@ func run(ctx context.Context, args []string) int {
 	flags.StringVar(&options.RuntimeRoot, "runtime-root", "", "target data root as seen by the daemon (defaults to --target)")
 	flags.BoolVar(&options.DryRun, "dry-run", false, "inspect and report without modifying either data root")
 	flags.BoolVar(&options.JSON, "json", false, "write the report as JSON")
+	options.Progress = os.Stderr
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}

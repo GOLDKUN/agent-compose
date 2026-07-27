@@ -40,7 +40,7 @@ func TestRunCopiesLatestDataRootAndResumes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v (%+v)", err, report)
 	}
-	if report.TargetVersion != 7 || report.CopiedFiles != 2 || report.Stage != "complete" {
+	if report.TargetVersion != 7 || report.CopiedFiles != 2 || report.Stage != "complete" || report.SourceFingerprint == "" {
 		t.Fatalf("report = %+v", report)
 	}
 	data, err := os.ReadFile(filepath.Join(target, "sandboxes", "sandbox-1", "artifact.txt"))
@@ -116,9 +116,18 @@ func TestRunDryRunDoesNotCreateTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = database.Close()
-	report, err := Run(context.Background(), Options{Source: source, Target: target, DryRun: true})
+	var progress strings.Builder
+	report, err := Run(context.Background(), Options{Source: source, Target: target, DryRun: true, Progress: &progress})
 	if err != nil || report.Stage != "eligible" {
 		t.Fatalf("dry-run report = %+v, err=%v", report, err)
+	}
+	if report.SourceFingerprint != "" {
+		t.Fatalf("dry-run calculated full source fingerprint %q", report.SourceFingerprint)
+	}
+	for _, stage := range []string{"[preflight]", "[database]", "[files]", "[complete]"} {
+		if !strings.Contains(progress.String(), stage) {
+			t.Fatalf("dry-run progress %q does not contain %s", progress.String(), stage)
+		}
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatalf("dry run created target: %v", err)
