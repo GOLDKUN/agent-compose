@@ -1307,10 +1307,7 @@ func (s *apiProjectRunStore) ListProjectSchedulers(context.Context, string) ([]d
 }
 
 func (s *apiProjectRunStore) ListProjectSchedulersPage(_ context.Context, query string, offset, limit int) ([]domain.ProjectSchedulerRecord, error) {
-	var items []domain.ProjectSchedulerRecord
-	for _, scheduler := range s.schedulers {
-		items = append(items, scheduler)
-	}
+	items := append([]domain.ProjectSchedulerRecord(nil), s.schedulers...)
 	start := min(max(offset, 0), len(items))
 	return items[start:min(start+limit, len(items))], nil
 }

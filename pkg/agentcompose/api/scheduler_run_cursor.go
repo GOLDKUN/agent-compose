@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -33,28 +32,4 @@ func encodeSchedulerRunCursor(projectID string, projectRevision int64, agentName
 		RunID:           strings.TrimSpace(run.ID),
 	})
 	return base64.RawURLEncoding.EncodeToString(payload)
-}
-
-func decodeSchedulerRunCursor(token, projectID string, projectRevision int64, agentName, triggerID, status string) (schedulerRunPageCursor, error) {
-	expected := schedulerRunPageCursor{
-		ProjectID:       strings.TrimSpace(projectID),
-		ProjectRevision: projectRevision,
-		AgentName:       strings.TrimSpace(agentName),
-		TriggerID:       strings.TrimSpace(triggerID),
-		Status:          strings.TrimSpace(status),
-	}
-	if strings.TrimSpace(token) == "" {
-		return expected, nil
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return schedulerRunPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	var cursor schedulerRunPageCursor
-	if json.Unmarshal(payload, &cursor) != nil ||
-		cursor.ProjectID != expected.ProjectID || cursor.ProjectRevision != expected.ProjectRevision || cursor.AgentName != expected.AgentName || cursor.TriggerID != expected.TriggerID || cursor.Status != expected.Status ||
-		cursor.StartedAt.IsZero() || strings.TrimSpace(cursor.LoaderID) == "" || strings.TrimSpace(cursor.RunID) == "" {
-		return schedulerRunPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	return cursor, nil
 }

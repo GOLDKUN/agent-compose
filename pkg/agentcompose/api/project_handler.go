@@ -187,9 +187,6 @@ func (h *ProjectHandler) ListSchedulerEvents(ctx context.Context, req *connect.R
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if offset > len(events) {
-		offset = len(events)
-	}
 	response := &agentcomposev2.ListSchedulerEventsResponse{Total: uint32(total)}
 	for _, event := range events {
 		response.Events = append(response.Events, schedulerEventToProto(event, scheduler))

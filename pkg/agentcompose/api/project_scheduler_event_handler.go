@@ -36,7 +36,6 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 		if triggerID != "" && triggerID != run.TriggerID {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scheduler run does not belong to trigger %q", triggerID))
 		}
-		agentName = runScheduler.AgentName
 		triggerID = run.TriggerID
 		runID = run.ID
 		schedulers = []domain.ProjectSchedulerRecord{runScheduler}

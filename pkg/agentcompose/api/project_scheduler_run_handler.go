@@ -369,13 +369,3 @@ func normalizeSchedulerRunPayload(raw string) (string, error) {
 	}
 	return payloadJSON, nil
 }
-
-func schedulerRunPageLimit(raw uint32) (int, error) {
-	if raw == 0 {
-		return 100, nil
-	}
-	if raw > 500 {
-		return 0, domain.ClassifyError(domain.ErrInvalidArgument, "limit must be between 1 and 500", nil)
-	}
-	return int(raw), nil
-}
