@@ -19,13 +19,22 @@ func TestListRPCsUseUniformPaginationFields(t *testing.T) {
 			assertUint32Field(t, method, method.Input(), "limit")
 			assertUint32Field(t, method, method.Output(), "total")
 			for _, forbidden := range []protoreflect.Name{"cursor", "next_cursor", "next_offset", "has_more", "total_count"} {
-				if field := method.Input().Fields().ByName(forbidden); field != nil {
-					t.Errorf("%s request still exposes %s", method.FullName(), forbidden)
-				}
-				if field := method.Output().Fields().ByName(forbidden); field != nil {
-					t.Errorf("%s response still exposes %s", method.FullName(), forbidden)
-				}
+				assertFieldNameAbsent(t, method, method.Input(), forbidden)
+				assertFieldNameAbsent(t, method, method.Output(), forbidden)
 			}
+		}
+	}
+}
+
+func assertFieldNameAbsent(t *testing.T, method protoreflect.MethodDescriptor, message protoreflect.MessageDescriptor, name protoreflect.Name) {
+	t.Helper()
+	if field := message.Fields().ByName(name); field != nil {
+		t.Errorf("%s message %s still exposes %s", method.FullName(), message.FullName(), name)
+	}
+	reserved := message.ReservedNames()
+	for index := 0; index < reserved.Len(); index++ {
+		if reserved.Get(index) == name {
+			t.Errorf("%s message %s still reserves obsolete pagination name %s", method.FullName(), message.FullName(), name)
 		}
 	}
 }

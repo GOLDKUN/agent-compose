@@ -347,8 +347,6 @@ message ListProjectsResponse {
   repeated ProjectSummary projects = 1;
   // Total matching resources before offset and limit are applied.
   uint32 total = 2;
-  reserved 3, 4;
-  reserved "has_more", "next_offset";
 }
 
 message RemoveProjectRequest {
@@ -1436,8 +1434,6 @@ message ListImagesResponse {
   repeated Image images = 1;
   // Total matching resources before offset and limit are applied.
   uint32 total = 2;
-  reserved 3, 4;
-  reserved "has_more", "next_offset";
   ImageStoreStatus store_status = 5;
 }
 

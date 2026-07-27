@@ -17857,10 +17857,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12'\n" +
 	"\x0finclude_removed\x18\x02 \x01(\bR\x0eincludeRemoved\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\rR\x06offset\x12\x14\n" +
-	"\x05limit\x18\x04 \x01(\rR\x05limit\"\x8c\x01\n" +
+	"\x05limit\x18\x04 \x01(\rR\x05limit\"i\n" +
 	"\x14ListProjectsResponse\x12;\n" +
 	"\bprojects\x18\x01 \x03(\v2\x1f.agentcompose.v2.ProjectSummaryR\bprojects\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\rR\x05totalJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\bhas_moreR\vnext_offset\"\xc1\x01\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\xc1\x01\n" +
 	"\x14RemoveProjectRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12%\n" +
 	"\x0eremove_history\x18\x02 \x01(\bR\rremoveHistory\x124\n" +
@@ -18810,11 +18810,11 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x03all\x18\x03 \x01(\bR\x03all\x120\n" +
 	"\x14include_cache_status\x18\x04 \x01(\bR\x12includeCacheStatus\x12\x16\n" +
 	"\x06offset\x18\x05 \x01(\rR\x06offset\x12\x14\n" +
-	"\x05limit\x18\x06 \x01(\rR\x05limit\"\xc3\x01\n" +
+	"\x05limit\x18\x06 \x01(\rR\x05limit\"\xa0\x01\n" +
 	"\x12ListImagesResponse\x12.\n" +
 	"\x06images\x18\x01 \x03(\v2\x16.agentcompose.v2.ImageR\x06images\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\rR\x05total\x12D\n" +
-	"\fstore_status\x18\x05 \x01(\v2!.agentcompose.v2.ImageStoreStatusR\vstoreStatusJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\bhas_moreR\vnext_offset\"\xa2\x01\n" +
+	"\fstore_status\x18\x05 \x01(\v2!.agentcompose.v2.ImageStoreStatusR\vstoreStatus\"\xa2\x01\n" +
 	"\x10PullImageRequest\x12\x1b\n" +
 	"\timage_ref\x18\x01 \x01(\tR\bimageRef\x125\n" +
 	"\x05store\x18\x02 \x01(\x0e2\x1f.agentcompose.v2.ImageStoreKindR\x05store\x12:\n" +
