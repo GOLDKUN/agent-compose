@@ -17,7 +17,7 @@ func newCLIRunCommand(cli *cliOptions) *cobra.Command {
 	cmd.Flags().StringVar(&options.SandboxID, "sandbox", "", "Reuse an existing sandbox")
 	cmd.Flags().StringVar(&options.Driver, "driver", "", "Runtime driver override for a new sandbox")
 	cmd.Flags().BoolVar(&options.KeepRunning, "keep-running", false, "Keep the sandbox runtime running after completion")
-	cmd.Flags().BoolVar(&options.Remove, "rm", false, "Remove the sandbox after a successful run")
+	cmd.Flags().BoolVar(&options.Remove, "rm", false, "Remove a newly created sandbox after run completion")
 	cmd.Flags().BoolVar(&options.Jupyter, "jupyter", false, "Enable Jupyter for this run")
 	cmd.Flags().BoolVar(&options.JupyterExpose, "jupyter-expose", false, "Mark the Jupyter proxy endpoint for this run as user-accessible")
 	cmd.Flags().BoolVarP(&options.Detach, "detach", "d", false, "Start the run in the daemon and return immediately")
