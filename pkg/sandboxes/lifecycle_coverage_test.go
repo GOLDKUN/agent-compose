@@ -63,6 +63,25 @@ func TestLifecycleReconcileRuntimeStateDockerLost(t *testing.T) {
 	}
 }
 
+func TestLifecycleReconcileRuntimeStatePreservesRunningStateWhenRetirementFails(t *testing.T) {
+	session := lifecycleTestSession("session-docker-stale", driverpkg.RuntimeDriverDocker, domain.VMStatusRunning)
+	store := &fakeLifecycleStore{session: session, vmState: domain.VMState{BoxID: "container-stale"}}
+	retireErr := errors.New("remove stale docker container")
+	lifecycle := Lifecycle{
+		Config:   &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
+		Store:    store,
+		Liveness: fakeRuntimeLiveness{err: retireErr},
+	}
+
+	loaded, err := lifecycle.ReconcileRuntimeState(context.Background(), session)
+	if !errors.Is(err, retireErr) || loaded != nil {
+		t.Fatalf("reconciliation result=%#v error=%v", loaded, err)
+	}
+	if session.Summary.VMStatus != domain.VMStatusRunning || store.updated != 0 || store.events != 0 || store.savedVM.BoxID != "" {
+		t.Fatalf("failed retirement mutated sandbox: session=%#v store=%#v", session, store)
+	}
+}
+
 func TestLifecycleReconcileRuntimeStateEarlyReturns(t *testing.T) {
 	lifecycle := Lifecycle{Config: &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker}, Store: &fakeLifecycleStore{}}
 	if got, err := lifecycle.ReconcileRuntimeState(context.Background(), nil); err != nil || got != nil {

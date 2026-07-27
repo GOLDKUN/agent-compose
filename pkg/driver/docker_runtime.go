@@ -42,6 +42,10 @@ type dockerRuntime struct {
 	config *appconfig.Config
 }
 
+type dockerContainerRemover interface {
+	ContainerRemove(context.Context, string, containerapi.RemoveOptions) error
+}
+
 type dockerDaemonTopology struct {
 	networkMode   containerapi.NetworkMode
 	containerized bool
@@ -213,10 +217,20 @@ func (r *dockerRuntime) IsSandboxAlive(ctx context.Context, sandbox *Sandbox, vm
 		return false, err
 	}
 	if !dockerContainerMountsMatch(containerInfo, expectedMounts) {
-		slog.Warn("docker sandbox mounts no longer match the active data root; marking runtime stopped for safe recreation", "sandbox_id", sandbox.Summary.ID, "container_id", containerInfo.ID)
+		slog.Warn("docker sandbox mounts no longer match the active data root; retiring stale runtime for safe recreation", "sandbox_id", sandbox.Summary.ID, "container_id", containerInfo.ID)
+		if err := removeDockerContainerWithStaleMounts(ctx, dockerClient, containerInfo.ID); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 	return containerInfo.State != nil && containerInfo.State.Running, nil
+}
+
+func removeDockerContainerWithStaleMounts(ctx context.Context, remover dockerContainerRemover, containerID string) error {
+	if err := remover.ContainerRemove(ctx, containerID, containerapi.RemoveOptions{Force: true}); err != nil && !isDockerNotFound(err) {
+		return fmt.Errorf("remove docker container with stale mounts %s: %w", containerID, err)
+	}
+	return nil
 }
 
 func (r *dockerRuntime) StopSandbox(ctx context.Context, sandbox *Sandbox, vmState VMState) (bool, error) {
@@ -732,8 +746,8 @@ func (r *dockerRuntime) getOrCreateContainer(ctx context.Context, dockerClient *
 			return containerInfo, false, nil
 		}
 		slog.Warn("recreating docker sandbox whose bind mounts reference an earlier data root", "sandbox_id", sandbox.Summary.ID, "container_id", containerInfo.ID)
-		if err := dockerClient.ContainerRemove(ctx, containerInfo.ID, containerapi.RemoveOptions{Force: true}); err != nil && !isDockerNotFound(err) {
-			return containerapi.InspectResponse{}, false, fmt.Errorf("remove docker container with stale mounts %s: %w", containerInfo.ID, err)
+		if err := removeDockerContainerWithStaleMounts(ctx, dockerClient, containerInfo.ID); err != nil {
+			return containerapi.InspectResponse{}, false, err
 		}
 		replacingStaleMounts = true
 	}

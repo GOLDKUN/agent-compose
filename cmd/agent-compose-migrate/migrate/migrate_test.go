@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"agent-compose/pkg/capabilities"
+	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/storage/configstore"
@@ -31,20 +33,75 @@ func TestRunCopiesLatestDataRootAndResumes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "sandboxes", "sandbox-1", "artifact.txt"), []byte("preserved"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink("artifact.txt", filepath.Join(source, "sandboxes", "sandbox-1", "artifact-link")); err != nil {
+		t.Fatal(err)
+	}
 	report, err := Run(context.Background(), Options{Source: source, Target: target})
 	if err != nil {
 		t.Fatalf("Run returned error: %v (%+v)", err, report)
 	}
-	if report.TargetVersion != 7 || report.CopiedFiles != 1 || report.Stage != "complete" {
+	if report.TargetVersion != 7 || report.CopiedFiles != 2 || report.Stage != "complete" {
 		t.Fatalf("report = %+v", report)
 	}
 	data, err := os.ReadFile(filepath.Join(target, "sandboxes", "sandbox-1", "artifact.txt"))
 	if err != nil || string(data) != "preserved" {
 		t.Fatalf("copied artifact = %q, %v", data, err)
 	}
+	if linkTarget, err := os.Readlink(filepath.Join(target, "sandboxes", "sandbox-1", "artifact-link")); err != nil || linkTarget != "artifact.txt" {
+		t.Fatalf("copied artifact symlink = %q, %v", linkTarget, err)
+	}
 	resumed, err := Run(context.Background(), Options{Source: source, Target: target})
 	if err != nil || resumed.Stage != "complete" {
 		t.Fatalf("resume report = %+v, err=%v", resumed, err)
+	}
+}
+
+func TestRunPreservesPartitionedLifecyclePathsAcrossDryRunCopyAndResume(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "source")
+	target := filepath.Join(t.TempDir(), "target")
+	directoryName := strings.Repeat("a", 64)
+	sandboxID := "sha256:" + directoryName
+	partition := filepath.Join("2026", "07", "26")
+	sourceSandbox := filepath.Join(source, "sandboxes", partition, directoryName)
+	writeMigrationJSON(t, filepath.Join(sourceSandbox, "metadata.json"), map[string]any{
+		"summary": map[string]any{"id": sandboxID, "vm_status": "STOPPED"},
+	})
+	writeMigrationJSON(t, filepath.Join(source, "sandboxes", ".lifecycle", sandboxID+".json"), map[string]any{
+		"version": 1, "sandbox_id": sandboxID, "sandbox_path": sourceSandbox,
+		"owned_resources": []any{
+			map[string]any{"kind": "sandbox-directory", "path": sourceSandbox},
+		},
+	})
+	database, err := sqlite.Open(filepath.Join(source, databaseName), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dryRun, err := Run(context.Background(), Options{Source: source, Target: target, DryRun: true})
+	if err != nil || dryRun.Stage != "eligible" {
+		t.Fatalf("partitioned dry-run report=%+v err=%v", dryRun, err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("dry run created target: %v", err)
+	}
+
+	report, err := Run(context.Background(), Options{Source: source, Target: target})
+	if err != nil || report.Stage != "complete" {
+		t.Fatalf("partitioned copy report=%+v err=%v", report, err)
+	}
+	wantPath := filepath.Join(target, "sandboxes", partition, directoryName)
+	lifecycle := readMigrationJSON(t, filepath.Join(target, "sandboxes", ".lifecycle", sandboxID+".json"))
+	resources := lifecycle["owned_resources"].([]any)
+	if lifecycle["sandbox_path"] != wantPath || resources[0].(map[string]any)["path"] != wantPath {
+		t.Fatalf("partitioned lifecycle=%#v", lifecycle)
+	}
+
+	resumed, err := Run(context.Background(), Options{Source: source, Target: target})
+	if err != nil || resumed.Stage != "complete" {
+		t.Fatalf("partitioned resume report=%+v err=%v", resumed, err)
 	}
 }
 
@@ -85,6 +142,41 @@ func TestRunRejectsSourceSymlink(t *testing.T) {
 	report, err := Run(context.Background(), Options{Source: source, Target: target})
 	if err == nil || report.Error == "" {
 		t.Fatalf("symlink report = %+v, err=%v", report, err)
+	}
+}
+
+func TestFingerprintRootIncludesUserSymlinkTarget(t *testing.T) {
+	source := t.TempDir()
+	database, err := sqlite.Open(filepath.Join(source, databaseName), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(source, "workspaces", "workspace-1", "content", "current")
+	if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("revision-a", link); err != nil {
+		t.Fatal(err)
+	}
+	first, err := fingerprintRoot(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("revision-b", link); err != nil {
+		t.Fatal(err)
+	}
+	second, err := fingerprintRoot(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("source fingerprint ignored a changed symlink target")
 	}
 }
 
@@ -149,7 +241,7 @@ func TestRunRejectsNestedDataRootsBeforeCreatingTarget(t *testing.T) {
 	if err := os.MkdirAll(nestedSource, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateDistinctDataRoots(nestedSource, parent); err == nil || !strings.Contains(err.Error(), "source must not be nested inside target") {
+	if err := validateMigrationDataRoots(nestedSource, parent); err == nil || !strings.Contains(err.Error(), "source must not be nested inside target") {
 		t.Fatalf("nested source validation error=%v", err)
 	}
 
@@ -158,7 +250,7 @@ func TestRunRejectsNestedDataRootsBeforeCreatingTarget(t *testing.T) {
 	if err := os.Symlink(source, symlink); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateDistinctDataRoots(source, filepath.Join(symlink, "nested")); err == nil || !strings.Contains(err.Error(), "target must not be nested inside source") {
+	if err := validateMigrationDataRoots(source, filepath.Join(symlink, "nested")); err == nil || !strings.Contains(err.Error(), "target must not be nested inside source") {
 		t.Fatalf("symlink nested target validation error=%v", err)
 	}
 }
@@ -277,6 +369,16 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(source, "sessions", "legacy-sandbox", "state.json"), []byte(`{"ready":true}`), 0o600); err != nil {
 				t.Fatal(err)
 			}
+			writeMigrationJSON(t, filepath.Join(source, "sessions", "legacy-sandbox", "metadata.json"), map[string]any{
+				"summary": map[string]any{
+					"id": "legacy-sandbox", "vm_status": "STOPPED",
+					"tags": []any{
+						map[string]any{"name": "source", "value": "agent"},
+						map[string]any{"name": "agent_id", "value": "standalone-agent"},
+						map[string]any{"name": "agent_name", "value": "123 Worker"},
+					},
+				},
+			})
 			workspaceContent := filepath.Join(source, "workspaces", "legacy-workspace", "content")
 			if err := os.MkdirAll(workspaceContent, 0o700); err != nil {
 				t.Fatal(err)
@@ -295,7 +397,7 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			if _, err := db.Exec(`INSERT INTO workspace_config(id,name,type,config_json,created_at,updated_at) VALUES('legacy-workspace','Legacy Workspace','file','{}',1000,1001)`); err != nil {
 				t.Fatalf("insert legacy workspace: %v", err)
 			}
-			if _, err := db.Exec(`INSERT INTO agent_definition(id,name,enabled,provider,model,system_prompt,workspace_id,skills,created_at,updated_at) VALUES('standalone-agent','123 Worker',1,'codex','legacy-model','preserve this prompt','legacy-workspace','[{"name":"review"}]',1000,1001)`); err != nil {
+			if _, err := db.Exec(`INSERT INTO agent_definition(id,name,enabled,provider,model,system_prompt,workspace_id,config_json,capset_ids,skills,created_at,updated_at) VALUES('standalone-agent','123 Worker',1,'codex','legacy-model','preserve this prompt','legacy-workspace','{"mcp_servers":{"tools":{"type":"local","command":"tool","env":{"TOKEN":{"value":"mcp-secret","secret":true}}}},"octobus_servers":{"internal":{"url":"https://octobus.example","token":"legacy-secret"}}}','["internal/dev"]','[{"name":"review"}]',1000,1001)`); err != nil {
 				t.Fatalf("insert standalone agent: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO agent_definition(id,name,enabled,deleted_at,provider,created_at,updated_at) VALUES('deleted-agent','Deleted Agent',1,1002,'codex',1000,1001)`); err != nil {
@@ -351,8 +453,22 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			if err != nil || agentID != wantAgentID || agentName != "agent-123worker" {
 				t.Fatalf("native agent identity id=%q name=%q want=%q, err=%v", agentID, agentName, wantAgentID, err)
 			}
-			if agent, err := definitionStore.GetAgentDefinition(context.Background(), agentID); err != nil || agent.WorkspaceID != "legacy-workspace" || agent.Model != "legacy-model" || agent.SystemPrompt != "preserve this prompt" || len(agent.Skills) != 1 {
-				t.Fatalf("converted standalone agent = %#v, err=%v", agent, err)
+			convertedDefinition, definitionErr := definitionStore.GetAgentDefinition(context.Background(), agentID)
+			if definitionErr != nil || convertedDefinition.WorkspaceID != "legacy-workspace" || convertedDefinition.Model != "legacy-model" || convertedDefinition.SystemPrompt != "preserve this prompt" || len(convertedDefinition.Skills) != 1 {
+				t.Fatalf("converted standalone agent = %#v, err=%v", convertedDefinition, definitionErr)
+			}
+			octoBusServers, octoBusErr := capabilities.AgentOctoBusServers(convertedDefinition)
+			if octoBusErr != nil || octoBusServers["internal"].URL != "https://octobus.example" || octoBusServers["internal"].Token != "legacy-secret" {
+				t.Fatalf("converted standalone OctoBus servers=%#v err=%v", octoBusServers, octoBusErr)
+			}
+			mcpServers := llms.AgentMCPConfig(convertedDefinition)
+			if mcpServers["tools"].Command != "tool" || mcpServers["tools"].Env["TOKEN"].Value != "mcp-secret" || !mcpServers["tools"].Env["TOKEN"].Secret {
+				t.Fatalf("converted standalone MCP servers=%#v", mcpServers)
+			}
+			metadata := readMigrationJSON(t, filepath.Join(target, "sandboxes", "legacy-sandbox", "metadata.json"))
+			tags := migrationTagValues(metadata["summary"].(map[string]any)["tags"])
+			if tags["agent_id"] != agentID || tags["agent_name"] != agentName || tags["agent"] != agentName || tags["project"] != projectID || tags["project_id"] != projectID {
+				t.Fatalf("converted standalone sandbox tags=%v", tags)
 			}
 			var deletedCount int
 			if err := targetDB.QueryRow(`SELECT COUNT(*) FROM project_agent WHERE name='Deleted Agent'`).Scan(&deletedCount); err != nil || deletedCount != 0 {
@@ -376,6 +492,9 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			spec, err := runs.DecodeRevisionSpec(revision.SpecJSON)
 			if err != nil {
 				t.Fatalf("decode migrated revision: %v", err)
+			}
+			if len(spec.GetOctobusServers()) != 1 || spec.GetOctobusServers()[0].GetName() != "internal" || spec.GetOctobusServers()[0].GetUrl() != "https://octobus.example" || spec.GetOctobusServers()[0].GetToken() != "legacy-secret" {
+				t.Fatalf("migrated revision OctoBus servers=%#v", spec.GetOctobusServers())
 			}
 			agentSpec, ok := runs.AgentSpecByName(spec, agentName)
 			if !ok {
@@ -630,15 +749,6 @@ func TestE2ELegacyCopyMigrationWorkflows(t *testing.T) {
 }
 
 func TestE2ELegacyMigrationReportAndPathMappingContracts(t *testing.T) {
-	if got := (Report{Stage: "validate", Error: "bad source"}).Text(); got != "legacy migration validate: bad source" {
-		t.Fatalf("error report text = %q", got)
-	}
-	if got := (Report{DryRun: true, SourceVersion: 4}).Text(); got != "legacy migration dry run: source schema version 4 is eligible" {
-		t.Fatalf("dry-run report text = %q", got)
-	}
-	if got := (Report{TargetVersion: 7, CopiedFiles: 2, CopiedBytes: 9, Target: "/target"}).Text(); got != "legacy migration complete: schema v7, 2 files (9 bytes) copied to /target" {
-		t.Fatalf("complete report text = %q", got)
-	}
 	source := filepath.Join(string(filepath.Separator), "old-root")
 	target := filepath.Join(string(filepath.Separator), "new-root")
 	stored := filepath.Join(source, "loaders", "legacy-loader", "runs", "run-1")

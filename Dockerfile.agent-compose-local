@@ -68,7 +68,6 @@ RUN test -x /app/agent-compose && \
     test -s /app/microsandbox/lib/libkrunfw.so
 ENV RUNTIME_DRIVER=docker
 ENV DATA_ROOT=/data
-ENV SANDBOX_ROOT=/data/sessions
 ENV HTTP_LISTEN=0.0.0.0:7410
 ENV DEFAULT_IMAGE=debian:bookworm-slim
 ENV LLM_TIMEOUT=60s

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func validateDistinctDataRoots(source, target string) error {
+func validateMigrationDataRoots(source, target string) error {
 	resolvedSource, err := resolvePathWithExistingAncestors(source)
 	if err != nil {
 		return fmt.Errorf("resolve source root: %w", err)
@@ -18,7 +18,7 @@ func validateDistinctDataRoots(source, target string) error {
 		return fmt.Errorf("resolve target root: %w", err)
 	}
 	if resolvedSource == resolvedTarget {
-		return fmt.Errorf("source and target must be different directories")
+		return nil
 	}
 	if pathContains(resolvedSource, resolvedTarget) {
 		return fmt.Errorf("target must not be nested inside source")
@@ -27,6 +27,18 @@ func validateDistinctDataRoots(source, target string) error {
 		return fmt.Errorf("source must not be nested inside target")
 	}
 	return nil
+}
+
+func sameDataRoot(source, target string) (bool, error) {
+	resolvedSource, err := resolvePathWithExistingAncestors(source)
+	if err != nil {
+		return false, fmt.Errorf("resolve source root: %w", err)
+	}
+	resolvedTarget, err := resolvePathWithExistingAncestors(target)
+	if err != nil {
+		return false, fmt.Errorf("resolve target root: %w", err)
+	}
+	return resolvedSource == resolvedTarget, nil
 }
 
 func resolvePathWithExistingAncestors(path string) (string, error) {

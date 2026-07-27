@@ -11,7 +11,7 @@ import (
 	"agent-compose/pkg/storage/sqlite"
 )
 
-type databaseCheckpoint func(warnings []string, schedulerIDs map[string]string) error
+type databaseCheckpoint func(warnings []string, schedulerIDs map[string]string, agentIDs map[string]standaloneAgentIdentity) error
 
 func prepareTargetDatabase(
 	ctx context.Context,
@@ -19,60 +19,71 @@ func prepareTargetDatabase(
 	sourceRoot, targetRoot string,
 	resumeWarnings []string,
 	resumeSchedulerIDs map[string]string,
+	resumeAgentIDs map[string]standaloneAgentIdentity,
 	checkpoint databaseCheckpoint,
-) ([]string, map[string]string, error) {
+) ([]string, map[string]string, map[string]standaloneAgentIdentity, error) {
 	version, err := inspectVersion(ctx, db)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if version == 0 {
 		nonEmpty, err := applicationSchemaExists(ctx, db)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if nonEmpty {
 			if err := adoptUnversionedSchema(ctx, db); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		}
 		version, err = inspectVersion(ctx, db)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	if version < 1 || version > 7 {
-		return nil, nil, fmt.Errorf("target database has an unknown migration version %d", version)
+		return nil, nil, nil, fmt.Errorf("target database has an unknown migration version %d", version)
 	}
 	if err := validateVersionedPrefix(ctx, db, version); err != nil {
-		return nil, nil, fmt.Errorf("validate target migration history: %w", err)
+		return nil, nil, nil, fmt.Errorf("validate target migration history: %w", err)
 	}
 	if version < 4 {
 		if err := sqlite.MigrateThrough(ctx, db, 4); err != nil {
-			return nil, nil, fmt.Errorf("advance target to conversion schema: %w", err)
+			return nil, nil, nil, fmt.Errorf("advance target to conversion schema: %w", err)
 		}
 		version = 4
 	}
 	warnings := append([]string(nil), resumeWarnings...)
+	agentIDs := cloneStandaloneAgentIdentities(resumeAgentIDs)
 	if version == 4 {
 		alignmentWarnings, alignErr := alignManagedProjectionRevisions(ctx, db)
 		if alignErr != nil {
-			return nil, nil, alignErr
+			return nil, nil, nil, alignErr
 		}
 		warnings = append(warnings, alignmentWarnings...)
 		if checkpoint != nil && len(alignmentWarnings) > 0 {
-			if err := checkpoint(warnings, resumeSchedulerIDs); err != nil {
-				return nil, nil, err
+			if err := checkpoint(warnings, resumeSchedulerIDs, agentIDs); err != nil {
+				return nil, nil, nil, err
 			}
 		}
-		standaloneWarnings, convertErr := convertStandaloneV1(ctx, db, targetRoot)
+		standaloneWarnings, convertedAgentIDs, convertErr := convertStandaloneV1(ctx, db, targetRoot, func(planned map[string]standaloneAgentIdentity) error {
+			agentIDs = cloneStandaloneAgentIdentities(planned)
+			if checkpoint == nil {
+				return nil
+			}
+			return checkpoint(warnings, resumeSchedulerIDs, agentIDs)
+		})
 		warnings = append(warnings, standaloneWarnings...)
 		err = convertErr
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
+		}
+		if convertedAgentIDs != nil {
+			agentIDs = cloneStandaloneAgentIdentities(convertedAgentIDs)
 		}
 		if checkpoint != nil && len(standaloneWarnings) > 0 {
-			if err := checkpoint(warnings, resumeSchedulerIDs); err != nil {
-				return nil, nil, err
+			if err := checkpoint(warnings, resumeSchedulerIDs, agentIDs); err != nil {
+				return nil, nil, nil, err
 			}
 		}
 	}
@@ -80,33 +91,36 @@ func prepareTargetDatabase(
 	if schedulerIDs == nil {
 		schedulerIDs, err = legacySchedulerIDMap(ctx, db, sourceRoot)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	if checkpoint != nil {
-		if err := checkpoint(warnings, schedulerIDs); err != nil {
-			return nil, nil, err
+		if err := checkpoint(warnings, schedulerIDs, agentIDs); err != nil {
+			return nil, nil, nil, err
 		}
+	}
+	if err := normalizeLegacyWorkspaceProviders(ctx, db); err != nil {
+		return nil, nil, nil, err
 	}
 	if version < 6 {
 		if err := rewriteLegacySchedulerArtifactPaths(ctx, db, sourceRoot, targetRoot, schedulerIDs); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	if err := sqlite.Migrate(ctx, db); err != nil {
-		return nil, nil, fmt.Errorf("migrate target database: %w", err)
+		return nil, nil, nil, fmt.Errorf("migrate target database: %w", err)
 	}
 	linkWarnings, err := backfillProvableSchedulerRunLinks(ctx, db)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	warnings = append(warnings, linkWarnings...)
 	pathWarnings, err := rewriteDataRootPaths(ctx, db, sourceRoot, targetRoot, schedulerIDs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	warnings = append(warnings, pathWarnings...)
-	return warnings, schedulerIDs, nil
+	return warnings, schedulerIDs, agentIDs, nil
 }
 
 func backfillProvableSchedulerRunLinks(ctx context.Context, db *sql.DB) ([]string, error) {

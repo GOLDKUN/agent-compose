@@ -36,44 +36,75 @@ type convertedStandaloneAgent struct {
 	scheduler  *legacySchedulerDefinition
 }
 
-func convertStandaloneV1(ctx context.Context, db *sql.DB, targetRoot string) ([]string, error) {
+func convertStandaloneV1(
+	ctx context.Context,
+	db *sql.DB,
+	targetRoot string,
+	checkpoint func(map[string]standaloneAgentIdentity) error,
+) ([]string, map[string]standaloneAgentIdentity, error) {
 	agents, err := loadStandaloneAgents(ctx, db)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	schedulers, err := loadStandaloneSchedulers(ctx, db)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	deletedAgentIDs, err := loadDeletedStandaloneAgentIDs(ctx, db)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(agents) == 0 && len(schedulers) == 0 && len(deletedAgentIDs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if len(agents) == 0 && len(schedulers) == 0 {
-		return nil, removeOnlyDeletedStandaloneAgents(ctx, db, deletedAgentIDs)
+		return nil, nil, removeOnlyDeletedStandaloneAgents(ctx, db, deletedAgentIDs)
 	}
 
 	projectID := identity.NewID(identity.ResourceProject, legacyDefaultProjectName, "")
 	revision, err := nextLegacyRevision(ctx, db, projectID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	now := time.Now().UTC().Unix()
 	converted, err := planStandaloneAgents(projectID, agents, schedulers, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	agentIDs := standaloneAgentIdentityMap(projectID, agents, converted)
+	if checkpoint != nil {
+		if err := checkpoint(agentIDs); err != nil {
+			return nil, nil, err
+		}
 	}
 	specWorkspaces, err := loadLegacyProjectWorkspaces(ctx, db, standaloneWorkspaceIDs(converted))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := saveStandaloneConversion(ctx, db, targetRoot, projectID, revision, now, agents, deletedAgentIDs, converted, specWorkspaces); err != nil {
-		return nil, err
+	specOctoBusServers, err := legacyProjectOctoBusServers(converted)
+	if err != nil {
+		return nil, nil, err
 	}
-	return []string{fmt.Sprintf("converted %d standalone agents and %d standalone schedulers into project %s", len(agents), len(schedulers), legacyDefaultProjectName)}, nil
+	if err := saveStandaloneConversion(ctx, db, targetRoot, projectID, revision, now, agents, deletedAgentIDs, converted, specWorkspaces, specOctoBusServers); err != nil {
+		return nil, nil, err
+	}
+	return []string{fmt.Sprintf("converted %d standalone agents and %d standalone schedulers into project %s", len(agents), len(schedulers), legacyDefaultProjectName)}, agentIDs, nil
+}
+
+func standaloneAgentIdentityMap(projectID string, agents []legacyAgentDefinition, converted []convertedStandaloneAgent) map[string]standaloneAgentIdentity {
+	if len(agents) == 0 {
+		return nil
+	}
+	identities := make(map[string]standaloneAgentIdentity, len(agents))
+	for index, agent := range agents {
+		convertedAgent := converted[index]
+		identities[agent.id] = standaloneAgentIdentity{
+			NativeID:  convertedAgent.nativeID,
+			ProjectID: projectID,
+			AgentName: convertedAgent.name,
+		}
+	}
+	return identities
 }
 
 func planStandaloneAgents(projectID string, agents []legacyAgentDefinition, schedulers []legacySchedulerDefinition, now int64) ([]convertedStandaloneAgent, error) {
@@ -119,7 +150,7 @@ func planStandaloneAgents(projectID string, agents []legacyAgentDefinition, sche
 	return converted, nil
 }
 
-func saveStandaloneConversion(ctx context.Context, db *sql.DB, targetRoot, projectID string, revision, now int64, agents []legacyAgentDefinition, deletedAgentIDs []string, converted []convertedStandaloneAgent, specWorkspaces []map[string]any) error {
+func saveStandaloneConversion(ctx context.Context, db *sql.DB, targetRoot, projectID string, revision, now int64, agents []legacyAgentDefinition, deletedAgentIDs []string, converted []convertedStandaloneAgent, specWorkspaces, specOctoBusServers []map[string]any) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin standalone conversion: %w", err)
@@ -181,6 +212,9 @@ func saveStandaloneConversion(ctx context.Context, db *sql.DB, targetRoot, proje
 	spec := map[string]any{"name": legacyDefaultProjectName, "agents": specAgents}
 	if len(specWorkspaces) > 0 {
 		spec["workspaces"] = specWorkspaces
+	}
+	if len(specOctoBusServers) > 0 {
+		spec["octobus_servers"] = specOctoBusServers
 	}
 	specData, err := json.Marshal(spec)
 	if err != nil {
@@ -261,46 +295,8 @@ func legacyAgentFromScheduler(item legacySchedulerDefinition, id, name string, n
 	return legacyAgentDefinition{id: id, name: name, description: item.description, provider: item.defaultAgent, driver: item.driver, image: item.image, workspaceID: item.workspaceID, envJSON: item.envJSON, volumesJSON: item.volumesJSON, configJSON: "{}", capsetIDs: item.capsetIDs, skills: "[]", enabled: 1, createdAt: firstLegacyTime(item.createdAt, now), updatedAt: firstLegacyTime(item.updatedAt, now)}
 }
 
-func legacyAgentJSON(item legacyAgentDefinition, name string, scheduler map[string]any) map[string]any {
-	result := map[string]any{"name": name, "enabled": item.enabled != 0, "display_name": item.name, "description": item.description, "provider": item.provider, "model": item.model, "system_prompt": item.systemPrompt, "image": item.image, "env": legacyEnvList(item.envJSON), "capset_ids": legacyJSONValue(item.capsetIDs, []any{}), "skills": legacyJSONValue(item.skills, []any{}), "volumes": legacyJSONValue(item.volumesJSON, []any{})}
-	if item.driver != "" {
-		result["driver"] = map[string]any{"name": item.driver}
-	}
-	if item.workspaceID != "" {
-		result["workspace"] = map[string]any{"name": item.workspaceID}
-	}
-	var config map[string]any
-	if json.Unmarshal([]byte(item.configJSON), &config) == nil {
-		for _, key := range []string{"jupyter", "mcp_servers"} {
-			if value, ok := config[key]; ok {
-				result[key] = value
-			}
-		}
-	}
-	if scheduler != nil {
-		result["scheduler"] = scheduler
-	}
-	return result
-}
-
 func legacySchedulerJSON(item legacySchedulerDefinition) map[string]any {
 	return map[string]any{"enabled": item.enabled != 0, "sandbox_policy": item.sandboxPolicy, "concurrency_policy": item.concurrencyPolicy, "display_name": item.name, "description": item.description, "script": item.script}
-}
-
-func legacyEnvList(raw string) []map[string]any {
-	var items []map[string]any
-	if json.Unmarshal([]byte(raw), &items) != nil {
-		return nil
-	}
-	return items
-}
-
-func legacyJSONValue(raw string, fallback any) any {
-	var value any
-	if json.Unmarshal([]byte(raw), &value) != nil {
-		return fallback
-	}
-	return value
 }
 
 func uniqueLegacyName(preferred, id, prefix string, used map[string]struct{}) string {

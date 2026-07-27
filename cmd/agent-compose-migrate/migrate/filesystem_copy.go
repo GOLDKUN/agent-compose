@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func copyAuthoritativeFiles(source, target, runtimeRoot string, schedulerIDs map[string]string) (int, int64, error) {
+func copyAuthoritativeFiles(source, target, runtimeRoot string, schedulerIDs map[string]string, agentIDs map[string]standaloneAgentIdentity) (int, int64, error) {
 	var files int
 	var bytes int64
 	mappedSources := make(map[string]string)
@@ -24,8 +24,8 @@ func copyAuthoritativeFiles(source, target, runtimeRoot string, schedulerIDs map
 		if err != nil || rel == "." {
 			return err
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("refuse symlink in source data root: %s", rel)
+		if rel == inPlaceBackupName && entry.IsDir() {
+			return filepath.SkipDir
 		}
 		if rel == databaseName || rel == databaseName+"-wal" || rel == databaseName+"-shm" || rel == journalName {
 			return nil
@@ -36,6 +36,21 @@ func copyAuthoritativeFiles(source, target, runtimeRoot string, schedulerIDs map
 		}
 		mappedSources[mappedRel] = rel
 		destination := filepath.Join(target, mappedRel)
+		if entry.Type()&os.ModeSymlink != 0 {
+			if err := validateMigratableSourceSymlink(rel); err != nil {
+				return err
+			}
+			if err := copyMigratedSymlink(path, destination, mappedRel, source, target, runtimeRoot, schedulerIDs); err != nil {
+				return err
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			files++
+			bytes += info.Size()
+			return nil
+		}
 		if err := ensureSafeTargetPath(target, destination); err != nil {
 			return err
 		}
@@ -49,7 +64,7 @@ func copyAuthoritativeFiles(source, target, runtimeRoot string, schedulerIDs map
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("refuse non-regular source file: %s", rel)
 		}
-		if err := copyMigratedFile(path, destination, mappedRel, source, runtimeRoot, schedulerIDs, info.Mode().Perm()); err != nil {
+		if err := copyMigratedFile(path, destination, mappedRel, source, runtimeRoot, schedulerIDs, agentIDs, info.Mode().Perm()); err != nil {
 			return err
 		}
 		files++
@@ -59,8 +74,70 @@ func copyAuthoritativeFiles(source, target, runtimeRoot string, schedulerIDs map
 	return files, bytes, err
 }
 
-func copyMigratedFile(sourcePath, destination, mappedRel, sourceRoot, runtimeRoot string, schedulerIDs map[string]string, mode fs.FileMode) error {
-	data, handled, err := rewriteMigratedJSON(sourcePath, mappedRel, sourceRoot, runtimeRoot, schedulerIDs)
+func inspectAuthoritativeFiles(source, runtimeRoot string, schedulerIDs map[string]string, agentIDs map[string]standaloneAgentIdentity) (int, int64, error) {
+	var files int
+	var bytes int64
+	mappedSources := make(map[string]string)
+	err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil || rel == "." {
+			return err
+		}
+		if rel == inPlaceBackupName && entry.IsDir() {
+			return filepath.SkipDir
+		}
+		if rel == databaseName || rel == databaseName+"-wal" || rel == databaseName+"-shm" || rel == journalName {
+			return nil
+		}
+		mappedRel := migratedDataRootPath(rel, schedulerIDs)
+		if previous, exists := mappedSources[mappedRel]; exists && previous != rel {
+			return fmt.Errorf("legacy paths %s and %s both map to %s", previous, rel, mappedRel)
+		}
+		mappedSources[mappedRel] = rel
+		if entry.Type()&os.ModeSymlink != 0 {
+			if err := validateMigratableSourceSymlink(rel); err != nil {
+				return err
+			}
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			if _, _, err := migratedSymlinkTarget(path, mappedRel, target, source, runtimeRoot, schedulerIDs); err != nil {
+				return fmt.Errorf("rewrite source symlink %s: %w", rel, err)
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			files++
+			bytes += info.Size()
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("refuse non-regular source file: %s", rel)
+		}
+		if _, _, err := rewriteMigratedJSON(path, mappedRel, source, runtimeRoot, schedulerIDs, agentIDs); err != nil {
+			return err
+		}
+		files++
+		bytes += info.Size()
+		return nil
+	})
+	return files, bytes, err
+}
+
+func copyMigratedFile(sourcePath, destination, mappedRel, sourceRoot, runtimeRoot string, schedulerIDs map[string]string, agentIDs map[string]standaloneAgentIdentity, mode fs.FileMode) error {
+	data, handled, err := rewriteMigratedJSON(sourcePath, mappedRel, sourceRoot, runtimeRoot, schedulerIDs, agentIDs)
 	if err != nil {
 		return err
 	}
@@ -79,7 +156,7 @@ func copyMigratedFile(sourcePath, destination, mappedRel, sourceRoot, runtimeRoo
 	return closeErr
 }
 
-func rewriteMigratedJSON(sourcePath, mappedRel, sourceRoot, runtimeRoot string, schedulerIDs map[string]string) ([]byte, bool, error) {
+func rewriteMigratedJSON(sourcePath, mappedRel, sourceRoot, runtimeRoot string, schedulerIDs map[string]string, agentIDs map[string]standaloneAgentIdentity) ([]byte, bool, error) {
 	parts := strings.Split(filepath.ToSlash(mappedRel), "/")
 	isMetadata := len(parts) >= 3 && parts[0] == "sandboxes" && parts[len(parts)-1] == "metadata.json"
 	isManifest := len(parts) >= 4 && parts[0] == "sandboxes" && parts[len(parts)-2] == "vm" && parts[len(parts)-1] == "mount-manifest.json"
@@ -116,6 +193,9 @@ func rewriteMigratedJSON(sourcePath, mappedRel, sourceRoot, runtimeRoot string, 
 			if err := rewrite(summary, "workspace_path"); err != nil {
 				return nil, true, fmt.Errorf("rewrite metadata workspace path: %w", err)
 			}
+			if err := rewriteStandaloneAgentTags(summary, agentIDs); err != nil {
+				return nil, true, fmt.Errorf("rewrite metadata agent identity: %w", err)
+			}
 		}
 		if mounts, ok := document["volume_mounts"].([]any); ok {
 			for _, item := range mounts {
@@ -140,20 +220,8 @@ func rewriteMigratedJSON(sourcePath, mappedRel, sourceRoot, runtimeRoot string, 
 	}
 	if isLifecycle {
 		sandboxID := strings.TrimSuffix(parts[2], ".json")
-		expectedPath := filepath.Join(runtimeRoot, "sandboxes", sandboxID)
-		if err := rewriteRequiredPath(document, "sandbox_path", sourceRoot, runtimeRoot, expectedPath, schedulerIDs); err != nil {
-			return nil, true, fmt.Errorf("rewrite lifecycle sandbox path: %w", err)
-		}
-		if resources, ok := document["owned_resources"].([]any); ok {
-			for _, item := range resources {
-				resource, ok := item.(map[string]any)
-				if !ok || resource["kind"] != "sandbox-directory" {
-					continue
-				}
-				if err := rewriteRequiredPath(resource, "path", sourceRoot, runtimeRoot, expectedPath, schedulerIDs); err != nil {
-					return nil, true, fmt.Errorf("rewrite lifecycle owned resource: %w", err)
-				}
-			}
+		if err := rewriteLifecyclePaths(document, sandboxID, sourceRoot, runtimeRoot, schedulerIDs); err != nil {
+			return nil, true, err
 		}
 	}
 	rewritten, err := json.MarshalIndent(document, "", "  ")
@@ -163,22 +231,57 @@ func rewriteMigratedJSON(sourcePath, mappedRel, sourceRoot, runtimeRoot string, 
 	return append(rewritten, '\n'), true, nil
 }
 
-func rewriteRequiredPath(container map[string]any, field, sourceRoot, runtimeRoot, expected string, schedulerIDs map[string]string) error {
-	value, ok := container[field].(string)
-	if !ok || strings.TrimSpace(value) == "" {
-		return fmt.Errorf("%s is required", field)
+func rewriteStandaloneAgentTags(summary map[string]any, agentIDs map[string]standaloneAgentIdentity) error {
+	tags, ok := summary["tags"].([]any)
+	if !ok {
+		return nil
 	}
-	migrated, inside, err := migratedStoredPath(value, sourceRoot, runtimeRoot, schedulerIDs)
-	if err != nil {
-		return err
+	legacyAgentID := ""
+	for _, item := range tags {
+		tag, ok := item.(map[string]any)
+		if !ok || tag["name"] != "agent_id" {
+			continue
+		}
+		legacyAgentID, _ = tag["value"].(string)
+		legacyAgentID = strings.TrimSpace(legacyAgentID)
+		if legacyAgentID != "" {
+			break
+		}
 	}
-	if !inside {
-		return fmt.Errorf("%s %q is outside the legacy data root", field, value)
+	identity, exists := agentIDs[legacyAgentID]
+	if !exists {
+		return nil
 	}
-	if filepath.Clean(migrated) != filepath.Clean(expected) {
-		return fmt.Errorf("%s %q does not identify %s", field, value, expected)
+	if strings.TrimSpace(identity.NativeID) == "" || strings.TrimSpace(identity.ProjectID) == "" || strings.TrimSpace(identity.AgentName) == "" {
+		return fmt.Errorf("standalone agent %s has an incomplete identity mapping", legacyAgentID)
 	}
-	container[field] = migrated
+	desired := map[string]string{
+		"agent_id":   identity.NativeID,
+		"agent_name": identity.AgentName,
+		"agent":      identity.AgentName,
+		"project":    identity.ProjectID,
+		"project_id": identity.ProjectID,
+	}
+	found := make(map[string]bool, len(desired))
+	for _, item := range tags {
+		tag, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := tag["name"].(string)
+		value, known := desired[strings.TrimSpace(name)]
+		if !known {
+			continue
+		}
+		tag["value"] = value
+		found[strings.TrimSpace(name)] = true
+	}
+	for _, name := range []string{"agent_id", "agent_name", "agent", "project", "project_id"} {
+		if !found[name] {
+			tags = append(tags, map[string]any{"name": name, "value": desired[name]})
+		}
+	}
+	summary["tags"] = tags
 	return nil
 }
 

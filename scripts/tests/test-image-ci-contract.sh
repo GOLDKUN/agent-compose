@@ -431,6 +431,8 @@ for daemon_dockerfile in "$ROOT_DIR/Dockerfile" "$ROOT_DIR/Dockerfile.agent-comp
     "migrator copy in $(basename "$daemon_dockerfile")"
   require_regex "$daemon_dockerfile_source" 'ln -sf /app/agent-compose-migrate /usr/local/bin/agent-compose-migrate' \
     "migrator command link in $(basename "$daemon_dockerfile")"
+  forbid_regex "$daemon_dockerfile_source" '^[[:space:]]*ENV[[:space:]]+SANDBOX_ROOT=' \
+    "sandbox root override in $(basename "$daemon_dockerfile"); daemon images must use the DATA_ROOT-derived application default"
 done
 
 image_verifier_source=$(<"$ROOT_DIR/scripts/verify-agent-compose-image.sh")

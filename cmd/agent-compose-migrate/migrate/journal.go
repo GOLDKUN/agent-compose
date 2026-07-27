@@ -9,12 +9,21 @@ import (
 )
 
 type journal struct {
-	SourceFingerprint string            `json:"source_fingerprint"`
-	RuntimeRoot       string            `json:"runtime_root"`
-	Stage             string            `json:"stage"`
-	Complete          bool              `json:"complete"`
-	SchedulerIDs      map[string]string `json:"scheduler_ids"`
-	Warnings          []string          `json:"warnings,omitempty"`
+	Mode              string                             `json:"mode,omitempty"`
+	SourceFingerprint string                             `json:"source_fingerprint"`
+	SourceVersion     int64                              `json:"source_version,omitempty"`
+	RuntimeRoot       string                             `json:"runtime_root"`
+	Stage             string                             `json:"stage"`
+	Complete          bool                               `json:"complete"`
+	SchedulerIDs      map[string]string                  `json:"scheduler_ids"`
+	AgentIDs          map[string]standaloneAgentIdentity `json:"agent_ids,omitempty"`
+	Warnings          []string                           `json:"warnings,omitempty"`
+}
+
+type standaloneAgentIdentity struct {
+	NativeID  string `json:"native_id"`
+	ProjectID string `json:"project_id"`
+	AgentName string `json:"agent_name"`
 }
 
 func prepareTarget(target, fingerprint, runtimeRoot string) (journal, error) {
@@ -59,6 +68,21 @@ func validateJournalState(state journal) error {
 	if !filepath.IsAbs(state.RuntimeRoot) {
 		return fmt.Errorf("migration journal has invalid runtime root %q", state.RuntimeRoot)
 	}
+	if state.Mode == "in_place" {
+		switch state.Stage {
+		case "database", inPlaceStagePrepared, inPlaceStageLayout, inPlaceStageSwitch:
+			if state.Complete {
+				return fmt.Errorf("in-place %s journal cannot be marked complete", state.Stage)
+			}
+		case "complete":
+			if !state.Complete {
+				return fmt.Errorf("complete migration journal is not sealed")
+			}
+		default:
+			return fmt.Errorf("in-place migration journal has unknown stage %q", state.Stage)
+		}
+		return nil
+	}
 	switch state.Stage {
 	case "database":
 		if state.Complete {
@@ -84,6 +108,29 @@ func validateJournalState(state journal) error {
 	return nil
 }
 
+func readJournal(root string) (journal, error) {
+	path := filepath.Join(root, journalName)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return journal{}, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return journal{}, fmt.Errorf("migration journal must be a regular file, not a symlink")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return journal{}, err
+	}
+	var state journal
+	if err := json.Unmarshal(data, &state); err != nil {
+		return journal{}, fmt.Errorf("decode target migration journal: %w", err)
+	}
+	if err := validateJournalState(state); err != nil {
+		return journal{}, err
+	}
+	return state, nil
+}
+
 func writeJournal(target string, state journal) error {
 	stateData, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
@@ -106,6 +153,17 @@ func cloneSchedulerIDs(source map[string]string) map[string]string {
 	result := make(map[string]string, len(source))
 	for legacyID, schedulerID := range source {
 		result[legacyID] = schedulerID
+	}
+	return result
+}
+
+func cloneStandaloneAgentIdentities(source map[string]standaloneAgentIdentity) map[string]standaloneAgentIdentity {
+	if source == nil {
+		return nil
+	}
+	result := make(map[string]standaloneAgentIdentity, len(source))
+	for legacyID, identity := range source {
+		result[legacyID] = identity
 	}
 	return result
 }

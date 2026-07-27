@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	databaseName = "data.db"
-	journalName  = ".agent-compose-migrate.json"
+	databaseName      = "data.db"
+	journalName       = ".agent-compose-migrate.json"
+	inPlaceBackupName = ".agent-compose-migrate-backup"
 )
 
 var knownMigrationChecksums = map[int64]string{
@@ -41,30 +42,6 @@ type Options struct {
 	RuntimeRoot string
 	DryRun      bool
 	JSON        bool
-}
-
-type Report struct {
-	Source            string   `json:"source"`
-	Target            string   `json:"target"`
-	SourceFingerprint string   `json:"source_fingerprint,omitempty"`
-	SourceVersion     int64    `json:"source_version,omitempty"`
-	TargetVersion     int64    `json:"target_version,omitempty"`
-	Stage             string   `json:"stage"`
-	CopiedFiles       int      `json:"copied_files,omitempty"`
-	CopiedBytes       int64    `json:"copied_bytes,omitempty"`
-	Warnings          []string `json:"warnings,omitempty"`
-	Error             string   `json:"error,omitempty"`
-	DryRun            bool     `json:"dry_run,omitempty"`
-}
-
-func (r Report) Text() string {
-	if r.Error != "" {
-		return fmt.Sprintf("legacy migration %s: %s", r.Stage, r.Error)
-	}
-	if r.DryRun {
-		return fmt.Sprintf("legacy migration dry run: source schema version %d is eligible", r.SourceVersion)
-	}
-	return fmt.Sprintf("legacy migration complete: schema v%d, %d files (%d bytes) copied to %s", r.TargetVersion, r.CopiedFiles, r.CopiedBytes, r.Target)
 }
 
 func Run(ctx context.Context, options Options) (Report, error) {
@@ -94,8 +71,23 @@ func Run(ctx context.Context, options Options) (Report, error) {
 			return fail(fmt.Errorf("resolve runtime root: %w", err))
 		}
 	}
-	if err := validateDistinctDataRoots(source, target); err != nil {
+	if err := validateMigrationDataRoots(source, target); err != nil {
 		return fail(err)
+	}
+	inPlace, err := sameDataRoot(source, target)
+	if err != nil {
+		return fail(err)
+	}
+	report.InPlace = inPlace
+	if inPlace {
+		report.Backup = filepath.Join(source, inPlaceBackupName)
+	}
+	if inPlace && !options.DryRun {
+		if _, err := os.Stat(filepath.Join(source, journalName)); err == nil {
+			return resumeInPlaceMigration(ctx, report, source, runtimeRoot)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fail(fmt.Errorf("inspect in-place migration journal: %w", err))
+		}
 	}
 	if err := validateSourceRoot(source); err != nil {
 		return fail(err)
@@ -137,10 +129,18 @@ func Run(ctx context.Context, options Options) (Report, error) {
 		}
 		report.Warnings = append(report.Warnings, warnings...)
 		report.TargetVersion = targetVersion
-		report.CopiedFiles = copiedFiles
-		report.CopiedBytes = copiedBytes
+		if inPlace {
+			report.CheckedFiles = copiedFiles
+			report.CheckedBytes = copiedBytes
+		} else {
+			report.CopiedFiles = copiedFiles
+			report.CopiedBytes = copiedBytes
+		}
 		report.Stage = "eligible"
 		return report, nil
+	}
+	if inPlace {
+		return runInPlaceMigration(ctx, report, sourceDB, source, runtimeRoot, fingerprint)
 	}
 
 	state, err := prepareTarget(target, fingerprint, runtimeRoot)
@@ -163,7 +163,7 @@ func Run(ctx context.Context, options Options) (Report, error) {
 		if err != nil {
 			return fail(err)
 		}
-		report.CopiedFiles, report.CopiedBytes, err = copyAuthoritativeFiles(source, target, runtimeRoot, state.SchedulerIDs)
+		report.CopiedFiles, report.CopiedBytes, err = copyAuthoritativeFiles(source, target, runtimeRoot, state.SchedulerIDs, state.AgentIDs)
 		if err != nil {
 			return fail(err)
 		}
@@ -195,12 +195,13 @@ func Run(ctx context.Context, options Options) (Report, error) {
 		return fail(fmt.Errorf("open target database: %w", err))
 	}
 	targetDB.SetMaxOpenConns(1)
-	checkpoint := func(warnings []string, schedulerIDs map[string]string) error {
+	checkpoint := func(warnings []string, schedulerIDs map[string]string, agentIDs map[string]standaloneAgentIdentity) error {
 		state.Warnings = append([]string(nil), warnings...)
 		state.SchedulerIDs = cloneSchedulerIDs(schedulerIDs)
+		state.AgentIDs = cloneStandaloneAgentIdentities(agentIDs)
 		return writeJournal(target, state)
 	}
-	warnings, schedulerIDs, err := prepareTargetDatabase(ctx, targetDB, source, runtimeRoot, state.Warnings, state.SchedulerIDs, checkpoint)
+	warnings, schedulerIDs, agentIDs, err := prepareTargetDatabase(ctx, targetDB, source, runtimeRoot, state.Warnings, state.SchedulerIDs, state.AgentIDs, checkpoint)
 	if err != nil {
 		_ = targetDB.Close()
 		return fail(err)
@@ -217,11 +218,12 @@ func Run(ctx context.Context, options Options) (Report, error) {
 	state.Stage = "files"
 	state.Warnings = append([]string(nil), warnings...)
 	state.SchedulerIDs = cloneSchedulerIDs(schedulerIDs)
+	state.AgentIDs = cloneStandaloneAgentIdentities(agentIDs)
 	if err := writeJournal(target, state); err != nil {
 		return fail(err)
 	}
 	report.Stage = "files"
-	report.CopiedFiles, report.CopiedBytes, err = copyAuthoritativeFiles(source, target, runtimeRoot, schedulerIDs)
+	report.CopiedFiles, report.CopiedBytes, err = copyAuthoritativeFiles(source, target, runtimeRoot, schedulerIDs, agentIDs)
 	if err != nil {
 		return fail(err)
 	}
@@ -249,7 +251,7 @@ func dryRunMigration(ctx context.Context, sourceDB *sql.DB, source, runtimeRoot 
 		return nil, 0, 0, 0, fmt.Errorf("open dry-run database: %w", err)
 	}
 	targetDB.SetMaxOpenConns(1)
-	warnings, schedulerIDs, err := prepareTargetDatabase(ctx, targetDB, source, runtimeRoot, nil, nil, nil)
+	warnings, schedulerIDs, agentIDs, err := prepareTargetDatabase(ctx, targetDB, source, runtimeRoot, nil, nil, nil, nil)
 	if err != nil {
 		_ = targetDB.Close()
 		return nil, 0, 0, 0, err
@@ -262,7 +264,7 @@ func dryRunMigration(ctx context.Context, sourceDB *sql.DB, source, runtimeRoot 
 	if closeErr != nil {
 		return nil, 0, 0, 0, fmt.Errorf("close dry-run database: %w", closeErr)
 	}
-	copiedFiles, copiedBytes, err := copyAuthoritativeFiles(source, temporaryRoot, runtimeRoot, schedulerIDs)
+	copiedFiles, copiedBytes, err := inspectAuthoritativeFiles(source, runtimeRoot, schedulerIDs, agentIDs)
 	if err != nil {
 		return nil, 0, 0, 0, err
 	}
@@ -368,10 +370,10 @@ func fingerprintRootFromDatabase(root, databasePath string) (string, error) {
 		if err != nil || rel == "." {
 			return err
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("refuse symlink in source data root: %s", rel)
+		if rel == inPlaceBackupName && entry.IsDir() {
+			return filepath.SkipDir
 		}
-		if rel == databaseName || rel == databaseName+"-wal" || rel == databaseName+"-shm" {
+		if rel == databaseName || rel == databaseName+"-wal" || rel == databaseName+"-shm" || rel == journalName {
 			return nil
 		}
 		info, err := entry.Info()
@@ -379,7 +381,17 @@ func fingerprintRootFromDatabase(root, databasePath string) (string, error) {
 			return err
 		}
 		contentHash := ""
-		if info.Mode().IsRegular() {
+		if entry.Type()&os.ModeSymlink != 0 {
+			if err := validateMigratableSourceSymlink(rel); err != nil {
+				return err
+			}
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			targetHash := sha256.Sum256([]byte(target))
+			contentHash = "symlink:" + hex.EncodeToString(targetHash[:])
+		} else if info.Mode().IsRegular() {
 			file, err := os.Open(path)
 			if err != nil {
 				return err
