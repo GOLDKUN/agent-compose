@@ -74,6 +74,29 @@ func TestPromptLineReaderStartsLineBeforeEnteringRawMode(t *testing.T) {
 	}
 }
 
+func TestPromptLineReaderReturnsRawModeError(t *testing.T) {
+	wantErr := errors.New("make raw failed")
+	input := &promptLineReader{
+		stdin:    strings.NewReader("消息\r"),
+		output:   io.Discard,
+		stdinFD:  0,
+		outputFD: -1,
+		makeRaw: func() (func() error, error) {
+			return nil, wantErr
+		},
+	}
+	t.Cleanup(func() {
+		if err := input.Close(); err != nil {
+			t.Fatalf("close prompt input: %v", err)
+		}
+	})
+
+	line, err := input.ReadLine("agent@sandbox:> ")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("read prompt line error = %v (%q), want %v", err, line, wantErr)
+	}
+}
+
 func TestPromptLineReaderEmptyInterruptIsNotEOF(t *testing.T) {
 	var output bytes.Buffer
 	input := &promptLineReader{

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/chzyer/readline"
@@ -79,6 +80,10 @@ func (r *promptLineReader) ReadLine(prompt string) (string, error) {
 		} else {
 			r.terminal.SetPrompt(prompt)
 		}
+		// readline 会忽略 FuncMakeRaw 的错误，因此在读取前显式进入并检查结果。
+		if err := r.terminal.Terminal.EnterRawMode(); err != nil {
+			return "", fmt.Errorf("enter terminal raw mode: %w", err)
+		}
 		line, err := r.terminal.Readline()
 		if errors.Is(err, readline.ErrInterrupt) {
 			// 与 readline.Result.CanContinue 保持一致：非空输入被中断时清空并重新读取。
@@ -116,6 +121,9 @@ func (r *promptLineReader) newTerminal(prompt string) (*readline.Instance, error
 			return 80
 		},
 		FuncMakeRaw: func() error {
+			if restore != nil {
+				return nil
+			}
 			var err error
 			restore, err = r.makeRaw()
 			return err
