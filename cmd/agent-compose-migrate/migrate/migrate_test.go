@@ -3,10 +3,14 @@ package migrate
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/runs"
 	"agent-compose/pkg/storage/configstore"
 	"agent-compose/pkg/storage/sqlite"
 )
@@ -119,6 +123,52 @@ func TestRunRejectsInvalidSourceAndOptionShapes(t *testing.T) {
 	}
 }
 
+func TestRunRejectsNestedDataRootsBeforeCreatingTarget(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	database, err := sqlite.Open(filepath.Join(source, databaseName), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(source, "migrated", "data")
+	report, err := Run(context.Background(), Options{Source: source, Target: target})
+	if err == nil || report.Stage != "validate" || !strings.Contains(report.Error, "target must not be nested inside source") {
+		t.Fatalf("nested target report=%+v, err=%v", report, err)
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("nested target was created: %v", statErr)
+	}
+
+	parent := t.TempDir()
+	nestedSource := filepath.Join(parent, "source")
+	if err := os.MkdirAll(nestedSource, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDistinctDataRoots(nestedSource, parent); err == nil || !strings.Contains(err.Error(), "source must not be nested inside target") {
+		t.Fatalf("nested source validation error=%v", err)
+	}
+
+	symlinkParent := t.TempDir()
+	symlink := filepath.Join(symlinkParent, "source-link")
+	if err := os.Symlink(source, symlink); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDistinctDataRoots(source, filepath.Join(symlink, "nested")); err == nil || !strings.Contains(err.Error(), "target must not be nested inside source") {
+		t.Fatalf("symlink nested target validation error=%v", err)
+	}
+}
+
+func TestLegacyProjectWorkspaceRejectsEscapingFileID(t *testing.T) {
+	if _, err := legacyProjectWorkspace("../outside", "Unsafe", "file", "{}"); err == nil {
+		t.Fatal("legacyProjectWorkspace accepted an escaping file workspace id")
+	}
+}
+
 func TestRunRejectsTargetConflictAndChangedSource(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "source")
 	if err := os.MkdirAll(source, 0o700); err != nil {
@@ -179,7 +229,18 @@ func TestRunRejectsSymlinkedTargetComponentOnResume(t *testing.T) {
 	if err := os.MkdirAll(target, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeJournal(target, journal{SourceFingerprint: fingerprint, Stage: "files"}); err != nil {
+	sourceDB, err := openReadOnly(filepath.Join(source, databaseName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := snapshotDatabase(context.Background(), sourceDB, filepath.Join(target, databaseName)); err != nil {
+		_ = sourceDB.Close()
+		t.Fatal(err)
+	}
+	if err := sourceDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJournal(target, journal{SourceFingerprint: fingerprint, Stage: "files", SchedulerIDs: map[string]string{}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outside, filepath.Join(target, "sandboxes")); err != nil {
@@ -216,6 +277,13 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(source, "sessions", "legacy-sandbox", "state.json"), []byte(`{"ready":true}`), 0o600); err != nil {
 				t.Fatal(err)
 			}
+			workspaceContent := filepath.Join(source, "workspaces", "legacy-workspace", "content")
+			if err := os.MkdirAll(workspaceContent, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(workspaceContent, "README.md"), []byte("legacy workspace"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 			db, err := sql.Open("sqlite", filepath.Join(source, databaseName))
 			if err != nil {
 				t.Fatal(err)
@@ -227,10 +295,13 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			if _, err := db.Exec(`INSERT INTO workspace_config(id,name,type,config_json,created_at,updated_at) VALUES('legacy-workspace','Legacy Workspace','file','{}',1000,1001)`); err != nil {
 				t.Fatalf("insert legacy workspace: %v", err)
 			}
-			if _, err := db.Exec(`INSERT INTO agent_definition(id,name,enabled,provider,workspace_id,created_at,updated_at) VALUES('standalone-agent','Standalone Agent',1,'codex','legacy-workspace',1000,1001)`); err != nil {
+			if _, err := db.Exec(`INSERT INTO agent_definition(id,name,enabled,provider,model,system_prompt,workspace_id,skills,created_at,updated_at) VALUES('standalone-agent','123 Worker',1,'codex','legacy-model','preserve this prompt','legacy-workspace','[{"name":"review"}]',1000,1001)`); err != nil {
 				t.Fatalf("insert standalone agent: %v", err)
 			}
-			if _, err := db.Exec(`INSERT INTO loader(id,name,runtime,script,workspace_id,enabled,created_at,updated_at) VALUES('standalone-loader','Standalone Scheduler','scheduler','function main() {}','legacy-workspace',1,1000,1001)`); err != nil {
+			if _, err := db.Exec(`INSERT INTO agent_definition(id,name,enabled,deleted_at,provider,created_at,updated_at) VALUES('deleted-agent','Deleted Agent',1,1002,'codex',1000,1001)`); err != nil {
+				t.Fatalf("insert deleted standalone agent: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO loader(id,name,runtime,script,workspace_id,agent_id,enabled,created_at,updated_at) VALUES('standalone-loader','Standalone Scheduler','scheduler','function main() {}','legacy-workspace','standalone-agent',1,1000,1001)`); err != nil {
 				t.Fatalf("insert standalone scheduler: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO loader_run(loader_id,run_id,status,started_at,artifacts_dir) VALUES('standalone-loader','legacy-run','succeeded',1700000000,?)`, artifactDir); err != nil {
@@ -252,11 +323,12 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			if report.TargetVersion != 7 || len(report.Warnings) != 1 {
 				t.Fatalf("report = %+v", report)
 			}
-			targetDB, err := sql.Open("sqlite", filepath.Join(target, databaseName))
+			targetDatabase, err := sqlite.Open(filepath.Join(target, databaseName), 0)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() { _ = targetDB.Close() }()
+			defer func() { _ = targetDatabase.Close() }()
+			targetDB := targetDatabase.DB()
 			var projects, agents, schedulers int
 			if err := targetDB.QueryRow(`SELECT COUNT(*) FROM project WHERE name=?`, legacyDefaultProjectName).Scan(&projects); err != nil {
 				t.Fatal(err)
@@ -267,12 +339,24 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			if err := targetDB.QueryRow(`SELECT COUNT(*) FROM project_scheduler`).Scan(&schedulers); err != nil {
 				t.Fatal(err)
 			}
-			if projects != 1 || agents != 2 || schedulers != 1 {
+			if projects != 1 || agents != 1 || schedulers != 1 {
 				t.Fatalf("converted counts project=%d agents=%d schedulers=%d", projects, agents, schedulers)
 			}
 			definitionStore := configstore.FromDB(targetDB)
-			if agent, err := definitionStore.GetAgentDefinition(context.Background(), "standalone-agent"); err != nil || agent.WorkspaceID != "legacy-workspace" {
+			var projectID, agentID, agentName string
+			if err := targetDB.QueryRow(`SELECT project_id,id,agent_name FROM project_agent`).Scan(&projectID, &agentID, &agentName); err != nil {
+				t.Fatal(err)
+			}
+			wantAgentID, err := domain.StableProjectAgentID(projectID, agentName)
+			if err != nil || agentID != wantAgentID || agentName != "agent-123worker" {
+				t.Fatalf("native agent identity id=%q name=%q want=%q, err=%v", agentID, agentName, wantAgentID, err)
+			}
+			if agent, err := definitionStore.GetAgentDefinition(context.Background(), agentID); err != nil || agent.WorkspaceID != "legacy-workspace" || agent.Model != "legacy-model" || agent.SystemPrompt != "preserve this prompt" || len(agent.Skills) != 1 {
 				t.Fatalf("converted standalone agent = %#v, err=%v", agent, err)
+			}
+			var deletedCount int
+			if err := targetDB.QueryRow(`SELECT COUNT(*) FROM project_agent WHERE name='Deleted Agent'`).Scan(&deletedCount); err != nil || deletedCount != 0 {
+				t.Fatalf("deleted standalone agent count=%d, err=%v", deletedCount, err)
 			}
 			var schedulerID string
 			if err := targetDB.QueryRow(`SELECT id FROM project_scheduler`).Scan(&schedulerID); err != nil {
@@ -280,6 +364,38 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			}
 			if scheduler, err := definitionStore.GetScheduler(context.Background(), schedulerID); err != nil || scheduler.Summary.WorkspaceID != "legacy-workspace" {
 				t.Fatalf("converted standalone scheduler = %#v, err=%v", scheduler, err)
+			}
+			project, err := definitionStore.GetProject(context.Background(), projectID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			revision, err := definitionStore.GetProjectRevision(context.Background(), projectID, project.CurrentRevision)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec, err := runs.DecodeRevisionSpec(revision.SpecJSON)
+			if err != nil {
+				t.Fatalf("decode migrated revision: %v", err)
+			}
+			agentSpec, ok := runs.AgentSpecByName(spec, agentName)
+			if !ok {
+				t.Fatalf("migrated revision missing agent %s", agentName)
+			}
+			_, resolvedWorkspace, err := runs.ProjectRunWorkspaceSpecsFromV2(spec.GetWorkspaces(), agentSpec.GetWorkspace())
+			if err != nil || resolvedWorkspace == nil || resolvedWorkspace.Provider != "file" || resolvedWorkspace.Path != filepath.ToSlash(filepath.Join("workspaces", "legacy-workspace", "content")) {
+				t.Fatalf("resolved migrated workspace=%#v, err=%v", resolvedWorkspace, err)
+			}
+			resolvedPath, err := runs.ResolveLocalProjectWorkspacePath(project, resolvedWorkspace.Path)
+			if err != nil {
+				t.Fatalf("resolve migrated workspace path: %v", err)
+			}
+			if data, readErr := os.ReadFile(filepath.Join(resolvedPath, "README.md")); readErr != nil || string(data) != "legacy workspace" {
+				t.Fatalf("materialized migrated workspace data=%q, err=%v", data, readErr)
+			}
+			coordinator := runs.NewCoordinator(definitionStore, domain.StableProjectRunID)
+			createdRun, err := coordinator.BeginRun(context.Background(), runs.StartRequest{ProjectID: projectID, AgentName: agentName, Source: domain.ProjectRunSourceAPI, ClientRequestID: "post-migration-run"})
+			if err != nil || createdRun.AgentID != agentID {
+				t.Fatalf("begin post-migration run=%#v, err=%v", createdRun, err)
 			}
 			var startedAt int64
 			if err := targetDB.QueryRow(`SELECT started_at FROM scheduler_run WHERE run_id='legacy-run'`).Scan(&startedAt); err != nil {
@@ -300,6 +416,7 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			for _, copied := range []string{
 				filepath.Join(wantArtifacts, "result.json"),
 				filepath.Join(target, "sandboxes", "legacy-sandbox", "state.json"),
+				filepath.Join(target, "workspaces", "legacy-workspace", "content", "README.md"),
 			} {
 				if _, err := os.Stat(copied); err != nil {
 					t.Fatalf("mapped legacy file %s: %v", copied, err)
@@ -420,7 +537,7 @@ func TestRunAppendsProjectionRevisionAndBackfillsProvableSchedulerRun(t *testing
 	}
 	statements := []string{
 		`INSERT INTO project(id,name,current_revision,spec_hash,created_at,updated_at) VALUES('project-1','project',1,'old',1000,1001)`,
-		`INSERT INTO project_revision(project_id,revision,spec_hash,spec_json,created_at) VALUES('project-1',1,'old','{"name":"project","agents":[]}',1000)`,
+		`INSERT INTO project_revision(project_id,revision,spec_hash,spec_json,created_at) VALUES('project-1',1,'old','{"name":"project","variables":[{"name":"TOKEN","value":"preserved"}],"workspaces":[{"key":"repo","provider":"file","path":"."}],"volumes":[{"key":"cache","name":"preserved-volume"}],"mcp_servers":[{"name":"tools","type":"stdio","command":"preserved-mcp"}],"octobus_servers":[{"name":"internal","url":"https://preserved.invalid"}],"agents":[]}',1000)`,
 		`INSERT INTO agent_definition(id,name,enabled,provider,managed_project_id,managed_project_revision,managed_agent_name,created_at,updated_at) VALUES('agent-1','Worker',1,'codex','wrong-project',0,'wrong-agent',1000,1001)`,
 		`INSERT INTO project_agent(id,name,project_id,agent_name,managed_agent_id,revision,provider,scheduler_enabled,created_at,updated_at) VALUES('agent-1','Worker','project-1','worker','agent-1',1,'codex',1,1000,1001)`,
 		`INSERT INTO loader(id,name,script,agent_id,managed_project_id,managed_project_revision,managed_agent_name,managed_scheduler_id,created_at,updated_at) VALUES('loader-1','Worker scheduler','run()','agent-1','wrong-project',0,'wrong-agent','wrong-scheduler',1000,1001)`,
@@ -459,6 +576,20 @@ func TestRunAppendsProjectionRevisionAndBackfillsProvableSchedulerRun(t *testing
 	}
 	if currentRevision != 2 || revisionCount != 2 {
 		t.Fatalf("project revision current=%d count=%d, want 2/2", currentRevision, revisionCount)
+	}
+	var alignedSpecJSON string
+	if err := targetDB.QueryRow(`SELECT spec_json FROM project_revision WHERE project_id='project-1' AND revision=2`).Scan(&alignedSpecJSON); err != nil {
+		t.Fatal(err)
+	}
+	var alignedSpec map[string]any
+	if err := json.Unmarshal([]byte(alignedSpecJSON), &alignedSpec); err != nil {
+		t.Fatalf("decode aligned revision: %v", err)
+	}
+	for _, field := range []string{"variables", "workspaces", "volumes", "mcp_servers", "octobus_servers"} {
+		items, ok := alignedSpec[field].([]any)
+		if !ok || len(items) != 1 {
+			t.Fatalf("aligned revision field %s = %#v", field, alignedSpec[field])
+		}
 	}
 	var schedulerRunID sql.NullString
 	if err := targetDB.QueryRow(`SELECT scheduler_run_id FROM project_run WHERE run_id='project-run-1'`).Scan(&schedulerRunID); err != nil {
@@ -517,6 +648,29 @@ func TestE2ELegacyMigrationReportAndPathMappingContracts(t *testing.T) {
 	}
 	if rewritten, inside, err := migratedStoredPath("relative/path", source, target, nil); err != nil || inside || rewritten != "relative/path" {
 		t.Fatalf("relative stored path = %q inside=%v err=%v", rewritten, inside, err)
+	}
+	relativeLegacyPath := filepath.Join("sessions", "sandbox-1", "workspace")
+	if rewritten, inside, err := migratedStoredPath(relativeLegacyPath, source, target, nil); err != nil || !inside || rewritten != filepath.Join(target, "sandboxes", "sandbox-1", "workspace") {
+		t.Fatalf("relative legacy stored path = %q inside=%v err=%v", rewritten, inside, err)
+	}
+	for _, external := range []string{
+		filepath.FromSlash("/external/volumes/sessions/backup"),
+		filepath.Join("..", "sessions", "sandbox-1"),
+		`C:\data\loaders\legacy-loader\runs\run-1`,
+	} {
+		if rewritten, inside, err := migratedStoredPath(external, source, target, map[string]string{"legacy-loader": "scheduler-1"}); err != nil || inside || rewritten != external {
+			t.Fatalf("external stored path %q = %q inside=%v err=%v", external, rewritten, inside, err)
+		}
+	}
+	alreadyMigrated := filepath.Join(target, "schedulers", "scheduler-1", "runs", "run-1")
+	if rewritten, inside, err := migratedStoredPath(alreadyMigrated, source, target, nil); err != nil || !inside || rewritten != alreadyMigrated {
+		t.Fatalf("already migrated stored path = %q inside=%v err=%v", rewritten, inside, err)
+	}
+	containerPath := filepath.FromSlash("/data/sessions/sandbox-1/state/runs/run-1/transcript.txt")
+	sameRuntimeRoot := filepath.FromSlash("/data")
+	wantSameRootPath := filepath.FromSlash("/data/sandboxes/sandbox-1/state/runs/run-1/transcript.txt")
+	if rewritten, inside, err := migratedStoredPath(containerPath, source, sameRuntimeRoot, nil); err != nil || !inside || rewritten != wantSameRootPath {
+		t.Fatalf("same-root container stored path = %q inside=%v err=%v, want %q", rewritten, inside, err, wantSameRootPath)
 	}
 	used := map[string]struct{}{}
 	first := uniqueLegacyName(" Worker! ", "agent-1", "agent", used)

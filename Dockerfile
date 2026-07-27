@@ -74,7 +74,8 @@ RUN target_arch="${TARGETARCH:-$(dpkg --print-architecture)}" && \
       --profile linux-full \
       --goarch "${target_arch}" \
       --output /out/agent-compose \
-      --version "${VERSION}"
+      --version "${VERSION}" && \
+    CGO_ENABLED=0 GOOS=linux GOARCH="${target_arch}" go build -o /out/agent-compose-migrate ./cmd/agent-compose-migrate
 
 FROM scratch AS agent-compose-artifact
 COPY --from=go-build /out/agent-compose /out/agent-compose
@@ -85,12 +86,15 @@ RUN apt-get update &&     apt-get install -y --no-install-recommends ca-certific
 RUN ln -sfv /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
 WORKDIR /app
 COPY --from=go-build /out/agent-compose /app/agent-compose
-RUN ln -sf /app/agent-compose /usr/local/bin/agent-compose
+COPY --from=go-build /out/agent-compose-migrate /app/agent-compose-migrate
+RUN ln -sf /app/agent-compose /usr/local/bin/agent-compose && \
+    ln -sf /app/agent-compose-migrate /usr/local/bin/agent-compose-migrate
 COPY --from=boxlite-build /out/runtime /app/boxlite/runtime
 COPY --from=microsandbox-fetch /out /app/microsandbox
 RUN test -x /app/agent-compose && \
-	command -v qemu-img >/dev/null && \
-	mkfs.ext4 2>&1 | grep -Fq -- '[-d root-directory' && \
+    test -x /app/agent-compose-migrate && \
+    command -v qemu-img >/dev/null && \
+    mkfs.ext4 2>&1 | grep -Fq -- '[-d root-directory' && \
     test -x /app/boxlite/runtime/boxlite-guest && \
     test -x /app/boxlite/runtime/boxlite-shim && \
     test -x /app/microsandbox/bin/msb && \

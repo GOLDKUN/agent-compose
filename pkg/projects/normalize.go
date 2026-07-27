@@ -90,19 +90,20 @@ func NormalizeSchedulerRecord(scheduler domain.ProjectSchedulerRecord) (domain.P
 	if scheduler.ProjectID == "" || scheduler.AgentName == "" {
 		return domain.ProjectSchedulerRecord{}, fmt.Errorf("project id and agent name are required")
 	}
-	if scheduler.SchedulerID == "" {
+	if scheduler.ID == "" {
+		scheduler.ID = scheduler.SchedulerID
+	}
+	if scheduler.ID == "" {
 		schedulerID, err := domain.StableProjectSchedulerID(scheduler.ProjectID, scheduler.AgentName, "")
 		if err != nil {
 			return domain.ProjectSchedulerRecord{}, err
 		}
-		scheduler.SchedulerID = schedulerID
+		scheduler.ID = schedulerID
 	}
-	if scheduler.ID == "" {
-		scheduler.ID = scheduler.SchedulerID
-	}
-	if scheduler.SchedulerID == "" {
-		scheduler.SchedulerID = scheduler.ID
-	}
+	// SchedulerID is the public name for the native scheduler identity. Keep the
+	// two model fields aligned while the database retains its compatibility
+	// scheduler_id column.
+	scheduler.SchedulerID = scheduler.ID
 	if scheduler.ShortID == "" {
 		scheduler.ShortID = identity.ShortID(scheduler.ID)
 	}

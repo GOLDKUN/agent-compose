@@ -21,6 +21,7 @@ func run(ctx context.Context, args []string) int {
 	var options migrate.Options
 	flags.StringVar(&options.Source, "source", "", "source data root (required; opened read-only)")
 	flags.StringVar(&options.Target, "target", "", "new target data root (required)")
+	flags.StringVar(&options.RuntimeRoot, "runtime-root", "", "target data root as seen by the daemon (defaults to --target)")
 	flags.BoolVar(&options.DryRun, "dry-run", false, "inspect and report without writing the target")
 	flags.BoolVar(&options.JSON, "json", false, "write the report as JSON")
 	if err := flags.Parse(args); err != nil {

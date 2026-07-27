@@ -116,6 +116,13 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 	if scheduler.SchedulerID == "" || scheduler.ID == "" || scheduler.SpecJSON != "{}" {
 		t.Fatalf("normalized scheduler = %#v", scheduler)
 	}
+	canonical, err := NormalizeSchedulerRecord(domain.ProjectSchedulerRecord{ID: "native-scheduler", SchedulerID: "legacy-alias", ProjectID: "project-1", AgentName: "worker"})
+	if err != nil {
+		t.Fatalf("NormalizeSchedulerRecord canonical identity returned error: %v", err)
+	}
+	if canonical.ID != "native-scheduler" || canonical.SchedulerID != canonical.ID {
+		t.Fatalf("normalized canonical scheduler = %#v", canonical)
+	}
 	for _, item := range []domain.ProjectSchedulerRecord{
 		{AgentName: "worker"},
 		{ProjectID: "project-1", AgentName: "Bad Agent"},

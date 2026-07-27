@@ -139,6 +139,53 @@ func TestV2MigrationDesignRejectsStandaloneSchedulerAndRollsBackAgentMigration(t
 	assertV4RollbackState(t, db, "loader", "standalone-loader")
 }
 
+func TestV2MigrationDesignRejectsAgentProjectionRevisionMismatchWithoutModification(t *testing.T) {
+	ctx := context.Background()
+	db := newMemoryDB(t)
+	chain := loadV2MigrationDesignChain(t)
+	if err := applyMigrationSet(ctx, db, chain[:4]); err != nil {
+		t.Fatalf("apply v4 prefix: %v", err)
+	}
+	seedManagedV4Fixture(t, db)
+	if _, err := db.ExecContext(ctx, `UPDATE agent_definition SET managed_project_revision = 2 WHERE id = 'agent-1'`); err != nil {
+		t.Fatalf("seed projection revision mismatch: %v", err)
+	}
+
+	err := applyMigrationSet(ctx, db, chain)
+	if err == nil || !strings.Contains(err.Error(), "agent-compose-migrate") {
+		t.Fatalf("migration error = %v, want copy migrator hint", err)
+	}
+	assertV4RollbackState(t, db, "agent_definition", "agent-1")
+	var revision int64
+	if err := db.QueryRow(`SELECT managed_project_revision FROM agent_definition WHERE id = 'agent-1'`).Scan(&revision); err != nil || revision != 2 {
+		t.Fatalf("projection revision after rollback = %d, err=%v", revision, err)
+	}
+}
+
+func TestV2MigrationDesignRejectsLegacySchedulerArtifactPathWithoutModification(t *testing.T) {
+	ctx := context.Background()
+	db := newMemoryDB(t)
+	chain := loadV2MigrationDesignChain(t)
+	if err := applyMigrationSet(ctx, db, chain[:4]); err != nil {
+		t.Fatalf("apply v4 prefix: %v", err)
+	}
+	seedManagedV4Fixture(t, db)
+	legacyPath := `/data/loaders/loader-1/runs/scheduler-run-1`
+	if _, err := db.ExecContext(ctx, `UPDATE loader_run SET artifacts_dir = ? WHERE run_id = 'scheduler-run-1'`, legacyPath); err != nil {
+		t.Fatalf("seed legacy scheduler artifact path: %v", err)
+	}
+
+	err := applyMigrationSet(ctx, db, chain)
+	if err == nil || !strings.Contains(err.Error(), "agent-compose-migrate") {
+		t.Fatalf("migration error = %v, want copy migrator hint", err)
+	}
+	assertV4RollbackState(t, db, "loader", "loader-1")
+	var artifactsDir string
+	if err := db.QueryRow(`SELECT artifacts_dir FROM loader_run WHERE run_id = 'scheduler-run-1'`).Scan(&artifactsDir); err != nil || artifactsDir != legacyPath {
+		t.Fatalf("artifact path after rollback = %q, err=%v", artifactsDir, err)
+	}
+}
+
 func TestV2MigrationDesignBuildsCleanDatabaseThroughHistoricalChain(t *testing.T) {
 	db := newMemoryDB(t)
 	if err := applyMigrationSet(context.Background(), db, loadV2MigrationDesignChain(t)); err != nil {
@@ -251,7 +298,7 @@ func seedManagedV4Fixture(t *testing.T, db *sql.DB) {
 		`INSERT INTO project_run(run_id, project_id, project_name, project_revision, agent_name, managed_agent_id, source, scheduler_id, trigger_id, status, sandbox_id, result_json, created_at, updated_at) VALUES('project-run-1', 'project-1', 'legacy', 1, 'worker', 'agent-1', 'scheduler', 'scheduler-1', 'trigger-1', 'succeeded', 'sandbox-1', '{"ok":true}', 1100, 1200)`,
 		`INSERT INTO project_run_event(id, run_id, seq, kind, text, success, created_at) VALUES('project-run-event-1', 'project-run-1', 1, 'agent_message', 'done', 1, 1200)`,
 		`INSERT INTO loader_trigger(loader_id, trigger_id, kind, enabled, spec_json, next_fire_at, last_fired_at) VALUES('loader-1', 'trigger-1', 'cron', 1, '{"expr":"0 * * * *"}', 2000, 1900)`,
-		`INSERT INTO loader_run(loader_id, run_id, trigger_id, trigger_kind, trigger_source, status, started_at, completed_at, duration_ms, result_json, payload_json, source_script_sha256, artifacts_dir) VALUES('loader-1', 'scheduler-run-1', 'trigger-1', 'cron', 'schedule', 'succeeded', 2000, 2100, 100, '{"ok":true}', '{"source":"timer"}', 'sha256', '/artifacts/scheduler-run-1')`,
+		`INSERT INTO loader_run(loader_id, run_id, trigger_id, trigger_kind, trigger_source, status, started_at, completed_at, duration_ms, result_json, payload_json, source_script_sha256, artifacts_dir) VALUES('loader-1', 'scheduler-run-1', 'trigger-1', 'cron', 'schedule', 'succeeded', 2000, 2100, 100, '{"ok":true}', '{"source":"timer"}', 'sha256', '')`,
 		`INSERT INTO loader_event(loader_id, event_id, run_id, trigger_id, type, level, message, payload_json, linked_sandbox_id, linked_cell_id, linked_agent_thread_id, created_at) VALUES('loader-1', 'scheduler-event-1', 'scheduler-run-1', 'trigger-1', 'loader.completed', 'info', 'done', '{"type":"loader.completed"}', 'sandbox-1', 'cell-1', 'thread-1', 2100)`,
 		`INSERT INTO loader_state(loader_id, key, value_json, updated_at) VALUES('loader-1', 'cursor', '{"offset":7}', 2100)`,
 		`INSERT INTO loader_binding(loader_id, trigger_id, sandbox_id, sandbox_config_hash, created_at, updated_at) VALUES('loader-1', 'trigger-1', 'sandbox-1', 'config-hash', 2000, 2100)`,

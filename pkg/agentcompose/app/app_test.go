@@ -193,7 +193,7 @@ func TestRegisterUsesSandboxRootAndInitializesConfigStoreSchema(t *testing.T) {
 	Register(di)
 	cancel()
 	config := do.MustInvoke[*appconfig.Config](di)
-	wantRoot := filepath.Join(root, "sandboxes")
+	wantRoot := legacyRoot
 	if config.SandboxRoot != wantRoot {
 		t.Fatalf("SandboxRoot = %q, want %q", config.SandboxRoot, wantRoot)
 	}

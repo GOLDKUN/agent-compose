@@ -122,7 +122,7 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 	assertE2ESandboxWorkspaceState(t, sandboxA, sandboxAID, projectID, domain.VMStatusRunning, "")
 	workspaceAPath := sandboxA.GetWorkspacePath()
 	if restartBinary != binary {
-		assertE2ELegacySandboxPath(t, testRoot, sandboxAID, workspaceAPath)
+		assertE2EBaselineSandboxPath(t, testRoot, sandboxAID, workspaceAPath)
 	}
 	handleA := inspectE2EDockerSandbox(t, ctx, dockerClient, sandboxAID)
 	if !handleA.Running || filepath.Clean(handleA.WorkspaceSource) != filepath.Clean(workspaceAPath) {
@@ -237,12 +237,22 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 	assertE2ETCPAddressReleased(t, listenAddress1)
 }
 
-func assertE2ELegacySandboxPath(t *testing.T, testRoot, sandboxID, workspacePath string) {
+func assertE2EBaselineSandboxPath(t *testing.T, testRoot, sandboxID, workspacePath string) {
 	t.Helper()
-	want := filepath.Join(testRoot, "sandboxes", sandboxID, "workspace")
-	if filepath.Clean(workspacePath) != filepath.Clean(want) {
-		t.Fatalf("legacy sandbox workspace path = %q, want %q", workspacePath, want)
+	flat := filepath.Join(testRoot, "sandboxes", sandboxID, "workspace")
+	if filepath.Clean(workspacePath) == filepath.Clean(flat) {
+		return
 	}
+	relative, err := filepath.Rel(filepath.Join(testRoot, "sandboxes"), workspacePath)
+	if err == nil {
+		parts := strings.Split(filepath.ToSlash(relative), "/")
+		if len(parts) == 5 && parts[3] == sandboxID && parts[4] == "workspace" {
+			if _, parseErr := time.ParseInLocation("2006/01/02", strings.Join(parts[:3], "/"), time.Local); parseErr == nil {
+				return
+			}
+		}
+	}
+	t.Fatalf("baseline sandbox workspace path = %q, want flat or date-partitioned path for %s", workspacePath, sandboxID)
 }
 
 func assertE2EDatePartitionedSandboxPath(t *testing.T, testRoot, sandboxID, workspacePath string) {

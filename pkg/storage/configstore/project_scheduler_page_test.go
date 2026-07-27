@@ -21,9 +21,9 @@ func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {
 		}
 	}
 	for _, scheduler := range []domain.ProjectSchedulerRecord{
-		{ProjectID: "project-a", AgentName: "agent-a", SchedulerID: "scheduler-a", ID: "scheduler-record-a", Enabled: true},
-		{ProjectID: "project-a", AgentName: "agent-b", SchedulerID: "scheduler-b", ID: "scheduler-record-b", Enabled: true},
-		{ProjectID: "project-b", AgentName: "agent-c", SchedulerID: "scheduler-c", ID: "scheduler-record-c", Enabled: true},
+		{ProjectID: "project-a", AgentName: "agent-a", ID: "scheduler-record-a", Enabled: true},
+		{ProjectID: "project-a", AgentName: "agent-b", ID: "scheduler-record-b", Enabled: true},
+		{ProjectID: "project-b", AgentName: "agent-c", ID: "scheduler-record-c", Enabled: true},
 	} {
 		agentID, err := domain.StableProjectAgentID(scheduler.ProjectID, scheduler.AgentName)
 		if err != nil {
@@ -35,6 +35,21 @@ func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {
 		if _, err := store.UpsertProjectScheduler(ctx, scheduler); err != nil {
 			t.Fatalf("upsert scheduler %s: %v", scheduler.SchedulerID, err)
 		}
+	}
+	// The retained scheduler_id column is migration-only state. Deliberately
+	// diverge it to prove current reads, writes, ordering, and cursors use id.
+	if _, err := store.db.ExecContext(ctx, `UPDATE project_scheduler SET scheduler_id = ? WHERE id = ?`, "legacy-alias-a", "scheduler-record-a"); err != nil {
+		t.Fatalf("diverge compatibility scheduler id: %v", err)
+	}
+	loaded, err := store.GetProjectScheduler(ctx, "project-a", "scheduler-record-a")
+	if err != nil || loaded.ID != "scheduler-record-a" || loaded.SchedulerID != loaded.ID {
+		t.Fatalf("get scheduler by native id = %#v, err = %v", loaded, err)
+	}
+	if _, err := store.GetProjectScheduler(ctx, "project-a", "legacy-alias-a"); err == nil {
+		t.Fatal("get scheduler unexpectedly used compatibility scheduler_id")
+	}
+	if loaded, err = store.SetProjectSchedulerEnabled(ctx, "project-a", "scheduler-record-a", false); err != nil || loaded.Enabled {
+		t.Fatalf("disable scheduler by native id = %#v, err = %v", loaded, err)
 	}
 	if _, err := store.db.ExecContext(ctx, `UPDATE project_scheduler SET last_error = ? WHERE id = ?`, "last failure", "scheduler-record-a"); err != nil {
 		t.Fatalf("update scheduler error: %v", err)

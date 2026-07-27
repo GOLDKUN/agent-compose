@@ -53,7 +53,6 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 		t.Fatalf("create project revision: %v", err)
 	}
 	const (
-		loaderID    = "loader-regression"
 		schedulerID = "scheduler-regression"
 		agentName   = "reviewer"
 		targetRunID = "run-target-beyond-500"
@@ -70,7 +69,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 		t.Fatalf("create project agent: %v", err)
 	}
 	if _, err := store.UpsertProjectScheduler(ctx, domain.ProjectSchedulerRecord{
-		ID: loaderID, ProjectID: project.ID, SchedulerID: schedulerID, AgentName: agentName,
+		ID: schedulerID, ProjectID: project.ID, SchedulerID: schedulerID, AgentName: agentName,
 		Revision: revision.Revision, Enabled: true, TriggerCount: 1, SpecJSON: `{"id":"scheduler-regression"}`,
 	}); err != nil {
 		t.Fatalf("create project scheduler: %v", err)
@@ -78,13 +77,13 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 
 	startedAt := time.UnixMilli(1_720_000_000_000).UTC()
 	if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{
-		ID: targetRunID, SchedulerID: loaderID, TriggerID: "trigger-regression",
+		ID: targetRunID, SchedulerID: schedulerID, TriggerID: "trigger-regression",
 		Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt,
 	}); err != nil {
 		t.Fatalf("create target scheduler run: %v", err)
 	}
 	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
-		ID: "event-target", SchedulerID: loaderID, RunID: targetRunID,
+		ID: "event-target", SchedulerID: schedulerID, RunID: targetRunID,
 		TriggerID: "trigger-regression", Type: "loader.agent.completed",
 		LinkedSandboxID: targetID, CreatedAt: startedAt,
 	}); err != nil {
@@ -93,7 +92,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	for index := 0; index < 501; index++ {
 		runID := fmt.Sprintf("run-newer-%03d", index)
 		if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{
-			ID: runID, SchedulerID: loaderID, TriggerID: "trigger-regression",
+			ID: runID, SchedulerID: schedulerID, TriggerID: "trigger-regression",
 			Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt.Add(time.Duration(index+1) * time.Second),
 		}); err != nil {
 			t.Fatalf("create newer scheduler run %s: %v", runID, err)

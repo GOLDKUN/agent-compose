@@ -350,10 +350,10 @@ func (s *projectStore) UpsertProjectScheduler(ctx context.Context, scheduler Pro
 	}
 	now := time.Now().UTC()
 	result, err := s.db.ExecContext(ctx, `UPDATE project_scheduler SET
-		id = ?, short_id = ?, agent_name = ?, revision = ?, enabled = ?, trigger_count = ?, spec_json = ?, updated_at = ?
-		WHERE project_id = ? AND scheduler_id = ?`,
+		scheduler_id = ?, short_id = ?, agent_name = ?, revision = ?, enabled = ?, trigger_count = ?, spec_json = ?, updated_at = ?
+		WHERE project_id = ? AND id = ?`,
 		scheduler.ID, scheduler.ShortID, scheduler.AgentName, scheduler.Revision, BoolToInt(scheduler.Enabled), scheduler.TriggerCount, scheduler.SpecJSON, now.Unix(),
-		scheduler.ProjectID, scheduler.SchedulerID)
+		scheduler.ProjectID, scheduler.ID)
 	if err != nil {
 		return ProjectSchedulerRecord{}, fmt.Errorf("update project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 	}
@@ -365,7 +365,7 @@ func (s *projectStore) UpsertProjectScheduler(ctx context.Context, scheduler Pro
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO project_scheduler(
 		id, short_id, project_id, scheduler_id, agent_name, revision, enabled, trigger_count, spec_json, last_error, created_at, updated_at
 	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		scheduler.ID, scheduler.ShortID, scheduler.ProjectID, scheduler.SchedulerID, scheduler.AgentName, scheduler.Revision, BoolToInt(scheduler.Enabled), scheduler.TriggerCount, scheduler.SpecJSON, scheduler.LastError,
+		scheduler.ID, scheduler.ShortID, scheduler.ProjectID, scheduler.ID, scheduler.AgentName, scheduler.Revision, BoolToInt(scheduler.Enabled), scheduler.TriggerCount, scheduler.SpecJSON, scheduler.LastError,
 		scheduler.CreatedAt.Unix(), scheduler.UpdatedAt.Unix()); err != nil {
 		return ProjectSchedulerRecord{}, fmt.Errorf("insert project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 	}
@@ -373,8 +373,8 @@ func (s *projectStore) UpsertProjectScheduler(ctx context.Context, scheduler Pro
 }
 
 func (s *projectStore) GetProjectScheduler(ctx context.Context, projectID, schedulerID string) (ProjectSchedulerRecord, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, short_id, project_id, scheduler_id, agent_name, revision, enabled, trigger_count, spec_json, created_at, updated_at
-		FROM project_scheduler WHERE project_id = ? AND scheduler_id = ?`, strings.TrimSpace(projectID), strings.TrimSpace(schedulerID))
+	row := s.db.QueryRowContext(ctx, `SELECT id, short_id, project_id, id, agent_name, revision, enabled, trigger_count, spec_json, created_at, updated_at
+		FROM project_scheduler WHERE project_id = ? AND id = ?`, strings.TrimSpace(projectID), strings.TrimSpace(schedulerID))
 	item, err := projects.ScanProjectScheduler(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -392,7 +392,7 @@ func (s *projectStore) SetProjectSchedulerEnabled(ctx context.Context, projectID
 	if projectID == "" || schedulerID == "" {
 		return ProjectSchedulerRecord{}, fmt.Errorf("project scheduler id is required")
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE project_scheduler SET enabled = ?, updated_at = ? WHERE project_id = ? AND scheduler_id = ?`,
+	result, err := s.db.ExecContext(ctx, `UPDATE project_scheduler SET enabled = ?, updated_at = ? WHERE project_id = ? AND id = ?`,
 		BoolToInt(enabled), time.Now().UTC().Unix(), projectID, schedulerID)
 	if err != nil {
 		return ProjectSchedulerRecord{}, fmt.Errorf("update project scheduler %s/%s enabled state: %w", projectID, schedulerID, err)
@@ -405,8 +405,8 @@ func (s *projectStore) SetProjectSchedulerEnabled(ctx context.Context, projectID
 }
 
 func (s *projectStore) ListProjectSchedulers(ctx context.Context, projectID string) ([]ProjectSchedulerRecord, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, short_id, project_id, scheduler_id, agent_name, revision, enabled, trigger_count, spec_json, created_at, updated_at
-		FROM project_scheduler WHERE project_id = ? ORDER BY agent_name ASC, scheduler_id ASC`, strings.TrimSpace(projectID))
+	rows, err := s.db.QueryContext(ctx, `SELECT id, short_id, project_id, id, agent_name, revision, enabled, trigger_count, spec_json, created_at, updated_at
+		FROM project_scheduler WHERE project_id = ? ORDER BY agent_name ASC, id ASC`, strings.TrimSpace(projectID))
 	if err != nil {
 		return nil, fmt.Errorf("query project schedulers %s: %w", strings.TrimSpace(projectID), err)
 	}
@@ -432,19 +432,19 @@ func (s *projectStore) ListProjectSchedulersPage(ctx context.Context, query stri
 	query = strings.ToLower(strings.TrimSpace(query))
 	likeQuery := "%" + query + "%"
 	rows, err := s.db.QueryContext(ctx, `WITH page AS (
-		SELECT s.id, s.short_id, s.project_id, s.scheduler_id, s.agent_name, s.revision, s.enabled, s.trigger_count, s.spec_json, s.created_at, s.updated_at
+		SELECT s.id, s.short_id, s.project_id, s.id, s.agent_name, s.revision, s.enabled, s.trigger_count, s.spec_json, s.created_at, s.updated_at
 		FROM project_scheduler s JOIN project p ON p.id = s.project_id
 		WHERE p.removed_at = 0
 		AND s.revision = p.current_revision
 		AND (? = '' OR lower(p.id) LIKE ? OR lower(p.name) LIKE ? OR lower(p.source_path) LIKE ?)
-		ORDER BY s.project_id ASC, s.agent_name ASC, s.scheduler_id ASC LIMIT ? OFFSET ?
+		ORDER BY s.project_id ASC, s.agent_name ASC, s.id ASC LIMIT ? OFFSET ?
 	)
-	SELECT page.id, page.short_id, page.project_id, page.scheduler_id, page.agent_name, page.revision, page.enabled, page.trigger_count, page.spec_json, page.created_at, page.updated_at,
+	SELECT page.id, page.short_id, page.project_id, page.id, page.agent_name, page.revision, page.enabled, page.trigger_count, page.spec_json, page.created_at, page.updated_at,
 		(SELECT COUNT(*) FROM scheduler_run sr WHERE sr.scheduler_id = page.id AND sr.trigger_id <> ''),
 		(SELECT MAX(started_at) FROM scheduler_run sr WHERE sr.scheduler_id = page.id AND sr.trigger_id <> ''),
 		COALESCE((SELECT last_error FROM project_scheduler WHERE id = page.id), '')
 	FROM page
-	ORDER BY page.project_id ASC, page.agent_name ASC, page.scheduler_id ASC`, query, likeQuery, likeQuery, likeQuery, limit, max(offset, 0))
+	ORDER BY page.project_id ASC, page.agent_name ASC, page.id ASC`, query, likeQuery, likeQuery, likeQuery, limit, max(offset, 0))
 	if err != nil {
 		return nil, fmt.Errorf("query project scheduler page: %w", err)
 	}

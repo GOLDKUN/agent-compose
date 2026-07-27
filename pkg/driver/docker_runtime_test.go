@@ -511,6 +511,32 @@ func TestDockerRuntimeMountsConsumeManifestAndRebaseEachSource(t *testing.T) {
 	}
 }
 
+func TestDockerContainerMountsMatchActiveDataRoot(t *testing.T) {
+	expected := []mountapi.Mount{
+		{Type: mountapi.TypeBind, Source: "/new/sandboxes/sandbox-1/workspace", Target: "/workspace"},
+		{Type: mountapi.TypeBind, Source: "/new/sandboxes/sandbox-1/state", Target: "/data/state", ReadOnly: true},
+	}
+	matching := containerapi.InspectResponse{Mounts: []containerapi.MountPoint{
+		{Type: mountapi.TypeBind, Source: "/new/sandboxes/sandbox-1/workspace", Destination: "/workspace", RW: true},
+		{Type: mountapi.TypeBind, Source: "/new/sandboxes/sandbox-1/state", Destination: "/data/state", RW: false},
+	}}
+	if !dockerContainerMountsMatch(matching, expected) {
+		t.Fatal("matching container mounts were rejected")
+	}
+	stale := matching
+	stale.Mounts = append([]containerapi.MountPoint(nil), matching.Mounts...)
+	stale.Mounts[0].Source = "/old/sessions/sandbox-1/workspace"
+	if dockerContainerMountsMatch(stale, expected) {
+		t.Fatal("container mounts from an earlier data root were accepted")
+	}
+	wrongMode := matching
+	wrongMode.Mounts = append([]containerapi.MountPoint(nil), matching.Mounts...)
+	wrongMode.Mounts[1].RW = true
+	if dockerContainerMountsMatch(wrongMode, expected) {
+		t.Fatal("container mount with changed read-only mode was accepted")
+	}
+}
+
 func TestSelectDockerNetworkNamePrefersUserDefinedNetwork(t *testing.T) {
 	got, ok := selectDockerNetworkName(containerapi.InspectResponse{
 		NetworkSettings: &containerapi.NetworkSettings{

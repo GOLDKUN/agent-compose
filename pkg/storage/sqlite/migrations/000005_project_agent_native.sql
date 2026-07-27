@@ -31,6 +31,7 @@ WHERE EXISTS (
     LEFT JOIN agent_definition AS definition ON definition.id = agent.managed_agent_id
     WHERE definition.id IS NULL
        OR definition.managed_project_id <> agent.project_id
+       OR definition.managed_project_revision <> agent.revision
        OR definition.managed_agent_name <> agent.agent_name
 );
 INSERT INTO migration_000005_guard

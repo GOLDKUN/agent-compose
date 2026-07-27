@@ -244,7 +244,78 @@ func testNewConfigAllowsDefaultRootsAndRequiresValidDriver(t *testing.T) {
 	}
 }
 
-func TestNewConfigDoesNotAdoptSessionsRootFile(t *testing.T) {
+func TestNewConfigAcceptsLegacySessionEnvironment(t *testing.T) {
+	tests := []struct {
+		name   string
+		legacy string
+		value  string
+		check  func(*Config) bool
+	}{
+		{name: "root", legacy: "SESSION_ROOT", value: filepath.Join("legacy", "sessions"), check: func(c *Config) bool { return strings.HasSuffix(c.SandboxRoot, filepath.Join("legacy", "sessions")) }},
+		{name: "docker host root", legacy: "DOCKER_HOST_SESSION_ROOT", value: filepath.Join("legacy", "host-sessions"), check: func(c *Config) bool {
+			return strings.HasSuffix(c.DockerHostSandboxRoot, filepath.Join("legacy", "host-sessions"))
+		}},
+		{name: "start timeout", legacy: "SESSION_START_TIMEOUT", value: "1s", check: func(c *Config) bool { return c.SandboxStartTimeout == time.Second }},
+		{name: "stop timeout", legacy: "SESSION_STOP_TIMEOUT", value: "1s", check: func(c *Config) bool { return c.SandboxStopTimeout == time.Second }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("DATA_ROOT", filepath.Join(t.TempDir(), "data"))
+			t.Setenv(tc.legacy, tc.value)
+			var logs strings.Builder
+			di := do.New()
+			do.ProvideValue(di, slog.New(slog.NewTextHandler(&logs, nil)))
+			config, err := NewConfig(di)
+			if err != nil || !tc.check(config) {
+				t.Fatalf("NewConfig config=%#v error=%v for legacy %s", config, err, tc.legacy)
+			}
+			if !strings.Contains(logs.String(), "using deprecated environment variable") || !strings.Contains(logs.String(), tc.legacy) {
+				t.Fatalf("logs = %q, want deprecation warning for %s", logs.String(), tc.legacy)
+			}
+		})
+	}
+}
+
+func TestNewConfigTrimsSandboxRootEnvironment(t *testing.T) {
+	for _, name := range []string{"SANDBOX_ROOT", "SESSION_ROOT"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			want := filepath.Join(root, "sandboxes")
+			t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
+			t.Setenv(name, "  "+want+" \t")
+			di := do.New()
+			do.ProvideValue(di, slog.Default())
+
+			config, err := NewConfig(di)
+			if err != nil {
+				t.Fatalf("NewConfig returned error: %v", err)
+			}
+			if config.SandboxRoot != want || !config.SandboxRootExplicit {
+				t.Fatalf("SandboxRoot = %q, explicit=%t; want %q, true", config.SandboxRoot, config.SandboxRootExplicit, want)
+			}
+		})
+	}
+}
+
+func TestNewConfigUsesNonEmptyLegacySessionsRootByDefault(t *testing.T) {
+	dataRoot := filepath.Join(t.TempDir(), "data")
+	legacyRoot := filepath.Join(dataRoot, "sessions")
+	if err := os.MkdirAll(filepath.Join(legacyRoot, "legacy-id"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATA_ROOT", dataRoot)
+	di := do.New()
+	do.ProvideValue(di, slog.Default())
+	config, err := NewConfig(di)
+	if err != nil {
+		t.Fatalf("NewConfig returned error: %v", err)
+	}
+	if config.SandboxRoot != legacyRoot || config.SandboxRootExplicit {
+		t.Fatalf("legacy root config = %#v", config)
+	}
+}
+
+func TestNewConfigIgnoresLegacySessionsRootFile(t *testing.T) {
 	dataRoot := filepath.Join(t.TempDir(), "data")
 	if err := os.MkdirAll(dataRoot, 0o755); err != nil {
 		t.Fatal(err)
@@ -264,6 +335,42 @@ func TestNewConfigDoesNotAdoptSessionsRootFile(t *testing.T) {
 	want := filepath.Join(dataRoot, "sandboxes")
 	if config.SandboxRoot != want || config.SandboxRootExplicit {
 		t.Fatalf("SandboxRoot = %q, explicit = %t; want %q, false", config.SandboxRoot, config.SandboxRootExplicit, want)
+	}
+}
+
+func TestNewConfigUsesSandboxEnvironmentWhenLegacyAlsoSet(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
+	t.Setenv("SESSION_ROOT", filepath.Join(root, "legacy-sessions"))
+	t.Setenv("SANDBOX_ROOT", filepath.Join(root, "new-sandboxes"))
+	t.Setenv("DOCKER_HOST_SESSION_ROOT", filepath.Join(root, "legacy-host-sessions"))
+	t.Setenv("DOCKER_HOST_SANDBOX_ROOT", filepath.Join(root, "new-host-sandboxes"))
+	t.Setenv("SESSION_START_TIMEOUT", "1s")
+	t.Setenv("SANDBOX_START_TIMEOUT", "2s")
+	t.Setenv("SESSION_STOP_TIMEOUT", "3s")
+	t.Setenv("SANDBOX_STOP_TIMEOUT", "4s")
+
+	var logs strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	di := do.New()
+	do.ProvideValue(di, logger)
+	config, err := NewConfig(di)
+	if err != nil {
+		t.Fatalf("NewConfig returned error: %v", err)
+	}
+	if config.SandboxRoot != filepath.Join(root, "new-sandboxes") ||
+		config.DockerHostSandboxRoot != filepath.Join(root, "new-host-sandboxes") ||
+		config.SandboxStartTimeout != 2*time.Second ||
+		config.SandboxStopTimeout != 4*time.Second {
+		t.Fatalf("sandbox env config = %#v", config)
+	}
+	if !config.SandboxRootExplicit {
+		t.Fatalf("SandboxRootExplicit = false, want true when SANDBOX_ROOT is set")
+	}
+	for _, legacy := range []string{"SESSION_ROOT", "DOCKER_HOST_SESSION_ROOT", "SESSION_START_TIMEOUT", "SESSION_STOP_TIMEOUT"} {
+		if !strings.Contains(logs.String(), "deprecated environment variable ignored") || !strings.Contains(logs.String(), legacy) {
+			t.Fatalf("logs = %q, want warning for ignored %s", logs.String(), legacy)
+		}
 	}
 }
 

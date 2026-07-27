@@ -47,6 +47,23 @@ INSERT INTO migration_000006_guard
 SELECT 'duplicate scheduler run identity'
 WHERE EXISTS (SELECT 1 FROM loader_run GROUP BY run_id HAVING COUNT(*) > 1);
 INSERT INTO migration_000006_guard
+SELECT 'noncanonical scheduler artifact path'
+WHERE EXISTS (
+    SELECT 1
+    FROM (
+        SELECT replace(trim(run.artifacts_dir), char(92), '/') AS actual,
+               'schedulers/' || scheduler.id || '/runs/' || run.run_id AS expected
+        FROM loader_run AS run
+        JOIN project_scheduler AS scheduler ON scheduler.managed_loader_id = run.loader_id
+        WHERE trim(run.artifacts_dir) <> ''
+    ) AS artifact
+    WHERE artifact.actual <> artifact.expected
+      AND (
+          (substr(artifact.actual, 1, 1) <> '/' AND artifact.actual NOT GLOB '[A-Za-z]:/*')
+          OR substr(artifact.actual, -(length(artifact.expected) + 1)) <> '/' || artifact.expected
+      )
+);
+INSERT INTO migration_000006_guard
 SELECT 'orphan scheduler event run'
 WHERE EXISTS (
     SELECT 1

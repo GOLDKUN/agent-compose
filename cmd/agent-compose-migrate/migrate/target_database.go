@@ -4,14 +4,28 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"agent-compose/pkg/storage/sqlite"
 )
 
-func prepareTargetDatabase(ctx context.Context, db *sql.DB, sourceVersion int64, sourceRoot, targetRoot string) ([]string, map[string]string, error) {
-	if sourceVersion == 0 {
+type databaseCheckpoint func(warnings []string, schedulerIDs map[string]string) error
+
+func prepareTargetDatabase(
+	ctx context.Context,
+	db *sql.DB,
+	sourceRoot, targetRoot string,
+	resumeWarnings []string,
+	resumeSchedulerIDs map[string]string,
+	checkpoint databaseCheckpoint,
+) ([]string, map[string]string, error) {
+	version, err := inspectVersion(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	if version == 0 {
 		nonEmpty, err := applicationSchemaExists(ctx, db)
 		if err != nil {
 			return nil, nil, err
@@ -21,10 +35,16 @@ func prepareTargetDatabase(ctx context.Context, db *sql.DB, sourceVersion int64,
 				return nil, nil, err
 			}
 		}
+		version, err = inspectVersion(ctx, db)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
-	version, err := inspectVersion(ctx, db)
-	if err != nil {
-		return nil, nil, err
+	if version < 1 || version > 7 {
+		return nil, nil, fmt.Errorf("target database has an unknown migration version %d", version)
+	}
+	if err := validateVersionedPrefix(ctx, db, version); err != nil {
+		return nil, nil, fmt.Errorf("validate target migration history: %w", err)
 	}
 	if version < 4 {
 		if err := sqlite.MigrateThrough(ctx, db, 4); err != nil {
@@ -32,23 +52,46 @@ func prepareTargetDatabase(ctx context.Context, db *sql.DB, sourceVersion int64,
 		}
 		version = 4
 	}
-	var warnings []string
+	warnings := append([]string(nil), resumeWarnings...)
 	if version == 4 {
 		alignmentWarnings, alignErr := alignManagedProjectionRevisions(ctx, db)
 		if alignErr != nil {
 			return nil, nil, alignErr
 		}
 		warnings = append(warnings, alignmentWarnings...)
-		standaloneWarnings, convertErr := convertStandaloneV1(ctx, db)
+		if checkpoint != nil && len(alignmentWarnings) > 0 {
+			if err := checkpoint(warnings, resumeSchedulerIDs); err != nil {
+				return nil, nil, err
+			}
+		}
+		standaloneWarnings, convertErr := convertStandaloneV1(ctx, db, targetRoot)
 		warnings = append(warnings, standaloneWarnings...)
 		err = convertErr
 		if err != nil {
 			return nil, nil, err
 		}
+		if checkpoint != nil && len(standaloneWarnings) > 0 {
+			if err := checkpoint(warnings, resumeSchedulerIDs); err != nil {
+				return nil, nil, err
+			}
+		}
 	}
-	schedulerIDs, err := legacySchedulerIDMap(ctx, db, sourceRoot)
-	if err != nil {
-		return nil, nil, err
+	schedulerIDs := cloneSchedulerIDs(resumeSchedulerIDs)
+	if schedulerIDs == nil {
+		schedulerIDs, err = legacySchedulerIDMap(ctx, db, sourceRoot)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if checkpoint != nil {
+		if err := checkpoint(warnings, schedulerIDs); err != nil {
+			return nil, nil, err
+		}
+	}
+	if version < 6 {
+		if err := rewriteLegacySchedulerArtifactPaths(ctx, db, sourceRoot, targetRoot, schedulerIDs); err != nil {
+			return nil, nil, err
+		}
 	}
 	if err := sqlite.Migrate(ctx, db); err != nil {
 		return nil, nil, fmt.Errorf("migrate target database: %w", err)
@@ -291,17 +334,77 @@ func rewriteStoredPathColumn(ctx context.Context, tx *sql.Tx, table, column, sou
 
 func migratedStoredPath(stored, sourceRoot, targetRoot string, schedulerIDs map[string]string) (string, bool, error) {
 	stored = strings.TrimSpace(stored)
-	if stored == "" || !filepath.IsAbs(stored) {
+	if stored == "" {
 		return stored, false, nil
 	}
-	rel, err := filepath.Rel(sourceRoot, stored)
+	// Absolute paths are rewritten only when their ownership is proved by the
+	// source or runtime root. A matching directory name elsewhere may be an
+	// external volume and must remain untouched.
+	if filepath.IsAbs(stored) {
+		targetRelative, err := filepath.Rel(targetRoot, stored)
+		if err == nil && targetRelative != ".." && !strings.HasPrefix(targetRelative, ".."+string(filepath.Separator)) {
+			return filepath.Join(targetRoot, migratedDataRootPath(targetRelative, schedulerIDs)), true, nil
+		}
+		rel, err := filepath.Rel(sourceRoot, stored)
+		if err != nil {
+			return "", false, err
+		}
+		if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return filepath.Join(targetRoot, migratedDataRootPath(rel, schedulerIDs)), true, nil
+		}
+		return stored, false, nil
+	}
+	// Data-root-relative paths have no absolute ownership boundary, so accept
+	// only canonical paths whose first component is a known application root.
+	if rel, ok := recognizedRelativeDataRootPath(stored); ok {
+		return filepath.Join(targetRoot, migratedDataRootPath(rel, schedulerIDs)), true, nil
+	}
+	return stored, false, nil
+}
+
+func recognizedRelativeDataRootPath(stored string) (string, bool) {
+	normalized := strings.ReplaceAll(filepath.Clean(strings.TrimSpace(stored)), `\`, "/")
+	parts := strings.Split(normalized, "/")
+	if len(parts) < 2 {
+		return "", false
+	}
+	switch parts[0] {
+	case "sessions", "sandboxes", "loaders", "schedulers":
+	default:
+		return "", false
+	}
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return "", false
+		}
+	}
+	return filepath.FromSlash(strings.Join(parts, "/")), true
+}
+
+func verifyLatestTargetDatabase(ctx context.Context, path string) (int64, error) {
+	info, err := os.Lstat(path)
 	if err != nil {
-		return "", false, err
+		return 0, fmt.Errorf("inspect target database: %w", err)
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return stored, false, nil
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return 0, fmt.Errorf("target database must be a regular file")
 	}
-	return filepath.Join(targetRoot, migratedDataRootPath(rel, schedulerIDs)), true, nil
+	db, err := openReadOnly(path)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = db.Close() }()
+	version, err := inspectVersion(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+	if version != 7 {
+		return 0, fmt.Errorf("resumable target database is schema v%d, want v7", version)
+	}
+	if err := validateVersionedPrefix(ctx, db, version); err != nil {
+		return 0, fmt.Errorf("validate resumable target database: %w", err)
+	}
+	return version, nil
 }
 
 func adoptUnversionedSchema(ctx context.Context, db *sql.DB) error {

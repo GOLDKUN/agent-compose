@@ -18,7 +18,7 @@ func (s *schedulerStore) loadSchedulerDefinition(ctx context.Context, schedulerI
 		return domain.Scheduler{}, fmt.Errorf("scheduler id is required")
 	}
 	row := s.db.QueryRowContext(ctx, `SELECT
-		s.id, s.short_id, s.project_id, s.scheduler_id, s.agent_name,
+		s.id, s.short_id, s.project_id, s.id, s.agent_name,
 		s.revision, s.enabled, s.trigger_count, s.spec_json, s.last_error,
 		s.created_at, s.updated_at,
 		p.name, p.short_id, p.source_path, p.source_json, p.current_revision,

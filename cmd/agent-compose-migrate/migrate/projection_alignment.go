@@ -1,12 +1,14 @@
 package migrate
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 func alignManagedProjectionRevisions(ctx context.Context, db *sql.DB) ([]string, error) {
@@ -59,7 +61,11 @@ func alignManagedProjectionRevisions(ctx context.Context, db *sql.DB) ([]string,
 func appendProjectionRevision(ctx context.Context, db *sql.DB, projectID string) (int64, error) {
 	var projectName string
 	var createdAt int64
-	if err := db.QueryRowContext(ctx, `SELECT name, updated_at FROM project WHERE id=?`, projectID).Scan(&projectName, &createdAt); err != nil {
+	var currentSpecJSON string
+	if err := db.QueryRowContext(ctx, `SELECT project.name,project.updated_at,revision.spec_json
+		FROM project JOIN project_revision AS revision
+		ON revision.project_id=project.id AND revision.revision=project.current_revision
+		WHERE project.id=?`, projectID).Scan(&projectName, &createdAt, &currentSpecJSON); err != nil {
 		return 0, fmt.Errorf("load projected project %s: %w", projectID, err)
 	}
 	revision, err := nextLegacyRevision(ctx, db, projectID)
@@ -73,7 +79,11 @@ func appendProjectionRevision(ctx context.Context, db *sql.DB, projectID string)
 	if len(agents) == 0 {
 		return 0, fmt.Errorf("project %s has inconsistent projections but no project agents", projectID)
 	}
-	specData, err := json.Marshal(map[string]any{"name": projectName, "agents": agents})
+	spec, err := preservedProjectionSpec(currentSpecJSON, projectName, agents)
+	if err != nil {
+		return 0, fmt.Errorf("preserve current revision for project %s: %w", projectID, err)
+	}
+	specData, err := json.Marshal(spec)
 	if err != nil {
 		return 0, fmt.Errorf("marshal projection revision for project %s: %w", projectID, err)
 	}
@@ -111,6 +121,23 @@ func appendProjectionRevision(ctx context.Context, db *sql.DB, projectID string)
 		return 0, fmt.Errorf("commit projection revision for project %s: %w", projectID, err)
 	}
 	return revision, nil
+}
+
+func preservedProjectionSpec(currentSpecJSON, projectName string, agents []map[string]any) (map[string]any, error) {
+	decoder := json.NewDecoder(bytes.NewBufferString(currentSpecJSON))
+	decoder.UseNumber()
+	var spec map[string]any
+	if err := decoder.Decode(&spec); err != nil {
+		return nil, fmt.Errorf("decode current project revision: %w", err)
+	}
+	if spec == nil {
+		return nil, fmt.Errorf("current project revision must be a JSON object")
+	}
+	if name, ok := spec["name"].(string); !ok || strings.TrimSpace(name) == "" {
+		spec["name"] = projectName
+	}
+	spec["agents"] = agents
+	return spec, nil
 }
 
 func projectedRevisionAgents(ctx context.Context, db *sql.DB, projectID string) ([]map[string]any, error) {
