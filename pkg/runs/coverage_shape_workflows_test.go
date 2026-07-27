@@ -344,10 +344,9 @@ func TestRunsControllerRunProjectAgentSuccessWorkflow(t *testing.T) {
 	if run.Status != domain.ProjectRunStatusSucceeded || run.SandboxID == "" || !strings.Contains(run.Output, "curl https://weather.test") {
 		t.Fatalf("run = %#v", run)
 	}
-	if len(configDB.events) != 4 ||
-		configDB.events[1].Kind != domain.ProjectRunEventKindAgentActivity || !strings.Contains(configDB.events[1].Text, "curl https://weather.test") ||
-		configDB.events[2].Kind != domain.ProjectRunEventKindAgentMessage || configDB.events[2].Text != "Beijing is 26°C today." ||
-		strings.Contains(configDB.events[2].Text, "curl") || configDB.events[3].Kind != domain.ProjectRunEventKindStatus {
+	if len(configDB.events) != 3 ||
+		configDB.events[1].Kind != domain.ProjectRunEventKindAgentMessage || configDB.events[1].Text != "Beijing is 26°C today." ||
+		strings.Contains(configDB.events[1].Text, "curl") || configDB.events[2].Kind != domain.ProjectRunEventKindStatus {
 		t.Fatalf("project run events = %#v", configDB.events)
 	}
 	if !strings.Contains(run.ArtifactsDir, filepath.Join("state", "cells", "cell-1")) || filepath.Base(run.LogsPath) != "output.txt" {
@@ -610,7 +609,7 @@ func TestRunsControllerRunProjectAgentCommandWorkflow(t *testing.T) {
 	if run.Status != domain.ProjectRunStatusSucceeded || run.Output != "command output\n" || run.ArtifactsDir == "" || run.LogsPath == "" {
 		t.Fatalf("command run = %#v", run)
 	}
-	if len(configDB.events) != 2 || configDB.events[0].Kind != domain.ProjectRunEventKindAgentActivity || configDB.events[0].Name != commandExecutionActivityName || configDB.events[1].Kind != domain.ProjectRunEventKindStatus {
+	if len(configDB.events) != 1 || configDB.events[0].Kind != domain.ProjectRunEventKindStatus {
 		t.Fatalf("command run events = %#v", configDB.events)
 	}
 	if !strings.Contains(run.ArtifactsDir, filepath.Join("state", "runs", run.RunID)) || filepath.Base(run.LogsPath) != "transcript.txt" {
@@ -777,7 +776,7 @@ func TestRunsControllerRunProjectAgentCommandNonZeroExitPreservesOutput(t *testi
 	if run.Status != domain.ProjectRunStatusFailed || run.ExitCode != 7 || run.Output != "partial stdout\nfailure stderr\n" {
 		t.Fatalf("failed command run = %#v", run)
 	}
-	if len(configDB.events) != 2 || configDB.events[0].Kind != domain.ProjectRunEventKindAgentActivity || configDB.events[0].Success || configDB.events[1].Kind != domain.ProjectRunEventKindStatus {
+	if len(configDB.events) != 1 || configDB.events[0].Kind != domain.ProjectRunEventKindStatus || configDB.events[0].Success {
 		t.Fatalf("failed command events = %#v", configDB.events)
 	}
 	if len(chunks) != 2 || domain.NormalizeStdioStream(chunks[0].Stream) != domain.StdioStdout || domain.NormalizeStdioStream(chunks[1].Stream) != domain.StdioStderr {
@@ -852,7 +851,7 @@ func TestRunsControllerRunProjectCommandAttachProjectsOutputAndResult(t *testing
 	if err != nil || string(data) != "hello\nwarn\n" {
 		t.Fatalf("attach transcript = %q err=%v", string(data), err)
 	}
-	if len(configDB.events) != 2 || configDB.events[0].Kind != domain.ProjectRunEventKindAgentActivity || configDB.events[0].Name != commandExecutionActivityName || configDB.events[1].Kind != domain.ProjectRunEventKindStatus {
+	if len(configDB.events) != 1 || configDB.events[0].Kind != domain.ProjectRunEventKindStatus {
 		t.Fatalf("command attach events = %#v", configDB.events)
 	}
 }
@@ -1187,17 +1186,14 @@ func TestPromptAttachProjectorPersistsEachFrameIdempotently(t *testing.T) {
 	if err != nil || transition == nil || len(transition.TerminalEvents) != 0 {
 		t.Fatalf("result transition = %#v err=%v", transition, err)
 	}
-	if len(store.events) != 3 {
+	if len(store.events) != 2 {
 		t.Fatalf("persisted events = %#v", store.events)
 	}
 	if store.events[0].Kind != domain.ProjectRunEventKindUserMessage || store.events[0].ID != attachedHumanEventID("run-events", "client-frame-1", 1, "question") {
 		t.Fatalf("human event = %#v", store.events[0])
 	}
-	if store.events[1].Kind != domain.ProjectRunEventKindAgentActivity || store.events[1].ID != attachedActivityEventID("run-events", 42, turn) || !strings.Contains(store.events[1].Text, "curl https://weather.test") {
-		t.Fatalf("activity event = %#v", store.events[1])
-	}
-	if store.events[2].Kind != domain.ProjectRunEventKindAgentMessage || store.events[2].ID != attachedAgentEventID("run-events", 42, turn) || store.events[2].Text != "answer" {
-		t.Fatalf("assistant event = %#v", store.events[2])
+	if store.events[1].Kind != domain.ProjectRunEventKindAgentMessage || store.events[1].ID != attachedAgentEventID("run-events", 42, turn) || store.events[1].Text != "answer" {
+		t.Fatalf("assistant event = %#v", store.events[1])
 	}
 }
 

@@ -1120,13 +1120,12 @@ func projectRunAgentExecutionStream(ctx context.Context, coordinator *Coordinato
 func transitionFromCommandResult(run domain.ProjectRunRecord, sandbox *domain.Sandbox, commandText string, result domain.ExecResult, execErr error) TransitionRequest {
 	artifactsDir := projectRunCommandArtifactsDir(run, sandbox)
 	req := TransitionRequest{
-		RunID:          run.RunID,
-		SandboxID:      sandbox.Summary.ID,
-		ExitCode:       result.ExitCode,
-		Output:         result.Output,
-		ArtifactsDir:   artifactsDir,
-		LogsPath:       filepath.Join(artifactsDir, "output.txt"),
-		TerminalEvents: commandTerminalEvents(run, commandText, result),
+		RunID:        run.RunID,
+		SandboxID:    sandbox.Summary.ID,
+		ExitCode:     result.ExitCode,
+		Output:       result.Output,
+		ArtifactsDir: artifactsDir,
+		LogsPath:     filepath.Join(artifactsDir, "output.txt"),
 	}
 	resultJSON, err := json.Marshal(map[string]any{
 		"mode":     "command",
