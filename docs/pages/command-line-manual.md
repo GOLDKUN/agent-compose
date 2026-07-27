@@ -489,6 +489,8 @@ agent-compose logs -t
 | `--run <run-id>` | Filter by run id. |
 | `--sandbox <sandbox>` | Filter by sandbox. |
 
+`--run` and `--sandbox` are mutually exclusive resource selectors. Combining them is a usage error, and no log request is sent.
+
 Examples:
 
 ```bash

@@ -68,6 +68,8 @@ func runComposeLogsCommand(cmd *cobra.Command, cli cliOptions, options composeLo
 }
 
 func normalizeComposeLogsOptions(cmd *cobra.Command, options composeLogsOptions, args []string) (composeLogsOptions, error) {
+	options.RunID = strings.TrimSpace(options.RunID)
+	options.SandboxID = strings.TrimSpace(options.SandboxID)
 	if len(args) > 0 {
 		if cmd.Flags().Changed("agent") {
 			return options, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("logs agent can be specified either positionally or with --agent, not both")}
@@ -77,6 +79,9 @@ func normalizeComposeLogsOptions(cmd *cobra.Command, options composeLogsOptions,
 		} else {
 			options.AgentName = args[0]
 		}
+	}
+	if options.RunID != "" && options.SandboxID != "" {
+		return options, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("logs --run cannot be combined with --sandbox")}
 	}
 	if options.TailLines < -1 {
 		return options, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("logs --tail must be -1 or greater")}
