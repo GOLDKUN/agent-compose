@@ -1,7 +1,6 @@
 package main
 
 import (
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +11,9 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
+
+	domain "agent-compose/pkg/model"
+	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 type composeSandboxPruneOptions struct {
@@ -24,7 +26,7 @@ type composeSandboxPruneOptions struct {
 }
 
 func addSandboxPruneFlags(cmd *cobra.Command, options *composeSandboxPruneOptions) {
-	cmd.Flags().StringVar(&options.Status, "status", "", "Filter sandboxes by status, comma-separated")
+	cmd.Flags().StringVar(&options.Status, "status", "", "Filter sandboxes by status: stopped or failed (comma-separated)")
 	cmd.Flags().StringVar(&options.Agent, "agent", "", "Filter sandboxes by agent name")
 	cmd.Flags().StringVar(&options.Driver, "driver", "", "Filter sandboxes by driver: docker, boxlite, or microsandbox")
 	cmd.Flags().StringVar(&options.OlderThan, "older-than", "", "Only match sandboxes older than a duration such as 7d or 24h")
@@ -191,8 +193,12 @@ func sandboxPruneStatusFilter(value string) (map[string]bool, error) {
 		if status == "" {
 			continue
 		}
-		if status == "running" || status == "pending" {
-			return nil, fmt.Errorf("sandbox prune cannot target %s sandboxes; use `agent-compose sandbox rm --force <sandbox>` for running sandboxes", status)
+		canonical, err := domain.NormalizeSandboxVMStatus(status)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --status %q: expected stopped or failed", status)
+		}
+		if canonical != domain.VMStatusStopped && canonical != domain.VMStatusFailed {
+			return nil, fmt.Errorf("sandbox prune cannot target %s sandboxes; only stopped or failed sandboxes are safe to prune", status)
 		}
 		result[status] = true
 	}

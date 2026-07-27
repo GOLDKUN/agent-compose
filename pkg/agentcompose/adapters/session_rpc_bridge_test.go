@@ -126,7 +126,7 @@ func TestSandboxRPCBridgeCallJSONSupportsSessionRPCs(t *testing.T) {
 		t.Fatalf("GetSession session id = %q, want %q", gotSession.Session.Summary.SessionID, sessionID)
 	}
 
-	listJSON, err := bridge.CallJSON(ctx, "ListSessions", ``)
+	listJSON, err := bridge.CallJSON(ctx, "ListSessions", `{"vmStatus":" running "}`)
 	if err != nil {
 		t.Fatalf("ListSessions returned error: %v", err)
 	}
@@ -136,6 +136,9 @@ func TestSandboxRPCBridgeCallJSONSupportsSessionRPCs(t *testing.T) {
 	}
 	if len(listed.Sessions) != 1 || listed.Sessions[0].SessionID != sessionID {
 		t.Fatalf("listed sessions = %#v, want one session %s", listed.Sessions, sessionID)
+	}
+	if _, err := bridge.CallJSON(ctx, "ListSessions", `{"vmStatus":"definitely-invalid"}`); !errors.Is(err, domain.ErrInvalidArgument) || !strings.Contains(err.Error(), `invalid sandbox status "definitely-invalid"`) {
+		t.Fatalf("ListSessions invalid vmStatus error = %v", err)
 	}
 
 	if _, err := bridge.CallJSON(ctx, "GetSessionProxy", `{"sessionId":"`+sessionID+`"}`); err == nil || !strings.Contains(err.Error(), "jupyter is not enabled") {

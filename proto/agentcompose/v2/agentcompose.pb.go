@@ -8403,14 +8403,15 @@ func (x *RemoveSandboxResponse) GetRemoved() bool {
 }
 
 type PruneSandboxesRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId        string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Status           []string               `protobuf:"bytes,2,rep,name=status,proto3" json:"status,omitempty"`
-	AgentName        string                 `protobuf:"bytes,3,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	Driver           string                 `protobuf:"bytes,4,opt,name=driver,proto3" json:"driver,omitempty"`
-	OlderThanSeconds uint64                 `protobuf:"varint,5,opt,name=older_than_seconds,json=olderThanSeconds,proto3" json:"older_than_seconds,omitempty"`
-	IncludeOrphans   bool                   `protobuf:"varint,6,opt,name=include_orphans,json=includeOrphans,proto3" json:"include_orphans,omitempty"`
-	Force            bool                   `protobuf:"varint,7,opt,name=force,proto3" json:"force,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// Optional case-insensitive filter. Only stopped and failed are safe to prune.
+	Status           []string `protobuf:"bytes,2,rep,name=status,proto3" json:"status,omitempty"`
+	AgentName        string   `protobuf:"bytes,3,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	Driver           string   `protobuf:"bytes,4,opt,name=driver,proto3" json:"driver,omitempty"`
+	OlderThanSeconds uint64   `protobuf:"varint,5,opt,name=older_than_seconds,json=olderThanSeconds,proto3" json:"older_than_seconds,omitempty"`
+	IncludeOrphans   bool     `protobuf:"varint,6,opt,name=include_orphans,json=includeOrphans,proto3" json:"include_orphans,omitempty"`
+	Force            bool     `protobuf:"varint,7,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -9067,11 +9068,13 @@ func (x *SandboxTag) GetValue() string {
 }
 
 type ListSandboxesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Limit         uint32                 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,2,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	ProjectId     string                 `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Status        []string               `protobuf:"bytes,4,rep,name=status,proto3" json:"status,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Limit     uint32                 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	Cursor    string                 `protobuf:"bytes,2,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	ProjectId string                 `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// Optional case-insensitive filter. Accepted values are pending, running,
+	// stopped, failed, and deleting. Empty entries are ignored.
+	Status        []string `protobuf:"bytes,4,rep,name=status,proto3" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

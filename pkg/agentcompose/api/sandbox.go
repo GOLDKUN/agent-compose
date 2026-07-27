@@ -167,13 +167,17 @@ func (h *SandboxHandler) ListSandboxes(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	statuses, err := domain.NormalizeSandboxVMStatuses(req.Msg.GetStatus())
+	if err != nil {
+		return nil, ConnectErrorForDomain(err)
+	}
 	store, ok := h.store.(SandboxListStore)
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sandbox list store is required"))
 	}
 	result, err := store.ListSandboxes(ctx, domain.SandboxListOptions{
 		ProjectID:       strings.TrimSpace(req.Msg.GetProjectId()),
-		VMStatuses:      append([]string(nil), req.Msg.GetStatus()...),
+		VMStatuses:      statuses,
 		Limit:           limit,
 		BeforeUpdatedAt: cursor.UpdatedAt,
 		BeforeID:        cursor.SandboxID,

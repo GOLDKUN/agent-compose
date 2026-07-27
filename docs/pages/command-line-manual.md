@@ -296,7 +296,7 @@ agent-compose ps
 agent-compose ps -a
 agent-compose ps --all
 agent-compose ps --status running
-agent-compose ps --status exited,error
+agent-compose ps --status stopped,failed
 agent-compose ps --verbose
 agent-compose ps --json
 ```
@@ -305,7 +305,7 @@ agent-compose ps --json
 | --- | --- |
 | `-a, --all` | Show current project sandboxes in all statuses. |
 | `--verbose` | Show additional columns. |
-| `--status <status>[,<status>...]` | Filter by sandbox status. |
+| `--status <status>[,<status>...]` | Filter by `pending`, `running`, `stopped`, `failed`, or `deleting`. Every non-empty comma-separated value must be valid. |
 
 Default columns:
 
@@ -331,7 +331,7 @@ agent-compose sandbox rm <sandbox>
 agent-compose sandbox rm --force <sandbox>
 agent-compose sandbox prune
 agent-compose sandbox prune --older-than 7d
-agent-compose sandbox prune --status error --json
+agent-compose sandbox prune --status failed --json
 agent-compose sandbox prune --agent worker --driver microsandbox --force
 agent-compose sandbox prune --include-orphans
 ```
