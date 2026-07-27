@@ -108,26 +108,28 @@ agent-compose down                                # 停止 sandbox、禁用 sche
 
 ### 停止运行态 sandbox
 
-停止 sandbox 时应保持旧 daemon 运行。对于仍保留 compose 文件的已部署 project，执行：
+迁移切换期间不要使用 `agent-compose down`。在旧版本中，`down` 还会将 project
+标记为 removed、禁用其 scheduler，并移除 volume 关联。如果原始 compose 文件
+已经丢失，迁移后无法安全恢复这些变更。
 
-```bash
-agent-compose --file /path/to/agent-compose.yml down
-```
-
-如果 compose 文件已丢失，可按名称选择 daemon 中已保存的 project；这种方式不会读取本地 YAML：
-
-```bash
-agent-compose project ls
-agent-compose --project-name my-project down
-```
-
-`down` 会禁用所选 project 的 scheduler，并停止其中的运行态 sandbox。需要对每个已部署 project 分别执行。对于不属于任何 project 的 legacy standalone sandbox，不能使用 `down`，应通过完整 sandbox ID 单独停止：
+保持旧 daemon 运行，并通过完整 ID 停止所有运行态 sandbox：
 
 ```bash
 agent-compose stop <sandbox-id> [<sandbox-id>...]
 ```
 
-同时禁用所有可能重新创建 sandbox 的 legacy 自动任务，然后停止旧 daemon，并备份完整 data root。不能用 `docker stop` 代替 CLI stop，也不能先停 daemon，因为持久化的 sandbox metadata 仍会是 `running`。migrator 遇到这种 metadata 会拒绝迁移，避免旧 data-root mount 继续产生写入。如果 migrator 报告仍有运行态 sandbox，应重新启动旧 daemon，使用旧 CLI 停止对应 sandbox，再次停止 daemon，并重新执行 dry-run。
+使用完整 ID 不需要 compose 文件或 project 选择，也适用于 legacy standalone
+sandbox。下面的 dry-run 会报告持久化 metadata 仍为 `running` 的全部 sandbox
+ID。
+
+dry-run 只检查 source，并使用临时数据库副本；它不会修改任一 data root、创建
+target、复制 sandbox workspace，也不会创建原地迁移备份。
+
+最后一个 `stop` 命令完成后，应立即停止旧 daemon 并保持停止。scheduler 可能
+在最后一次 stop 与 daemon 停止之间短暂创建新的 sandbox，因此应以停机后的
+dry-run 为准：如果仍报告运行态 ID，应重新启动旧 daemon，停止所有已报告的
+ID，再次停止 daemon，然后重新执行 dry-run。不要使用 `docker stop` 停止
+sandbox；必须由旧 daemon 持久化其 stopped 状态。
 
 ### 从源码构建并运行
 
@@ -157,7 +159,11 @@ MIGRATOR=./agent-compose-v2-storage-migrator-linux-amd64
 
 ### 执行迁移
 
-将 `DATA_ROOT` 设为已停止部署的数据目录。`RUNTIME_ROOT` 应设为新 daemon 看到的路径：标准容器部署使用 `/data`，native daemon 使用与 `DATA_ROOT` 相同的路径。先执行原地 dry-run：
+将 `DATA_ROOT` 设为部署的数据目录。`RUNTIME_ROOT` 应设为新 daemon 看到的
+路径：标准容器部署使用 `/data`，native daemon 使用与 `DATA_ROOT` 相同的
+路径。旧 daemon 仍可用时，可以先运行只读 dry-run 获取所有运行态 sandbox
+ID，再按上面的说明使用旧 CLI 停止这些 ID。停止旧 daemon 后，迁移前必须再次
+运行相同的 dry-run：
 
 ```bash
 DATA_ROOT=/opt/agent-compose/data
@@ -166,7 +172,8 @@ RUNTIME_ROOT=/data
   --runtime-root "$RUNTIME_ROOT" --dry-run
 ```
 
-检查 dry-run 报告确认成功后，移除 `--dry-run` 正式执行：
+停机后的 dry-run 必须成功。备份完整 data root，然后移除 `--dry-run` 正式
+执行迁移：
 
 ```bash
 "$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \

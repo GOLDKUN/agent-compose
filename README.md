@@ -171,6 +171,10 @@ Using a full ID does not require a compose file or project selection and also
 works for legacy standalone sandboxes. The dry run below reports all sandbox
 IDs whose persisted metadata is still `running`.
 
+Dry-run only inspects the source and uses a temporary database copy. It does
+not modify either data root, create the target, copy sandbox workspaces, or
+create an in-place backup.
+
 Immediately after the last `stop` command, stop the old daemon and keep it
 stopped. A scheduler may create another sandbox in the short interval before
 daemon shutdown, so the post-shutdown dry run is the authority: if it reports
