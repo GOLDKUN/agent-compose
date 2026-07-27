@@ -811,12 +811,10 @@ func testComposeImageStatsAndSessionHelpers(t *testing.T) {
 	store := &agentcomposev2.ImageStoreStatus{Store: agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_DOCKER_DAEMON, Available: true, Endpoint: "unix:///var/run/docker.sock"}
 	imageList := composeImageListOutputFromResponse(&agentcomposev2.ListImagesResponse{
 		Images:      []*agentcomposev2.Image{image},
-		TotalCount:  1,
-		HasMore:     true,
-		NextOffset:  10,
+		Total:       1,
 		StoreStatus: store,
 	})
-	if len(imageList.Images) != 1 || imageList.StoreStatus.Store != "docker" || !imageList.HasMore || imageList.Images[0].Platform != "linux/amd64" {
+	if len(imageList.Images) != 1 || imageList.StoreStatus.Store != "docker" || imageList.Total != 1 || imageList.Images[0].Platform != "linux/amd64" {
 		t.Fatalf("composeImageListOutputFromResponse = %#v", imageList)
 	}
 	pull := composeImagePullOutputFromResponse(&agentcomposev2.PullImageResponse{

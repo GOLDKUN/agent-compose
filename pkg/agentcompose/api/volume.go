@@ -42,7 +42,11 @@ func (h *VolumeHandler) ListVolumes(ctx context.Context, req *connect.Request[ag
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	return connect.NewResponse(&agentcomposev2.ListVolumesResponse{Volumes: VolumesToProto(items)}), nil
+	page, total, err := paginateList(items, req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&agentcomposev2.ListVolumesResponse{Volumes: VolumesToProto(page), Total: total}), nil
 }
 
 func (h *VolumeHandler) CreateVolume(ctx context.Context, req *connect.Request[agentcomposev2.CreateVolumeRequest]) (*connect.Response[agentcomposev2.CreateVolumeResponse], error) {

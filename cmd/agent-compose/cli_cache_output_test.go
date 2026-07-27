@@ -33,17 +33,15 @@ func TestCLIImageCacheAndFilterHelpersCoverEdgeBranches(t *testing.T) {
 		t.Fatalf("pull text = %q", text.String())
 	}
 	listOutput := composeImageListOutputFromResponse(&agentcomposev2.ListImagesResponse{
-		Images:     []*agentcomposev2.Image{image},
-		TotalCount: 1,
-		HasMore:    true,
-		NextOffset: 25,
+		Images: []*agentcomposev2.Image{image},
+		Total:  1,
 		StoreStatus: &agentcomposev2.ImageStoreStatus{
 			Store:     agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE,
 			Available: true,
 			Endpoint:  "/tmp/images",
 		},
 	})
-	if len(listOutput.Images) != 1 || !listOutput.HasMore || listOutput.StoreStatus.Store != "oci-cache" {
+	if len(listOutput.Images) != 1 || listOutput.Total != 1 || listOutput.StoreStatus.Store != "oci-cache" {
 		t.Fatalf("image list output = %#v", listOutput)
 	}
 	inspectOutput := composeImageInspectOutputFromResponse(&agentcomposev2.InspectImageResponse{

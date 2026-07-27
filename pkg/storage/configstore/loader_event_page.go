@@ -86,3 +86,31 @@ func (s *loaderStore) ListLoaderEventsPage(ctx context.Context, filter loaders.L
 	}
 	return items, nil
 }
+
+func (s *loaderStore) CountLoaderEventsPage(ctx context.Context, filter loaders.LoaderEventPageFilter) (int, error) {
+	loaderIDs := normalizedLoaderRunPageIDs(filter.LoaderIDs)
+	if len(loaderIDs) == 0 {
+		return 0, nil
+	}
+	args := make([]any, 0, len(loaderIDs)+2)
+	for _, loaderID := range loaderIDs {
+		args = append(args, loaderID)
+	}
+	query := `SELECT COUNT(*) FROM loader_event e JOIN loader_run r ON r.loader_id = e.loader_id AND r.run_id = e.run_id WHERE e.loader_id IN (` + placeholders(len(loaderIDs)) + `)`
+	if filter.RequireTrigger {
+		query += ` AND r.trigger_id <> ''`
+	}
+	if triggerID := strings.TrimSpace(filter.TriggerID); triggerID != "" {
+		query += ` AND r.trigger_id = ?`
+		args = append(args, triggerID)
+	}
+	if runID := strings.TrimSpace(filter.RunID); runID != "" {
+		query += ` AND r.run_id = ?`
+		args = append(args, runID)
+	}
+	var total int
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count loader events: %w", err)
+	}
+	return total, nil
+}

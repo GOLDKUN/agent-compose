@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -156,16 +154,9 @@ func (h *SandboxHandler) populateSandboxNotebookURL(sandbox *domain.Sandbox, res
 }
 
 func (h *SandboxHandler) ListSandboxes(ctx context.Context, req *connect.Request[agentcomposev2.ListSandboxesRequest]) (*connect.Response[agentcomposev2.ListSandboxesResponse], error) {
-	limit := int(req.Msg.GetLimit())
-	if limit == 0 {
-		limit = 100
-	}
-	if limit < 1 || limit > 500 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("limit must be between 1 and 500"))
-	}
-	cursor, err := decodeSandboxCursor(req.Msg.GetCursor())
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	statuses, err := domain.NormalizeSandboxVMStatuses(req.Msg.GetStatus())
 	if err != nil {
@@ -176,26 +167,18 @@ func (h *SandboxHandler) ListSandboxes(ctx context.Context, req *connect.Request
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sandbox list store is required"))
 	}
 	result, err := store.ListSandboxes(ctx, domain.SandboxListOptions{
-		ProjectID:       strings.TrimSpace(req.Msg.GetProjectId()),
-		VMStatuses:      statuses,
-		Limit:           limit,
-		BeforeUpdatedAt: cursor.UpdatedAt,
-		BeforeID:        cursor.SandboxID,
+		ProjectID:  strings.TrimSpace(req.Msg.GetProjectId()),
+		VMStatuses: statuses,
+		Offset:     offset,
+		Limit:      limit,
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	response := &agentcomposev2.ListSandboxesResponse{Sandboxes: make([]*agentcomposev2.Sandbox, 0, len(result.Sandboxes))}
+	response := &agentcomposev2.ListSandboxesResponse{Sandboxes: make([]*agentcomposev2.Sandbox, 0, len(result.Sandboxes)), Total: uint32(result.TotalCount)}
 	targets := h.resolveSandboxTargets(ctx, result.Sandboxes)
 	for _, sandbox := range result.Sandboxes {
 		response.Sandboxes = append(response.Sandboxes, sandboxToV2WithTarget(sandbox, targets[sandbox.Summary.ID]))
-	}
-	// A page can come back empty while HasMore is true when every indexed row on
-	// it was a ghost (its directory vanished and was pruned during the list).
-	// Guard the cursor access so that case cannot panic the handler.
-	if result.HasMore && len(result.Sandboxes) > 0 {
-		last := result.Sandboxes[len(result.Sandboxes)-1]
-		response.NextCursor = encodeSandboxCursor(last.Summary.UpdatedAt, last.Summary.ID)
 	}
 	return connect.NewResponse(response), nil
 }
@@ -220,18 +203,9 @@ func (h *SandboxHandler) ListSandboxHistory(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	response := &agentcomposev2.ListSandboxHistoryResponse{LegacyHistory: true}
-	for _, cell := range cells {
-		response.Cells = append(response.Cells, &agentcomposev2.SandboxHistoryCell{
-			Id: cell.ID, Type: cell.Type, Source: cell.Source, Stdout: cell.Stdout, Stderr: cell.Stderr,
-			Output: cell.Output, ExitCode: int32(cell.ExitCode), Success: cell.Success, Running: cell.Running,
-			CreatedAt: sandboxHistoryTimestamp(cell.CreatedAt), Agent: cell.Agent, AgentThreadId: cell.AgentThreadID, StopReason: cell.StopReason,
-		})
-	}
-	for _, event := range events {
-		response.Events = append(response.Events, &agentcomposev2.SandboxHistoryEvent{
-			Id: event.ID, Type: event.Type, Level: event.Level, Message: event.Message, CreatedAt: sandboxHistoryTimestamp(event.CreatedAt),
-		})
+	response, err := paginateSandboxHistory(cells, events, req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
 	}
 	return connect.NewResponse(response), nil
 }
@@ -442,31 +416,6 @@ func (h *SandboxHandler) resolveSandboxTargets(ctx context.Context, sandboxes []
 		return nil
 	}
 	return targets
-}
-
-type sandboxPageCursor struct {
-	UpdatedAt time.Time `json:"updated_at"`
-	SandboxID string    `json:"sandbox_id"`
-}
-
-func encodeSandboxCursor(updatedAt time.Time, sandboxID string) string {
-	data, _ := json.Marshal(sandboxPageCursor{UpdatedAt: updatedAt.UTC(), SandboxID: sandboxID})
-	return base64.RawURLEncoding.EncodeToString(data)
-}
-
-func decodeSandboxCursor(token string) (sandboxPageCursor, error) {
-	if strings.TrimSpace(token) == "" {
-		return sandboxPageCursor{}, nil
-	}
-	decoded, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return sandboxPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	var cursor sandboxPageCursor
-	if json.Unmarshal(decoded, &cursor) != nil || cursor.UpdatedAt.IsZero() || strings.TrimSpace(cursor.SandboxID) == "" {
-		return sandboxPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	return cursor, nil
 }
 
 func (h *SandboxHandler) RemoveSandbox(ctx context.Context, req *connect.Request[agentcomposev2.RemoveSandboxRequest]) (*connect.Response[agentcomposev2.RemoveSandboxResponse], error) {

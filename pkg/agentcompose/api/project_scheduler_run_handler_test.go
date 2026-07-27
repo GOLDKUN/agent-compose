@@ -135,15 +135,15 @@ func TestProjectHandlerSchedulerRunLifecycle(t *testing.T) {
 		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		Limit:   1,
 	}))
-	if err != nil || len(first.Msg.GetRuns()) != 1 || first.Msg.GetRuns()[0].GetRunId() != newer.ID || len(first.Msg.GetRuns()[0].GetSandboxIds()) != 1 || first.Msg.GetNextCursor() == "" {
+	if err != nil || len(first.Msg.GetRuns()) != 1 || first.Msg.GetRuns()[0].GetRunId() != newer.ID || len(first.Msg.GetRuns()[0].GetSandboxIds()) != 1 || first.Msg.GetTotal() != 2 {
 		t.Fatalf("ListSchedulerRuns first=%#v err=%v", first, err)
 	}
 	second, err := handler.ListSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
 		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		Limit:   1,
-		Cursor:  first.Msg.GetNextCursor(),
+		Offset:  1,
 	}))
-	if err != nil || len(second.Msg.GetRuns()) != 1 || second.Msg.GetRuns()[0].GetRunId() != older.ID || second.Msg.GetNextCursor() != "" {
+	if err != nil || len(second.Msg.GetRuns()) != 1 || second.Msg.GetRuns()[0].GetRunId() != older.ID || second.Msg.GetTotal() != 2 {
 		t.Fatalf("ListSchedulerRuns second=%#v err=%v", second, err)
 	}
 	if _, err := handler.ListSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
@@ -204,7 +204,7 @@ func TestProjectHandlerRejectsExcessiveSchedulerRunBatch(t *testing.T) {
 	}
 }
 
-func TestProjectHandlerListsProjectSchedulerEventsWithIdentityAndCursor(t *testing.T) {
+func TestProjectHandlerListsProjectSchedulerEventsWithIdentityAndOffset(t *testing.T) {
 	store, _, handler := newSchedulerRunHandlerFixture()
 	createdAt := time.Unix(300, 0).UTC()
 	store.events = []domain.LoaderEvent{
@@ -215,64 +215,14 @@ func TestProjectHandlerListsProjectSchedulerEventsWithIdentityAndCursor(t *testi
 		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, Limit: 1,
 	}))
 	if err != nil || len(first.Msg.GetEvents()) != 1 || first.Msg.GetEvents()[0].GetAgentName() != store.scheduler.AgentName ||
-		first.Msg.GetEvents()[0].GetSchedulerId() != store.scheduler.SchedulerID || first.Msg.GetEvents()[0].GetLinkedSandboxId() != "sandbox-1" || first.Msg.GetNextCursor() == "" {
+		first.Msg.GetEvents()[0].GetSchedulerId() != store.scheduler.SchedulerID || first.Msg.GetEvents()[0].GetLinkedSandboxId() != "sandbox-1" || first.Msg.GetTotal() != 2 {
 		t.Fatalf("first event page=%#v err=%v", first, err)
 	}
 	second, err := handler.ListProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
-		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, Limit: 1, Cursor: first.Msg.GetNextCursor(),
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, Limit: 1, Offset: 1,
 	}))
-	if err != nil || len(second.Msg.GetEvents()) != 1 || second.Msg.GetEvents()[0].GetId() != "event-1" || second.Msg.GetNextCursor() != "" {
+	if err != nil || len(second.Msg.GetEvents()) != 1 || second.Msg.GetEvents()[0].GetId() != "event-1" || second.Msg.GetTotal() != 2 {
 		t.Fatalf("second event page=%#v err=%v", second, err)
-	}
-}
-
-func TestProjectSchedulerEventCursorBindsAllFilters(t *testing.T) {
-	event := domain.LoaderEvent{ID: "event-1", LoaderID: "loader-1", CreatedAt: time.Unix(400, 0).UTC()}
-	token := encodeProjectSchedulerEventCursor("project-1", 3, "agent-1", "trigger-1", "run-1", event)
-	if _, err := decodeProjectSchedulerEventCursor(token, "project-1", 3, "agent-1", "trigger-1", "run-1"); err != nil {
-		t.Fatalf("decode event cursor: %v", err)
-	}
-	for _, scope := range []struct {
-		project             string
-		revision            int64
-		agent, trigger, run string
-	}{
-		{project: "project-2", revision: 3, agent: "agent-1", trigger: "trigger-1", run: "run-1"},
-		{project: "project-1", revision: 4, agent: "agent-1", trigger: "trigger-1", run: "run-1"},
-		{project: "project-1", revision: 3, agent: "agent-2", trigger: "trigger-1", run: "run-1"},
-		{project: "project-1", revision: 3, agent: "agent-1", trigger: "trigger-2", run: "run-1"},
-		{project: "project-1", revision: 3, agent: "agent-1", trigger: "trigger-1", run: "run-2"},
-	} {
-		if _, err := decodeProjectSchedulerEventCursor(token, scope.project, scope.revision, scope.agent, scope.trigger, scope.run); err == nil {
-			t.Fatalf("cursor accepted scope %#v", scope)
-		}
-	}
-}
-
-func TestSchedulerRunCursorIsScopedToProjectAndAgent(t *testing.T) {
-	run := domain.LoaderRunSummary{ID: "run-1", LoaderID: "loader-1", StartedAt: time.Unix(300, 0).UTC()}
-	token := encodeSchedulerRunCursor("project-1", 3, "agent-1", "trigger-1", "running", run)
-	cursor, err := decodeSchedulerRunCursor(token, "project-1", 3, "agent-1", "trigger-1", "running")
-	if err != nil || cursor.RunID != run.ID || cursor.LoaderID != run.LoaderID || !cursor.StartedAt.Equal(run.StartedAt) {
-		t.Fatalf("decode cursor=%#v err=%v", cursor, err)
-	}
-	if _, err := decodeSchedulerRunCursor(token, "project-2", 3, "agent-1", "trigger-1", "running"); err == nil {
-		t.Fatal("cursor accepted a different project")
-	}
-	if _, err := decodeSchedulerRunCursor(token, "project-1", 4, "agent-1", "trigger-1", "running"); err == nil {
-		t.Fatal("cursor accepted a different project revision")
-	}
-	if _, err := decodeSchedulerRunCursor(token, "project-1", 3, "agent-2", "trigger-1", "running"); err == nil {
-		t.Fatal("cursor accepted a different agent")
-	}
-	if _, err := decodeSchedulerRunCursor(token, "project-1", 3, "agent-1", "trigger-2", "running"); err == nil {
-		t.Fatal("cursor accepted a different trigger")
-	}
-	if _, err := decodeSchedulerRunCursor(token, "project-1", 3, "agent-1", "trigger-1", "failed"); err == nil {
-		t.Fatal("cursor accepted a different status")
-	}
-	if _, err := decodeSchedulerRunCursor("not-base64!", "project-1", 3, "agent-1", "trigger-1", "running"); err == nil {
-		t.Fatal("invalid cursor returned nil error")
 	}
 }
 
@@ -355,6 +305,13 @@ func (s *schedulerRunProjectStoreFake) ListLoaderEventsPage(_ context.Context, f
 	return append([]domain.LoaderEvent(nil), items[start:end]...), nil
 }
 
+func (s *schedulerRunProjectStoreFake) CountLoaderEventsPage(_ context.Context, filter loaders.LoaderEventPageFilter) (int, error) {
+	filter.Offset = 0
+	filter.Limit = int(^uint(0) >> 1)
+	items, err := s.ListLoaderEventsPage(context.Background(), filter)
+	return len(items), err
+}
+
 func compareLoaderEventKey(event domain.LoaderEvent, createdAt time.Time, loaderID, eventID string) int {
 	if !event.CreatedAt.Equal(createdAt) {
 		if event.CreatedAt.Before(createdAt) {
@@ -407,7 +364,7 @@ func (s *schedulerRunProjectStoreFake) GetLoaderRunForLoaders(_ context.Context,
 
 func (s *schedulerRunProjectStoreFake) ListLoaderRunsPage(_ context.Context, filter loaders.LoaderRunPageFilter) ([]domain.LoaderRunSummary, error) {
 	s.lastRunFilter = filter
-	start := 0
+	start := min(max(filter.Offset, 0), len(s.runs))
 	if filter.BeforeRunID != "" {
 		start = len(s.runs)
 		for index, run := range s.runs {
@@ -419,6 +376,10 @@ func (s *schedulerRunProjectStoreFake) ListLoaderRunsPage(_ context.Context, fil
 	}
 	end := min(start+filter.Limit, len(s.runs))
 	return append([]domain.LoaderRunSummary(nil), s.runs[start:end]...), nil
+}
+
+func (s *schedulerRunProjectStoreFake) CountLoaderRunsPage(context.Context, loaders.LoaderRunPageFilter) (int, error) {
+	return len(s.runs), nil
 }
 
 func (s *schedulerRunProjectStoreFake) ListLoaderRunSandboxIDs(_ context.Context, _ []loaders.LoaderRunKey) (map[loaders.LoaderRunKey][]string, error) {
