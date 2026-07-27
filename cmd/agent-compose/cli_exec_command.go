@@ -77,10 +77,20 @@ func executeComposeRunRequest(cmd *cobra.Command, cli cliOptions, projectName, p
 }
 
 func composeExecArgs(cmd *cobra.Command, args []string) error {
+	if err := validateComposeExecTargetArgs(cmd, args); err != nil {
+		return err
+	}
 	if cmd.Flags().Changed("run") {
 		return nil
 	}
 	return cobra.MinimumNArgs(1)(cmd, args)
+}
+
+func validateComposeExecTargetArgs(cmd *cobra.Command, args []string) error {
+	if cmd.Flags().Changed("run") && len(args) > 0 {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("exec target can only be specified once: use either <sandbox> or --run")}
+	}
+	return nil
 }
 
 func runComposeExecCommand(cmd *cobra.Command, cli cliOptions, options composeExecOptions, args []string) error {
@@ -204,6 +214,9 @@ func (p promptAttachInputPrompt) String() string {
 }
 
 func normalizeComposeExecRequest(cmd *cobra.Command, clients cliServiceClients, projectID string, options composeExecOptions, args []string) (*agentcomposev2.ExecRequest, error) {
+	if err := validateComposeExecTargetArgs(cmd, args); err != nil {
+		return nil, err
+	}
 	commandText := strings.TrimSpace(options.Command)
 	promptText := strings.TrimSpace(options.Prompt)
 	if commandText != "" && promptText != "" {

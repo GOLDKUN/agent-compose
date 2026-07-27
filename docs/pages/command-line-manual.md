@@ -450,6 +450,8 @@ agent-compose exec <sandbox> --prompt "..."
 | `--agent <agent>` | Deprecated target selection option; use `exec <sandbox>` instead. |
 | `--run <run-id>` | Deprecated target selection option; use `exec <sandbox>` instead. |
 
+The positional `<sandbox>` target and deprecated `--run` target are mutually exclusive. If both are provided, `exec` exits with a usage error before resolving either target or sending an execution request.
+
 Examples:
 
 ```bash
