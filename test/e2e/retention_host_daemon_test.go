@@ -95,7 +95,7 @@ func TestE2EDockerDaemonRetentionCleanup(t *testing.T) {
 	removeE2EDockerSandboxFallback(t, ctx, dockerClient, sandboxID)
 	assertE2EDockerSandboxContainerCount(t, ctx, dockerClient, sandboxID, 0)
 	if _, err := projectClient.RemoveProject(ctx, connect.NewRequest(&agentcomposev2.RemoveProjectRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 	})); err != nil {
 		t.Fatalf("RemoveProject returned error: %v", err)
 	}

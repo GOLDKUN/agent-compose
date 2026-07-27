@@ -373,9 +373,12 @@ message WatchProjectResponse {
 }
 
 message ProjectRef {
-  string project_id = 1;
-  string name = 2;
-  string source_path = 3;
+  // Select exactly one stable project identifier.
+  oneof selector {
+    string project_id = 1;
+    string name = 2;
+    string source_path = 3;
+  }
 }
 
 message ProjectSource {

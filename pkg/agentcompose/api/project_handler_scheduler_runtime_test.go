@@ -33,7 +33,7 @@ func TestProjectHandlerSchedulerUpdatesUseLoaderRuntime(t *testing.T) {
 	handler := NewProjectHandler(nil, store, runtime)
 
 	enabled, err := handler.SetSchedulerEnabled(context.Background(), connect.NewRequest(&agentcomposev2.SetSchedulerEnabledRequest{
-		Project:   &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 		AgentName: agentName,
 		Enabled:   true,
 	}))
@@ -45,7 +45,7 @@ func TestProjectHandlerSchedulerUpdatesUseLoaderRuntime(t *testing.T) {
 	}
 
 	trigger, err := handler.SetSchedulerTriggerEnabled(context.Background(), connect.NewRequest(&agentcomposev2.SetSchedulerTriggerEnabledRequest{
-		Project:   &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 		AgentName: agentName,
 		TriggerId: triggerID,
 		Enabled:   true,

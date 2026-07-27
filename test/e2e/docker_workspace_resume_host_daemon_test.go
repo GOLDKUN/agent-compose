@@ -173,7 +173,7 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 	sandboxClient = agentcomposev2connect.NewSandboxServiceClient(httpClient2, baseURL2)
 
 	getProjectResp, err := projectClient.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{
-		Project:     &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project:     &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 		IncludeSpec: true,
 	}))
 	if err != nil || getProjectResp.Msg.GetProject().GetSummary().GetProjectId() != projectID {
@@ -227,7 +227,7 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 	assertE2EDockerSandboxContainerCount(t, ctx, dockerClient, sandboxAID, 0)
 
 	if _, err := projectClient.RemoveProject(ctx, connect.NewRequest(&agentcomposev2.RemoveProjectRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 	})); err != nil {
 		t.Fatalf("RemoveProject returned error: %v", err)
 	}

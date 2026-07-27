@@ -334,7 +334,7 @@ func resolveComposeSandboxRefWithProject(ctx context.Context, clients cliService
 		return ref, nil
 	}
 	project, err := clients.project.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 	}))
 	if err != nil {
 		if connect.CodeOf(err) == connect.CodeNotFound {

@@ -426,7 +426,7 @@ func runLegacyEnvPriorityE2E(
 ) {
 	t.Helper()
 	response, err := projectClient.RunScheduler(ctx, connect.NewRequest(&agentcomposev2.RunSchedulerRequest{
-		Project:     &agentcomposev2.ProjectRef{ProjectId: project.GetSummary().GetProjectId()},
+		Project:     &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: project.GetSummary().GetProjectId()}},
 		AgentName:   project.GetAgents()[0].GetAgentName(),
 		TriggerId:   "legacy-env-e2e",
 		PayloadJson: `{}`,
@@ -491,7 +491,7 @@ func linkedE2ESandboxID(
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		response, err := projectClient.ListProjectSchedulerEvents(ctx, connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
-			Project:   &agentcomposev2.ProjectRef{ProjectId: project.GetSummary().GetProjectId()},
+			Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: project.GetSummary().GetProjectId()}},
 			AgentName: project.GetAgents()[0].GetAgentName(),
 			RunId:     runID,
 			Limit:     100,
@@ -527,7 +527,7 @@ func getE2EProject(
 ) *agentcomposev2.Project {
 	t.Helper()
 	response, err := client.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{
-		Project:     &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project:     &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 		IncludeSpec: true,
 	}))
 	if err != nil {

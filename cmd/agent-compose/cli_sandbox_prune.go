@@ -90,7 +90,7 @@ func runComposeSandboxPruneCommand(cmd *cobra.Command, cli cliOptions, options c
 
 func runLegacyComposeSandboxPrune(cmd *cobra.Command, cli cliOptions, options composeSandboxPruneOptions, clients cliServiceClients, runtimeProject composeRuntimeProject, statusFilter map[string]bool, olderThanSeconds uint64) error {
 	project, err := clients.project.GetProject(cmd.Context(), connect.NewRequest(&agentcomposev2.GetProjectRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: runtimeProject.id()},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: runtimeProject.id()}},
 	}))
 	if err != nil {
 		return commandExitErrorForComposeProject(fmt.Errorf("get project %s: %w", runtimeProject.name(), err), "sandbox prune", runtimeProject.name(), runtimeProject.composePath)

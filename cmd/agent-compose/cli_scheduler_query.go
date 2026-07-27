@@ -78,7 +78,7 @@ func listComposeSchedulerTriggers(ctx context.Context, clients cliServiceClients
 		}
 		schedulerEnabled := agent.Scheduler.Enabled
 		if agent.Scheduler.HasScript() {
-			scheduler, err := clients.project.GetScheduler(ctx, connect.NewRequest(&agentcomposev2.GetSchedulerRequest{Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, AgentName: agent.Name}))
+			scheduler, err := clients.project.GetScheduler(ctx, connect.NewRequest(&agentcomposev2.GetSchedulerRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agent.Name}))
 			if err != nil {
 				return nil, commandExitErrorForConnect(fmt.Errorf("get scheduler %s: %w", schedulerID, err))
 			}
@@ -120,7 +120,7 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 			return items, nil
 		}
 		resp, err := clients.project.ListSchedulerRuns(ctx, connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
-			Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, AgentName: agentFilter, TriggerId: triggerID, Status: runStatus, Limit: pageLimit, Cursor: cursor,
+			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agentFilter, TriggerId: triggerID, Status: runStatus, Limit: pageLimit, Cursor: cursor,
 		}))
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -223,7 +223,7 @@ func resolveHistoricalSchedulerTriggerID(ctx context.Context, client agentcompos
 			continue
 		}
 		resp, err := client.ListSchedulerRuns(ctx, connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
-			Project:   &agentcomposev2.ProjectRef{ProjectId: projectID},
+			Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 			AgentName: agent.Name,
 			TriggerId: triggerID,
 			Limit:     1,
@@ -292,7 +292,7 @@ func schedulerRuntimeRunItem(schedulerID, loaderID string, run *agentcomposev2.S
 func resolveSchedulerRuntimeRun(ctx context.Context, client agentcomposev2connect.ProjectServiceClient, normalized *compose.NormalizedProjectSpec, projectID, ref string) (*composeSchedulerRunItem, error) {
 	ref = strings.TrimSpace(ref)
 	response, err := client.GetSchedulerRun(ctx, connect.NewRequest(&agentcomposev2.GetSchedulerRunRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, RunId: ref,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, RunId: ref,
 	}))
 	if err == nil && response != nil && response.Msg.GetRun() != nil {
 		run := response.Msg.GetRun()
@@ -326,7 +326,7 @@ func listProjectSchedulerLogEvents(ctx context.Context, client agentcomposev2con
 			break
 		}
 		resp, err := client.ListProjectSchedulerEvents(ctx, connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
-			Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, AgentName: agentName, TriggerId: triggerID, RunId: runID, Limit: pageLimit, Cursor: cursor,
+			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agentName, TriggerId: triggerID, RunId: runID, Limit: pageLimit, Cursor: cursor,
 		}))
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {

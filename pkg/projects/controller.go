@@ -59,12 +59,6 @@ type NormalizedProject struct {
 	managedLoaderOverrides map[string]legacyManagedLoaderOverride
 }
 
-type ProjectRef struct {
-	ProjectID  string
-	Name       string
-	SourcePath string
-}
-
 type ControllerStore interface {
 	GetProject(context.Context, string) (domain.ProjectRecord, error)
 	GetProjectIfExists(context.Context, string, bool) (domain.ProjectRecord, bool, error)
@@ -447,58 +441,36 @@ func (c *Controller) resolveProjectRef(ctx context.Context, ref ProjectRef, incl
 	if c.store == nil {
 		return domain.ProjectRecord{}, fmt.Errorf("config store is required")
 	}
-	if projectID := strings.TrimSpace(ref.ProjectID); projectID != "" {
-		if includeRemoved {
-			project, found, err := c.store.GetProjectIfExists(ctx, projectID, true)
-			if err != nil {
-				return domain.ProjectRecord{}, err
-			}
-			if found {
-				return project, nil
-			}
-			return domain.ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", projectID, fmt.Sprintf("project %s not found", projectID), sql.ErrNoRows)
-		}
-		return c.store.GetProject(ctx, projectID)
+	if !includeRemoved {
+		return ResolveProjectRef(ctx, c.store, ref)
 	}
-	name := strings.TrimSpace(ref.Name)
-	sourcePath := strings.TrimSpace(ref.SourcePath)
-	if name != "" && sourcePath != "" {
-		projectID, err := domain.StableProjectID(name, sourcePath)
+	value := strings.TrimSpace(ref.value)
+	if value == "" {
+		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project selector is required", nil)
+	}
+	if ref.kind == projectRefID {
+		project, found, err := c.store.GetProjectIfExists(ctx, value, true)
 		if err != nil {
 			return domain.ProjectRecord{}, err
 		}
-		if includeRemoved {
-			project, found, err := c.store.GetProjectIfExists(ctx, projectID, true)
-			if err != nil {
-				return domain.ProjectRecord{}, err
-			}
-			if found {
-				return project, nil
-			}
-			return domain.ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", projectID, fmt.Sprintf("project %s not found", projectID), sql.ErrNoRows)
+		if found {
+			return project, nil
 		}
-		return c.store.GetProject(ctx, projectID)
+		return domain.ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", value, fmt.Sprintf("project %s not found", value), sql.ErrNoRows)
 	}
-	if name == "" {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project id or name is required", nil)
-	}
-	result, err := c.store.ListProjects(ctx, domain.ProjectListOptions{Query: name, IncludeRemoved: includeRemoved, Limit: 200})
-	if err != nil {
-		return domain.ProjectRecord{}, err
-	}
-	var matches []domain.ProjectRecord
-	for _, project := range result.Projects {
-		if project.Name == name {
-			matches = append(matches, project)
+	query := value
+	projectValue := func(project domain.ProjectRecord) string { return project.Name }
+	selectorName := "name"
+	if ref.kind == projectRefSourcePath {
+		query = domain.NormalizeProjectSourcePath(value)
+		projectValue = func(project domain.ProjectRecord) string {
+			return domain.NormalizeProjectSourcePath(project.SourcePath)
 		}
+		selectorName = "source path"
+	} else if ref.kind != projectRefName {
+		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project selector is required", nil)
 	}
-	if len(matches) == 0 {
-		return domain.ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", name, fmt.Sprintf("project %s not found", name), sql.ErrNoRows)
-	}
-	if len(matches) > 1 {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrAmbiguous, fmt.Sprintf("project name %s is ambiguous; use project_id or source_path", name), nil)
-	}
-	return matches[0], nil
+	return resolveProjectByExactMatch(ctx, c.store, query, true, selectorName, projectValue)
 }
 
 func (c *Controller) projectArtifacts(ctx context.Context, project domain.ProjectRecord, revision int64, normalized NormalizedProject) ([]domain.ProjectAgentRecord, []domain.AgentDefinition, []domain.ProjectSchedulerRecord, []domain.Loader, error) {

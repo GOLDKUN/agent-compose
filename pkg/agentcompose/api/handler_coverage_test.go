@@ -480,7 +480,7 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("expected stopped run sandbox error, got %v", err)
 	}
-	if _, err := handler.resolveProjectRef(ctx, &agentcomposev2.ProjectRef{Name: "Project"}); !errors.Is(err, domain.ErrAmbiguous) {
+	if _, err := handler.resolveProjectRef(ctx, &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}); !errors.Is(err, domain.ErrAmbiguous) {
 		t.Fatalf("expected ambiguous project ref error, got %v", err)
 	}
 }
@@ -494,6 +494,11 @@ func TestExecHandlerSelectorErrors(t *testing.T) {
 	}
 	if _, err := handler.Exec(context.Background(), connect.NewRequest(&agentcomposev2.ExecRequest{Target: &agentcomposev2.ExecRequest_RunId{RunId: "missing"}, Command: &agentcomposev2.ExecCommand{Command: "echo"}})); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("expected run not found, got %v", err)
+	}
+	if _, err := handler.Exec(context.Background(), connect.NewRequest(&agentcomposev2.ExecRequest{
+		Target: &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", ProjectName: "Project"}},
+	})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("expected conflicting project selector error, got %v", err)
 	}
 }
 
@@ -695,7 +700,7 @@ func TestExecAttachInputFrameMapping(t *testing.T) {
 func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	ctx := context.Background()
 	store := &apiProjectRunStore{
-		projects: []domain.ProjectRecord{{ID: "project-1", Name: "Project", CurrentRevision: 1}},
+		projects: []domain.ProjectRecord{{ID: "project-1", Name: "Project", SourcePath: "/repo/agent-compose.yml", CurrentRevision: 1}},
 		agents: []domain.ProjectAgentRecord{
 			{ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Revision: 1, Driver: "boxlite", Image: "guest:latest"},
 			{ProjectID: "project-1", AgentName: "worker-2", ManagedAgentID: "agent-2", Revision: 1, Driver: "boxlite", Image: "guest:latest"},
@@ -719,7 +724,7 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 		runEvents: []domain.ProjectRunEventRecord{{ID: "event-1", RunID: "run-1", Sequence: 1, Kind: domain.ProjectRunEventKindUserMessage, Text: "hello", CreatedAt: time.Unix(1, 0)}},
 	}
 	projectHandler := NewProjectHandler(nil, store, nil)
-	projectResp, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Name: "Project"}, IncludeSpec: true}))
+	projectResp, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}, IncludeSpec: true}))
 	if err != nil {
 		t.Fatalf("GetProject returned error: %v", err)
 	}
@@ -737,6 +742,12 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	if store.agentRunStateCalls != 1 || projectAgent.GetCurrentRun().GetRunningRunCount() != 1 || projectAgent.GetCurrentRun().GetRunningSchedulerRunCount() != 2 || projectAgent.GetLatestRun().GetRunId() != "run-1" || projectAgent.GetHealth() != agentcomposev2.ProjectAgentHealth_PROJECT_AGENT_HEALTH_AT_RISK {
 		t.Fatalf("project agent run enrichment calls=%d agent=%#v", store.agentRunStateCalls, projectAgent)
 	}
+	projectByPath, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_SourcePath{SourcePath: "/repo/./agent-compose.yml"}},
+	}))
+	if err != nil || projectByPath.Msg.GetProject().GetSummary().GetProjectId() != "project-1" {
+		t.Fatalf("GetProject by source path response=%#v err=%v", projectByPath, err)
+	}
 	listProjects, err := projectHandler.ListProjects(ctx, connect.NewRequest(&agentcomposev2.ListProjectsRequest{Query: "Project", Limit: 10}))
 	if err != nil || len(listProjects.Msg.GetProjects()) != 1 {
 		t.Fatalf("ListProjects resp=%#v err=%v", listProjects, err)
@@ -744,7 +755,7 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	if summary := listProjects.Msg.GetProjects()[0]; summary.GetAgentCount() != 2 || summary.GetSchedulerCount() != 2 {
 		t.Fatalf("ListProjects summary counts = agents %d schedulers %d", summary.GetAgentCount(), summary.GetSchedulerCount())
 	}
-	scheduler, err := projectHandler.GetScheduler(ctx, connect.NewRequest(&agentcomposev2.GetSchedulerRequest{Project: &agentcomposev2.ProjectRef{ProjectId: "project-1"}, AgentName: "worker"}))
+	scheduler, err := projectHandler.GetScheduler(ctx, connect.NewRequest(&agentcomposev2.GetSchedulerRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}}, AgentName: "worker"}))
 	if err != nil || scheduler.Msg.GetScheduler().GetSchedulerId() != "scheduler-1" || scheduler.Msg.GetScheduler().GetDisplayName() != "每日巡检" || scheduler.Msg.GetSpec().GetScript() != "run()" || scheduler.Msg.GetSpec().GetDescription() != "每天汇总巡检结果" {
 		t.Fatalf("GetScheduler resp=%#v err=%v", scheduler, err)
 	}
@@ -766,7 +777,7 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	}
 	store.loaders["loader-2"] = domain.Loader{Summary: domain.LoaderSummary{ID: "loader-2", Enabled: true}}
 	store.projects = append(store.projects, domain.ProjectRecord{ID: "project-2", Name: "Project"})
-	if _, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Name: "Project"}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("expected ambiguous project error, got %v", err)
 	}
 	store.projects = store.projects[:1]

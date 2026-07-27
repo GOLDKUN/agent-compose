@@ -26,7 +26,7 @@ func TestProjectHandlerPruneSchedulerRunsMapsRequestAndResult(t *testing.T) {
 		Warnings:    []string{"warning"},
 	}
 	response, err := handler.PruneSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
-		Project:   &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		AgentName: store.scheduler.AgentName,
 		TriggerId: " trigger-history ",
 		Status: []agentcomposev2.SchedulerRunStatus{
@@ -63,7 +63,7 @@ func TestProjectHandlerPruneSchedulerRunsUsesCurrentProjectSchedulers(t *testing
 	store.schedulers = []domain.ProjectSchedulerRecord{store.scheduler, stale, currentSecond}
 
 	_, err := handler.PruneSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, Force: true,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, Force: true,
 	}))
 	if err != nil {
 		t.Fatalf("PruneSchedulerRuns: %v", err)
@@ -80,14 +80,14 @@ func TestProjectHandlerPruneSchedulerRunsRejectsInvalidStatusAndDuration(t *test
 		agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_RUNNING,
 	} {
 		_, err := handler.PruneSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
-			Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, Status: []agentcomposev2.SchedulerRunStatus{status},
+			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, Status: []agentcomposev2.SchedulerRunStatus{status},
 		}))
 		if connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Fatalf("status %v code=%v err=%v", status, connect.CodeOf(err), err)
 		}
 	}
 	_, err := handler.PruneSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, OlderThanSeconds: math.MaxUint64,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, OlderThanSeconds: math.MaxUint64,
 	}))
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("overflow duration code=%v err=%v", connect.CodeOf(err), err)
@@ -101,7 +101,7 @@ func TestProjectHandlerPruneSchedulerRunsRuntimeUnavailable(t *testing.T) {
 	store, _, _ := newSchedulerRunHandlerFixture()
 	handler := NewProjectHandler(nil, store, &schedulerRuntimeFake{})
 	_, err := handler.PruneSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 	}))
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("runtime unavailable code=%v err=%v", connect.CodeOf(err), err)

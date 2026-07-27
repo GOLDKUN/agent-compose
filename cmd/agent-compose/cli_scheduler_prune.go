@@ -95,7 +95,7 @@ func runComposeSchedulerPruneCommand(cmd interface {
 		return commandExitError{Code: exitCodeUsage, Err: err}
 	}
 	response, err := clients.project.PruneSchedulerRuns(cmd.Context(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
-		Project:          &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project:          &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 		AgentName:        agentName,
 		TriggerId:        triggerID,
 		Status:           statuses,

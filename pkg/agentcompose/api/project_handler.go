@@ -518,39 +518,5 @@ func (h *ProjectHandler) ListProjects(ctx context.Context, req *connect.Request[
 }
 
 func (h *ProjectHandler) resolveProjectRef(ctx context.Context, ref *agentcomposev2.ProjectRef) (domain.ProjectRecord, error) {
-	if ref == nil {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project ref is required", nil)
-	}
-	if projectID := strings.TrimSpace(ref.GetProjectId()); projectID != "" {
-		return h.store.GetProject(ctx, projectID)
-	}
-	name := strings.TrimSpace(ref.GetName())
-	sourcePath := strings.TrimSpace(ref.GetSourcePath())
-	if name != "" && sourcePath != "" {
-		projectID, err := domain.StableProjectID(name, sourcePath)
-		if err != nil {
-			return domain.ProjectRecord{}, err
-		}
-		return h.store.GetProject(ctx, projectID)
-	}
-	if name == "" {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project id or name is required", nil)
-	}
-	result, err := h.store.ListProjects(ctx, domain.ProjectListOptions{Query: name, Limit: 200})
-	if err != nil {
-		return domain.ProjectRecord{}, err
-	}
-	var matches []domain.ProjectRecord
-	for _, project := range result.Projects {
-		if project.Name == name {
-			matches = append(matches, project)
-		}
-	}
-	if len(matches) == 0 {
-		return domain.ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", name, fmt.Sprintf("project %s not found", name), sql.ErrNoRows)
-	}
-	if len(matches) > 1 {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrAmbiguous, fmt.Sprintf("project name %s is ambiguous; use project_id or source_path", name), nil)
-	}
-	return matches[0], nil
+	return resolveProjectReference(ctx, h.store, ref)
 }

@@ -47,8 +47,14 @@ func TestAppProjectControllerHelperCoverage(t *testing.T) {
 	if normalizedSpecToProto(nil) != nil {
 		t.Fatalf("normalizedSpecToProto nil returned non-nil")
 	}
-	if ref := projectRefFromProto(&agentcomposev2.ProjectRef{ProjectId: "project-1", Name: "Project", SourcePath: "/repo"}); ref.ProjectID != "project-1" || ref.Name != "Project" || ref.SourcePath != "/repo" {
-		t.Fatalf("projectRefFromProto = %#v", ref)
+	for _, ref := range []*agentcomposev2.ProjectRef{
+		{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}},
+		{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}},
+		{Selector: &agentcomposev2.ProjectRef_SourcePath{SourcePath: "/repo"}},
+	} {
+		if got := projectRefFromProto(ref); got == (projects.ProjectRef{}) {
+			t.Fatalf("projectRefFromProto(%T) returned empty ref", ref.GetSelector())
+		}
 	}
 	if ref := projectRefFromProto(nil); ref != (projects.ProjectRef{}) {
 		t.Fatalf("projectRefFromProto nil = %#v", ref)
