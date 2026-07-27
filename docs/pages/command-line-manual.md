@@ -90,6 +90,20 @@ Without `env_file`, the CLI first looks for `.env` in the project directory, the
 
 Later files override earlier files, and the environment inherited by the CLI overrides every env file. Project env files are only used to render `agent-compose.yml`; they do not change CLI connection settings such as `--host` or authentication.
 
+### Daemon database concurrency
+
+The daemon uses one SQLite connection while applying startup migrations. After
+migration succeeds, a file-backed database uses up to four runtime connections
+by default so WAL readers can make progress alongside a writer. Set
+`SQLITE_MAX_OPEN_CONNS` to an integer from `1` through `32` to override that
+limit. In-memory SQLite databases always remain limited to one connection,
+regardless of the configured value.
+
+Increasing the limit enables more concurrent database operations but does not
+create additional SQLite writers: WAL still permits only one active writer.
+Values above the default should therefore be justified by observed connection
+wait time and tested under the deployment's write workload.
+
 ## Common Workflows
 
 Local development:

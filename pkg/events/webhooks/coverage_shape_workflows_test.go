@@ -281,13 +281,6 @@ func (s *webhookRouteStore) CreateEvent(_ context.Context, event domain.TopicEve
 	return event, nil
 }
 
-func (s *webhookRouteStore) UpdateEventPayload(_ context.Context, eventID, payloadJSON string) error {
-	event := s.events[eventID]
-	event.PayloadJSON = payloadJSON
-	s.events[eventID] = event
-	return nil
-}
-
 func (s *webhookRouteStore) GetEvent(_ context.Context, eventID string) (domain.TopicEventRecord, error) {
 	event, ok := s.events[eventID]
 	if !ok {

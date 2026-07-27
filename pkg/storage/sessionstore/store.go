@@ -86,7 +86,7 @@ func NewWithConfig(config *appconfig.Config) (*Store, error) {
 	if dbPath == "" {
 		dbPath = filepath.Join(config.SandboxRoot, "data.db")
 	}
-	database, err := storagesqlite.Open(dbPath, config.DbTimeout)
+	database, err := storagesqlite.OpenWithMaxOpenConns(dbPath, config.DbTimeout, config.EffectiveSQLiteMaxOpenConns())
 	if err != nil {
 		return newStoreWithIndex(config, nil, dbPath, err, nil)
 	}

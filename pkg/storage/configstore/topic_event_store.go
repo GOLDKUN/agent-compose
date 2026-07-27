@@ -16,62 +16,6 @@ type eventStore struct {
 	db *sql.DB
 }
 
-func (s *eventStore) CreateEvent(ctx context.Context, item domain.TopicEventRecord) (domain.TopicEventRecord, error) {
-	normalized, err := normalizeTopicEventRecord(item, true)
-	if err != nil {
-		return domain.TopicEventRecord{}, err
-	}
-	result, err := s.db.ExecContext(ctx, `INSERT INTO event(
-		id, topic, source, provider, intent, correlation_id, idempotency_key, delivery_id, payload_hash, payload_json,
-		dispatch_status, parent_event_id, publisher_type, publisher_id, publisher_run_id, replay_of_event_id,
-		claim_id, claim_until, attempt_count, next_attempt_at, last_error, dead_letter_at, created_at, dispatched_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		normalized.ID,
-		normalized.Topic,
-		normalized.Source,
-		normalized.Provider,
-		normalized.Intent,
-		normalized.CorrelationID,
-		normalized.IdempotencyKey,
-		normalized.DeliveryID,
-		normalized.PayloadHash,
-		normalized.PayloadJSON,
-		normalized.DispatchStatus,
-		normalized.ParentEventID,
-		normalized.PublisherType,
-		normalized.PublisherID,
-		normalized.PublisherRunID,
-		normalized.ReplayOfEventID,
-		normalized.ClaimID,
-		domain.NonZeroTimeUnixMilli(normalized.ClaimUntil),
-		normalized.AttemptCount,
-		domain.NonZeroTimeUnixMilli(normalized.NextAttemptAt),
-		normalized.LastError,
-		domain.NonZeroTimeUnixMilli(normalized.DeadLetterAt),
-		normalized.CreatedAt.UnixMilli(),
-		domain.NonZeroTimeUnixMilli(normalized.DispatchedAt),
-	)
-	if err != nil {
-		if normalized.IdempotencyKey != "" {
-			if existing, ok, lookupErr := s.FindEventByIdempotencyKey(ctx, normalized.Topic, normalized.IdempotencyKey); lookupErr != nil {
-				return domain.TopicEventRecord{}, lookupErr
-			} else if ok {
-				if existing.PayloadHash != normalized.PayloadHash {
-					return domain.TopicEventRecord{}, domain.ResourceError(domain.ErrConflict, "event", normalized.Topic, fmt.Sprintf("event idempotency conflict for topic %q", normalized.Topic), nil)
-				}
-				return existing, nil
-			}
-		}
-		return domain.TopicEventRecord{}, fmt.Errorf("insert event %s: %w", normalized.ID, err)
-	}
-	sequence, err := result.LastInsertId()
-	if err != nil {
-		return domain.TopicEventRecord{}, fmt.Errorf("read event sequence: %w", err)
-	}
-	normalized.Sequence = sequence
-	return s.GetEvent(ctx, normalized.ID)
-}
-
 func (s *eventStore) GetEvent(ctx context.Context, eventID string) (domain.TopicEventRecord, error) {
 	eventID = strings.TrimSpace(eventID)
 	if eventID == "" {

@@ -44,6 +44,7 @@ type Config struct {
 	DbAddr                     string
 	DbName                     string
 	DbTimeout                  time.Duration
+	SQLiteMaxOpenConns         int
 	DataRoot                   string
 	SandboxRoot                string
 	SandboxRootExplicit        bool
@@ -126,6 +127,10 @@ func NewConfig(di do.Injector) (*Config, error) {
 			dbTimeout = parsed
 			logger.Info("dbTimeout updated", "dbTimeout", dbTimeout)
 		}
+	}
+	sqliteMaxOpenConns, err := sqliteMaxOpenConnsFromEnvironment()
+	if err != nil {
+		return nil, err
 	}
 
 	sandboxRootExplicit := strings.TrimSpace(os.Getenv("SANDBOX_ROOT")) != "" || strings.TrimSpace(os.Getenv("SESSION_ROOT")) != ""
@@ -449,6 +454,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		DbAddr:                     dbPath,
 		DbName:                     dbName,
 		DbTimeout:                  dbTimeout,
+		SQLiteMaxOpenConns:         sqliteMaxOpenConns,
 		DataRoot:                   dataRoot,
 		SandboxRoot:                sandboxRoot,
 		SandboxRootExplicit:        sandboxRootExplicit,

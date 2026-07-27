@@ -437,7 +437,7 @@ func NewDatabase(di do.Injector) (*storagesqlite.Database, error) {
 	if err := os.MkdirAll(config.DataRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("create agent-compose data root: %w", err)
 	}
-	return storagesqlite.Open(config.DbAddr, config.DbTimeout)
+	return storagesqlite.OpenWithMaxOpenConns(config.DbAddr, config.DbTimeout, config.EffectiveSQLiteMaxOpenConns())
 }
 
 func NewConfigStore(di do.Injector) (*configstore.ConfigStore, error) {

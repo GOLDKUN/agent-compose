@@ -6,13 +6,19 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
 
-const defaultBusyTimeout = 16 * time.Second
+const (
+	defaultBusyTimeout = 16 * time.Second
+
+	// DefaultMaxOpenConns is the runtime connection limit used by Open.
+	DefaultMaxOpenConns = 4
+)
 
 // Database owns the application's shared SQLite connection. All storage
 // facades receive DB() and must not close it themselves.
@@ -25,6 +31,18 @@ type Database struct {
 // Open opens and migrates one application database. The returned Database owns
 // the connection and must be closed by its composition root.
 func Open(path string, busyTimeout time.Duration) (*Database, error) {
+	return OpenWithMaxOpenConns(path, busyTimeout, DefaultMaxOpenConns)
+}
+
+// OpenWithMaxOpenConns opens and migrates one application database, then applies
+// the provided runtime connection limit.
+func OpenWithMaxOpenConns(path string, busyTimeout time.Duration, runtimeMaxOpenConns int) (*Database, error) {
+	if runtimeMaxOpenConns <= 0 {
+		return nil, fmt.Errorf("SQLite maximum open connections must be positive")
+	}
+	if isMemoryDatabase(path) {
+		runtimeMaxOpenConns = 1
+	}
 	db, err := sql.Open("sqlite", sqliteDSN(path, busyTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("open SQLite database: %w", err)
@@ -43,7 +61,21 @@ func Open(path string, busyTimeout time.Duration) (*Database, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	db.SetMaxOpenConns(runtimeMaxOpenConns)
+	db.SetMaxIdleConns(runtimeMaxOpenConns)
 	return &Database{db: db}, nil
+}
+
+func isMemoryDatabase(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == ":memory:" {
+		return true
+	}
+	uri, err := url.Parse(path)
+	if err != nil || uri.Scheme != "file" {
+		return false
+	}
+	return uri.Opaque == ":memory:" || uri.Path == ":memory:" || strings.EqualFold(uri.Query().Get("mode"), "memory")
 }
 
 // DB returns the shared connection. Database retains ownership; callers must
