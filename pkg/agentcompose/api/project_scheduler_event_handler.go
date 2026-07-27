@@ -14,10 +14,11 @@ import (
 
 type ProjectSchedulerEventStore interface {
 	ListLoaderEventsPage(context.Context, loaders.LoaderEventPageFilter) ([]domain.LoaderEvent, error)
+	CountLoaderEventsPage(context.Context, loaders.LoaderEventPageFilter) (int, error)
 }
 
 func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *connect.Request[agentcomposev2.ListProjectSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListProjectSchedulerEventsResponse], error) {
-	project, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
+	_, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -35,18 +36,13 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 		if triggerID != "" && triggerID != run.TriggerID {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scheduler run does not belong to trigger %q", triggerID))
 		}
-		agentName = runScheduler.AgentName
 		triggerID = run.TriggerID
 		runID = run.ID
 		schedulers = []domain.ProjectSchedulerRecord{runScheduler}
 	}
-	limit, err := schedulerRunPageLimit(req.Msg.GetLimit())
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
 	if err != nil {
-		return nil, ConnectErrorForDomain(err)
-	}
-	cursor, err := decodeProjectSchedulerEventCursor(req.Msg.GetCursor(), project.ID, project.CurrentRevision, agentName, triggerID, runID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	loaderIDs := make([]string, 0, len(schedulers))
 	byLoaderID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
@@ -63,29 +59,29 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler event store is required"))
 	}
 	events, err := store.ListLoaderEventsPage(ctx, loaders.LoaderEventPageFilter{
-		LoaderIDs:       loaderIDs,
-		RequireTrigger:  true,
-		TriggerID:       triggerID,
-		RunID:           runID,
-		BeforeCreatedAt: cursor.CreatedAt,
-		BeforeLoaderID:  cursor.LoaderID,
-		BeforeEventID:   cursor.EventID,
-		Limit:           limit + 1,
+		LoaderIDs:      loaderIDs,
+		RequireTrigger: true,
+		TriggerID:      triggerID,
+		RunID:          runID,
+		Offset:         offset,
+		Limit:          limit,
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	end := min(limit, len(events))
-	response := &agentcomposev2.ListProjectSchedulerEventsResponse{Events: make([]*agentcomposev2.SchedulerEvent, 0, end)}
-	for _, event := range events[:end] {
+	total, err := store.CountLoaderEventsPage(ctx, loaders.LoaderEventPageFilter{
+		LoaderIDs: loaderIDs, RequireTrigger: true, TriggerID: triggerID, RunID: runID,
+	})
+	if err != nil {
+		return nil, ConnectErrorForDomain(err)
+	}
+	response := &agentcomposev2.ListProjectSchedulerEventsResponse{Events: make([]*agentcomposev2.SchedulerEvent, 0, len(events)), Total: uint32(total)}
+	for _, event := range events {
 		scheduler, ok := byLoaderID[event.LoaderID]
 		if !ok {
 			continue
 		}
 		response.Events = append(response.Events, schedulerEventToProto(event, scheduler))
-	}
-	if len(events) > limit {
-		response.NextCursor = encodeProjectSchedulerEventCursor(project.ID, project.CurrentRevision, agentName, triggerID, runID, events[limit-1])
 	}
 	return connect.NewResponse(response), nil
 }

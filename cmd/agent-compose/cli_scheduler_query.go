@@ -109,8 +109,7 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 		return nil, err
 	}
 	items := make([]composeSchedulerRunItem, 0)
-	cursor := ""
-	seenCursors := make(map[string]struct{})
+	var offset uint32
 	for {
 		pageLimit := uint32(500)
 		if limit > 0 && limit-uint32(len(items)) < pageLimit {
@@ -120,7 +119,7 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 			return items, nil
 		}
 		resp, err := clients.project.ListSchedulerRuns(ctx, connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
-			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agentFilter, TriggerId: triggerID, Status: runStatus, Limit: pageLimit, Cursor: cursor,
+			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agentFilter, TriggerId: triggerID, Status: runStatus, Limit: pageLimit, Offset: offset,
 		}))
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -128,7 +127,8 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 			}
 			return nil, commandExitErrorForConnect(fmt.Errorf("list scheduler runs: %w", err))
 		}
-		for _, run := range resp.Msg.GetRuns() {
+		runs := resp.Msg.GetRuns()
+		for _, run := range runs {
 			if strings.TrimSpace(run.GetTriggerId()) == "" || (agentFilter != "" && run.GetAgentName() != agentFilter) ||
 				(triggerID != "" && run.GetTriggerId() != triggerID) || (statusText != "" && schedulerRunStatusText(run.GetStatus()) != statusText) {
 				continue
@@ -142,18 +142,13 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 				return items, nil
 			}
 		}
-		next := strings.TrimSpace(resp.Msg.GetNextCursor())
-		if next == "" {
+		offset += uint32(len(runs))
+		if offset >= resp.Msg.GetTotal() {
 			return items, nil
 		}
-		if next == cursor {
-			return nil, fmt.Errorf("daemon returned a repeated scheduler run cursor")
+		if len(runs) == 0 {
+			return nil, fmt.Errorf("scheduler run pagination did not advance")
 		}
-		if _, ok := seenCursors[next]; ok {
-			return nil, fmt.Errorf("daemon returned a repeated scheduler run cursor")
-		}
-		seenCursors[next] = struct{}{}
-		cursor = next
 	}
 }
 
@@ -315,8 +310,7 @@ func listProjectSchedulerLogEvents(ctx context.Context, client agentcomposev2con
 	if tail == 0 {
 		return events, nil
 	}
-	cursor := ""
-	seenCursors := make(map[string]struct{})
+	var offset uint32
 	for {
 		pageLimit := uint32(500)
 		if tail > 0 && tail-len(events) < int(pageLimit) {
@@ -326,7 +320,7 @@ func listProjectSchedulerLogEvents(ctx context.Context, client agentcomposev2con
 			break
 		}
 		resp, err := client.ListProjectSchedulerEvents(ctx, connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
-			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agentName, TriggerId: triggerID, RunId: runID, Limit: pageLimit, Cursor: cursor,
+			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agentName, TriggerId: triggerID, RunId: runID, Limit: pageLimit, Offset: offset,
 		}))
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -334,7 +328,8 @@ func listProjectSchedulerLogEvents(ctx context.Context, client agentcomposev2con
 			}
 			return nil, commandExitErrorForConnect(fmt.Errorf("list scheduler logs: %w", err))
 		}
-		for _, event := range resp.Msg.GetEvents() {
+		pageEvents := resp.Msg.GetEvents()
+		for _, event := range pageEvents {
 			events = append(events, composeSchedulerLogEvent{
 				ID: event.GetId(), RunID: event.GetRunId(), AgentName: event.GetAgentName(), SchedulerID: event.GetSchedulerId(), TriggerID: event.GetTriggerId(),
 				Type: schedulerDisplayEventType(event.GetType()), Level: event.GetLevel(), Message: event.GetMessage(), PayloadJSON: event.GetPayloadJson(),
@@ -347,18 +342,13 @@ func listProjectSchedulerLogEvents(ctx context.Context, client agentcomposev2con
 		if tail > 0 && len(events) >= tail {
 			break
 		}
-		next := strings.TrimSpace(resp.Msg.GetNextCursor())
-		if next == "" {
+		offset += uint32(len(pageEvents))
+		if offset >= resp.Msg.GetTotal() {
 			break
 		}
-		if next == cursor {
-			return nil, fmt.Errorf("daemon returned a repeated scheduler event cursor")
+		if len(pageEvents) == 0 {
+			return nil, fmt.Errorf("scheduler event pagination did not advance")
 		}
-		if _, ok := seenCursors[next]; ok {
-			return nil, fmt.Errorf("daemon returned a repeated scheduler event cursor")
-		}
-		seenCursors[next] = struct{}{}
-		cursor = next
 	}
 	for left, right := 0, len(events)-1; left < right; left, right = left+1, right-1 {
 		events[left], events[right] = events[right], events[left]

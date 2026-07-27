@@ -760,13 +760,13 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 		t.Fatalf("GetScheduler resp=%#v err=%v", scheduler, err)
 	}
 	firstSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 1}))
-	if err != nil || len(firstSchedulers.Msg.GetSchedulers()) != 1 || firstSchedulers.Msg.GetNextCursor() == "" {
+	if err != nil || len(firstSchedulers.Msg.GetSchedulers()) != 1 || firstSchedulers.Msg.GetTotal() != 2 {
 		t.Fatalf("ListSchedulers first page=%#v err=%v", firstSchedulers, err)
 	}
 	if summary := firstSchedulers.Msg.GetSchedulers()[0]; summary.GetEnabled() || summary.GetRunCount() != 3 || !summary.GetLatestRunAt().AsTime().Equal(time.Unix(10, 0)) || summary.GetLastError() != "failed" || summary.GetDisplayName() != "每日巡检" || summary.GetDescription() != "每天汇总巡检结果" {
 		t.Fatalf("ListSchedulers summary=%#v", summary)
 	}
-	secondSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 1, Cursor: firstSchedulers.Msg.GetNextCursor()}))
+	secondSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 1, Offset: 1}))
 	if err != nil || len(secondSchedulers.Msg.GetSchedulers()) != 1 || secondSchedulers.Msg.GetSchedulers()[0].GetSchedulerId() != "scheduler-2" {
 		t.Fatalf("ListSchedulers second page=%#v err=%v", secondSchedulers, err)
 	}
@@ -1306,18 +1306,14 @@ func (s *apiProjectRunStore) ListProjectSchedulers(context.Context, string) ([]d
 	return s.schedulers, nil
 }
 
-func (s *apiProjectRunStore) ListProjectSchedulersPage(_ context.Context, query, afterKey string, limit int) ([]domain.ProjectSchedulerRecord, error) {
-	var items []domain.ProjectSchedulerRecord
-	for _, scheduler := range s.schedulers {
-		key := scheduler.ProjectID + "\x00" + scheduler.AgentName + "\x00" + scheduler.SchedulerID
-		if key > afterKey {
-			items = append(items, scheduler)
-		}
-	}
-	if len(items) > limit {
-		items = items[:limit]
-	}
-	return items, nil
+func (s *apiProjectRunStore) ListProjectSchedulersPage(_ context.Context, query string, offset, limit int) ([]domain.ProjectSchedulerRecord, error) {
+	items := append([]domain.ProjectSchedulerRecord(nil), s.schedulers...)
+	start := min(max(offset, 0), len(items))
+	return items[start:min(start+limit, len(items))], nil
+}
+
+func (s *apiProjectRunStore) CountProjectSchedulers(context.Context, string) (int, error) {
+	return len(s.schedulers), nil
 }
 
 func (s *apiProjectRunStore) GetProjectRevision(context.Context, string, int64) (domain.ProjectRevisionRecord, error) {
@@ -1447,6 +1443,17 @@ func (s *apiProjectRunStore) ListProjectRunEvents(_ context.Context, runID strin
 	return items, nil
 }
 
+func (s *apiProjectRunStore) ListProjectRunEventsPage(ctx context.Context, runID string, offset, limit int) ([]domain.ProjectRunEventRecord, error) {
+	items, err := s.ListProjectRunEvents(ctx, runID, 0, int(^uint(0)>>1))
+	start := min(max(offset, 0), len(items))
+	return items[start:min(start+limit, len(items))], err
+}
+
+func (s *apiProjectRunStore) CountProjectRunEvents(ctx context.Context, runID string) (int, error) {
+	items, err := s.ListProjectRunEvents(ctx, runID, 0, int(^uint(0)>>1))
+	return len(items), err
+}
+
 func (s *apiProjectRunStore) HasProjectRunEvents(_ context.Context, runID string) (bool, error) {
 	for _, event := range s.runEvents {
 		if event.RunID == runID {
@@ -1491,4 +1498,15 @@ func (s *apiProjectRunStore) ListProjectRunEventsForSandbox(_ context.Context, s
 		items = items[:limit]
 	}
 	return items, nil
+}
+
+func (s *apiProjectRunStore) ListProjectRunEventsForSandboxPage(ctx context.Context, sandboxID string, offset, limit int) ([]domain.ProjectRunEventRecord, error) {
+	items, err := s.ListProjectRunEventsForSandbox(ctx, sandboxID, time.Time{}, "", 0, int(^uint(0)>>1))
+	start := min(max(offset, 0), len(items))
+	return items[start:min(start+limit, len(items))], err
+}
+
+func (s *apiProjectRunStore) CountProjectRunEventsForSandbox(ctx context.Context, sandboxID string) (int, error) {
+	items, err := s.ListProjectRunEventsForSandbox(ctx, sandboxID, time.Time{}, "", 0, int(^uint(0)>>1))
+	return len(items), err
 }

@@ -92,12 +92,51 @@ func (s *projectStore) ListProjectRunEvents(ctx context.Context, runID string, a
 	return events, nil
 }
 
+func (s *projectStore) ListProjectRunEventsPage(ctx context.Context, runID string, offset, limit int) ([]domain.ProjectRunEventRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, run_id, seq, kind, text, agent, name, payload_json, success, exit_code, stop_reason, created_at FROM project_run_event WHERE run_id = ? ORDER BY seq ASC LIMIT ? OFFSET ?`, strings.TrimSpace(runID), limit, max(offset, 0))
+	if err != nil {
+		return nil, fmt.Errorf("list run event page: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var events []domain.ProjectRunEventRecord
+	for rows.Next() {
+		event, scanErr := scanRunEvent(rows.Scan)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate run event page: %w", err)
+	}
+	return events, nil
+}
+
 func (s *projectStore) HasProjectRunEvents(ctx context.Context, runID string) (bool, error) {
 	var exists bool
 	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM project_run_event WHERE run_id = ?)`, strings.TrimSpace(runID)).Scan(&exists); err != nil {
 		return false, fmt.Errorf("check run events: %w", err)
 	}
 	return exists, nil
+}
+
+func (s *projectStore) CountProjectRunEvents(ctx context.Context, runID string) (int, error) {
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_run_event WHERE run_id = ?`, strings.TrimSpace(runID)).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count run events: %w", err)
+	}
+	return total, nil
+}
+
+func (s *projectStore) CountProjectRunEventsForSandbox(ctx context.Context, sandboxID string) (int, error) {
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_run_event e JOIN project_run r ON r.run_id = e.run_id WHERE r.sandbox_id = ?`, strings.TrimSpace(sandboxID)).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count sandbox run events: %w", err)
+	}
+	return total, nil
 }
 
 func (s *projectStore) ListProjectRunEventRunIDsForSandbox(ctx context.Context, sandboxID string) ([]string, error) {
@@ -142,6 +181,31 @@ func (s *projectStore) ListProjectRunEventsForSandbox(ctx context.Context, sandb
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate sandbox run events: %w", err)
+	}
+	return events, nil
+}
+
+func (s *projectStore) ListProjectRunEventsForSandboxPage(ctx context.Context, sandboxID string, offset, limit int) ([]domain.ProjectRunEventRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT e.id, e.run_id, e.seq, e.kind, e.text, e.agent, e.name, e.payload_json, e.success, e.exit_code, e.stop_reason, e.created_at
+		FROM project_run_event e JOIN project_run r ON r.run_id = e.run_id
+		WHERE r.sandbox_id = ? ORDER BY e.created_at ASC, e.run_id ASC, e.seq ASC LIMIT ? OFFSET ?`, strings.TrimSpace(sandboxID), limit, max(offset, 0))
+	if err != nil {
+		return nil, fmt.Errorf("list sandbox run event page: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var events []domain.ProjectRunEventRecord
+	for rows.Next() {
+		event, scanErr := scanRunEvent(rows.Scan)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sandbox run event page: %w", err)
 	}
 	return events, nil
 }

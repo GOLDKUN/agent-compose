@@ -168,7 +168,7 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 	if err != nil || managedAgent.WorkspaceID != workspace.ID {
 		t.Fatalf("managed legacy agent workspace = %#v, err = %v", managedAgent, err)
 	}
-	page, err := store.ListProjectSchedulersPage(ctx, "", "", 10)
+	page, err := store.ListProjectSchedulersPage(ctx, "", 0, 10)
 	if err != nil {
 		t.Fatalf("list project schedulers page: %v", err)
 	}
@@ -209,7 +209,7 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 	if err != nil {
 		t.Fatalf("load upgraded legacy project: %v", err)
 	}
-	page, err = store.ListProjectSchedulersPage(ctx, "", "", 10)
+	page, err = store.ListProjectSchedulersPage(ctx, "", 0, 10)
 	if err != nil || len(page) != 1 || page[0].Revision != project.CurrentRevision || page[0].ManagedLoaderID != loader.Summary.ID || page[0].RunCount != 1 || !strings.Contains(page[0].SpecJSON, `"display_name":"资讯推送任务"`) {
 		t.Fatalf("scheduler page after presentation upgrade = %#v, err = %v", page, err)
 	}
@@ -236,7 +236,7 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 	if err != nil || !edited.Applied {
 		t.Fatalf("apply edited synthetic project = %#v, err = %v", edited, err)
 	}
-	page, err = store.ListProjectSchedulersPage(ctx, "", "", 10)
+	page, err = store.ListProjectSchedulersPage(ctx, "", 0, 10)
 	if err != nil || len(page) != 1 || page[0].ManagedLoaderID != loader.Summary.ID {
 		t.Fatalf("edited scheduler lost adopted loader identity: %#v, err = %v", page, err)
 	}
@@ -299,7 +299,7 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 	if err != nil || finalProject.CurrentRevision != reverted.Revision.Revision {
 		t.Fatalf("repeated apply changed project revision = %#v, err = %v", finalProject, err)
 	}
-	finalPage, err := store.ListProjectSchedulersPage(ctx, "", "", 10)
+	finalPage, err := store.ListProjectSchedulersPage(ctx, "", 0, 10)
 	if err != nil || len(finalPage) != 1 || finalPage[0].ManagedLoaderID != loader.Summary.ID || finalPage[0].Revision != reverted.Revision.Revision {
 		t.Fatalf("scheduler identity after repeated apply = %#v, err = %v", finalPage, err)
 	}

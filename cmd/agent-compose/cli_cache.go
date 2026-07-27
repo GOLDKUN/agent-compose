@@ -75,13 +75,23 @@ func runComposeCacheListCommand(cmd *cobra.Command, cli cliOptions, options comp
 	if err != nil {
 		return commandExitError{Code: exitCodeUsage, Err: err}
 	}
-	resp, err := clients.cache.ListCaches(cmd.Context(), connect.NewRequest(&agentcomposev2.ListCachesRequest{
-		Filter: filter,
-	}))
-	if err != nil {
-		return commandExitErrorForConnect(fmt.Errorf("list caches: %w", err))
+	response := &agentcomposev2.ListCachesResponse{}
+	for uint32(len(response.Caches)) < response.GetTotal() || response.GetTotal() == 0 {
+		resp, err := clients.cache.ListCaches(cmd.Context(), connect.NewRequest(&agentcomposev2.ListCachesRequest{Filter: filter, Offset: uint32(len(response.Caches)), Limit: 500}))
+		if err != nil {
+			return commandExitErrorForConnect(fmt.Errorf("list caches: %w", err))
+		}
+		response.Total = resp.Msg.GetTotal()
+		response.Caches = append(response.Caches, resp.Msg.GetCaches()...)
+		response.Warnings = append(response.Warnings, resp.Msg.GetWarnings()...)
+		if uint32(len(response.Caches)) >= response.Total {
+			break
+		}
+		if len(resp.Msg.GetCaches()) == 0 {
+			return fmt.Errorf("cache list pagination did not advance")
+		}
 	}
-	output := composeCacheListOutputFromResponse(resp.Msg)
+	output := composeCacheListOutputFromResponse(response)
 	if cli.JSON {
 		data, err := json.MarshalIndent(output, "", "  ")
 		if err != nil {
@@ -215,6 +225,7 @@ func cacheStringListContains(values []string, want string) bool {
 type composeCacheListOutput struct {
 	Caches   []composeCacheOutput `json:"caches"`
 	Warnings []string             `json:"warnings,omitempty"`
+	Total    uint32               `json:"total"`
 }
 
 type composeCacheInspectOutput struct {
@@ -265,6 +276,7 @@ func composeCacheListOutputFromResponse(resp *agentcomposev2.ListCachesResponse)
 	output := composeCacheListOutput{
 		Caches:   make([]composeCacheOutput, 0, len(resp.GetCaches())),
 		Warnings: append([]string(nil), resp.GetWarnings()...),
+		Total:    resp.GetTotal(),
 	}
 	for _, cache := range resp.GetCaches() {
 		output.Caches = append(output.Caches, composeCacheOutputFromProto(cache))

@@ -44,19 +44,18 @@ func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {
 		t.Fatalf("insert old invocation: %v", err)
 	}
 
-	first, err := store.ListProjectSchedulersPage(ctx, "", "", 2)
+	first, err := store.ListProjectSchedulersPage(ctx, "", 0, 2)
 	if err != nil || len(first) != 2 {
 		t.Fatalf("first page = %#v, err = %v", first, err)
 	}
 	if first[0].RunCount != 2 || first[0].LastError != "last failure" || !first[0].LatestRunAt.Equal(time.Unix(1700000060, 0).UTC()) {
 		t.Fatalf("scheduler summary = %#v", first[0])
 	}
-	afterKey := first[1].ProjectID + "\x00" + first[1].AgentName + "\x00" + first[1].SchedulerID
-	second, err := store.ListProjectSchedulersPage(ctx, "", afterKey, 2)
+	second, err := store.ListProjectSchedulersPage(ctx, "", 2, 2)
 	if err != nil || len(second) != 1 || second[0].ProjectID != "project-b" {
 		t.Fatalf("second page = %#v, err = %v", second, err)
 	}
-	filtered, err := store.ListProjectSchedulersPage(ctx, "alpha", "", 10)
+	filtered, err := store.ListProjectSchedulersPage(ctx, "alpha", 0, 10)
 	if err != nil || len(filtered) != 2 {
 		t.Fatalf("filtered page = %#v, err = %v", filtered, err)
 	}

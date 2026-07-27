@@ -136,8 +136,9 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	if err != nil {
 		t.Fatalf("list first 500 scheduler runs: %v", err)
 	}
-	if len(page.Msg.GetRuns()) != 500 || page.Msg.GetNextCursor() == "" {
-		t.Fatalf("first page has %d runs and cursor %q, want 500 runs and a next cursor", len(page.Msg.GetRuns()), page.Msg.GetNextCursor())
+	const totalRuns = 502
+	if len(page.Msg.GetRuns()) != 500 || page.Msg.GetTotal() != totalRuns {
+		t.Fatalf("first page has %d runs and total %d, want 500 runs and total %d", len(page.Msg.GetRuns()), page.Msg.GetTotal(), totalRuns)
 	}
 	for _, run := range page.Msg.GetRuns() {
 		if run.GetRunId() == targetRunID {

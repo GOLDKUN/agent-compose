@@ -36,12 +36,13 @@ func (h *ImageHandler) ListImages(ctx context.Context, req *connect.Request[agen
 	if err != nil {
 		return nil, ConnectErrorForImageBackend("list images", "", err)
 	}
-	images, hasMore, nextOffset := images.PaginateProtoImages(result.Images, req.Msg.GetOffset(), req.Msg.GetLimit())
+	page, total, err := paginateList(result.Images, req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
+	}
 	return connect.NewResponse(&agentcomposev2.ListImagesResponse{
-		Images:      images,
-		TotalCount:  uint32(len(result.Images)),
-		HasMore:     hasMore,
-		NextOffset:  nextOffset,
+		Images:      page,
+		Total:       total,
 		StoreStatus: result.StoreStatus,
 	}), nil
 }

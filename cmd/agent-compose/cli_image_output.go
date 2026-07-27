@@ -28,9 +28,7 @@ func writeImagePullText(out io.Writer, output composeImagePullOutput) error {
 
 type composeImageListOutput struct {
 	Images      []composeImageOutput    `json:"images"`
-	TotalCount  uint32                  `json:"total_count"`
-	HasMore     bool                    `json:"has_more"`
-	NextOffset  uint32                  `json:"next_offset"`
+	Total       uint32                  `json:"total"`
 	StoreStatus composeImageStoreOutput `json:"store_status"`
 }
 
@@ -100,9 +98,7 @@ type composeImageStoreOutput struct {
 func composeImageListOutputFromResponse(resp *agentcomposev2.ListImagesResponse) composeImageListOutput {
 	output := composeImageListOutput{
 		Images:      make([]composeImageOutput, 0, len(resp.GetImages())),
-		TotalCount:  resp.GetTotalCount(),
-		HasMore:     resp.GetHasMore(),
-		NextOffset:  resp.GetNextOffset(),
+		Total:       resp.GetTotal(),
 		StoreStatus: composeImageStoreOutputFromProto(resp.GetStoreStatus()),
 	}
 	for _, image := range resp.GetImages() {

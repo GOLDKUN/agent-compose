@@ -1669,10 +1669,12 @@ type ListProjectsRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Query          string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	IncludeRemoved bool                   `protobuf:"varint,2,opt,name=include_removed,json=includeRemoved,proto3" json:"include_removed,omitempty"`
-	Offset         uint32                 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
-	Limit          uint32                 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset uint32 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit         uint32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListProjectsRequest) Reset() {
@@ -1734,11 +1736,10 @@ func (x *ListProjectsRequest) GetLimit() uint32 {
 }
 
 type ListProjectsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Projects      []*ProjectSummary      `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
-	TotalCount    uint32                 `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
-	HasMore       bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
-	NextOffset    uint32                 `protobuf:"varint,4,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Projects []*ProjectSummary      `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1780,23 +1781,9 @@ func (x *ListProjectsResponse) GetProjects() []*ProjectSummary {
 	return nil
 }
 
-func (x *ListProjectsResponse) GetTotalCount() uint32 {
+func (x *ListProjectsResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.TotalCount
-	}
-	return 0
-}
-
-func (x *ListProjectsResponse) GetHasMore() bool {
-	if x != nil {
-		return x.HasMore
-	}
-	return false
-}
-
-func (x *ListProjectsResponse) GetNextOffset() uint32 {
-	if x != nil {
-		return x.NextOffset
+		return x.Total
 	}
 	return 0
 }
@@ -3034,10 +3021,12 @@ func (x *ResolvedTrigger) GetLastFiredAt() *timestamppb.Timestamp {
 }
 
 type ListSchedulersRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	Limit         uint32                 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Query string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit uint32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset        uint32 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3086,11 +3075,11 @@ func (x *ListSchedulersRequest) GetLimit() uint32 {
 	return 0
 }
 
-func (x *ListSchedulersRequest) GetCursor() string {
+func (x *ListSchedulersRequest) GetOffset() uint32 {
 	if x != nil {
-		return x.Cursor
+		return x.Offset
 	}
-	return ""
+	return 0
 }
 
 type SchedulerSummary struct {
@@ -3210,9 +3199,10 @@ func (x *SchedulerSummary) GetDescription() string {
 }
 
 type ListSchedulersResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Schedulers    []*SchedulerSummary    `protobuf:"bytes,1,rep,name=schedulers,proto3" json:"schedulers,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Schedulers []*SchedulerSummary    `protobuf:"bytes,1,rep,name=schedulers,proto3" json:"schedulers,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3254,19 +3244,21 @@ func (x *ListSchedulersResponse) GetSchedulers() []*SchedulerSummary {
 	return nil
 }
 
-func (x *ListSchedulersResponse) GetNextCursor() string {
+func (x *ListSchedulersResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.NextCursor
+		return x.Total
 	}
-	return ""
+	return 0
 }
 
 type ListSchedulerEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Project       *ProjectRef            `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
-	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	Limit         uint32                 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,4,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Project   *ProjectRef            `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	AgentName string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset        uint32 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3322,11 +3314,11 @@ func (x *ListSchedulerEventsRequest) GetLimit() uint32 {
 	return 0
 }
 
-func (x *ListSchedulerEventsRequest) GetCursor() string {
+func (x *ListSchedulerEventsRequest) GetOffset() uint32 {
 	if x != nil {
-		return x.Cursor
+		return x.Offset
 	}
-	return ""
+	return 0
 }
 
 type SchedulerEvent struct {
@@ -3470,9 +3462,10 @@ func (x *SchedulerEvent) GetLinkedAgentThreadId() string {
 }
 
 type ListSchedulerEventsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*SchedulerEvent      `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Events []*SchedulerEvent      `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3514,21 +3507,23 @@ func (x *ListSchedulerEventsResponse) GetEvents() []*SchedulerEvent {
 	return nil
 }
 
-func (x *ListSchedulerEventsResponse) GetNextCursor() string {
+func (x *ListSchedulerEventsResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.NextCursor
+		return x.Total
 	}
-	return ""
+	return 0
 }
 
 type ListProjectSchedulerEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Project       *ProjectRef            `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
-	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	TriggerId     string                 `protobuf:"bytes,3,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
-	RunId         string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Limit         uint32                 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Project   *ProjectRef            `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	AgentName string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	TriggerId string                 `protobuf:"bytes,3,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
+	RunId     string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit uint32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset        uint32 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3598,17 +3593,18 @@ func (x *ListProjectSchedulerEventsRequest) GetLimit() uint32 {
 	return 0
 }
 
-func (x *ListProjectSchedulerEventsRequest) GetCursor() string {
+func (x *ListProjectSchedulerEventsRequest) GetOffset() uint32 {
 	if x != nil {
-		return x.Cursor
+		return x.Offset
 	}
-	return ""
+	return 0
 }
 
 type ListProjectSchedulerEventsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*SchedulerEvent      `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Events []*SchedulerEvent      `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3650,11 +3646,11 @@ func (x *ListProjectSchedulerEventsResponse) GetEvents() []*SchedulerEvent {
 	return nil
 }
 
-func (x *ListProjectSchedulerEventsResponse) GetNextCursor() string {
+func (x *ListProjectSchedulerEventsResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.NextCursor
+		return x.Total
 	}
-	return ""
+	return 0
 }
 
 type InvokeSchedulerRequest struct {
@@ -4098,13 +4094,15 @@ func (x *GetSchedulerRunResponse) GetRun() *SchedulerRun {
 }
 
 type ListSchedulerRunsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Project       *ProjectRef            `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
-	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	Limit         uint32                 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,4,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	TriggerId     string                 `protobuf:"bytes,5,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
-	Status        SchedulerRunStatus     `protobuf:"varint,6,opt,name=status,proto3,enum=agentcompose.v2.SchedulerRunStatus" json:"status,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Project   *ProjectRef            `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	AgentName string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset        uint32             `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	TriggerId     string             `protobuf:"bytes,5,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
+	Status        SchedulerRunStatus `protobuf:"varint,6,opt,name=status,proto3,enum=agentcompose.v2.SchedulerRunStatus" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4160,11 +4158,11 @@ func (x *ListSchedulerRunsRequest) GetLimit() uint32 {
 	return 0
 }
 
-func (x *ListSchedulerRunsRequest) GetCursor() string {
+func (x *ListSchedulerRunsRequest) GetOffset() uint32 {
 	if x != nil {
-		return x.Cursor
+		return x.Offset
 	}
-	return ""
+	return 0
 }
 
 func (x *ListSchedulerRunsRequest) GetTriggerId() string {
@@ -4182,9 +4180,10 @@ func (x *ListSchedulerRunsRequest) GetStatus() SchedulerRunStatus {
 }
 
 type ListSchedulerRunsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Runs          []*SchedulerRun        `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Runs  []*SchedulerRun        `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4226,11 +4225,11 @@ func (x *ListSchedulerRunsResponse) GetRuns() []*SchedulerRun {
 	return nil
 }
 
-func (x *ListSchedulerRunsResponse) GetNextCursor() string {
+func (x *ListSchedulerRunsResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.NextCursor
+		return x.Total
 	}
-	return ""
+	return 0
 }
 
 type PruneSchedulerRunsRequest struct {
@@ -7510,17 +7509,19 @@ func (x *GetRunResponse) GetRun() *RunDetail {
 }
 
 type ListRunsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	SchedulerId   string                 `protobuf:"bytes,4,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
-	Status        RunStatus              `protobuf:"varint,5,opt,name=status,proto3,enum=agentcompose.v2.RunStatus" json:"status,omitempty"`
-	Source        RunSource              `protobuf:"varint,6,opt,name=source,proto3,enum=agentcompose.v2.RunSource" json:"source,omitempty"`
-	StartedFrom   string                 `protobuf:"bytes,7,opt,name=started_from,json=startedFrom,proto3" json:"started_from,omitempty"`
-	StartedTo     string                 `protobuf:"bytes,8,opt,name=started_to,json=startedTo,proto3" json:"started_to,omitempty"`
-	Offset        uint32                 `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`
-	Limit         uint32                 `protobuf:"varint,10,opt,name=limit,proto3" json:"limit,omitempty"`
-	SandboxId     string                 `protobuf:"bytes,11,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId   string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	AgentName   string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	SchedulerId string                 `protobuf:"bytes,4,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
+	Status      RunStatus              `protobuf:"varint,5,opt,name=status,proto3,enum=agentcompose.v2.RunStatus" json:"status,omitempty"`
+	Source      RunSource              `protobuf:"varint,6,opt,name=source,proto3,enum=agentcompose.v2.RunSource" json:"source,omitempty"`
+	StartedFrom string                 `protobuf:"bytes,7,opt,name=started_from,json=startedFrom,proto3" json:"started_from,omitempty"`
+	StartedTo   string                 `protobuf:"bytes,8,opt,name=started_to,json=startedTo,proto3" json:"started_to,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset uint32 `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit         uint32 `protobuf:"varint,10,opt,name=limit,proto3" json:"limit,omitempty"`
+	SandboxId     string `protobuf:"bytes,11,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7626,8 +7627,10 @@ func (x *ListRunsRequest) GetSandboxId() string {
 }
 
 type ListRunsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Runs          []*RunSummary          `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Runs  []*RunSummary          `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7667,6 +7670,13 @@ func (x *ListRunsResponse) GetRuns() []*RunSummary {
 		return x.Runs
 	}
 	return nil
+}
+
+func (x *ListRunsResponse) GetTotal() uint32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
 }
 
 type FollowRunLogsRequest struct {
@@ -7959,10 +7969,12 @@ func (x *StopRunResponse) GetStopRequested() bool {
 }
 
 type ListRunEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Limit         uint32                 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	RunId string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit uint32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset        uint32 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8011,11 +8023,11 @@ func (x *ListRunEventsRequest) GetLimit() uint32 {
 	return 0
 }
 
-func (x *ListRunEventsRequest) GetCursor() string {
+func (x *ListRunEventsRequest) GetOffset() uint32 {
 	if x != nil {
-		return x.Cursor
+		return x.Offset
 	}
-	return ""
+	return 0
 }
 
 type RunEvent struct {
@@ -8151,10 +8163,11 @@ func (x *RunEvent) GetCreatedAt() *timestamppb.Timestamp {
 }
 
 type ListRunEventsResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Events           []*RunEvent            `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	NextCursor       string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
-	HistoryAvailable bool                   `protobuf:"varint,3,opt,name=history_available,json=historyAvailable,proto3" json:"history_available,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Events []*RunEvent            `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total            uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	HistoryAvailable bool   `protobuf:"varint,3,opt,name=history_available,json=historyAvailable,proto3" json:"history_available,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -8196,11 +8209,11 @@ func (x *ListRunEventsResponse) GetEvents() []*RunEvent {
 	return nil
 }
 
-func (x *ListRunEventsResponse) GetNextCursor() string {
+func (x *ListRunEventsResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.NextCursor
+		return x.Total
 	}
-	return ""
+	return 0
 }
 
 func (x *ListRunEventsResponse) GetHistoryAvailable() bool {
@@ -8211,10 +8224,12 @@ func (x *ListRunEventsResponse) GetHistoryAvailable() bool {
 }
 
 type ListSandboxRunEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
-	Limit         uint32                 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit uint32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset        uint32 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8263,18 +8278,19 @@ func (x *ListSandboxRunEventsRequest) GetLimit() uint32 {
 	return 0
 }
 
-func (x *ListSandboxRunEventsRequest) GetCursor() string {
+func (x *ListSandboxRunEventsRequest) GetOffset() uint32 {
 	if x != nil {
-		return x.Cursor
+		return x.Offset
 	}
-	return ""
+	return 0
 }
 
 type ListSandboxRunEventsResponse struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	Events                 []*RunEvent            `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	NextCursor             string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
-	HistoryAvailableRunIds []string               `protobuf:"bytes,3,rep,name=history_available_run_ids,json=historyAvailableRunIds,proto3" json:"history_available_run_ids,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Events []*RunEvent            `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total                  uint32   `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	HistoryAvailableRunIds []string `protobuf:"bytes,3,rep,name=history_available_run_ids,json=historyAvailableRunIds,proto3" json:"history_available_run_ids,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -8316,11 +8332,11 @@ func (x *ListSandboxRunEventsResponse) GetEvents() []*RunEvent {
 	return nil
 }
 
-func (x *ListSandboxRunEventsResponse) GetNextCursor() string {
+func (x *ListSandboxRunEventsResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.NextCursor
+		return x.Total
 	}
-	return ""
+	return 0
 }
 
 func (x *ListSandboxRunEventsResponse) GetHistoryAvailableRunIds() []string {
@@ -9108,10 +9124,12 @@ func (x *SandboxTag) GetValue() string {
 }
 
 type ListSandboxesRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Limit     uint32                 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor    string                 `protobuf:"bytes,2,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	ProjectId string                 `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit uint32 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset    uint32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	ProjectId string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	// Optional case-insensitive filter. Accepted values are pending, running,
 	// stopped, failed, and deleting. Empty entries are ignored.
 	Status        []string `protobuf:"bytes,4,rep,name=status,proto3" json:"status,omitempty"`
@@ -9156,11 +9174,11 @@ func (x *ListSandboxesRequest) GetLimit() uint32 {
 	return 0
 }
 
-func (x *ListSandboxesRequest) GetCursor() string {
+func (x *ListSandboxesRequest) GetOffset() uint32 {
 	if x != nil {
-		return x.Cursor
+		return x.Offset
 	}
-	return ""
+	return 0
 }
 
 func (x *ListSandboxesRequest) GetProjectId() string {
@@ -9178,9 +9196,10 @@ func (x *ListSandboxesRequest) GetStatus() []string {
 }
 
 type ListSandboxesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sandboxes     []*Sandbox             `protobuf:"bytes,1,rep,name=sandboxes,proto3" json:"sandboxes,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Sandboxes []*Sandbox             `protobuf:"bytes,1,rep,name=sandboxes,proto3" json:"sandboxes,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9222,11 +9241,11 @@ func (x *ListSandboxesResponse) GetSandboxes() []*Sandbox {
 	return nil
 }
 
-func (x *ListSandboxesResponse) GetNextCursor() string {
+func (x *ListSandboxesResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.NextCursor
+		return x.Total
 	}
-	return ""
+	return 0
 }
 
 type GetSandboxResponse struct {
@@ -11689,10 +11708,12 @@ type ListImagesRequest struct {
 	Query              string                 `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
 	All                bool                   `protobuf:"varint,3,opt,name=all,proto3" json:"all,omitempty"`
 	IncludeCacheStatus bool                   `protobuf:"varint,4,opt,name=include_cache_status,json=includeCacheStatus,proto3" json:"include_cache_status,omitempty"`
-	Offset             uint32                 `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
-	Limit              uint32                 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset uint32 `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit         uint32 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListImagesRequest) Reset() {
@@ -11768,12 +11789,11 @@ func (x *ListImagesRequest) GetLimit() uint32 {
 }
 
 type ListImagesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Images        []*Image               `protobuf:"bytes,1,rep,name=images,proto3" json:"images,omitempty"`
-	TotalCount    uint32                 `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
-	HasMore       bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
-	NextOffset    uint32                 `protobuf:"varint,4,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
-	StoreStatus   *ImageStoreStatus      `protobuf:"bytes,5,opt,name=store_status,json=storeStatus,proto3" json:"store_status,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Images []*Image               `protobuf:"bytes,1,rep,name=images,proto3" json:"images,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32            `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	StoreStatus   *ImageStoreStatus `protobuf:"bytes,5,opt,name=store_status,json=storeStatus,proto3" json:"store_status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11815,23 +11835,9 @@ func (x *ListImagesResponse) GetImages() []*Image {
 	return nil
 }
 
-func (x *ListImagesResponse) GetTotalCount() uint32 {
+func (x *ListImagesResponse) GetTotal() uint32 {
 	if x != nil {
-		return x.TotalCount
-	}
-	return 0
-}
-
-func (x *ListImagesResponse) GetHasMore() bool {
-	if x != nil {
-		return x.HasMore
-	}
-	return false
-}
-
-func (x *ListImagesResponse) GetNextOffset() uint32 {
-	if x != nil {
-		return x.NextOffset
+		return x.Total
 	}
 	return 0
 }
@@ -12512,8 +12518,12 @@ func (x *CacheFilter) GetCacheId() string {
 }
 
 type ListCachesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filter        *CacheFilter           `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Filter *CacheFilter           `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset uint32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit         uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -12555,10 +12565,26 @@ func (x *ListCachesRequest) GetFilter() *CacheFilter {
 	return nil
 }
 
+func (x *ListCachesRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ListCachesRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ListCachesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Caches        []*CacheItem           `protobuf:"bytes,1,rep,name=caches,proto3" json:"caches,omitempty"`
-	Warnings      []string               `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Caches   []*CacheItem           `protobuf:"bytes,1,rep,name=caches,proto3" json:"caches,omitempty"`
+	Warnings []string               `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,3,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -12605,6 +12631,13 @@ func (x *ListCachesResponse) GetWarnings() []string {
 		return x.Warnings
 	}
 	return nil
+}
+
+func (x *ListCachesResponse) GetTotal() uint32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
 }
 
 type InspectCacheRequest struct {
@@ -13216,10 +13249,14 @@ func (x *CacheReference) GetPolicy() CacheReferencePolicy {
 }
 
 type ListVolumesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	Driver        string                 `protobuf:"bytes,2,opt,name=driver,proto3" json:"driver,omitempty"`
-	ProjectId     string                 `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Query     string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Driver    string                 `protobuf:"bytes,2,opt,name=driver,proto3" json:"driver,omitempty"`
+	ProjectId string                 `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset uint32 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit         uint32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13275,9 +13312,25 @@ func (x *ListVolumesRequest) GetProjectId() string {
 	return ""
 }
 
+func (x *ListVolumesRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ListVolumesRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ListVolumesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Volumes       []*Volume              `protobuf:"bytes,1,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Volumes []*Volume              `protobuf:"bytes,1,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13317,6 +13370,13 @@ func (x *ListVolumesResponse) GetVolumes() []*Volume {
 		return x.Volumes
 	}
 	return nil
+}
+
+func (x *ListVolumesResponse) GetTotal() uint32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
 }
 
 type CreateVolumeRequest struct {
@@ -15676,7 +15736,11 @@ func (x *WorkspacePreset) GetUpdatedAt() *timestamppb.Timestamp {
 }
 
 type ListWorkspacePresetsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset uint32 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit         uint32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -15711,9 +15775,25 @@ func (*ListWorkspacePresetsRequest) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{198}
 }
 
+func (x *ListWorkspacePresetsRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ListWorkspacePresetsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ListWorkspacePresetsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Presets       []*WorkspacePreset     `protobuf:"bytes,1,rep,name=presets,proto3" json:"presets,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Presets []*WorkspacePreset     `protobuf:"bytes,1,rep,name=presets,proto3" json:"presets,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -15753,6 +15833,13 @@ func (x *ListWorkspacePresetsResponse) GetPresets() []*WorkspacePreset {
 		return x.Presets
 	}
 	return nil
+}
+
+func (x *ListWorkspacePresetsResponse) GetTotal() uint32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
 }
 
 type CreateWorkspacePresetRequest struct {
@@ -16160,7 +16247,11 @@ func (x *CapabilityStatusResponse) GetProxyTargetConfigured() bool {
 }
 
 type ListCapabilitySetsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Number of matching resources to skip. Values at or above total return an empty page.
+	Offset uint32 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+	Limit         uint32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -16193,6 +16284,20 @@ func (x *ListCapabilitySetsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListCapabilitySetsRequest.ProtoReflect.Descriptor instead.
 func (*ListCapabilitySetsRequest) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{207}
+}
+
+func (x *ListCapabilitySetsRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ListCapabilitySetsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
 }
 
 type CapabilitySet struct {
@@ -16264,8 +16369,10 @@ func (x *CapabilitySet) GetEnabled() bool {
 }
 
 type ListCapabilitySetsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Capsets       []*CapabilitySet       `protobuf:"bytes,1,rep,name=capsets,proto3" json:"capsets,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Capsets []*CapabilitySet       `protobuf:"bytes,1,rep,name=capsets,proto3" json:"capsets,omitempty"`
+	// Total matching resources before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -16305,6 +16412,13 @@ func (x *ListCapabilitySetsResponse) GetCapsets() []*CapabilitySet {
 		return x.Capsets
 	}
 	return nil
+}
+
+func (x *ListCapabilitySetsResponse) GetTotal() uint32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
 }
 
 type GetCapabilityCatalogRequest struct {
@@ -16620,8 +16734,12 @@ func (x *GetCapabilityCatalogResponse) GetMethods() []*CapabilityMethod {
 }
 
 type ListSandboxHistoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	// Number of matching history entries to skip in the newest-first merged cells/events timeline. Values at or above total return an empty page.
+	Offset uint32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Maximum history entries to return across cells and events. Zero uses the server default; values above 500 are rejected.
+	Limit         uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -16661,6 +16779,20 @@ func (x *ListSandboxHistoryRequest) GetSandboxId() string {
 		return x.SandboxId
 	}
 	return ""
+}
+
+func (x *ListSandboxHistoryRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ListSandboxHistoryRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
 }
 
 type SandboxHistoryCell struct {
@@ -16884,6 +17016,8 @@ type ListSandboxHistoryResponse struct {
 	Cells         []*SandboxHistoryCell  `protobuf:"bytes,1,rep,name=cells,proto3" json:"cells,omitempty"`
 	Events        []*SandboxHistoryEvent `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
 	LegacyHistory bool                   `protobuf:"varint,3,opt,name=legacy_history,json=legacyHistory,proto3" json:"legacy_history,omitempty"`
+	// Total matching history entries across cells and events before offset and limit are applied.
+	Total         uint32 `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -16937,6 +17071,13 @@ func (x *ListSandboxHistoryResponse) GetLegacyHistory() bool {
 		return x.LegacyHistory
 	}
 	return false
+}
+
+func (x *ListSandboxHistoryResponse) GetTotal() uint32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
 }
 
 type WatchSandboxRequest struct {
@@ -17716,14 +17857,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12'\n" +
 	"\x0finclude_removed\x18\x02 \x01(\bR\x0eincludeRemoved\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\rR\x06offset\x12\x14\n" +
-	"\x05limit\x18\x04 \x01(\rR\x05limit\"\xb0\x01\n" +
+	"\x05limit\x18\x04 \x01(\rR\x05limit\"i\n" +
 	"\x14ListProjectsResponse\x12;\n" +
-	"\bprojects\x18\x01 \x03(\v2\x1f.agentcompose.v2.ProjectSummaryR\bprojects\x12\x1f\n" +
-	"\vtotal_count\x18\x02 \x01(\rR\n" +
-	"totalCount\x12\x19\n" +
-	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12\x1f\n" +
-	"\vnext_offset\x18\x04 \x01(\rR\n" +
-	"nextOffset\"\xc1\x01\n" +
+	"\bprojects\x18\x01 \x03(\v2\x1f.agentcompose.v2.ProjectSummaryR\bprojects\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\xc1\x01\n" +
 	"\x14RemoveProjectRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12%\n" +
 	"\x0eremove_history\x18\x02 \x01(\bR\rremoveHistory\x124\n" +
@@ -17851,7 +17988,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x15ListSchedulersRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\rR\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"\xf3\x02\n" +
+	"\x06offset\x18\x03 \x01(\rR\x06offset\"\xf3\x02\n" +
 	"\x10SchedulerSummary\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
@@ -17866,19 +18003,18 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"last_error\x18\b \x01(\tR\tlastError\x12!\n" +
 	"\fdisplay_name\x18\t \x01(\tR\vdisplayName\x12 \n" +
 	"\vdescription\x18\n" +
-	" \x01(\tR\vdescription\"|\n" +
+	" \x01(\tR\vdescription\"q\n" +
 	"\x16ListSchedulersResponse\x12A\n" +
 	"\n" +
 	"schedulers\x18\x01 \x03(\v2!.agentcompose.v2.SchedulerSummaryR\n" +
-	"schedulers\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\xa0\x01\n" +
+	"schedulers\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\xa0\x01\n" +
 	"\x1aListSchedulerEventsRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\rR\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x04 \x01(\tR\x06cursor\"\xc1\x03\n" +
+	"\x06offset\x18\x04 \x01(\rR\x06offset\"\xc1\x03\n" +
 	"\x0eSchedulerEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
@@ -17896,11 +18032,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	" \x01(\tR\vschedulerId\x12*\n" +
 	"\x11linked_sandbox_id\x18\v \x01(\tR\x0flinkedSandboxId\x12$\n" +
 	"\x0elinked_cell_id\x18\f \x01(\tR\flinkedCellId\x123\n" +
-	"\x16linked_agent_thread_id\x18\r \x01(\tR\x13linkedAgentThreadId\"w\n" +
+	"\x16linked_agent_thread_id\x18\r \x01(\tR\x13linkedAgentThreadId\"l\n" +
 	"\x1bListSchedulerEventsResponse\x127\n" +
-	"\x06events\x18\x01 \x03(\v2\x1f.agentcompose.v2.SchedulerEventR\x06events\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\xdd\x01\n" +
+	"\x06events\x18\x01 \x03(\v2\x1f.agentcompose.v2.SchedulerEventR\x06events\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\xdd\x01\n" +
 	"!ListProjectSchedulerEventsRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12\x1d\n" +
 	"\n" +
@@ -17909,11 +18044,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"trigger_id\x18\x03 \x01(\tR\ttriggerId\x12\x15\n" +
 	"\x06run_id\x18\x04 \x01(\tR\x05runId\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\rR\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x06 \x01(\tR\x06cursor\"~\n" +
+	"\x06offset\x18\x06 \x01(\rR\x06offset\"s\n" +
 	"\"ListProjectSchedulerEventsResponse\x127\n" +
-	"\x06events\x18\x01 \x03(\v2\x1f.agentcompose.v2.SchedulerEventR\x06events\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\x91\x01\n" +
+	"\x06events\x18\x01 \x03(\v2\x1f.agentcompose.v2.SchedulerEventR\x06events\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\x91\x01\n" +
 	"\x16InvokeSchedulerRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12\x1d\n" +
 	"\n" +
@@ -17953,14 +18087,13 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\rR\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x04 \x01(\tR\x06cursor\x12\x1d\n" +
+	"\x06offset\x18\x04 \x01(\rR\x06offset\x12\x1d\n" +
 	"\n" +
 	"trigger_id\x18\x05 \x01(\tR\ttriggerId\x12;\n" +
-	"\x06status\x18\x06 \x01(\x0e2#.agentcompose.v2.SchedulerRunStatusR\x06status\"o\n" +
+	"\x06status\x18\x06 \x01(\x0e2#.agentcompose.v2.SchedulerRunStatusR\x06status\"d\n" +
 	"\x19ListSchedulerRunsResponse\x121\n" +
-	"\x04runs\x18\x01 \x03(\v2\x1d.agentcompose.v2.SchedulerRunR\x04runs\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\x91\x02\n" +
+	"\x04runs\x18\x01 \x03(\v2\x1d.agentcompose.v2.SchedulerRunR\x04runs\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\x91\x02\n" +
 	"\x19PruneSchedulerRunsRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12\x1d\n" +
 	"\n" +
@@ -18285,9 +18418,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	" \x01(\rR\x05limit\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\v \x01(\tR\tsandboxIdJ\x04\b\x03\x10\x04R\n" +
-	"session_id\"C\n" +
+	"session_id\"Y\n" +
 	"\x10ListRunsResponse\x12/\n" +
-	"\x04runs\x18\x01 \x03(\v2\x1b.agentcompose.v2.RunSummaryR\x04runs\"\xec\x01\n" +
+	"\x04runs\x18\x01 \x03(\v2\x1b.agentcompose.v2.RunSummaryR\x04runs\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\xec\x01\n" +
 	"\x14FollowRunLogsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x15\n" +
@@ -18317,7 +18451,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x14ListRunEventsRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\rR\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"\xea\x02\n" +
+	"\x06offset\x18\x03 \x01(\rR\x06offset\"\xea\x02\n" +
 	"\bRunEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x10\n" +
@@ -18333,21 +18467,19 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\vstop_reason\x18\v \x01(\tR\n" +
 	"stopReason\x129\n" +
 	"\n" +
-	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x98\x01\n" +
+	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x8d\x01\n" +
 	"\x15ListRunEventsResponse\x121\n" +
-	"\x06events\x18\x01 \x03(\v2\x19.agentcompose.v2.RunEventR\x06events\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\x12+\n" +
+	"\x06events\x18\x01 \x03(\v2\x19.agentcompose.v2.RunEventR\x06events\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\x12+\n" +
 	"\x11history_available\x18\x03 \x01(\bR\x10historyAvailable\"j\n" +
 	"\x1bListSandboxRunEventsRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\rR\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"\xad\x01\n" +
+	"\x06offset\x18\x03 \x01(\rR\x06offset\"\xa2\x01\n" +
 	"\x1cListSandboxRunEventsResponse\x121\n" +
-	"\x06events\x18\x01 \x03(\v2\x19.agentcompose.v2.RunEventR\x06events\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\x129\n" +
+	"\x06events\x18\x01 \x03(\v2\x19.agentcompose.v2.RunEventR\x06events\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\x129\n" +
 	"\x19history_available_run_ids\x18\x03 \x03(\tR\x16historyAvailableRunIds\"K\n" +
 	"\x14RemoveSandboxRequest\x12\x1d\n" +
 	"\n" +
@@ -18435,14 +18567,13 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"{\n" +
 	"\x14ListSandboxesRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\rR\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x02 \x01(\tR\x06cursor\x12\x1d\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x16\n" +
-	"\x06status\x18\x04 \x03(\tR\x06status\"p\n" +
+	"\x06status\x18\x04 \x03(\tR\x06status\"e\n" +
 	"\x15ListSandboxesResponse\x126\n" +
-	"\tsandboxes\x18\x01 \x03(\v2\x18.agentcompose.v2.SandboxR\tsandboxes\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"H\n" +
+	"\tsandboxes\x18\x01 \x03(\v2\x18.agentcompose.v2.SandboxR\tsandboxes\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"H\n" +
 	"\x12GetSandboxResponse\x122\n" +
 	"\asandbox\x18\x01 \x01(\v2\x18.agentcompose.v2.SandboxR\asandbox\"3\n" +
 	"\x12StopSandboxRequest\x12\x1d\n" +
@@ -18679,14 +18810,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x03all\x18\x03 \x01(\bR\x03all\x120\n" +
 	"\x14include_cache_status\x18\x04 \x01(\bR\x12includeCacheStatus\x12\x16\n" +
 	"\x06offset\x18\x05 \x01(\rR\x06offset\x12\x14\n" +
-	"\x05limit\x18\x06 \x01(\rR\x05limit\"\xe7\x01\n" +
+	"\x05limit\x18\x06 \x01(\rR\x05limit\"\xa0\x01\n" +
 	"\x12ListImagesResponse\x12.\n" +
-	"\x06images\x18\x01 \x03(\v2\x16.agentcompose.v2.ImageR\x06images\x12\x1f\n" +
-	"\vtotal_count\x18\x02 \x01(\rR\n" +
-	"totalCount\x12\x19\n" +
-	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12\x1f\n" +
-	"\vnext_offset\x18\x04 \x01(\rR\n" +
-	"nextOffset\x12D\n" +
+	"\x06images\x18\x01 \x03(\v2\x16.agentcompose.v2.ImageR\x06images\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\x12D\n" +
 	"\fstore_status\x18\x05 \x01(\v2!.agentcompose.v2.ImageStoreStatusR\vstoreStatus\"\xa2\x01\n" +
 	"\x10PullImageRequest\x12\x1b\n" +
 	"\timage_ref\x18\x01 \x01(\tR\bimageRef\x125\n" +
@@ -18747,12 +18874,15 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x124\n" +
 	"\x06status\x18\x04 \x01(\x0e2\x1c.agentcompose.v2.CacheStatusR\x06status\x12,\n" +
 	"\x12older_than_seconds\x18\x05 \x01(\x04R\x10olderThanSeconds\x12\x19\n" +
-	"\bcache_id\x18\x06 \x01(\tR\acacheId\"I\n" +
+	"\bcache_id\x18\x06 \x01(\tR\acacheId\"w\n" +
 	"\x11ListCachesRequest\x124\n" +
-	"\x06filter\x18\x01 \x01(\v2\x1c.agentcompose.v2.CacheFilterR\x06filter\"d\n" +
+	"\x06filter\x18\x01 \x01(\v2\x1c.agentcompose.v2.CacheFilterR\x06filter\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"z\n" +
 	"\x12ListCachesResponse\x122\n" +
 	"\x06caches\x18\x01 \x03(\v2\x1a.agentcompose.v2.CacheItemR\x06caches\x12\x1a\n" +
-	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"0\n" +
+	"\bwarnings\x18\x02 \x03(\tR\bwarnings\x12\x14\n" +
+	"\x05total\x18\x03 \x01(\rR\x05total\"0\n" +
 	"\x13InspectCacheRequest\x12\x19\n" +
 	"\bcache_id\x18\x01 \x01(\tR\acacheId\"d\n" +
 	"\x14InspectCacheResponse\x120\n" +
@@ -18806,14 +18936,17 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x04path\x18\x04 \x01(\tR\x04path\x12\x16\n" +
 	"\x06status\x18\x05 \x01(\tR\x06status\x12 \n" +
 	"\vdescription\x18\x06 \x01(\tR\vdescription\x12=\n" +
-	"\x06policy\x18\a \x01(\x0e2%.agentcompose.v2.CacheReferencePolicyR\x06policy\"a\n" +
+	"\x06policy\x18\a \x01(\x0e2%.agentcompose.v2.CacheReferencePolicyR\x06policy\"\x8f\x01\n" +
 	"\x12ListVolumesRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x16\n" +
 	"\x06driver\x18\x02 \x01(\tR\x06driver\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\"H\n" +
+	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\rR\x05limit\"^\n" +
 	"\x13ListVolumesResponse\x121\n" +
-	"\avolumes\x18\x01 \x03(\v2\x17.agentcompose.v2.VolumeR\avolumes\"\xcf\x02\n" +
+	"\avolumes\x18\x01 \x03(\v2\x17.agentcompose.v2.VolumeR\avolumes\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\xcf\x02\n" +
 	"\x13CreateVolumeRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06driver\x18\x02 \x01(\tR\x06driver\x12H\n" +
@@ -19006,10 +19139,13 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x1d\n" +
-	"\x1bListWorkspacePresetsRequest\"Z\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"K\n" +
+	"\x1bListWorkspacePresetsRequest\x12\x16\n" +
+	"\x06offset\x18\x01 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\"p\n" +
 	"\x1cListWorkspacePresetsResponse\x12:\n" +
-	"\apresets\x18\x01 \x03(\v2 .agentcompose.v2.WorkspacePresetR\apresets\"\x81\x01\n" +
+	"\apresets\x18\x01 \x03(\v2 .agentcompose.v2.WorkspacePresetR\apresets\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\x81\x01\n" +
 	"\x1cCreateWorkspacePresetRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1f\n" +
@@ -19039,15 +19175,18 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x05error\x18\x05 \x01(\tR\x05error\x12-\n" +
 	"\x12runtime_configured\x18\x06 \x01(\bR\x11runtimeConfigured\x126\n" +
 	"\x17proxy_listen_configured\x18\a \x01(\bR\x15proxyListenConfigured\x126\n" +
-	"\x17proxy_target_configured\x18\b \x01(\bR\x15proxyTargetConfigured\"\x1b\n" +
-	"\x19ListCapabilitySetsRequest\"o\n" +
+	"\x17proxy_target_configured\x18\b \x01(\bR\x15proxyTargetConfigured\"I\n" +
+	"\x19ListCapabilitySetsRequest\x12\x16\n" +
+	"\x06offset\x18\x01 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\"o\n" +
 	"\rCapabilitySet\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
-	"\aenabled\x18\x04 \x01(\bR\aenabled\"V\n" +
+	"\aenabled\x18\x04 \x01(\bR\aenabled\"l\n" +
 	"\x1aListCapabilitySetsResponse\x128\n" +
-	"\acapsets\x18\x01 \x03(\v2\x1e.agentcompose.v2.CapabilitySetR\acapsets\":\n" +
+	"\acapsets\x18\x01 \x03(\v2\x1e.agentcompose.v2.CapabilitySetR\acapsets\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\":\n" +
 	"\x1bGetCapabilityCatalogRequest\x12\x1b\n" +
 	"\tcapset_id\x18\x01 \x01(\tR\bcapsetId\"\xfa\x02\n" +
 	"\x12CapabilityEndpoint\x12\x1a\n" +
@@ -19079,10 +19218,12 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\tcapset_id\x18\x01 \x01(\tR\bcapsetId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12;\n" +
-	"\amethods\x18\x04 \x03(\v2!.agentcompose.v2.CapabilityMethodR\amethods\":\n" +
+	"\amethods\x18\x04 \x03(\v2!.agentcompose.v2.CapabilityMethodR\amethods\"h\n" +
 	"\x19ListSandboxHistoryRequest\x12\x1d\n" +
 	"\n" +
-	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\x83\x03\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"\x83\x03\n" +
 	"\x12SandboxHistoryCell\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
@@ -19106,11 +19247,12 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x05level\x18\x03 \x01(\tR\x05level\x12\x18\n" +
 	"\amessage\x18\x04 \x01(\tR\amessage\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xbc\x01\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xd2\x01\n" +
 	"\x1aListSandboxHistoryResponse\x129\n" +
 	"\x05cells\x18\x01 \x03(\v2#.agentcompose.v2.SandboxHistoryCellR\x05cells\x12<\n" +
 	"\x06events\x18\x02 \x03(\v2$.agentcompose.v2.SandboxHistoryEventR\x06events\x12%\n" +
-	"\x0elegacy_history\x18\x03 \x01(\bR\rlegacyHistory\"4\n" +
+	"\x0elegacy_history\x18\x03 \x01(\bR\rlegacyHistory\x12\x14\n" +
+	"\x05total\x18\x04 \x01(\rR\x05total\"4\n" +
 	"\x13WatchSandboxRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\xeb\x02\n" +

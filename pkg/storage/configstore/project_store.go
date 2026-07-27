@@ -425,7 +425,7 @@ func (s *projectStore) ListProjectSchedulers(ctx context.Context, projectID stri
 	return items, nil
 }
 
-func (s *projectStore) ListProjectSchedulersPage(ctx context.Context, query, afterKey string, limit int) ([]ProjectSchedulerRecord, error) {
+func (s *projectStore) ListProjectSchedulersPage(ctx context.Context, query string, offset, limit int) ([]ProjectSchedulerRecord, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -437,15 +437,14 @@ func (s *projectStore) ListProjectSchedulersPage(ctx context.Context, query, aft
 		WHERE p.removed_at = 0
 		AND s.revision = p.current_revision
 		AND (? = '' OR lower(p.id) LIKE ? OR lower(p.name) LIKE ? OR lower(p.source_path) LIKE ?)
-		AND (s.project_id || char(0) || s.agent_name || char(0) || s.scheduler_id) > ?
-		ORDER BY s.project_id ASC, s.agent_name ASC, s.scheduler_id ASC LIMIT ?
+		ORDER BY s.project_id ASC, s.agent_name ASC, s.scheduler_id ASC LIMIT ? OFFSET ?
 	)
 	SELECT page.id, page.short_id, page.project_id, page.scheduler_id, page.agent_name, page.managed_loader_id, page.revision, page.enabled, page.trigger_count, page.spec_json, page.created_at, page.updated_at,
 		(SELECT COUNT(*) FROM loader_run lr WHERE lr.loader_id = page.managed_loader_id AND lr.trigger_id <> ''),
 		(SELECT MAX(started_at) FROM loader_run lr WHERE lr.loader_id = page.managed_loader_id AND lr.trigger_id <> ''),
 		COALESCE(l.last_error, '')
 	FROM page LEFT JOIN loader l ON l.id = page.managed_loader_id
-	ORDER BY page.project_id ASC, page.agent_name ASC, page.scheduler_id ASC`, query, likeQuery, likeQuery, likeQuery, afterKey, limit)
+	ORDER BY page.project_id ASC, page.agent_name ASC, page.scheduler_id ASC`, query, likeQuery, likeQuery, likeQuery, limit, max(offset, 0))
 	if err != nil {
 		return nil, fmt.Errorf("query project scheduler page: %w", err)
 	}
@@ -462,6 +461,18 @@ func (s *projectStore) ListProjectSchedulersPage(ctx context.Context, query, aft
 		return nil, fmt.Errorf("iterate project scheduler page: %w", err)
 	}
 	return items, nil
+}
+
+func (s *projectStore) CountProjectSchedulers(ctx context.Context, query string) (int, error) {
+	query = strings.ToLower(strings.TrimSpace(query))
+	likeQuery := "%" + query + "%"
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_scheduler s JOIN project p ON p.id = s.project_id
+		WHERE p.removed_at = 0 AND s.revision = p.current_revision
+		AND (? = '' OR lower(p.id) LIKE ? OR lower(p.name) LIKE ? OR lower(p.source_path) LIKE ?)`, query, likeQuery, likeQuery, likeQuery).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count project schedulers: %w", err)
+	}
+	return total, nil
 }
 
 func (s *projectStore) CreateProjectRun(ctx context.Context, run ProjectRunRecord) (ProjectRunRecord, error) {
@@ -586,6 +597,44 @@ func (s *projectStore) ListProjectRunsByOptions(ctx context.Context, options Pro
 		return nil, fmt.Errorf("iterate project runs: %w", err)
 	}
 	return items, nil
+}
+
+func (s *projectStore) CountProjectRuns(ctx context.Context, options ProjectRunListOptions) (int, error) {
+	where := make([]string, 0, 6)
+	args := make([]any, 0, 6)
+	if projectID := strings.TrimSpace(options.ProjectID); projectID != "" {
+		where = append(where, "project_id = ?")
+		args = append(args, projectID)
+	}
+	if agentName := strings.TrimSpace(options.AgentName); agentName != "" {
+		where = append(where, "agent_name = ?")
+		args = append(args, agentName)
+	}
+	if sandboxID := strings.TrimSpace(options.SandboxID); sandboxID != "" {
+		where = append(where, "sandbox_id = ?")
+		args = append(args, sandboxID)
+	}
+	if schedulerID := strings.TrimSpace(options.SchedulerID); schedulerID != "" {
+		where = append(where, "scheduler_id = ?")
+		args = append(args, schedulerID)
+	}
+	if status := strings.TrimSpace(options.Status); status != "" {
+		where = append(where, "status = ?")
+		args = append(args, projects.NormalizeRunStatus(status))
+	}
+	if source := strings.TrimSpace(options.Source); source != "" {
+		where = append(where, "source = ?")
+		args = append(args, runs.NormalizeSource(source))
+	}
+	query := `SELECT COUNT(*) FROM project_run`
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	var total int
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count project runs: %w", err)
+	}
+	return total, nil
 }
 
 func (s *projectStore) getProject(ctx context.Context, projectID string, includeRemoved bool) (ProjectRecord, bool, error) {

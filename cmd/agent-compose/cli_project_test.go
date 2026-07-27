@@ -481,9 +481,7 @@ func TestIntegrationCLIListProjectsTextVerboseAndJSON(t *testing.T) {
 							SchedulerCount:  1,
 							UpdatedAt:       mustProtoTimestamp("2026-07-03T10:00:00Z"),
 						}},
-						TotalCount: 2,
-						HasMore:    true,
-						NextOffset: 1,
+						Total: 2,
 					}), nil
 				case 1:
 					return connect.NewResponse(&agentcomposev2.ListProjectsResponse{
@@ -497,7 +495,7 @@ func TestIntegrationCLIListProjectsTextVerboseAndJSON(t *testing.T) {
 							SchedulerCount:  0,
 							UpdatedAt:       mustProtoTimestamp("2026-07-03T11:00:00Z"),
 						}},
-						TotalCount: 2,
+						Total: 2,
 					}), nil
 				default:
 					t.Fatalf("ListProjects unexpected offset = %d", req.Msg.GetOffset())
@@ -536,7 +534,7 @@ func TestIntegrationCLIListProjectsTextVerboseAndJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOut), &decoded); err != nil {
 		t.Fatalf("ls JSON decode failed: %v\n%s", err, jsonOut)
 	}
-	if decoded.TotalCount != 2 || len(decoded.Projects) != 2 {
+	if decoded.Total != 2 || len(decoded.Projects) != 2 {
 		t.Fatalf("ls JSON = %#v", decoded)
 	}
 	if decoded.Projects[0].Name != "reviewer" || decoded.Projects[0].AgentCount != 2 || decoded.Projects[0].SchedulerCount != 1 || decoded.Projects[0].ServiceCount != nil {
@@ -563,9 +561,7 @@ func TestIntegrationCLIListProjectsPaginationFlags(t *testing.T) {
 						SourcePath:      "/path/to/page/agent-compose.yml",
 						CurrentRevision: 7,
 					}},
-					TotalCount: 31,
-					HasMore:    true,
-					NextOffset: 30,
+					Total: 31,
 				}), nil
 			},
 		},
@@ -580,7 +576,7 @@ func TestIntegrationCLIListProjectsPaginationFlags(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
 		t.Fatalf("ls pagination JSON decode failed: %v\n%s", err, stdout)
 	}
-	if requests != 1 || decoded.TotalCount != 31 || !decoded.HasMore || decoded.NextOffset != 30 || len(decoded.Projects) != 1 {
+	if requests != 1 || decoded.Total != 31 || len(decoded.Projects) != 1 {
 		t.Fatalf("ls pagination requests/output = %d / %#v", requests, decoded)
 	}
 }

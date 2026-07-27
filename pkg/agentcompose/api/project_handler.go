@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,15 +53,13 @@ type ProjectSchedulerPruneRuntime interface {
 	PruneSchedulerRuns(context.Context, loaders.SchedulerRunPruneRequest) (loaders.SchedulerRunPruneResult, error)
 }
 
-type ProjectLoaderEventCursorStore interface {
-	ListLoaderEventsBefore(context.Context, string, time.Time, string, int) ([]domain.LoaderEvent, error)
-}
 type ProjectAgentRunStateStore interface {
 	ListProjectAgentRunStates(context.Context, string) ([]domain.ProjectAgentRunState, error)
 }
 
 type ProjectSchedulerPageStore interface {
-	ListProjectSchedulersPage(context.Context, string, string, int) ([]domain.ProjectSchedulerRecord, error)
+	ListProjectSchedulersPage(context.Context, string, int, int) ([]domain.ProjectSchedulerRecord, error)
+	CountProjectSchedulers(context.Context, string) (int, error)
 }
 
 type ProjectHandler struct {
@@ -112,28 +109,25 @@ func (h *ProjectHandler) GetScheduler(ctx context.Context, req *connect.Request[
 }
 
 func (h *ProjectHandler) ListSchedulers(ctx context.Context, req *connect.Request[agentcomposev2.ListSchedulersRequest]) (*connect.Response[agentcomposev2.ListSchedulersResponse], error) {
-	limit := int(req.Msg.GetLimit())
-	if limit == 0 {
-		limit = 100
-	}
-	if limit < 1 || limit > 500 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("limit must be between 1 and 500"))
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
 	}
 	query := strings.TrimSpace(req.Msg.GetQuery())
-	cursor, err := decodeSchedulerCursor(req.Msg.GetCursor(), query)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
 	pageStore, ok := h.store.(ProjectSchedulerPageStore)
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler page store is required"))
 	}
-	schedulers, err := pageStore.ListProjectSchedulersPage(ctx, query, cursor.LastKey, limit+1)
+	schedulers, err := pageStore.ListProjectSchedulersPage(ctx, query, offset, limit)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	summaries := make([]*agentcomposev2.SchedulerSummary, 0, min(len(schedulers), limit))
-	for _, scheduler := range schedulers[:min(len(schedulers), limit)] {
+	total, err := pageStore.CountProjectSchedulers(ctx, query)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	summaries := make([]*agentcomposev2.SchedulerSummary, 0, len(schedulers))
+	for _, scheduler := range schedulers {
 		enabled, err := h.effectiveSchedulerEnabled(ctx, scheduler)
 		if err != nil {
 			return nil, err
@@ -153,11 +147,7 @@ func (h *ProjectHandler) ListSchedulers(ctx context.Context, req *connect.Reques
 		summary.LastError = scheduler.LastError
 		summaries = append(summaries, summary)
 	}
-	response := &agentcomposev2.ListSchedulersResponse{Schedulers: summaries}
-	if len(schedulers) > limit {
-		response.NextCursor = encodeSchedulerCursor(query, schedulerSummaryKey(summaries[len(summaries)-1]))
-	}
-	return connect.NewResponse(response), nil
+	return connect.NewResponse(&agentcomposev2.ListSchedulersResponse{Schedulers: summaries, Total: uint32(total)}), nil
 }
 
 func (h *ProjectHandler) effectiveSchedulerEnabled(ctx context.Context, scheduler domain.ProjectSchedulerRecord) (bool, error) {
@@ -175,96 +165,31 @@ func (h *ProjectHandler) effectiveSchedulerEnabled(ctx context.Context, schedule
 	return loader.Summary.Enabled, nil
 }
 
-type schedulerPageCursor struct {
-	Query   string `json:"query"`
-	LastKey string `json:"last_key"`
-}
-
-func schedulerSummaryKey(item *agentcomposev2.SchedulerSummary) string {
-	return item.GetProjectId() + "\x00" + item.GetAgentName() + "\x00" + item.GetSchedulerId()
-}
-
-func encodeSchedulerCursor(query, lastKey string) string {
-	data, _ := json.Marshal(schedulerPageCursor{Query: query, LastKey: lastKey})
-	return base64.RawURLEncoding.EncodeToString(data)
-}
-
-func decodeSchedulerCursor(token, query string) (schedulerPageCursor, error) {
-	if strings.TrimSpace(token) == "" {
-		return schedulerPageCursor{Query: query}, nil
-	}
-	data, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return schedulerPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	var cursor schedulerPageCursor
-	if json.Unmarshal(data, &cursor) != nil || cursor.Query != query || cursor.LastKey == "" {
-		return schedulerPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	return cursor, nil
-}
-
-type schedulerEventPageCursor struct {
-	LoaderID  string    `json:"loader_id"`
-	CreatedAt time.Time `json:"created_at"`
-	EventID   string    `json:"event_id"`
-}
-
-func encodeSchedulerEventCursor(loaderID string, createdAt time.Time, eventID string) string {
-	data, _ := json.Marshal(schedulerEventPageCursor{LoaderID: loaderID, CreatedAt: createdAt.UTC(), EventID: eventID})
-	return base64.RawURLEncoding.EncodeToString(data)
-}
-
-func decodeSchedulerEventCursor(token, loaderID string) (schedulerEventPageCursor, error) {
-	if strings.TrimSpace(token) == "" {
-		return schedulerEventPageCursor{LoaderID: loaderID}, nil
-	}
-	data, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return schedulerEventPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	var cursor schedulerEventPageCursor
-	if json.Unmarshal(data, &cursor) != nil || cursor.LoaderID != loaderID || cursor.CreatedAt.IsZero() || cursor.EventID == "" {
-		return schedulerEventPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	return cursor, nil
-}
-
 func (h *ProjectHandler) ListSchedulerEvents(ctx context.Context, req *connect.Request[agentcomposev2.ListSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListSchedulerEventsResponse], error) {
 	_, scheduler, err := h.resolveProjectScheduler(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
 	if err != nil {
 		return nil, projectConnectError(err)
 	}
-	limit := int(req.Msg.GetLimit())
-	if limit == 0 {
-		limit = 100
-	}
-	if limit < 1 || limit > 500 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("limit must be between 1 and 500"))
-	}
-	cursor, err := decodeSchedulerEventCursor(req.Msg.GetCursor(), scheduler.ManagedLoaderID)
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
-	store, ok := h.store.(ProjectLoaderEventCursorStore)
+	store, ok := h.store.(ProjectSchedulerEventStore)
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler runtime store is required"))
 	}
-	events, err := store.ListLoaderEventsBefore(ctx, scheduler.ManagedLoaderID, cursor.CreatedAt, cursor.EventID, limit+1)
+	filter := loaders.LoaderEventPageFilter{LoaderIDs: []string{scheduler.ManagedLoaderID}, Offset: offset, Limit: limit}
+	events, err := store.ListLoaderEventsPage(ctx, filter)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	end := limit
-	if end > len(events) {
-		end = len(events)
+	total, err := store.CountLoaderEventsPage(ctx, filter)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	response := &agentcomposev2.ListSchedulerEventsResponse{}
-	for _, event := range events[:end] {
+	response := &agentcomposev2.ListSchedulerEventsResponse{Total: uint32(total)}
+	for _, event := range events {
 		response.Events = append(response.Events, schedulerEventToProto(event, scheduler))
-	}
-	if end < len(events) {
-		last := events[end-1]
-		response.NextCursor = encodeSchedulerEventCursor(scheduler.ManagedLoaderID, last.CreatedAt, last.ID)
 	}
 	return connect.NewResponse(response), nil
 }
@@ -489,19 +414,21 @@ func (h *ProjectHandler) ListProjects(ctx context.Context, req *connect.Request[
 	if h.store == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("config store is required"))
 	}
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
+	}
 	result, err := h.store.ListProjects(ctx, domain.ProjectListOptions{
 		Query:          req.Msg.GetQuery(),
 		IncludeRemoved: req.Msg.GetIncludeRemoved(),
-		Offset:         int(req.Msg.GetOffset()),
-		Limit:          int(req.Msg.GetLimit()),
+		Offset:         offset,
+		Limit:          limit,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	resp := &agentcomposev2.ListProjectsResponse{
-		TotalCount: uint32(result.TotalCount),
-		HasMore:    result.HasMore,
-		NextOffset: uint32(result.NextOffset),
+		Total: uint32(result.TotalCount),
 	}
 	for _, project := range result.Projects {
 		agents, err := h.store.ListProjectAgents(ctx, project.ID)

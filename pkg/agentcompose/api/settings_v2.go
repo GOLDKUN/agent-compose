@@ -92,13 +92,17 @@ func (h *SettingsV2Handler) UpdateCapabilityGatewayConfig(ctx context.Context, r
 	}
 	return connect.NewResponse(&agentcomposev2.UpdateCapabilityGatewayConfigResponse{Config: &agentcomposev2.CapabilityGatewayConfig{Addr: saved.Addr, TokenSet: strings.TrimSpace(saved.Token) != ""}}), nil
 }
-func (h *SettingsV2Handler) ListWorkspacePresets(ctx context.Context, _ *connect.Request[agentcomposev2.ListWorkspacePresetsRequest]) (*connect.Response[agentcomposev2.ListWorkspacePresetsResponse], error) {
+func (h *SettingsV2Handler) ListWorkspacePresets(ctx context.Context, req *connect.Request[agentcomposev2.ListWorkspacePresetsRequest]) (*connect.Response[agentcomposev2.ListWorkspacePresetsResponse], error) {
 	items, err := h.store.ListWorkspaceConfigs(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	resp := &agentcomposev2.ListWorkspacePresetsResponse{}
-	for _, item := range items {
+	page, total, err := paginateList(items, req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
+	}
+	resp := &agentcomposev2.ListWorkspacePresetsResponse{Total: total}
+	for _, item := range page {
 		resp.Presets = append(resp.Presets, workspacePresetToV2(item))
 	}
 	return connect.NewResponse(resp), nil

@@ -88,8 +88,8 @@ func (s *loaderStore) ListLoaderRunsPage(ctx context.Context, filter loaders.Loa
 		beforeMillis := filter.BeforeStartedAt.UTC().UnixMilli()
 		args = append(args, beforeMillis, beforeMillis, strings.TrimSpace(filter.BeforeLoaderID), strings.TrimSpace(filter.BeforeLoaderID), strings.TrimSpace(filter.BeforeRunID))
 	}
-	query += ` ORDER BY started_at DESC, loader_id DESC, run_id DESC LIMIT ?`
-	args = append(args, filter.Limit)
+	query += ` ORDER BY started_at DESC, loader_id DESC, run_id DESC LIMIT ? OFFSET ?`
+	args = append(args, filter.Limit, max(filter.Offset, 0))
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query loader run page: %w", err)
@@ -108,6 +108,34 @@ func (s *loaderStore) ListLoaderRunsPage(ctx context.Context, filter loaders.Loa
 		return nil, fmt.Errorf("iterate loader run page: %w", err)
 	}
 	return items, nil
+}
+
+func (s *loaderStore) CountLoaderRunsPage(ctx context.Context, filter loaders.LoaderRunPageFilter) (int, error) {
+	loaderIDs := normalizedLoaderRunPageIDs(filter.LoaderIDs)
+	if len(loaderIDs) == 0 {
+		return 0, nil
+	}
+	args := make([]any, 0, len(loaderIDs)+2)
+	for _, loaderID := range loaderIDs {
+		args = append(args, loaderID)
+	}
+	query := `SELECT COUNT(*) FROM loader_run WHERE loader_id IN (` + placeholders(len(loaderIDs)) + `)`
+	if filter.RequireTrigger {
+		query += ` AND trigger_id <> ''`
+	}
+	if triggerID := strings.TrimSpace(filter.TriggerID); triggerID != "" {
+		query += ` AND trigger_id = ?`
+		args = append(args, triggerID)
+	}
+	if status := strings.TrimSpace(filter.Status); status != "" {
+		query += ` AND status = ?`
+		args = append(args, status)
+	}
+	var total int
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count loader runs: %w", err)
+	}
+	return total, nil
 }
 
 func (s *loaderStore) ListLoaderRunSandboxIDs(ctx context.Context, keys []loaders.LoaderRunKey) (map[loaders.LoaderRunKey][]string, error) {

@@ -337,15 +337,16 @@ message GetProjectResponse {
 message ListProjectsRequest {
   string query = 1;
   bool include_removed = 2;
+  // Number of matching resources to skip. Values at or above total return an empty page.
   uint32 offset = 3;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 4;
 }
 
 message ListProjectsResponse {
   repeated ProjectSummary projects = 1;
-  uint32 total_count = 2;
-  bool has_more = 3;
-  uint32 next_offset = 4;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
 }
 
 message RemoveProjectRequest {
@@ -483,8 +484,10 @@ message ResolvedTrigger {
 
 message ListSchedulersRequest {
   string query = 1;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 2;
-  string cursor = 3;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 3;
 }
 
 message SchedulerSummary {
@@ -502,14 +505,17 @@ message SchedulerSummary {
 
 message ListSchedulersResponse {
   repeated SchedulerSummary schedulers = 1;
-  string next_cursor = 2;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
 }
 
 message ListSchedulerEventsRequest {
   ProjectRef project = 1;
   string agent_name = 2;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 3;
-  string cursor = 4;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 4;
 }
 
 message SchedulerEvent {
@@ -530,7 +536,8 @@ message SchedulerEvent {
 
 message ListSchedulerEventsResponse {
   repeated SchedulerEvent events = 1;
-  string next_cursor = 2;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
 }
 
 message ListProjectSchedulerEventsRequest {
@@ -538,13 +545,16 @@ message ListProjectSchedulerEventsRequest {
   string agent_name = 2;
   string trigger_id = 3;
   string run_id = 4;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 5;
-  string cursor = 6;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 6;
 }
 
 message ListProjectSchedulerEventsResponse {
   repeated SchedulerEvent events = 1;
-  string next_cursor = 2;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
 }
 
 message InvokeSchedulerRequest {
@@ -593,15 +603,18 @@ message GetSchedulerRunResponse {
 message ListSchedulerRunsRequest {
   ProjectRef project = 1;
   string agent_name = 2;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 3;
-  string cursor = 4;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 4;
   string trigger_id = 5;
   SchedulerRunStatus status = 6;
 }
 
 message ListSchedulerRunsResponse {
   repeated SchedulerRun runs = 1;
-  string next_cursor = 2;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
 }
 
 message PruneSchedulerRunsRequest {
@@ -961,13 +974,17 @@ message ListRunsRequest {
   RunSource source = 6;
   string started_from = 7;
   string started_to = 8;
+  // Number of matching resources to skip. Values at or above total return an empty page.
   uint32 offset = 9;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 10;
   string sandbox_id = 11;
 }
 
 message ListRunsResponse {
   repeated RunSummary runs = 1;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
 }
 
 message FollowRunLogsRequest {
@@ -1003,8 +1020,10 @@ message StopRunResponse {
 
 message ListRunEventsRequest {
   string run_id = 1;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 2;
-  string cursor = 3;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 3;
 }
 
 message RunEvent {
@@ -1024,19 +1043,23 @@ message RunEvent {
 
 message ListRunEventsResponse {
   repeated RunEvent events = 1;
-  string next_cursor = 2;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
   bool history_available = 3;
 }
 
 message ListSandboxRunEventsRequest {
   string sandbox_id = 1;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 2;
-  string cursor = 3;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 3;
 }
 
 message ListSandboxRunEventsResponse {
   repeated RunEvent events = 1;
-  string next_cursor = 2;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
   repeated string history_available_run_ids = 3;
 }
 
@@ -1124,8 +1147,10 @@ message SandboxTag {
 }
 
 message ListSandboxesRequest {
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 1;
-  string cursor = 2;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 2;
   string project_id = 3;
   // Optional case-insensitive filter. Accepted values are pending, running,
   // stopped, failed, and deleting. Empty entries are ignored.
@@ -1134,7 +1159,8 @@ message ListSandboxesRequest {
 
 message ListSandboxesResponse {
   repeated Sandbox sandboxes = 1;
-  string next_cursor = 2;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
 }
 
 message GetSandboxResponse {
@@ -1398,15 +1424,16 @@ message ListImagesRequest {
   string query = 2;
   bool all = 3;
   bool include_cache_status = 4;
+  // Number of matching resources to skip. Values at or above total return an empty page.
   uint32 offset = 5;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 6;
 }
 
 message ListImagesResponse {
   repeated Image images = 1;
-  uint32 total_count = 2;
-  bool has_more = 3;
-  uint32 next_offset = 4;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
   ImageStoreStatus store_status = 5;
 }
 
@@ -1482,11 +1509,17 @@ message CacheFilter {
 
 message ListCachesRequest {
   CacheFilter filter = 1;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 2;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+  uint32 limit = 3;
 }
 
 message ListCachesResponse {
   repeated CacheItem caches = 1;
   repeated string warnings = 2;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 3;
 }
 
 message InspectCacheRequest {
@@ -1560,10 +1593,16 @@ message ListVolumesRequest {
   string query = 1;
   string driver = 2;
   string project_id = 3;
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 4;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+  uint32 limit = 5;
 }
 
 message ListVolumesResponse {
   repeated Volume volumes = 1;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
 }
 
 message CreateVolumeRequest {
@@ -1776,8 +1815,17 @@ message WorkspacePreset {
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
 }
-message ListWorkspacePresetsRequest {}
-message ListWorkspacePresetsResponse { repeated WorkspacePreset presets = 1; }
+message ListWorkspacePresetsRequest {
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 1;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+  uint32 limit = 2;
+}
+message ListWorkspacePresetsResponse {
+  repeated WorkspacePreset presets = 1;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
+}
 message CreateWorkspacePresetRequest {
   string name = 1;
   string type = 2;
@@ -1806,14 +1854,23 @@ message CapabilityStatusResponse {
   bool proxy_listen_configured = 7;
   bool proxy_target_configured = 8;
 }
-message ListCapabilitySetsRequest {}
+message ListCapabilitySetsRequest {
+  // Number of matching resources to skip. Values at or above total return an empty page.
+  uint32 offset = 1;
+  // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
+  uint32 limit = 2;
+}
 message CapabilitySet {
   string id = 1;
   string name = 2;
   string description = 3;
   bool enabled = 4;
 }
-message ListCapabilitySetsResponse { repeated CapabilitySet capsets = 1; }
+message ListCapabilitySetsResponse {
+  repeated CapabilitySet capsets = 1;
+  // Total matching resources before offset and limit are applied.
+  uint32 total = 2;
+}
 message GetCapabilityCatalogRequest { string capset_id = 1; }
 message CapabilityEndpoint {
   string protocol = 1;
@@ -1844,6 +1901,10 @@ message GetCapabilityCatalogResponse {
 
 message ListSandboxHistoryRequest {
   string sandbox_id = 1;
+  // Number of matching history entries to skip in the newest-first merged cells/events timeline. Values at or above total return an empty page.
+  uint32 offset = 2;
+  // Maximum history entries to return across cells and events. Zero uses the server default; values above 500 are rejected.
+  uint32 limit = 3;
 }
 
 message SandboxHistoryCell {
@@ -1874,6 +1935,8 @@ message ListSandboxHistoryResponse {
   repeated SandboxHistoryCell cells = 1;
   repeated SandboxHistoryEvent events = 2;
   bool legacy_history = 3;
+  // Total matching history entries across cells and events before offset and limit are applied.
+  uint32 total = 4;
 }
 
 message WatchSandboxRequest {

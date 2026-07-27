@@ -60,15 +60,24 @@ func runComposeVolumeListCommand(cmd *cobra.Command, cli cliOptions, options com
 	if err != nil {
 		return err
 	}
-	resp, err := clients.volume.ListVolumes(cmd.Context(), connect.NewRequest(&agentcomposev2.ListVolumesRequest{
-		Query:     strings.TrimSpace(options.Query),
-		Driver:    strings.TrimSpace(options.Driver),
-		ProjectId: strings.TrimSpace(options.ProjectID),
-	}))
-	if err != nil {
-		return commandExitErrorForConnect(fmt.Errorf("list volumes: %w", err))
+	request := &agentcomposev2.ListVolumesRequest{Query: strings.TrimSpace(options.Query), Driver: strings.TrimSpace(options.Driver), ProjectId: strings.TrimSpace(options.ProjectID), Limit: 500}
+	response := &agentcomposev2.ListVolumesResponse{}
+	for uint32(len(response.Volumes)) < response.GetTotal() || response.GetTotal() == 0 {
+		request.Offset = uint32(len(response.Volumes))
+		resp, err := clients.volume.ListVolumes(cmd.Context(), connect.NewRequest(request))
+		if err != nil {
+			return commandExitErrorForConnect(fmt.Errorf("list volumes: %w", err))
+		}
+		response.Total = resp.Msg.GetTotal()
+		response.Volumes = append(response.Volumes, resp.Msg.GetVolumes()...)
+		if uint32(len(response.Volumes)) >= response.Total {
+			break
+		}
+		if len(resp.Msg.GetVolumes()) == 0 {
+			return fmt.Errorf("volume list pagination did not advance")
+		}
 	}
-	output := composeVolumeListOutputFromResponse(resp.Msg)
+	output := composeVolumeListOutputFromResponse(response)
 	projects, err := listAllProjects(cmd.Context(), clients.project)
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("list projects for volumes: %w", err))
@@ -203,6 +212,7 @@ func runComposeVolumePruneCommand(cmd *cobra.Command, cli cliOptions, options co
 
 type composeVolumeListOutput struct {
 	Volumes []composeVolumeOutput `json:"volumes"`
+	Total   uint32                `json:"total"`
 }
 
 type composeVolumeInspectOutput struct {
@@ -238,7 +248,7 @@ type composeVolumeOutput struct {
 }
 
 func composeVolumeListOutputFromResponse(resp *agentcomposev2.ListVolumesResponse) composeVolumeListOutput {
-	output := composeVolumeListOutput{Volumes: make([]composeVolumeOutput, 0, len(resp.GetVolumes()))}
+	output := composeVolumeListOutput{Volumes: make([]composeVolumeOutput, 0, len(resp.GetVolumes())), Total: resp.GetTotal()}
 	for _, volume := range resp.GetVolumes() {
 		output.Volumes = append(output.Volumes, composeVolumeOutputFromProto(volume))
 	}

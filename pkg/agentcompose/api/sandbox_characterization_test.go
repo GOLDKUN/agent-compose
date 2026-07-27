@@ -167,7 +167,7 @@ func TestV2SandboxLifecycleIsIdempotentAndRejectsInvalidState(t *testing.T) {
 	}
 }
 
-func TestV2ListSandboxesEmptyPageWithHasMoreDoesNotPanic(t *testing.T) {
+func TestV2ListSandboxesEmptyPageReturnsTotal(t *testing.T) {
 	// A page whose indexed rows were all ghosts comes back empty with HasMore set.
 	// The cursor must not be built from the (empty) page, which would panic.
 	store := &characterizationSandboxStore{listResults: []domain.SandboxListResult{
@@ -182,33 +182,30 @@ func TestV2ListSandboxesEmptyPageWithHasMoreDoesNotPanic(t *testing.T) {
 	if len(resp.Msg.GetSandboxes()) != 0 {
 		t.Fatalf("expected empty page, got %d sandboxes", len(resp.Msg.GetSandboxes()))
 	}
-	if resp.Msg.GetNextCursor() != "" {
-		t.Fatalf("empty page must not emit a cursor, got %q", resp.Msg.GetNextCursor())
+	if resp.Msg.GetTotal() != 5 {
+		t.Fatalf("total = %d, want 5", resp.Msg.GetTotal())
 	}
 }
 
-func TestV2ListSandboxesUsesOpaquePagination(t *testing.T) {
+func TestV2ListSandboxesUsesOffsetPagination(t *testing.T) {
 	firstID := identity.NewID(identity.ResourceSandbox, "characterization", "list-first")
 	secondID := identity.NewID(identity.ResourceSandbox, "characterization", "list-second")
 	firstUpdatedAt := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
 	store := &characterizationSandboxStore{listResults: []domain.SandboxListResult{
-		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: firstID, UpdatedAt: firstUpdatedAt}}}, HasMore: true},
-		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: secondID, UpdatedAt: firstUpdatedAt.Add(-time.Second)}}}},
+		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: firstID, UpdatedAt: firstUpdatedAt}}}, TotalCount: 2},
+		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: secondID, UpdatedAt: firstUpdatedAt.Add(-time.Second)}}}, TotalCount: 2},
 	}}
 	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
 	first, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Limit: 1}))
-	if err != nil || first.Msg.GetSandboxes()[0].GetSandboxId() != firstID || first.Msg.GetNextCursor() == "" {
+	if err != nil || first.Msg.GetSandboxes()[0].GetSandboxId() != firstID || first.Msg.GetTotal() != 2 {
 		t.Fatalf("first ListSandboxes() = %#v, err=%v", first, err)
 	}
-	second, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Limit: 1, Cursor: first.Msg.GetNextCursor()}))
-	if err != nil || second.Msg.GetSandboxes()[0].GetSandboxId() != secondID || second.Msg.GetNextCursor() != "" {
+	second, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Limit: 1, Offset: 1}))
+	if err != nil || second.Msg.GetSandboxes()[0].GetSandboxId() != secondID || second.Msg.GetTotal() != 2 {
 		t.Fatalf("second ListSandboxes() = %#v, err=%v", second, err)
 	}
-	if len(store.listOptions) != 2 || store.listOptions[1].BeforeID != firstID || !store.listOptions[1].BeforeUpdatedAt.Equal(firstUpdatedAt) {
+	if len(store.listOptions) != 2 || store.listOptions[1].Offset != 1 {
 		t.Fatalf("list options = %#v", store.listOptions)
-	}
-	if _, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Cursor: "invalid"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("invalid token code=%v err=%v", connect.CodeOf(err), err)
 	}
 }
 

@@ -26,8 +26,8 @@ func TestIntegrationCLIImagesAliasesAndJSON(t *testing.T) {
 					t.Fatalf("ListImages request = %#v", req.Msg)
 				}
 				return connect.NewResponse(&agentcomposev2.ListImagesResponse{
-					Images:     []*agentcomposev2.Image{testCLIImage("sha256:abc1234567890", "agent:latest")},
-					TotalCount: 1,
+					Images: []*agentcomposev2.Image{testCLIImage("sha256:abc1234567890", "agent:latest")},
+					Total:  1,
 					StoreStatus: &agentcomposev2.ImageStoreStatus{
 						Store:     agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_DOCKER_DAEMON,
 						Available: true,
@@ -47,7 +47,7 @@ func TestIntegrationCLIImagesAliasesAndJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
 		t.Fatalf("images JSON decode failed: %v\n%s", err, stdout)
 	}
-	if decoded.TotalCount != 1 || decoded.Images[0].ImageRef != "agent:latest" || decoded.StoreStatus.Store != "docker" {
+	if decoded.Total != 1 || decoded.Images[0].ImageRef != "agent:latest" || decoded.StoreStatus.Store != "docker" {
 		t.Fatalf("images JSON = %#v", decoded)
 	}
 
@@ -610,8 +610,8 @@ func TestIntegrationCLIImagesJSONAcceptsOCIStoreStatus(t *testing.T) {
 		image: imageServiceStub{
 			listImages: func(ctx context.Context, req *connect.Request[agentcomposev2.ListImagesRequest]) (*connect.Response[agentcomposev2.ListImagesResponse], error) {
 				return connect.NewResponse(&agentcomposev2.ListImagesResponse{
-					Images:     []*agentcomposev2.Image{image},
-					TotalCount: 1,
+					Images: []*agentcomposev2.Image{image},
+					Total:  1,
 					StoreStatus: &agentcomposev2.ImageStoreStatus{
 						Store:     agentcomposev2.ImageStoreKind_IMAGE_STORE_KIND_OCI_CACHE,
 						Available: true,
@@ -631,7 +631,7 @@ func TestIntegrationCLIImagesJSONAcceptsOCIStoreStatus(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
 		t.Fatalf("images JSON decode failed: %v\n%s", err, stdout)
 	}
-	if decoded.TotalCount != 1 || decoded.Images[0].Store != "oci-cache" || decoded.StoreStatus.Store != "oci-cache" || decoded.StoreStatus.Endpoint != "/tmp/images/oci" {
+	if decoded.Total != 1 || decoded.Images[0].Store != "oci-cache" || decoded.StoreStatus.Store != "oci-cache" || decoded.StoreStatus.Endpoint != "/tmp/images/oci" {
 		t.Fatalf("images JSON = %#v", decoded)
 	}
 }

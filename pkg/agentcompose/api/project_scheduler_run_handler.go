@@ -23,6 +23,7 @@ type ProjectSchedulerRunRuntime interface {
 type ProjectSchedulerRunStore interface {
 	GetLoaderRunForLoaders(context.Context, []string, string) (domain.LoaderRunSummary, error)
 	ListLoaderRunsPage(context.Context, loaders.LoaderRunPageFilter) ([]domain.LoaderRunSummary, error)
+	CountLoaderRunsPage(context.Context, loaders.LoaderRunPageFilter) (int, error)
 }
 
 type ProjectSchedulerRunSandboxStore interface {
@@ -124,23 +125,19 @@ func (h *ProjectHandler) GetSchedulerRun(ctx context.Context, req *connect.Reque
 }
 
 func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Request[agentcomposev2.ListSchedulerRunsRequest]) (*connect.Response[agentcomposev2.ListSchedulerRunsResponse], error) {
-	project, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
+	_, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	limit, err := schedulerRunPageLimit(req.Msg.GetLimit())
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
 	if err != nil {
-		return nil, ConnectErrorForDomain(err)
+		return nil, err
 	}
 	status, err := schedulerRunStatusFilter(req.Msg.GetStatus())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
 	triggerID := strings.TrimSpace(req.Msg.GetTriggerId())
-	cursor, err := decodeSchedulerRunCursor(req.Msg.GetCursor(), project.ID, project.CurrentRevision, req.Msg.GetAgentName(), triggerID, status)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
 	loaderIDs := make([]string, 0, len(schedulers))
 	byLoaderID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
 	for _, scheduler := range schedulers {
@@ -156,22 +153,23 @@ func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Req
 		return nil, ConnectErrorForDomain(err)
 	}
 	runs, err := store.ListLoaderRunsPage(ctx, loaders.LoaderRunPageFilter{
-		LoaderIDs:       loaderIDs,
-		RequireTrigger:  true,
-		TriggerID:       triggerID,
-		Status:          status,
-		BeforeStartedAt: cursor.StartedAt,
-		BeforeLoaderID:  cursor.LoaderID,
-		BeforeRunID:     cursor.RunID,
-		Limit:           limit + 1,
+		LoaderIDs:      loaderIDs,
+		RequireTrigger: true,
+		TriggerID:      triggerID,
+		Status:         status,
+		Offset:         offset,
+		Limit:          limit,
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	end := min(limit, len(runs))
-	response := &agentcomposev2.ListSchedulerRunsResponse{Runs: make([]*agentcomposev2.SchedulerRun, 0, end)}
-	keys := make([]loaders.LoaderRunKey, 0, end)
-	for _, run := range runs[:end] {
+	total, err := store.CountLoaderRunsPage(ctx, loaders.LoaderRunPageFilter{LoaderIDs: loaderIDs, RequireTrigger: true, TriggerID: triggerID, Status: status})
+	if err != nil {
+		return nil, ConnectErrorForDomain(err)
+	}
+	response := &agentcomposev2.ListSchedulerRunsResponse{Runs: make([]*agentcomposev2.SchedulerRun, 0, len(runs)), Total: uint32(total)}
+	keys := make([]loaders.LoaderRunKey, 0, len(runs))
+	for _, run := range runs {
 		keys = append(keys, loaders.LoaderRunKey{LoaderID: run.LoaderID, RunID: run.ID})
 	}
 	sandboxIDs := make(map[loaders.LoaderRunKey][]string)
@@ -181,7 +179,7 @@ func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Req
 			return nil, ConnectErrorForDomain(err)
 		}
 	}
-	for _, run := range runs[:end] {
+	for _, run := range runs {
 		scheduler, ok := byLoaderID[run.LoaderID]
 		if !ok {
 			continue
@@ -189,9 +187,6 @@ func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Req
 		item := schedulerRunToProto(run, scheduler)
 		item.SandboxIds = sandboxIDs[loaders.LoaderRunKey{LoaderID: run.LoaderID, RunID: run.ID}]
 		response.Runs = append(response.Runs, item)
-	}
-	if len(runs) > limit {
-		response.NextCursor = encodeSchedulerRunCursor(project.ID, project.CurrentRevision, req.Msg.GetAgentName(), triggerID, status, runs[limit-1])
 	}
 	return connect.NewResponse(response), nil
 }
@@ -373,14 +368,4 @@ func normalizeSchedulerRunPayload(raw string) (string, error) {
 		return "", domain.ClassifyError(domain.ErrInvalidArgument, "payload_json must contain valid JSON", err)
 	}
 	return payloadJSON, nil
-}
-
-func schedulerRunPageLimit(raw uint32) (int, error) {
-	if raw == 0 {
-		return 100, nil
-	}
-	if raw > 500 {
-		return 0, domain.ClassifyError(domain.ErrInvalidArgument, "limit must be between 1 and 500", nil)
-	}
-	return int(raw), nil
 }

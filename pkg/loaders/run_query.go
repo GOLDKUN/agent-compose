@@ -10,6 +10,7 @@ type LoaderRunPageFilter struct {
 	BeforeStartedAt time.Time
 	BeforeLoaderID  string
 	BeforeRunID     string
+	Offset          int
 	Limit           int
 }
 
