@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	connectrpc.com/connect v1.19.2
 	github.com/chaitin/ai-api-protocol-bridge v1.0.0
+	github.com/chzyer/readline v1.5.1
 	github.com/containerd/errdefs v1.0.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v28.5.1+incompatible
@@ -21,6 +22,7 @@ require (
 	github.com/samber/mo v1.16.0
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.1
+	github.com/spf13/pflag v1.0.9
 	github.com/superradcompany/microsandbox/sdk/go v0.6.4
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	golang.org/x/net v0.55.0
@@ -68,7 +70,6 @@ require (
 	github.com/samber/go-type-to-string v1.8.0 // indirect
 	github.com/samber/lo v1.52.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/tetratelabs/wazero v1.9.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
