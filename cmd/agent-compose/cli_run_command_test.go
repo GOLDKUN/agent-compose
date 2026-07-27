@@ -105,6 +105,16 @@ agents:
 			want: "run --driver cannot be combined with --sandbox",
 		},
 		{
+			name: "remove with keep running",
+			args: []string{"run", "--host", server.URL, "--file", composePath, "reviewer", "--rm", "--keep-running", "--prompt", "check"},
+			want: "run --rm cannot be combined with --keep-running",
+		},
+		{
+			name: "keep running with remove",
+			args: []string{"run", "--host", server.URL, "--file", composePath, "reviewer", "--keep-running", "--rm", "--prompt", "check"},
+			want: "run --rm cannot be combined with --keep-running",
+		},
+		{
 			name: "command and prompt flags",
 			args: []string{"run", "--host", server.URL, "--file", composePath, "reviewer", "--command", "echo hi", "--prompt", "check"},
 			want: "only one of --prompt or --command",
