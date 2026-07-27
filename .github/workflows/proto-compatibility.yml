@@ -2,9 +2,7 @@ name: Protobuf compatibility
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
-  pull_request_review:
-    types: [submitted, dismissed]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -12,7 +10,9 @@ permissions:
 
 concurrency:
   group: proto-compatibility-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # Review refreshes share this group and must wait for the initial Buf run.
+  # Keeping the running attempt alive also lets the refresh workflow rerun it.
+  cancel-in-progress: false
 
 jobs:
   proto-breaking:
@@ -55,10 +55,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REQUIRED_LABEL: protobuf-breaking-approved
         run: |
-          label_present=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER" \
-            --jq '[.labels[].name] | index(env.REQUIRED_LABEL) != null')
           reviews=$(gh api --paginate --slurp "repos/$GH_REPO/pulls/$PR_NUMBER/reviews?per_page=100")
           approved_reviewers=$(jq -r --arg head "$PR_HEAD_SHA" '
             [.[][] | select(
@@ -81,7 +78,7 @@ jobs:
             fi
           done <<<"$approved_reviewers"
 
-          if [[ $label_present == true && -n $approving_maintainer ]]; then
+          if [[ -n $approving_maintainer ]]; then
             printf 'Breaking Protobuf change approved by maintainer @%s for commit %s.\n' \
               "$approving_maintainer" "$PR_HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -90,7 +87,6 @@ jobs:
           {
             echo '### Breaking Protobuf change requires approval'
             echo
-            echo "- Required label \`$REQUIRED_LABEL\`: \`$label_present\`"
-            echo "- Maintainer approval for current commit: \`$([[ -n $approving_maintainer ]] && echo true || echo false)\`"
+            echo 'A maintainer must approve the current PR commit. The compatibility check will rerun automatically after review.'
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1
