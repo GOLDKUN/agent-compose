@@ -1,0 +1,168 @@
+package configstore
+
+import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+
+	domain "agent-compose/pkg/model"
+	storagesqlite "agent-compose/pkg/storage/sqlite"
+
+	modernsqlite "modernc.org/sqlite"
+)
+
+func TestTopicEventPayloadWithSequencePreservesRawBodyValues(t *testing.T) {
+	payload := `{"sequence":0,"body":{"large":9007199254740993}}`
+	sequenced, changed, err := topicEventPayloadWithSequence(payload, 7)
+	if err != nil {
+		t.Fatalf("topicEventPayloadWithSequence returned error: %v", err)
+	}
+	if !changed || sequenced != `{"body":{"large":9007199254740993},"sequence":7}` {
+		t.Fatalf("topicEventPayloadWithSequence = %s changed=%v", sequenced, changed)
+	}
+
+	plain := `{"body":{"large":9007199254740993}}`
+	sequenced, changed, err = topicEventPayloadWithSequence(plain, 7)
+	if err != nil || changed || sequenced != plain {
+		t.Fatalf("payload without sequence = %s changed=%v err=%v", sequenced, changed, err)
+	}
+}
+
+func TestCreateEventAcceptsIdempotentPayloadWithSequencePlaceholder(t *testing.T) {
+	ctx := context.Background()
+	store := FromDB(newMemoryDB(t))
+	if err := store.initSchema(ctx); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+
+	item := domain.TopicEventRecord{
+		ID:             "event-original",
+		Topic:          "webhook.github.push",
+		Source:         domain.TopicEventSourceWebhook,
+		IdempotencyKey: "delivery-1",
+		PayloadJSON:    `{"sequence":0,"body":{"branch":"main"}}`,
+		DispatchStatus: domain.TopicEventDispatchPending,
+	}
+	created, err := store.CreateEvent(ctx, item)
+	if err != nil {
+		t.Fatalf("create original event: %v", err)
+	}
+
+	item.ID = "event-duplicate"
+	duplicate, err := store.CreateEvent(ctx, item)
+	if err != nil {
+		t.Fatalf("create idempotent duplicate: %v", err)
+	}
+	if duplicate.ID != created.ID || duplicate.PayloadHash != created.PayloadHash {
+		t.Fatalf("duplicate = %#v, want original %#v", duplicate, created)
+	}
+}
+
+func TestCreateEventReturnsSequencedRecordWhenContextIsCanceledAfterCommit(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	setup, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		t.Fatalf("open setup database: %v", err)
+	}
+	if err := storagesqlite.Migrate(context.Background(), setup); err != nil {
+		_ = setup.Close()
+		t.Fatalf("migrate setup database: %v", err)
+	}
+	if err := setup.Close(); err != nil {
+		t.Fatalf("close setup database: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	driverName := "sqlite_cancel_after_event_commit:" + databasePath
+	sql.Register(driverName, &cancelAfterEventCommitDriver{
+		delegate: &modernsqlite.Driver{},
+		cancel:   cancel,
+	})
+	database, err := sql.Open(driverName, databasePath)
+	if err != nil {
+		t.Fatalf("open instrumented database: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Errorf("close instrumented database: %v", err)
+		}
+	})
+
+	created, err := FromDB(database).CreateEvent(ctx, domain.TopicEventRecord{
+		ID:             "event-committed",
+		Topic:          "webhook.github.push",
+		Source:         domain.TopicEventSourceWebhook,
+		PayloadJSON:    `{"sequence":0,"body":{"branch":"main"}}`,
+		DispatchStatus: domain.TopicEventDispatchPending,
+	})
+	if err != nil {
+		t.Fatalf("CreateEvent returned error after commit: %v", err)
+	}
+	if ctx.Err() == nil {
+		t.Fatal("context was not canceled after COMMIT")
+	}
+	if created.ID != "event-committed" || created.Sequence == 0 {
+		t.Fatalf("CreateEvent returned %#v", created)
+	}
+	wantSequence := `"sequence":` + strconv.FormatInt(created.Sequence, 10)
+	if !strings.Contains(created.PayloadJSON, wantSequence) {
+		t.Fatalf("CreateEvent payload = %s, want %s", created.PayloadJSON, wantSequence)
+	}
+
+	var storedPayload string
+	if err := database.QueryRowContext(context.Background(), `SELECT payload_json FROM event WHERE id = ?`, created.ID).Scan(&storedPayload); err != nil {
+		t.Fatalf("query committed event: %v", err)
+	}
+	if storedPayload != created.PayloadJSON {
+		t.Fatalf("stored payload = %s, want %s", storedPayload, created.PayloadJSON)
+	}
+}
+
+type cancelAfterEventCommitDriver struct {
+	delegate driver.Driver
+	cancel   context.CancelFunc
+	once     sync.Once
+}
+
+func (d *cancelAfterEventCommitDriver) Open(name string) (driver.Conn, error) {
+	connection, err := d.delegate.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return &cancelAfterEventCommitConn{Conn: connection, owner: d}, nil
+}
+
+type cancelAfterEventCommitConn struct {
+	driver.Conn
+	owner *cancelAfterEventCommitDriver
+}
+
+func (c *cancelAfterEventCommitConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	beginner, ok := c.Conn.(driver.ConnBeginTx)
+	if !ok {
+		return nil, driver.ErrSkip
+	}
+	transaction, err := beginner.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &cancelAfterEventCommitTx{Tx: transaction, owner: c.owner}, nil
+}
+
+type cancelAfterEventCommitTx struct {
+	driver.Tx
+	owner *cancelAfterEventCommitDriver
+}
+
+func (t *cancelAfterEventCommitTx) Commit() error {
+	if err := t.Tx.Commit(); err != nil {
+		return err
+	}
+	t.owner.once.Do(t.owner.cancel)
+	return nil
+}

@@ -281,7 +281,7 @@ agents:
 		t.Fatalf("create test data root: %v", err)
 	}
 	storeConfig := &config.Config{DataRoot: dataRoot, DbAddr: filepath.Join(dataRoot, "data.db")}
-	database, err := storagesqlite.Open(storeConfig.DbAddr, storeConfig.DbTimeout)
+	database, err := storagesqlite.OpenWithMaxOpenConns(storeConfig.DbAddr, storeConfig.DbTimeout, storeConfig.EffectiveSQLiteMaxOpenConns())
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}

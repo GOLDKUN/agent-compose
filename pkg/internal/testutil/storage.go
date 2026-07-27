@@ -50,7 +50,7 @@ func openDatabase(t testing.TB, config *appconfig.Config) (*storagesqlite.Databa
 	if err := os.MkdirAll(config.DataRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("create test data root: %w", err)
 	}
-	database, err := storagesqlite.Open(config.DbAddr, config.DbTimeout)
+	database, err := storagesqlite.OpenWithMaxOpenConns(config.DbAddr, config.DbTimeout, config.EffectiveSQLiteMaxOpenConns())
 	if err != nil {
 		return nil, err
 	}
