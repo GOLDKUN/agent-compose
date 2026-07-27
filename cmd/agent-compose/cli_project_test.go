@@ -427,6 +427,41 @@ agents:
 	}
 }
 
+func TestConfigCommandQuietRejectsDuplicateSchedulerTriggerNames(t *testing.T) {
+	composePath := writeComposeFile(t, filepath.Join(t.TempDir(), "duplicate-trigger-project"), `
+name: duplicate-trigger-repro
+agents:
+  runner:
+    provider: codex
+    scheduler:
+      triggers:
+        - name: duplicate
+          interval: 1m
+        - name: duplicate
+          interval: 2m
+`)
+
+	stdout, stderr, runCount, exitCode := executeCLICommand("config", "--quiet", "--file", composePath)
+	if exitCode != exitCodeUsage {
+		t.Fatalf("config --quiet exit code = %d, want %d; stderr=%q", exitCode, exitCodeUsage, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("config --quiet stdout = %q, want empty", stdout)
+	}
+	for _, want := range []string{
+		composePath,
+		"agents.runner.scheduler.triggers[1].name",
+		`duplicate scheduler trigger name "duplicate"`,
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("config --quiet stderr %q does not contain %q", stderr, want)
+		}
+	}
+	if runCount != 0 {
+		t.Fatalf("daemon runner called %d times, want 0", runCount)
+	}
+}
+
 func TestIntegrationCLIListProjectsTextVerboseAndJSON(t *testing.T) {
 	requests := 0
 	server := newComposeServiceStubServer(t, composeServiceStubs{

@@ -2,6 +2,7 @@ package compose
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -967,6 +968,65 @@ agents:
 	if trigger := scheduler.Triggers[0]; trigger.Name != "hourly-review" || trigger.Kind != "interval" || trigger.Interval != "1h" || trigger.Prompt != "review changes" {
 		t.Fatalf("scheduler trigger = %#v, want normalized interval trigger", trigger)
 	}
+}
+
+func TestNormalizeSchedulerTriggerNameUniqueness(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		secondName string
+	}{
+		{name: "exact duplicate", secondName: "duplicate"},
+		{name: "duplicate after trimming", secondName: `" duplicate "`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := mustParseCompose(t, `
+name: duplicate-trigger
+agents:
+  runner:
+    scheduler:
+      triggers:
+        - name: duplicate
+          interval: 1m
+        - name: `+tt.secondName+`
+          interval: 2m
+`)
+
+			_, err := Normalize(spec, NormalizeOptions{})
+			if err == nil {
+				t.Fatalf("expected Normalize to fail")
+			}
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("Normalize error = %T %v, want ValidationError", err, err)
+			}
+			if got, want := validationErr.Path, "agents.runner.scheduler.triggers[1].name"; got != want {
+				t.Fatalf("validation path = %q, want %q", got, want)
+			}
+			if got, want := validationErr.Message, `duplicate scheduler trigger name "duplicate"`; got != want {
+				t.Fatalf("validation message = %q, want %q", got, want)
+			}
+		})
+	}
+
+	t.Run("unnamed triggers remain valid", func(t *testing.T) {
+		spec := mustParseCompose(t, `
+name: unnamed-triggers
+agents:
+  runner:
+    scheduler:
+      triggers:
+        - interval: 1m
+        - interval: 2m
+`)
+
+		normalized, err := Normalize(spec, NormalizeOptions{})
+		if err != nil {
+			t.Fatalf("Normalize returned error: %v", err)
+		}
+		if got := len(normalized.Agents[0].Scheduler.Triggers); got != 2 {
+			t.Fatalf("scheduler trigger count = %d, want 2", got)
+		}
+	})
 }
 
 func TestNormalizeRejectsInvalidTriggerPayloads(t *testing.T) {
