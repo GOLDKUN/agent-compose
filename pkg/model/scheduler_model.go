@@ -32,23 +32,25 @@ const (
 )
 
 type SchedulerSummary struct {
-	ID                 string    `json:"id"`
-	Name               string    `json:"name"`
-	Description        string    `json:"description,omitempty"`
-	Enabled            bool      `json:"enabled"`
-	Runtime            string    `json:"runtime"`
-	WorkspaceID        string    `json:"workspace_id,omitempty"`
-	AgentID            string    `json:"agent_id,omitempty"`
-	Driver             string    `json:"driver,omitempty"`
-	GuestImage         string    `json:"guest_image,omitempty"`
-	DefaultAgent       string    `json:"default_agent,omitempty"`
-	SandboxPolicy      string    `json:"sandbox_policy,omitempty"`
-	ConcurrencyPolicy  string    `json:"concurrency_policy,omitempty"`
-	CapsetIDs          []string  `json:"capset_ids,omitempty"`
-	ManagedProjectID   string    `json:"managed_project_id,omitempty"`
-	ManagedRevision    int64     `json:"managed_project_revision,omitempty"`
-	ManagedAgentName   string    `json:"managed_agent_name,omitempty"`
-	ManagedSchedulerID string    `json:"managed_scheduler_id,omitempty"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description,omitempty"`
+	Enabled           bool     `json:"enabled"`
+	Runtime           string   `json:"runtime"`
+	WorkspaceID       string   `json:"workspace_id,omitempty"`
+	AgentID           string   `json:"agent_id,omitempty"`
+	Driver            string   `json:"driver,omitempty"`
+	GuestImage        string   `json:"guest_image,omitempty"`
+	DefaultAgent      string   `json:"default_agent,omitempty"`
+	SandboxPolicy     string   `json:"sandbox_policy,omitempty"`
+	ConcurrencyPolicy string   `json:"concurrency_policy,omitempty"`
+	CapsetIDs         []string `json:"capset_ids,omitempty"`
+	// Project ownership uses native v2 names internally. The JSON tags retain
+	// their historical names for existing event and runtime consumers.
+	ProjectID          string    `json:"managed_project_id,omitempty"`
+	ProjectRevision    int64     `json:"managed_project_revision,omitempty"`
+	AgentName          string    `json:"managed_agent_name,omitempty"`
+	ProjectSchedulerID string    `json:"managed_scheduler_id,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 	LastError          string    `json:"last_error,omitempty"`
@@ -210,7 +212,7 @@ type SchedulerTopicEvent struct {
 	Release         func()                                         `json:"-"`
 }
 
-func NormalizeLoaderRuntime(runtime string) (string, error) {
+func NormalizeSchedulerRuntime(runtime string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(runtime)) {
 	case "", SchedulerRuntimeScheduler:
 		return SchedulerRuntimeScheduler, nil
@@ -219,7 +221,7 @@ func NormalizeLoaderRuntime(runtime string) (string, error) {
 	}
 }
 
-func NormalizeLoaderTriggerKind(kind string) (string, error) {
+func NormalizeSchedulerTriggerKind(kind string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case SchedulerTriggerKindInterval:
 		return SchedulerTriggerKindInterval, nil
@@ -234,7 +236,7 @@ func NormalizeLoaderTriggerKind(kind string) (string, error) {
 	}
 }
 
-func NormalizeLoaderSandboxPolicy(policy string) string {
+func NormalizeSchedulerSandboxPolicy(policy string) string {
 	switch strings.ToLower(strings.TrimSpace(policy)) {
 	case "", SchedulerSandboxPolicySticky, SchedulerSandboxPolicyReuse:
 		return SchedulerSandboxPolicySticky
@@ -261,7 +263,7 @@ func SchedulerCommandSandboxEnv(request SchedulerCommandRequest) []SandboxEnvVar
 	return request.SandboxEnv
 }
 
-func NormalizeLoaderConcurrencyPolicy(policy string) string {
+func NormalizeSchedulerConcurrencyPolicy(policy string) string {
 	switch strings.ToLower(strings.TrimSpace(policy)) {
 	case "", SchedulerConcurrencyPolicySkip:
 		return SchedulerConcurrencyPolicySkip
@@ -272,7 +274,7 @@ func NormalizeLoaderConcurrencyPolicy(policy string) string {
 	}
 }
 
-func NormalizeLoaderRunStatus(status string) string {
+func NormalizeSchedulerRunStatus(status string) string {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case SchedulerRunStatusRunning:
 		return SchedulerRunStatusRunning
@@ -341,11 +343,11 @@ func SchedulerTriggerScheduledAt(now time.Time, delayMs int64) time.Time {
 	return now.UTC().Add(time.Duration(delayMs) * time.Millisecond)
 }
 
-func DefaultLoaderName(now time.Time) string {
+func DefaultSchedulerName(now time.Time) string {
 	return "Scheduler " + now.UTC().Format("2006-01-02 15:04")
 }
 
-func DefaultLoaderScript() string {
+func DefaultSchedulerScript() string {
 	return strings.TrimSpace(`function main(payload) {
   const result = {
     status: "ready",

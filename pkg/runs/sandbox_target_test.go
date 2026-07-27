@@ -67,7 +67,7 @@ func (s *sandboxRunTargetStoreStub) ListLatestProjectRunsForSandboxes(context.Co
 	return s.runs, nil
 }
 
-func (s *sandboxRunTargetStoreStub) ListProjectAgentsByManagedAgentIDs(context.Context, []string) (map[string]domain.ProjectAgentRecord, error) {
+func (s *sandboxRunTargetStoreStub) ListProjectAgentsByIDs(context.Context, []string) (map[string]domain.ProjectAgentRecord, error) {
 	s.managedCalls++
 	return s.managedAgents, nil
 }

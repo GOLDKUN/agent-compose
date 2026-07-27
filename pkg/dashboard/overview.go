@@ -17,7 +17,7 @@ type SandboxStore interface {
 }
 
 type SchedulerRunStore interface {
-	ListRecentLoaderRuns(context.Context, int) ([]domain.SchedulerRunSummary, error)
+	ListRecentSchedulerRuns(context.Context, int) ([]domain.SchedulerRunSummary, error)
 }
 
 type Aggregator struct {
@@ -57,7 +57,7 @@ func (a *Aggregator) Build(ctx context.Context) (*Overview, error) {
 	if err != nil {
 		return nil, err
 	}
-	runs, err := a.configDB.ListRecentLoaderRuns(ctx, OverviewPageSize)
+	runs, err := a.configDB.ListRecentSchedulerRuns(ctx, OverviewPageSize)
 	if err != nil {
 		return nil, err
 	}

@@ -21,17 +21,17 @@ type SchedulerRunRequest struct {
 }
 
 type schedulerRunStore interface {
-	GetLoaderRun(ctx context.Context, loaderID, runID string) (domain.SchedulerRunSummary, error)
-	ListLoaderRuns(ctx context.Context, loaderID string, limit int) ([]domain.SchedulerRunSummary, error)
+	GetSchedulerRun(ctx context.Context, schedulerID, runID string) (domain.SchedulerRunSummary, error)
+	ListSchedulerRuns(ctx context.Context, schedulerID string, limit int) ([]domain.SchedulerRunSummary, error)
 }
 
 type schedulerRunSupervisorDependencies struct {
-	RootCtx          context.Context
-	Store            schedulerRunStore
-	LoadLoaderForRun func(ctx context.Context, loaderID, triggerID string) (domain.Scheduler, *domain.SchedulerTrigger, error)
-	Prepare          func(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error)
-	Execute          func(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error)
-	RunTimeout       func(override time.Duration) time.Duration
+	RootCtx             context.Context
+	Store               schedulerRunStore
+	LoadSchedulerForRun func(ctx context.Context, schedulerID, triggerID string) (domain.Scheduler, *domain.SchedulerTrigger, error)
+	Prepare             func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error)
+	Execute             func(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error)
+	RunTimeout          func(override time.Duration) time.Duration
 }
 
 type schedulerRunSupervisor struct {
@@ -42,11 +42,11 @@ type schedulerRunSupervisor struct {
 }
 
 type activeSchedulerRun struct {
-	loaderID string
-	cancel   context.CancelCauseFunc
-	done     chan struct{}
-	result   domain.SchedulerRunSummary
-	err      error
+	schedulerID string
+	cancel      context.CancelCauseFunc
+	done        chan struct{}
+	result      domain.SchedulerRunSummary
+	err         error
 }
 
 func newSchedulerRunSupervisor(deps schedulerRunSupervisorDependencies) *schedulerRunSupervisor {
@@ -90,11 +90,11 @@ func (s *schedulerRunSupervisor) start(ctx context.Context, request SchedulerRun
 	if err := context.Cause(s.deps.RootCtx); err != nil {
 		return domain.SchedulerRunSummary{}, nil, err
 	}
-	loader, trigger, err := s.deps.LoadLoaderForRun(ctx, request.SchedulerID, request.TriggerID)
+	scheduler, trigger, err := s.deps.LoadSchedulerForRun(ctx, request.SchedulerID, request.TriggerID)
 	if err != nil {
 		return domain.SchedulerRunSummary{}, nil, err
 	}
-	prepared, err := s.deps.Prepare(ctx, loader, trigger, request.PayloadJSON, "manual", RunOptions{})
+	prepared, err := s.deps.Prepare(ctx, scheduler, trigger, request.PayloadJSON, "manual", RunOptions{})
 	if err != nil {
 		return domain.SchedulerRunSummary{}, nil, err
 	}
@@ -113,9 +113,9 @@ func (s *schedulerRunSupervisor) start(ctx context.Context, request SchedulerRun
 		}
 	}
 	active := &activeSchedulerRun{
-		loaderID: request.SchedulerID,
-		cancel:   cancel,
-		done:     make(chan struct{}),
+		schedulerID: request.SchedulerID,
+		cancel:      cancel,
+		done:        make(chan struct{}),
 	}
 	s.register(prepared.Run.ID, active)
 	go s.execute(runCtx, cleanup, prepared, active)
@@ -129,30 +129,30 @@ func (s *schedulerRunSupervisor) execute(ctx context.Context, cleanup func(), pr
 	s.unregister(prepared.Run.ID, active)
 }
 
-func (s *schedulerRunSupervisor) Get(ctx context.Context, loaderID, runID string) (domain.SchedulerRunSummary, error) {
+func (s *schedulerRunSupervisor) Get(ctx context.Context, schedulerID, runID string) (domain.SchedulerRunSummary, error) {
 	if s.deps.Store == nil {
 		return domain.SchedulerRunSummary{}, fmt.Errorf("scheduler run store is unavailable")
 	}
-	return s.deps.Store.GetLoaderRun(ctx, strings.TrimSpace(loaderID), strings.TrimSpace(runID))
+	return s.deps.Store.GetSchedulerRun(ctx, strings.TrimSpace(schedulerID), strings.TrimSpace(runID))
 }
 
-func (s *schedulerRunSupervisor) List(ctx context.Context, loaderID string, limit int) ([]domain.SchedulerRunSummary, error) {
+func (s *schedulerRunSupervisor) List(ctx context.Context, schedulerID string, limit int) ([]domain.SchedulerRunSummary, error) {
 	if s.deps.Store == nil {
 		return nil, fmt.Errorf("scheduler run store is unavailable")
 	}
-	return s.deps.Store.ListLoaderRuns(ctx, strings.TrimSpace(loaderID), limit)
+	return s.deps.Store.ListSchedulerRuns(ctx, strings.TrimSpace(schedulerID), limit)
 }
 
-func (s *schedulerRunSupervisor) Stop(ctx context.Context, loaderID, runID, reason string) (domain.SchedulerRunSummary, bool, error) {
-	loaderID = strings.TrimSpace(loaderID)
+func (s *schedulerRunSupervisor) Stop(ctx context.Context, schedulerID, runID, reason string) (domain.SchedulerRunSummary, bool, error) {
+	schedulerID = strings.TrimSpace(schedulerID)
 	runID = strings.TrimSpace(runID)
-	active := s.lookup(loaderID, runID)
+	active := s.lookup(schedulerID, runID)
 	if active == nil {
-		current, err := s.Get(ctx, loaderID, runID)
+		current, err := s.Get(ctx, schedulerID, runID)
 		if err != nil || SchedulerRunStatusIsTerminal(current.Status) {
 			return current, false, err
 		}
-		id := loaderID + "/" + runID
+		id := schedulerID + "/" + runID
 		return current, false, domain.ResourceError(domain.ErrFailedPrecondition, "scheduler run", id, fmt.Sprintf("scheduler run %s is not active in this process", id), nil)
 	}
 	reason = strings.TrimSpace(reason)
@@ -183,11 +183,11 @@ func (s *schedulerRunSupervisor) unregister(runID string, active *activeSchedule
 	}
 }
 
-func (s *schedulerRunSupervisor) lookup(loaderID, runID string) *activeSchedulerRun {
+func (s *schedulerRunSupervisor) lookup(schedulerID, runID string) *activeSchedulerRun {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	active := s.active[runID]
-	if active == nil || active.loaderID != loaderID {
+	if active == nil || active.schedulerID != schedulerID {
 		return nil
 	}
 	return active
@@ -201,7 +201,7 @@ func (s *schedulerRunSupervisor) runTimeout(override time.Duration) time.Duratio
 }
 
 func SchedulerRunStatusIsTerminal(status string) bool {
-	switch domain.NormalizeLoaderRunStatus(status) {
+	switch domain.NormalizeSchedulerRunStatus(status) {
 	case domain.SchedulerRunStatusSucceeded, domain.SchedulerRunStatusFailed, domain.SchedulerRunStatusCanceled, domain.SchedulerRunStatusSkipped:
 		return true
 	default:

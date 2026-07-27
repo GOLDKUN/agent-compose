@@ -13,16 +13,16 @@ type EventTarget struct {
 
 func CollectEventTargets(items []domain.Scheduler, topic string) []EventTarget {
 	targets := make([]EventTarget, 0)
-	for _, loader := range items {
-		if !loader.Summary.Enabled {
+	for _, scheduler := range items {
+		if !scheduler.Summary.Enabled {
 			continue
 		}
-		for _, trigger := range loader.Triggers {
+		for _, trigger := range scheduler.Triggers {
 			if !trigger.Enabled || trigger.Kind != domain.SchedulerTriggerKindEvent || !domain.SchedulerTriggerTopicMatches(trigger.Topic, topic) {
 				continue
 			}
 			targets = append(targets, EventTarget{
-				Scheduler: loader,
+				Scheduler: scheduler,
 				Trigger:   trigger,
 			})
 		}
@@ -37,15 +37,15 @@ func DedupeWebhookEventTargets(event domain.SchedulerTopicEvent, targets []Event
 	seen := map[string]struct{}{}
 	deduped := make([]EventTarget, 0, len(targets))
 	for _, target := range targets {
-		loaderID := strings.TrimSpace(target.Scheduler.Summary.ID)
-		if loaderID == "" {
+		schedulerID := strings.TrimSpace(target.Scheduler.Summary.ID)
+		if schedulerID == "" {
 			deduped = append(deduped, target)
 			continue
 		}
-		if _, ok := seen[loaderID]; ok {
+		if _, ok := seen[schedulerID]; ok {
 			continue
 		}
-		seen[loaderID] = struct{}{}
+		seen[schedulerID] = struct{}{}
 		deduped = append(deduped, target)
 	}
 	return deduped
@@ -53,8 +53,8 @@ func DedupeWebhookEventTargets(event domain.SchedulerTopicEvent, targets []Event
 
 func AnyTargetBusy(targets []EventTarget, running map[string]int) bool {
 	for _, target := range targets {
-		loaderID := strings.TrimSpace(target.Scheduler.Summary.ID)
-		if domain.NormalizeLoaderConcurrencyPolicy(target.Scheduler.Summary.ConcurrencyPolicy) != domain.SchedulerConcurrencyPolicyParallel && running[loaderID] > 0 {
+		schedulerID := strings.TrimSpace(target.Scheduler.Summary.ID)
+		if domain.NormalizeSchedulerConcurrencyPolicy(target.Scheduler.Summary.ConcurrencyPolicy) != domain.SchedulerConcurrencyPolicyParallel && running[schedulerID] > 0 {
 			return true
 		}
 	}

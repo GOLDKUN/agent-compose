@@ -10,15 +10,15 @@ import (
 )
 
 func upsertNativeTestScheduler(ctx context.Context, store *ConfigStore, scheduler domain.Scheduler) (domain.Scheduler, error) {
-	projectID := strings.TrimSpace(scheduler.Summary.ManagedProjectID)
+	projectID := strings.TrimSpace(scheduler.Summary.ProjectID)
 	if projectID == "" {
 		projectID = "test-project-" + scheduler.Summary.ID
 	}
-	agentName := strings.TrimSpace(scheduler.Summary.ManagedAgentName)
+	agentName := strings.TrimSpace(scheduler.Summary.AgentName)
 	if agentName == "" {
 		agentName = "worker"
 	}
-	schedulerName := strings.TrimSpace(scheduler.Summary.ManagedSchedulerID)
+	schedulerName := strings.TrimSpace(scheduler.Summary.ProjectSchedulerID)
 	if schedulerName == "" {
 		schedulerName = scheduler.Summary.ID
 	}
@@ -76,10 +76,10 @@ func upsertNativeTestScheduler(ctx context.Context, store *ConfigStore, schedule
 	if err != nil {
 		return domain.Scheduler{}, err
 	}
-	if _, err := store.ReplaceLoaderTriggers(ctx, record.ID, scheduler.Triggers); err != nil {
+	if _, err := store.ReplaceSchedulerTriggers(ctx, record.ID, scheduler.Triggers); err != nil {
 		return domain.Scheduler{}, err
 	}
-	return store.GetLoader(ctx, record.ID)
+	return store.GetScheduler(ctx, record.ID)
 }
 
 func testEnvSpec(items []domain.SandboxEnvVar) map[string]compose.EnvVarSpec {

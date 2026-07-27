@@ -22,11 +22,11 @@ func TestRunExecutorCancellationWritesCanceledTerminalState(t *testing.T) {
 		Store:       store,
 		Engine:      engine,
 		HostFactory: func(domain.Scheduler, RuntimeExecutionContext, TriggerEventMetadata) RunHost { return nil },
-		ArtifactsDir: func(loaderID, runID string) string {
-			return filepath.Join(artifactsDir, loaderID, runID)
+		ArtifactsDir: func(schedulerID, runID string) string {
+			return filepath.Join(artifactsDir, schedulerID, runID)
 		},
 		WriteArtifact: func(string, string, string) error { return nil },
-		AddLoaderEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
+		AddSchedulerEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
 			events = append(events, eventType)
 			return nil
 		},
@@ -64,7 +64,7 @@ func TestSchedulerRunSupervisorRunReturnsFinalResult(t *testing.T) {
 	supervisor := newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
 		RootCtx: context.Background(),
 		Store:   store,
-		LoadLoaderForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
+		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1"}}, nil, nil
 		},
 		Prepare: func(_ context.Context, loader domain.Scheduler, _ *domain.SchedulerTrigger, _, _ string, _ RunOptions) (PreparedRun, error) {
@@ -88,7 +88,7 @@ func TestSchedulerRunSupervisorRunReturnsFinalResult(t *testing.T) {
 func TestSchedulerRunSupervisorRejectsEmptyTriggerWithoutPreparingRun(t *testing.T) {
 	prepareCalls := 0
 	supervisor := newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
-		LoadLoaderForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
+		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			t.Fatal("empty trigger must be rejected before loading")
 			return domain.Scheduler{}, nil, nil
 		},
@@ -107,7 +107,7 @@ func TestSchedulerRunSupervisorTimeoutCancelsExecution(t *testing.T) {
 	supervisor := newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
 		RootCtx: context.Background(),
 		Store:   store,
-		LoadLoaderForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
+		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1"}}, nil, nil
 		},
 		Prepare: func(_ context.Context, loader domain.Scheduler, _ *domain.SchedulerTrigger, _, _ string, _ RunOptions) (PreparedRun, error) {
@@ -135,7 +135,7 @@ func TestSchedulerRunSupervisorStopWaitsForExecutorTerminalState(t *testing.T) {
 	supervisor := newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
 		RootCtx: context.Background(),
 		Store:   store,
-		LoadLoaderForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
+		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1"}}, nil, nil
 		},
 		Prepare: func(_ context.Context, loader domain.Scheduler, _ *domain.SchedulerTrigger, payloadJSON, source string, _ RunOptions) (PreparedRun, error) {
@@ -189,11 +189,11 @@ func TestSchedulerRunSupervisorStopsQJSPendingPromise(t *testing.T) {
 		HostFactory: func(domain.Scheduler, RuntimeExecutionContext, TriggerEventMetadata) RunHost {
 			return host
 		},
-		ArtifactsDir: func(loaderID, runID string) string {
-			return filepath.Join(artifactsDir, loaderID, runID)
+		ArtifactsDir: func(schedulerID, runID string) string {
+			return filepath.Join(artifactsDir, schedulerID, runID)
 		},
 		WriteArtifact: func(string, string, string) error { return nil },
-		AddLoaderEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
+		AddSchedulerEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
 			eventMu.Lock()
 			defer eventMu.Unlock()
 			events = append(events, eventType)
@@ -212,7 +212,7 @@ scheduler.interval("pending", async function pending() {
 	supervisor := newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
 		RootCtx: context.Background(),
 		Store:   store,
-		LoadLoaderForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
+		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return loader, trigger, nil
 		},
 		Prepare: executor.Prepare,
@@ -256,7 +256,7 @@ func TestSchedulerRunSupervisorRootContextStopsBackgroundRun(t *testing.T) {
 	supervisor := newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
 		RootCtx: root,
 		Store:   store,
-		LoadLoaderForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
+		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1"}}, nil, nil
 		},
 		Prepare: func(_ context.Context, loader domain.Scheduler, _ *domain.SchedulerTrigger, _, _ string, _ RunOptions) (PreparedRun, error) {
@@ -308,17 +308,17 @@ type cancelRunStore struct {
 	lastError string
 }
 
-func (s *cancelRunStore) CreateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *cancelRunStore) CreateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.created = append(s.created, run)
 	return nil
 }
 
-func (s *cancelRunStore) UpdateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *cancelRunStore) UpdateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.updated = append(s.updated, run)
 	return nil
 }
 
-func (s *cancelRunStore) UpdateLoaderLastError(_ context.Context, _ string, lastError string) error {
+func (s *cancelRunStore) UpdateSchedulerLastError(_ context.Context, _ string, lastError string) error {
 	s.lastError = lastError
 	return nil
 }
@@ -344,36 +344,36 @@ func (s *supervisorRunStore) set(run domain.SchedulerRunSummary) {
 	s.runs[run.SchedulerID+"/"+run.ID] = run
 }
 
-func (s *supervisorRunStore) CreateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *supervisorRunStore) CreateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.set(run)
 	return nil
 }
 
-func (s *supervisorRunStore) UpdateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *supervisorRunStore) UpdateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.set(run)
 	return nil
 }
 
-func (*supervisorRunStore) UpdateLoaderLastError(context.Context, string, string) error {
+func (*supervisorRunStore) UpdateSchedulerLastError(context.Context, string, string) error {
 	return nil
 }
 
-func (s *supervisorRunStore) GetLoaderRun(_ context.Context, loaderID, runID string) (domain.SchedulerRunSummary, error) {
+func (s *supervisorRunStore) GetSchedulerRun(_ context.Context, schedulerID, runID string) (domain.SchedulerRunSummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	run, ok := s.runs[loaderID+"/"+runID]
+	run, ok := s.runs[schedulerID+"/"+runID]
 	if !ok {
-		return domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrNotFound, "scheduler run", loaderID+"/"+runID, "scheduler run not found", nil)
+		return domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrNotFound, "scheduler run", schedulerID+"/"+runID, "scheduler run not found", nil)
 	}
 	return run, nil
 }
 
-func (s *supervisorRunStore) ListLoaderRuns(_ context.Context, loaderID string, limit int) ([]domain.SchedulerRunSummary, error) {
+func (s *supervisorRunStore) ListSchedulerRuns(_ context.Context, schedulerID string, limit int) ([]domain.SchedulerRunSummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	runs := make([]domain.SchedulerRunSummary, 0, len(s.runs))
 	for _, run := range s.runs {
-		if run.SchedulerID == loaderID {
+		if run.SchedulerID == schedulerID {
 			runs = append(runs, run)
 		}
 	}

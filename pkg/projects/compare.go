@@ -50,9 +50,9 @@ func SameSkills(a, b []domain.AgentSkill) bool {
 	return true
 }
 
-func SameLoaderTriggerSpecs(a, b []domain.SchedulerTrigger) bool {
-	a = NormalizeComparableLoaderTriggers(a)
-	b = NormalizeComparableLoaderTriggers(b)
+func SameSchedulerTriggerSpecs(a, b []domain.SchedulerTrigger) bool {
+	a = NormalizeComparableSchedulerTriggers(a)
+	b = NormalizeComparableSchedulerTriggers(b)
 	if len(a) != len(b) {
 		return false
 	}
@@ -69,7 +69,7 @@ func SameLoaderTriggerSpecs(a, b []domain.SchedulerTrigger) bool {
 	return true
 }
 
-func NormalizeComparableLoaderTriggers(items []domain.SchedulerTrigger) []domain.SchedulerTrigger {
+func NormalizeComparableSchedulerTriggers(items []domain.SchedulerTrigger) []domain.SchedulerTrigger {
 	cloned := append([]domain.SchedulerTrigger(nil), items...)
 	for i := range cloned {
 		cloned[i].ID = strings.TrimSpace(cloned[i].ID)
@@ -100,9 +100,9 @@ func AgentDefinitionUnchanged(existing, current domain.AgentDefinition) bool {
 		SameSandboxEnvItems(existing.EnvItems, current.EnvItems) &&
 		SameCapsetIDs(existing.CapsetIDs, current.CapsetIDs) &&
 		SameSkills(existing.Skills, current.Skills) &&
-		existing.ManagedProjectID == current.ManagedProjectID &&
-		existing.ManagedProjectRevision == current.ManagedProjectRevision &&
-		existing.ManagedAgentName == current.ManagedAgentName
+		existing.ProjectID == current.ProjectID &&
+		existing.ProjectRevision == current.ProjectRevision &&
+		existing.AgentName == current.AgentName
 }
 
 func SchedulerRecordUnchanged(existing, current domain.ProjectSchedulerRecord) bool {
@@ -125,14 +125,14 @@ func SchedulerDefinitionUnchanged(existing, current domain.Scheduler) bool {
 		existing.Summary.DefaultAgent == current.Summary.DefaultAgent &&
 		existing.Summary.SandboxPolicy == current.Summary.SandboxPolicy &&
 		existing.Summary.ConcurrencyPolicy == current.Summary.ConcurrencyPolicy &&
-		existing.Summary.ManagedProjectID == current.Summary.ManagedProjectID &&
-		existing.Summary.ManagedRevision == current.Summary.ManagedRevision &&
-		existing.Summary.ManagedAgentName == current.Summary.ManagedAgentName &&
-		existing.Summary.ManagedSchedulerID == current.Summary.ManagedSchedulerID &&
+		existing.Summary.ProjectID == current.Summary.ProjectID &&
+		existing.Summary.ProjectRevision == current.Summary.ProjectRevision &&
+		existing.Summary.AgentName == current.Summary.AgentName &&
+		existing.Summary.ProjectSchedulerID == current.Summary.ProjectSchedulerID &&
 		existing.Script == current.Script &&
 		SameSandboxEnvItems(existing.EnvItems, current.EnvItems) &&
 		SameCapsetIDs(existing.Summary.CapsetIDs, current.Summary.CapsetIDs) &&
-		SameLoaderTriggerSpecs(existing.Triggers, current.Triggers)
+		SameSchedulerTriggerSpecs(existing.Triggers, current.Triggers)
 }
 
 func ProjectRecordUnchanged(existing, current domain.ProjectRecord) bool {

@@ -192,14 +192,14 @@ func NewConfig(di do.Injector) (*Config, error) {
 			imagePullTimeout = parsed
 		}
 	}
-	loaderRunTimeout := 20 * time.Minute
+	schedulerRunTimeout := 20 * time.Minute
 	if raw := os.Getenv("LOADER_RUN_TIMEOUT"); raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
 			logger.Warn("failed to parse LOADER_RUN_TIMEOUT", "value", raw, "error", err)
 		} else if parsed <= 0 {
 			logger.Warn("ignored non-positive LOADER_RUN_TIMEOUT", "value", raw)
 		} else {
-			loaderRunTimeout = parsed
+			schedulerRunTimeout = parsed
 		}
 	}
 	runtimeDriver := os.Getenv("RUNTIME_DRIVER")
@@ -457,7 +457,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		CodexStreamIdleTimeout:     codexRuntime.streamIdleTimeout,
 		RuntimeBaseURL:             runtimeBaseURL,
 		AgentTimeout:               agentTimeout,
-		SchedulerRunTimeout:        loaderRunTimeout,
+		SchedulerRunTimeout:        schedulerRunTimeout,
 		RuntimeDriver:              runtimeDriver,
 		BoxliteHome:                boxliteHome,
 		BoxliteRuntimeDir:          boxliteRuntimeDir,

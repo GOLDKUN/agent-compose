@@ -105,8 +105,8 @@ func (h *coverageEngineHost) PublishEvent(_ context.Context, topic, payloadJSON 
 
 func TestQJSSchedulerEngineBindingCoverageWorkflow(t *testing.T) {
 	engine := &QJSSchedulerEngine{}
-	if built, err := NewLoaderEngine(nil); err != nil || built == nil {
-		t.Fatalf("NewLoaderEngine built=%#v err=%v", built, err)
+	if built, err := NewSchedulerEngine(nil); err != nil || built == nil {
+		t.Fatalf("NewSchedulerEngine built=%#v err=%v", built, err)
 	}
 	if got := EngineMaxExecutionTime(context.Background()); got <= 0 {
 		t.Fatalf("EngineMaxExecutionTime without deadline = %d", got)
@@ -360,7 +360,7 @@ func TestE2EQJSSchedulerEngineValidationCoverageWorkflow(t *testing.T) {
 }
 
 func TestLoaderSandboxEnvDecodingEdgeBranches(t *testing.T) {
-	items, err := loaderSandboxEnvItems(map[string]any{
+	items, err := schedulerSandboxEnvItems(map[string]any{
 		" BOOL ":         true,
 		"FLOAT":          float64(12.50),
 		"OPENAI_API_KEY": map[string]any{"value": "secret", "secret": false},
@@ -369,7 +369,7 @@ func TestLoaderSandboxEnvDecodingEdgeBranches(t *testing.T) {
 		" ":              "ignored",
 	})
 	if err != nil {
-		t.Fatalf("loaderSandboxEnvItems map returned error: %v", err)
+		t.Fatalf("schedulerSandboxEnvItems map returned error: %v", err)
 	}
 	env := domain.SandboxEnvMap(items)
 	if env["BOOL"] != "true" || env["FLOAT"] != "12.5" || env["OPENAI_API_KEY"] != "secret" || env["NUMBER_SECRET"] != "7" {
@@ -382,13 +382,13 @@ func TestLoaderSandboxEnvDecodingEdgeBranches(t *testing.T) {
 		t.Fatalf("secret flags were not decoded: %#v", items)
 	}
 
-	arrayItems, err := loaderSandboxEnvItems([]any{
+	arrayItems, err := schedulerSandboxEnvItems([]any{
 		map[string]any{"name": "A", "value": nil},
 		map[string]any{"name": "B", "value": false, "secret": "false"},
 		map[string]any{"name": "C_TOKEN", "value": map[string]any{"value": "nested"}},
 	})
 	if err != nil {
-		t.Fatalf("loaderSandboxEnvItems array returned error: %v", err)
+		t.Fatalf("schedulerSandboxEnvItems array returned error: %v", err)
 	}
 	arrayEnv := domain.SandboxEnvMap(arrayItems)
 	if arrayEnv["A"] != "" || arrayEnv["B"] != "false" || arrayEnv["C_TOKEN"] != "nested" || !findEnvSecretForTest(arrayItems, "C_TOKEN") {
@@ -408,19 +408,19 @@ func TestLoaderSandboxEnvDecodingEdgeBranches(t *testing.T) {
 	}
 	for _, tc := range errorCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := loaderSandboxEnvItems(tc.value)
+			_, err := schedulerSandboxEnvItems(tc.value)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("loaderSandboxEnvItems(%#v) error = %v, want %q", tc.value, err, tc.want)
+				t.Fatalf("schedulerSandboxEnvItems(%#v) error = %v, want %q", tc.value, err, tc.want)
 			}
 		})
 	}
 
-	if secret := loaderSecretEnvName("plain"); secret {
+	if secret := schedulerSecretEnvName("plain"); secret {
 		t.Fatalf("plain env name should not be secret")
 	}
 	for _, name := range []string{"password", "ACCESS_TOKEN", "CLIENT_SECRET", "API_KEY", "LLM_API_KEY"} {
-		if !loaderSecretEnvName(name) {
-			t.Fatalf("loaderSecretEnvName(%q) = false", name)
+		if !schedulerSecretEnvName(name) {
+			t.Fatalf("schedulerSecretEnvName(%q) = false", name)
 		}
 	}
 }

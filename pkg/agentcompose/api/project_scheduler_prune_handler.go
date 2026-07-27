@@ -28,14 +28,14 @@ func (h *ProjectHandler) PruneSchedulerRuns(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	loaderIDs := make([]string, 0, len(schedulerRecords))
+	schedulerIDs := make([]string, 0, len(schedulerRecords))
 	for _, scheduler := range schedulerRecords {
-		if loaderID := strings.TrimSpace(scheduler.ID); loaderID != "" {
-			loaderIDs = append(loaderIDs, loaderID)
+		if schedulerID := strings.TrimSpace(scheduler.ID); schedulerID != "" {
+			schedulerIDs = append(schedulerIDs, schedulerID)
 		}
 	}
 	result, err := h.schedulerPrune.PruneSchedulerRuns(ctx, schedulers.SchedulerRunPruneRequest{
-		SchedulerIDs: loaderIDs,
+		SchedulerIDs: schedulerIDs,
 		TriggerID:    strings.TrimSpace(req.Msg.GetTriggerId()),
 		Statuses:     statuses,
 		OlderThan:    olderThan,

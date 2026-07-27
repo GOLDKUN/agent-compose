@@ -214,30 +214,30 @@ type schedulerRunPruneStoreFake struct {
 	events      []domain.SchedulerEvent
 }
 
-func (s *schedulerRunPruneStoreFake) ListInterruptedLoaderRuns(context.Context, time.Time) ([]domain.SchedulerRunSummary, error) {
+func (s *schedulerRunPruneStoreFake) ListInterruptedSchedulerRuns(context.Context, time.Time) ([]domain.SchedulerRunSummary, error) {
 	return append([]domain.SchedulerRunSummary(nil), s.interrupted...), nil
 }
 
-func (s *schedulerRunPruneStoreFake) UpdateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *schedulerRunPruneStoreFake) UpdateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.updatedRuns = append(s.updatedRuns, run)
 	return nil
 }
 
-func (s *schedulerRunPruneStoreFake) AddLoaderEvent(_ context.Context, event domain.SchedulerEvent) error {
+func (s *schedulerRunPruneStoreFake) AddSchedulerEvent(_ context.Context, event domain.SchedulerEvent) error {
 	s.events = append(s.events, event)
 	return nil
 }
 
-func (s *schedulerRunPruneStoreFake) ListLoaderRunsForPrune(_ context.Context, filter SchedulerRunPruneFilter) ([]domain.SchedulerRunSummary, error) {
+func (s *schedulerRunPruneStoreFake) ListSchedulerRunsForPrune(_ context.Context, filter SchedulerRunPruneFilter) ([]domain.SchedulerRunSummary, error) {
 	s.filter = filter
 	return append([]domain.SchedulerRunSummary(nil), s.runs...), nil
 }
 
-func (s *schedulerRunPruneStoreFake) CountLoaderRunPruneData(context.Context, []SchedulerRunKey) (SchedulerRunPruneDatabaseStats, error) {
+func (s *schedulerRunPruneStoreFake) CountSchedulerRunPruneData(context.Context, []SchedulerRunKey) (SchedulerRunPruneDatabaseStats, error) {
 	return s.counted, s.countErr
 }
 
-func (s *schedulerRunPruneStoreFake) DeleteLoaderRunPruneData(_ context.Context, keys []SchedulerRunKey) (SchedulerRunPruneDatabaseResult, error) {
+func (s *schedulerRunPruneStoreFake) DeleteSchedulerRunPruneData(_ context.Context, keys []SchedulerRunKey) (SchedulerRunPruneDatabaseResult, error) {
 	s.deleteCalls++
 	s.deletedKeys = append([]SchedulerRunKey(nil), keys...)
 	removedKeys := s.removedKeys
@@ -256,13 +256,13 @@ type schedulerRunArtifactPrunerFake struct {
 	removed       []string
 }
 
-func (p *schedulerRunArtifactPrunerFake) InspectRunArtifacts(loaderID, runID, _ string) (SchedulerRunArtifactInfo, error) {
-	key := loaderID + "/" + runID
+func (p *schedulerRunArtifactPrunerFake) InspectRunArtifacts(schedulerID, runID, _ string) (SchedulerRunArtifactInfo, error) {
+	key := schedulerID + "/" + runID
 	return p.inspected[key], p.inspectErrors[key]
 }
 
-func (p *schedulerRunArtifactPrunerFake) RemoveRunArtifacts(loaderID, runID, _ string) (SchedulerRunArtifactInfo, error) {
-	key := loaderID + "/" + runID
+func (p *schedulerRunArtifactPrunerFake) RemoveRunArtifacts(schedulerID, runID, _ string) (SchedulerRunArtifactInfo, error) {
+	key := schedulerID + "/" + runID
 	p.removed = append(p.removed, key)
 	return p.removeResults[key], p.removeErrors[key]
 }

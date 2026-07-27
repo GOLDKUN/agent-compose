@@ -2,7 +2,7 @@ CREATE TEMP TABLE migration_000006_guard(reason TEXT);
 CREATE TEMP TRIGGER migration_000006_abort
 BEFORE INSERT ON migration_000006_guard
 BEGIN
-    SELECT RAISE(ABORT, 'scheduler migration requires agent-compose-legacy-migrate');
+    SELECT RAISE(ABORT, 'scheduler migration requires agent-compose-migrate');
 END;
 
 INSERT INTO migration_000006_guard
@@ -137,7 +137,7 @@ ALTER TABLE loader_state RENAME TO scheduler_state_v1;
 ALTER TABLE loader_binding RENAME TO scheduler_sandbox_binding_v1;
 
 CREATE TABLE project_scheduler (
-    id TEXT PRIMARY KEY,
+    id TEXT NOT NULL PRIMARY KEY CHECK(trim(id) <> ''),
     short_id TEXT NOT NULL DEFAULT '',
     project_id TEXT NOT NULL,
     scheduler_id TEXT NOT NULL,

@@ -10,18 +10,18 @@ import (
 	"agent-compose/pkg/schedulers"
 )
 
-func (s *loaderStore) ListLoaderRunsForPrune(ctx context.Context, filter schedulers.SchedulerRunPruneFilter) ([]domain.SchedulerRunSummary, error) {
-	loaderIDs := normalizedLoaderRunPageIDs(filter.SchedulerIDs)
-	if len(loaderIDs) == 0 {
+func (s *schedulerStore) ListSchedulerRunsForPrune(ctx context.Context, filter schedulers.SchedulerRunPruneFilter) ([]domain.SchedulerRunSummary, error) {
+	schedulerIDs := normalizedSchedulerRunPageIDs(filter.SchedulerIDs)
+	if len(schedulerIDs) == 0 {
 		return []domain.SchedulerRunSummary{}, nil
 	}
-	placeholders := make([]string, len(loaderIDs))
-	args := make([]any, 0, len(loaderIDs)+len(filter.Statuses)+4)
-	for index, loaderID := range loaderIDs {
+	placeholders := make([]string, len(schedulerIDs))
+	args := make([]any, 0, len(schedulerIDs)+len(filter.Statuses)+4)
+	for index, schedulerID := range schedulerIDs {
 		placeholders[index] = "?"
-		args = append(args, loaderID)
+		args = append(args, schedulerID)
 	}
-	query := schedulers.SelectLoaderRunSQL() + ` WHERE scheduler_id IN (` + strings.Join(placeholders, ",") + `) AND trigger_id <> ''`
+	query := schedulers.SelectSchedulerRunSQL() + ` WHERE scheduler_id IN (` + strings.Join(placeholders, ",") + `) AND trigger_id <> ''`
 	if triggerID := strings.TrimSpace(filter.TriggerID); triggerID != "" {
 		query += ` AND trigger_id = ?`
 		args = append(args, triggerID)
@@ -47,7 +47,7 @@ func (s *loaderStore) ListLoaderRunsForPrune(ctx context.Context, filter schedul
 	defer func() { _ = rows.Close() }()
 	result := make([]domain.SchedulerRunSummary, 0)
 	for rows.Next() {
-		run, scanErr := schedulers.ScanLoaderRun(rows.Scan)
+		run, scanErr := schedulers.ScanSchedulerRun(rows.Scan)
 		if scanErr != nil {
 			return nil, scanErr
 		}
@@ -59,8 +59,8 @@ func (s *loaderStore) ListLoaderRunsForPrune(ctx context.Context, filter schedul
 	return result, nil
 }
 
-func (s *loaderStore) CountLoaderRunPruneData(ctx context.Context, keys []schedulers.SchedulerRunKey) (schedulers.SchedulerRunPruneDatabaseStats, error) {
-	keys = normalizedLoaderRunKeys(keys)
+func (s *schedulerStore) CountSchedulerRunPruneData(ctx context.Context, keys []schedulers.SchedulerRunKey) (schedulers.SchedulerRunPruneDatabaseStats, error) {
+	keys = normalizedSchedulerRunKeys(keys)
 	var stats schedulers.SchedulerRunPruneDatabaseStats
 	for _, key := range keys {
 		eligible, err := schedulerRunPruneKeyIsEligible(ctx, s.db, key)
@@ -70,7 +70,7 @@ func (s *loaderStore) CountLoaderRunPruneData(ctx context.Context, keys []schedu
 		if !eligible {
 			continue
 		}
-		var loaderEvents, deliveries, sandboxLinks, runs int64
+		var schedulerEvents, deliveries, sandboxLinks, runs int64
 		err = s.db.QueryRowContext(ctx, `SELECT
 			(SELECT COUNT(*) FROM scheduler_event WHERE scheduler_id = ? AND scheduler_run_id = ?),
 			(SELECT COUNT(*) FROM event_delivery WHERE scheduler_id = ? AND scheduler_run_id = ?),
@@ -80,11 +80,11 @@ func (s *loaderStore) CountLoaderRunPruneData(ctx context.Context, keys []schedu
 			key.SchedulerID, key.RunID,
 			key.SchedulerID, key.RunID,
 			key.SchedulerID, key.RunID,
-		).Scan(&loaderEvents, &deliveries, &sandboxLinks, &runs)
+		).Scan(&schedulerEvents, &deliveries, &sandboxLinks, &runs)
 		if err != nil {
 			return schedulers.SchedulerRunPruneDatabaseStats{}, fmt.Errorf("count scheduler run prune data %s/%s: %w", key.SchedulerID, key.RunID, err)
 		}
-		stats.SchedulerEvents += uint64(loaderEvents)
+		stats.SchedulerEvents += uint64(schedulerEvents)
 		stats.EventDeliveries += uint64(deliveries)
 		stats.EventSandboxLinks += uint64(sandboxLinks)
 		stats.Runs += uint64(runs)
@@ -92,8 +92,8 @@ func (s *loaderStore) CountLoaderRunPruneData(ctx context.Context, keys []schedu
 	return stats, nil
 }
 
-func (s *loaderStore) DeleteLoaderRunPruneData(ctx context.Context, keys []schedulers.SchedulerRunKey) (schedulers.SchedulerRunPruneDatabaseResult, error) {
-	keys = normalizedLoaderRunKeys(keys)
+func (s *schedulerStore) DeleteSchedulerRunPruneData(ctx context.Context, keys []schedulers.SchedulerRunKey) (schedulers.SchedulerRunPruneDatabaseResult, error) {
+	keys = normalizedSchedulerRunKeys(keys)
 	if len(keys) == 0 {
 		return schedulers.SchedulerRunPruneDatabaseResult{}, nil
 	}
@@ -104,7 +104,7 @@ func (s *loaderStore) DeleteLoaderRunPruneData(ctx context.Context, keys []sched
 	defer func() { _ = tx.Rollback() }()
 	var result schedulers.SchedulerRunPruneDatabaseResult
 	for _, key := range keys {
-		removed, err := deleteLoaderRunPruneRows(ctx, tx, key, &result.Stats)
+		removed, err := deleteSchedulerRunPruneRows(ctx, tx, key, &result.Stats)
 		if err != nil {
 			return schedulers.SchedulerRunPruneDatabaseResult{}, err
 		}
@@ -118,7 +118,7 @@ func (s *loaderStore) DeleteLoaderRunPruneData(ctx context.Context, keys []sched
 	return result, nil
 }
 
-func deleteLoaderRunPruneRows(ctx context.Context, tx *sql.Tx, key schedulers.SchedulerRunKey, stats *schedulers.SchedulerRunPruneDatabaseStats) (bool, error) {
+func deleteSchedulerRunPruneRows(ctx context.Context, tx *sql.Tx, key schedulers.SchedulerRunKey, stats *schedulers.SchedulerRunPruneDatabaseStats) (bool, error) {
 	eligible, err := schedulerRunPruneKeyIsEligible(ctx, tx, key)
 	if err != nil {
 		return false, err
@@ -173,7 +173,7 @@ func schedulerRunPruneKeyIsEligible(ctx context.Context, queryer schedulerRunPru
 	return eligible != 0, nil
 }
 
-func normalizedLoaderRunKeys(keys []schedulers.SchedulerRunKey) []schedulers.SchedulerRunKey {
+func normalizedSchedulerRunKeys(keys []schedulers.SchedulerRunKey) []schedulers.SchedulerRunKey {
 	seen := make(map[schedulers.SchedulerRunKey]struct{}, len(keys))
 	result := make([]schedulers.SchedulerRunKey, 0, len(keys))
 	for _, key := range keys {

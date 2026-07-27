@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"agent-compose/cmd/agent-compose-legacy-migrate/migrate"
+	"agent-compose/cmd/agent-compose-migrate/migrate"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) int {
-	flags := flag.NewFlagSet("agent-compose-legacy-migrate", flag.ContinueOnError)
+	flags := flag.NewFlagSet("agent-compose-migrate", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	var options migrate.Options
 	flags.StringVar(&options.Source, "source", "", "source data root (required; opened read-only)")
@@ -39,7 +39,10 @@ func run(ctx context.Context, args []string) int {
 			return 1
 		}
 	} else {
-		fmt.Fprintln(os.Stdout, report.Text())
+		if _, writeErr := fmt.Fprintln(os.Stdout, report.Text()); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "write migration report: %v\n", writeErr)
+			return 1
+		}
 	}
 	if err != nil {
 		if !options.JSON && !errors.Is(err, migrate.ErrReported) {

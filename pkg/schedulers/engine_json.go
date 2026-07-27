@@ -89,7 +89,7 @@ func (e *jsValueEncoder) Encode(value *qjs.Value) (string, error) {
 	return raw, nil
 }
 
-func loaderResultJSON(encoder *jsValueEncoder, value *qjs.Value) (string, bool, error) {
+func schedulerResultJSON(encoder *jsValueEncoder, value *qjs.Value) (string, bool, error) {
 	if value == nil || value.IsUndefined() {
 		return "", false, nil
 	}

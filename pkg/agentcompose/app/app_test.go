@@ -109,7 +109,7 @@ func TestStartBackgroundConstructsCleanupBeforeLoader(t *testing.T) {
 	})
 	do.Override(di, func(di do.Injector) (*schedulers.Controller, error) {
 		constructionOrder = append(constructionOrder, "loader")
-		return NewLoaderController(di)
+		return NewSchedulerController(di)
 	})
 
 	if err := StartBackground(di); err != nil {

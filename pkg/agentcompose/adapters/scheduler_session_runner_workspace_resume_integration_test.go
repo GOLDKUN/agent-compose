@@ -58,7 +58,7 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 	loader = createNativeTestScheduler(t, ctx, bridge.configDB, loader)
 	request := domain.SchedulerAgentRequest{BindingTriggerID: triggerID}
 	publisher := &loaderSessionPublisherFake{}
-	runner := NewLoaderSandboxRunner(
+	runner := NewSchedulerSandboxRunner(
 		bridge.config,
 		bridge.store,
 		bridge.configDB,
@@ -89,9 +89,9 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 	sandboxID := created.Summary.ID
 	workspaceRoot := created.Summary.WorkspacePath
 	readyUpdatedAt := created.WorkspaceProvisioning.UpdatedAt
-	bindingBefore, ok, err := bridge.configDB.GetLoaderBinding(ctx, loaderID, triggerID)
+	bindingBefore, ok, err := bridge.configDB.GetSchedulerBinding(ctx, loaderID, triggerID)
 	if err != nil {
-		t.Fatalf("GetLoaderBinding after create returned error: %v", err)
+		t.Fatalf("GetSchedulerBinding after create returned error: %v", err)
 	}
 	if !ok || bindingBefore.SandboxID != sandboxID {
 		t.Fatalf("loader binding after create = %#v ok=%v, want sandbox %q", bindingBefore, ok, sandboxID)
@@ -208,9 +208,9 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 		t.Fatalf("resumed loader workspace revived deleted template file, stat error = %v", statErr)
 	}
 
-	bindingAfter, ok, err := bridge.configDB.GetLoaderBinding(ctx, loaderID, triggerID)
+	bindingAfter, ok, err := bridge.configDB.GetSchedulerBinding(ctx, loaderID, triggerID)
 	if err != nil {
-		t.Fatalf("GetLoaderBinding after resume returned error: %v", err)
+		t.Fatalf("GetSchedulerBinding after resume returned error: %v", err)
 	}
 	if !ok || !reflect.DeepEqual(bindingAfter, bindingBefore) {
 		t.Fatalf("loader binding changed across sticky resume:\n got: %#v ok=%v\nwant: %#v", bindingAfter, ok, bindingBefore)

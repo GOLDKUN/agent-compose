@@ -32,7 +32,7 @@ func TestCompareAndSwapLoaderBindingAllowsSingleConcurrentClaim(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			claimed, err := store.CompareAndSwapLoaderBinding(ctx, nil, domain.SchedulerBinding{
+			claimed, err := store.CompareAndSwapSchedulerBinding(ctx, nil, domain.SchedulerBinding{
 				SchedulerID:       "loader-1",
 				TriggerID:         "trigger-1",
 				SandboxID:         sandboxID,
@@ -48,7 +48,7 @@ func TestCompareAndSwapLoaderBindingAllowsSingleConcurrentClaim(t *testing.T) {
 	close(errorsCh)
 	for err := range errorsCh {
 		if err != nil {
-			t.Fatalf("CompareAndSwapLoaderBinding returned error: %v", err)
+			t.Fatalf("CompareAndSwapSchedulerBinding returned error: %v", err)
 		}
 	}
 	claims := 0

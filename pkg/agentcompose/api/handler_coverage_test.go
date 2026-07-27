@@ -1328,10 +1328,10 @@ func (s *apiProjectRunStore) GetProjectAgent(context.Context, string, string) (d
 }
 
 func (s *apiProjectRunStore) GetManagedAgentDefinition(context.Context, string) (domain.AgentDefinition, error) {
-	return domain.AgentDefinition{ID: "agent-1", Enabled: true, ManagedProjectID: "project-1", ManagedAgentName: "worker"}, nil
+	return domain.AgentDefinition{ID: "agent-1", Enabled: true, ProjectID: "project-1", AgentName: "worker"}, nil
 }
 
-func (s *apiProjectRunStore) GetLoader(_ context.Context, loaderID string) (domain.Scheduler, error) {
+func (s *apiProjectRunStore) GetScheduler(_ context.Context, loaderID string) (domain.Scheduler, error) {
 	loader, ok := s.loaders[loaderID]
 	if !ok {
 		return domain.Scheduler{}, sql.ErrNoRows
@@ -1339,7 +1339,7 @@ func (s *apiProjectRunStore) GetLoader(_ context.Context, loaderID string) (doma
 	return loader, nil
 }
 
-func (s *apiProjectRunStore) SetLoaderEnabled(_ context.Context, loaderID string, enabled bool) error {
+func (s *apiProjectRunStore) SetSchedulerEnabled(_ context.Context, loaderID string, enabled bool) error {
 	loader, ok := s.loaders[loaderID]
 	if !ok {
 		return sql.ErrNoRows
@@ -1349,11 +1349,11 @@ func (s *apiProjectRunStore) SetLoaderEnabled(_ context.Context, loaderID string
 	return nil
 }
 
-func (s *apiProjectRunStore) SetLoaderTriggerEnabled(context.Context, string, string, bool) error {
+func (s *apiProjectRunStore) SetSchedulerTriggerEnabled(context.Context, string, string, bool) error {
 	return nil
 }
 
-func (s *apiProjectRunStore) ListLoaderEvents(context.Context, string, int) ([]domain.SchedulerEvent, error) {
+func (s *apiProjectRunStore) ListSchedulerEvents(context.Context, string, int) ([]domain.SchedulerEvent, error) {
 	return nil, nil
 }
 

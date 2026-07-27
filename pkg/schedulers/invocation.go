@@ -20,8 +20,8 @@ type InvocationResult struct {
 type InvocationExecutorDependencies struct {
 	Engine      SchedulerEngine
 	HostFactory RunHostFactory
-	EnterRun    func(loader domain.Scheduler) bool
-	LeaveRun    func(loaderID string)
+	EnterRun    func(scheduler domain.Scheduler) bool
+	LeaveRun    func(schedulerID string)
 	NewID       func() string
 }
 
@@ -33,7 +33,7 @@ func NewInvocationExecutor(deps InvocationExecutorDependencies) *InvocationExecu
 	return &InvocationExecutor{deps: deps}
 }
 
-func (e *InvocationExecutor) Invoke(ctx context.Context, loader domain.Scheduler, payloadJSON string) (InvocationResult, error) {
+func (e *InvocationExecutor) Invoke(ctx context.Context, scheduler domain.Scheduler, payloadJSON string) (InvocationResult, error) {
 	payloadJSON, err := domain.NormalizeJSONDocument(payloadJSON)
 	if err != nil {
 		return InvocationResult{}, err
@@ -41,11 +41,11 @@ func (e *InvocationExecutor) Invoke(ctx context.Context, loader domain.Scheduler
 	if e.deps.Engine == nil || e.deps.HostFactory == nil {
 		return InvocationResult{}, fmt.Errorf("scheduler invocation runtime is unavailable")
 	}
-	if e.deps.EnterRun != nil && !e.deps.EnterRun(loader) {
-		return InvocationResult{}, domain.ResourceError(domain.ErrFailedPrecondition, "scheduler", loader.Summary.ID, "scheduler is already running", nil)
+	if e.deps.EnterRun != nil && !e.deps.EnterRun(scheduler) {
+		return InvocationResult{}, domain.ResourceError(domain.ErrFailedPrecondition, "scheduler", scheduler.Summary.ID, "scheduler is already running", nil)
 	}
 	if e.deps.LeaveRun != nil {
-		defer e.deps.LeaveRun(loader.Summary.ID)
+		defer e.deps.LeaveRun(scheduler.Summary.ID)
 	}
 
 	correlationID := uuid.NewString()
@@ -54,11 +54,11 @@ func (e *InvocationExecutor) Invoke(ctx context.Context, loader domain.Scheduler
 			correlationID = generatedID
 		}
 	}
-	host := e.deps.HostFactory(loader, RuntimeExecutionContext{ID: correlationID, Kind: ExecutionKindInvocation}, TriggerEventMetadata{})
+	host := e.deps.HostFactory(scheduler, RuntimeExecutionContext{ID: correlationID, Kind: ExecutionKindInvocation}, TriggerEventMetadata{})
 	startedAt := time.Now().UTC()
 	execution, execErr := e.deps.Engine.Execute(ctx, SchedulerExecutionRequest{
-		Runtime:     loader.Summary.Runtime,
-		Script:      loader.Script,
+		Runtime:     scheduler.Summary.Runtime,
+		Script:      scheduler.Script,
 		PayloadJSON: payloadJSON,
 	}, host)
 	if host != nil {

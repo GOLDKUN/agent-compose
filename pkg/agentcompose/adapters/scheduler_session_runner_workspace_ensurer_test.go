@@ -84,7 +84,7 @@ func TestLoaderSandboxRunnerEnsureUsesWorkspaceEnsurerBeforeGuideAndDriver(t *te
 		}
 	}
 	publisher := &loaderSessionPublisherFake{}
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, bridge.cap, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, bridge.cap, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
 	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "loader-create",
 		Name:          "Scheduler Create",
@@ -124,7 +124,7 @@ func TestLoaderSandboxRunnerEnsureUsesWorkspaceEnsurerBeforeGuideAndDriver(t *te
 	if execution.SessionTagValue(sandbox.Summary.Tags, domain.AgentSandboxTagProvider) != domain.DefaultAgentProvider {
 		t.Fatalf("sandbox provider tag = %#v", sandbox.Summary.Tags)
 	}
-	binding, ok, err := bridge.configDB.GetLoaderBinding(ctx, loader.Summary.ID, "trigger-create")
+	binding, ok, err := bridge.configDB.GetSchedulerBinding(ctx, loader.Summary.ID, "trigger-create")
 	if err != nil || !ok || binding.SandboxID != sandbox.Summary.ID {
 		t.Fatalf("loader binding = %#v ok=%v err=%v, want sandbox %q", binding, ok, err, sandbox.Summary.ID)
 	}
@@ -142,7 +142,7 @@ func TestLoaderSandboxRunnerEnsureWorkspaceEnsurerErrorShortCircuitsDriver(t *te
 		return []byte("unexpected guide"), nil
 	}}
 	publisher := &loaderSessionPublisherFake{}
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
 	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "loader-ensure-error",
 		Name:          "Scheduler Ensure Error",
@@ -197,7 +197,7 @@ func TestLoaderSandboxRunnerEnsureRuntimeFailurePreservesReadyProvisioning(t *te
 	}}
 	startErr := errors.New("loader runtime start failed")
 	driver.startErr = startErr
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
 	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "loader-runtime-error",
 		Name:          "Scheduler Runtime Error",
@@ -280,7 +280,7 @@ func TestLoaderSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 			}
 		}
 		publisher := &loaderSessionPublisherFake{}
-		runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+		runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
 
 		resumed, eventType, err := runner.LoadOrResume(ctx, stopped.Summary.ID)
 		if err != nil {
@@ -333,7 +333,7 @@ func TestLoaderSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 			return nil, nil
 		}}
 		publisher := &loaderSessionPublisherFake{}
-		runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+		runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
 
 		_, _, err = runner.LoadOrResume(ctx, stopped.Summary.ID)
 		if err != ensureErr {
@@ -371,7 +371,7 @@ func TestLoaderSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 		}}
 		startErr := errors.New("resume runtime start failed")
 		driver.startErr = startErr
-		runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+		runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
 
 		_, _, err = runner.LoadOrResume(ctx, stopped.Summary.ID)
 		if err != startErr {
@@ -425,22 +425,22 @@ func TestLoaderSandboxRunnerStickyRunningMatchingConfigSkipsEnsurerAndPreservesW
 	request := domain.SchedulerAgentRequest{Agent: "codex", BindingTriggerID: "sticky-trigger"}
 	ensurer := &recordingLoaderWorkspaceEnsurer{err: errors.New("running sticky path must not ensure workspace")}
 	publisher := &loaderSessionPublisherFake{}
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
-	baseConfigHash, err := loaderSandboxConfigHash(loader)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	baseConfigHash, err := schedulerSandboxConfigHash(loader)
 	if err != nil {
-		t.Fatalf("loaderSandboxConfigHash returned error: %v", err)
+		t.Fatalf("schedulerSandboxConfigHash returned error: %v", err)
 	}
-	agentDefinition, err := runner.ResolveLoaderAgentDefinition(ctx, loader)
+	agentDefinition, err := runner.ResolveSchedulerAgentDefinition(ctx, loader)
 	if err != nil {
-		t.Fatalf("ResolveLoaderAgentDefinition returned error: %v", err)
+		t.Fatalf("ResolveSchedulerAgentDefinition returned error: %v", err)
 	}
 	guestImage := runner.guestImage(request, loader, agentDefinition, driverpkg.RuntimeDriverDocker)
-	configHash, err := loaderRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, nil, nil, originalSnapshot, driverpkg.RuntimeDriverDocker, guestImage, nil)
+	configHash, err := schedulerRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, nil, nil, originalSnapshot, driverpkg.RuntimeDriverDocker, guestImage, nil)
 	if err != nil {
-		t.Fatalf("loaderRequestSandboxConfigHash returned error: %v", err)
+		t.Fatalf("schedulerRequestSandboxConfigHash returned error: %v", err)
 	}
-	if err := bridge.configDB.UpsertLoaderBinding(ctx, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "sticky-trigger", SandboxID: running.Summary.ID, SandboxConfigHash: configHash}); err != nil {
-		t.Fatalf("UpsertLoaderBinding returned error: %v", err)
+	if err := bridge.configDB.UpsertSchedulerBinding(ctx, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "sticky-trigger", SandboxID: running.Summary.ID, SandboxConfigHash: configHash}); err != nil {
+		t.Fatalf("UpsertSchedulerBinding returned error: %v", err)
 	}
 	reused, eventType, err := runner.Ensure(ctx, loader, request, false)
 	if err != nil {
@@ -471,14 +471,14 @@ func TestLoaderSandboxRunnerAdoptsLegacyStickyBindingWithoutStoppingSandbox(t *t
 		{
 			name: "initial reuse",
 			reuse: func(ctx context.Context, runner *SchedulerSandboxRunner, loader domain.Scheduler, triggerID, configHash string) (*domain.Sandbox, string, bool, error) {
-				sandbox, eventType, reused, _, err := runner.reuseCompatibleLoaderBinding(ctx, loader, triggerID, configHash)
+				sandbox, eventType, reused, _, err := runner.reuseCompatibleSchedulerBinding(ctx, loader, triggerID, configHash)
 				return sandbox, eventType, reused, err
 			},
 		},
 		{
 			name: "concurrent winner",
 			reuse: func(ctx context.Context, runner *SchedulerSandboxRunner, loader domain.Scheduler, triggerID, configHash string) (*domain.Sandbox, string, bool, error) {
-				return runner.reuseWinningLoaderBinding(ctx, loader.Summary.ID, triggerID, configHash)
+				return runner.reuseWinningSchedulerBinding(ctx, loader.Summary.ID, triggerID, configHash)
 			},
 		},
 	}
@@ -486,7 +486,7 @@ func TestLoaderSandboxRunnerAdoptsLegacyStickyBindingWithoutStoppingSandbox(t *t
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			bridge, driver := newTestSandboxRPCBridge(t)
-			runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingLoaderWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+			runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingLoaderWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
 			loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "legacy-loader", SandboxPolicy: domain.SchedulerSandboxPolicySticky}}
 			loader = createNativeTestScheduler(t, ctx, bridge.configDB, loader)
 			const triggerID = "legacy-trigger"
@@ -499,8 +499,8 @@ func TestLoaderSandboxRunnerAdoptsLegacyStickyBindingWithoutStoppingSandbox(t *t
 			if err := bridge.store.UpdateSandbox(ctx, running); err != nil {
 				t.Fatalf("UpdateSandbox returned error: %v", err)
 			}
-			if err := bridge.configDB.UpsertLoaderBinding(ctx, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: triggerID, SandboxID: running.Summary.ID}); err != nil {
-				t.Fatalf("UpsertLoaderBinding returned error: %v", err)
+			if err := bridge.configDB.UpsertSchedulerBinding(ctx, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: triggerID, SandboxID: running.Summary.ID}); err != nil {
+				t.Fatalf("UpsertSchedulerBinding returned error: %v", err)
 			}
 
 			reusedSandbox, eventType, reused, err := test.reuse(ctx, runner, loader, triggerID, configHash)
@@ -513,7 +513,7 @@ func TestLoaderSandboxRunnerAdoptsLegacyStickyBindingWithoutStoppingSandbox(t *t
 			if len(driver.stopCalls) != 0 || len(driver.startCalls) != 0 {
 				t.Fatalf("driver stop/start calls = %#v/%#v, want none", driver.stopCalls, driver.startCalls)
 			}
-			binding, found, err := bridge.configDB.GetLoaderBinding(ctx, loader.Summary.ID, triggerID)
+			binding, found, err := bridge.configDB.GetSchedulerBinding(ctx, loader.Summary.ID, triggerID)
 			if err != nil || !found || binding.SandboxID != running.Summary.ID || binding.SandboxConfigHash != configHash {
 				t.Fatalf("adopted binding = %#v found=%v err=%v, want sandbox %q hash %q", binding, found, err, running.Summary.ID, configHash)
 			}
@@ -524,7 +524,7 @@ func TestLoaderSandboxRunnerAdoptsLegacyStickyBindingWithoutStoppingSandbox(t *t
 func TestLoaderSandboxRunnerConcurrentStickyClaimReusesWinner(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingLoaderWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingLoaderWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
 	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:                "loader-concurrent-sticky",
 		Name:              "Concurrent Sticky",
@@ -534,18 +534,18 @@ func TestLoaderSandboxRunnerConcurrentStickyClaimReusesWinner(t *testing.T) {
 	}}
 	loader = createNativeTestScheduler(t, ctx, bridge.configDB, loader)
 	request := domain.SchedulerAgentRequest{Agent: "codex", BindingTriggerID: "trigger-1"}
-	agentDefinition, err := runner.ResolveLoaderAgentDefinition(ctx, loader)
+	agentDefinition, err := runner.ResolveSchedulerAgentDefinition(ctx, loader)
 	if err != nil {
-		t.Fatalf("ResolveLoaderAgentDefinition returned error: %v", err)
+		t.Fatalf("ResolveSchedulerAgentDefinition returned error: %v", err)
 	}
 	guestImage := runner.guestImage(request, loader, agentDefinition, driverpkg.RuntimeDriverDocker)
-	baseConfigHash, err := loaderSandboxConfigHash(loader)
+	baseConfigHash, err := schedulerSandboxConfigHash(loader)
 	if err != nil {
-		t.Fatalf("loaderSandboxConfigHash returned error: %v", err)
+		t.Fatalf("schedulerSandboxConfigHash returned error: %v", err)
 	}
-	configHash, err := loaderRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, nil, nil, nil, driverpkg.RuntimeDriverDocker, guestImage, nil)
+	configHash, err := schedulerRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, nil, nil, nil, driverpkg.RuntimeDriverDocker, guestImage, nil)
 	if err != nil {
-		t.Fatalf("loaderRequestSandboxConfigHash returned error: %v", err)
+		t.Fatalf("schedulerRequestSandboxConfigHash returned error: %v", err)
 	}
 	winner, err := bridge.store.CreateSandbox(ctx, "winner", "", driverpkg.RuntimeDriverDocker, guestImage, "", domain.SandboxTypeScript+":"+loader.Summary.ID, nil, nil, nil)
 	if err != nil {
@@ -560,7 +560,7 @@ func TestLoaderSandboxRunnerConcurrentStickyClaimReusesWinner(t *testing.T) {
 		if bindErr != nil {
 			return
 		}
-		bindErr = bridge.configDB.UpsertLoaderBinding(ctx, domain.SchedulerBinding{
+		bindErr = bridge.configDB.UpsertSchedulerBinding(ctx, domain.SchedulerBinding{
 			SchedulerID:       loader.Summary.ID,
 			TriggerID:         request.BindingTriggerID,
 			SandboxID:         winner.Summary.ID,
@@ -602,7 +602,7 @@ func TestLoaderSandboxRunnerStickyWorkspaceConfigChangeCreatesReplacement(t *tes
 	if err != nil {
 		t.Fatalf("CreateWorkspaceConfig returned error: %v", err)
 	}
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingLoaderWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, &loaderSessionPublisherFake{}, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingLoaderWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, &loaderSessionPublisherFake{}, nil, bridge.agentExecutor)
 	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "loader-sticky-workspace-update",
 		Name:          "Scheduler Sticky Workspace Update",
@@ -642,7 +642,7 @@ func TestLoaderSandboxRunnerStickyRunningConfigChangeCreatesReplacement(t *testi
 		},
 	}
 	capTokens := NewCapabilitySandboxResolver(bridge.store)
-	runner := NewLoaderSandboxRunner(
+	runner := NewSchedulerSandboxRunner(
 		bridge.config,
 		bridge.store,
 		bridge.configDB,
@@ -676,7 +676,7 @@ func TestLoaderSandboxRunnerStickyRunningConfigChangeCreatesReplacement(t *testi
 	if oldToken == "" {
 		t.Fatal("first sticky sandbox has no CAP_TOKEN")
 	}
-	firstBinding, found, err := bridge.configDB.GetLoaderBinding(ctx, loader.Summary.ID, request.BindingTriggerID)
+	firstBinding, found, err := bridge.configDB.GetSchedulerBinding(ctx, loader.Summary.ID, request.BindingTriggerID)
 	if err != nil || !found {
 		t.Fatalf("first binding = %#v found=%v err=%v", firstBinding, found, err)
 	}
@@ -703,7 +703,7 @@ func TestLoaderSandboxRunnerStickyRunningConfigChangeCreatesReplacement(t *testi
 	if len(driver.stopCalls) != 1 || driver.stopCalls[0] != first.Summary.ID {
 		t.Fatalf("driver stop calls = %#v, want [%q]", driver.stopCalls, first.Summary.ID)
 	}
-	binding, found, err := bridge.configDB.GetLoaderBinding(ctx, loader.Summary.ID, request.BindingTriggerID)
+	binding, found, err := bridge.configDB.GetSchedulerBinding(ctx, loader.Summary.ID, request.BindingTriggerID)
 	if err != nil || !found || binding.SandboxID != replacement.Summary.ID {
 		t.Fatalf("replacement binding = %#v found=%v err=%v", binding, found, err)
 	}
@@ -726,7 +726,7 @@ func TestLoaderSandboxRunnerStickyRunningConfigChangeCreatesReplacement(t *testi
 func TestLoaderSandboxRunnerStickyStoppedConfigChangeDoesNotResume(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingLoaderWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, &loaderSessionPublisherFake{}, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingLoaderWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, &loaderSessionPublisherFake{}, nil, bridge.agentExecutor)
 	loader := domain.Scheduler{
 		Summary: domain.SchedulerSummary{
 			ID:            "loader-sticky-stopped-update",

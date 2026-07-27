@@ -445,7 +445,7 @@ func TestSandboxRPCBridgeCapabilityGuideRoutesManagedScopeAndMergesBestEffort(t 
 	if err != nil {
 		t.Fatalf("read merged guide: %v", err)
 	}
-	if gotScope != (capabilities.GuideScope{ManagedProjectID: "project-1", ManagedAgentID: "agent-1"}) {
+	if gotScope != (capabilities.GuideScope{ProjectID: "project-1", AgentID: "agent-1"}) {
 		t.Fatalf("guide scope = %#v", gotScope)
 	}
 	if content := string(guide); !strings.Contains(content, "global guide") || !strings.Contains(content, "project guide for internal/dev") {

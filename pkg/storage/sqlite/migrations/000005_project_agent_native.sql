@@ -2,7 +2,7 @@ CREATE TEMP TABLE migration_000005_guard(reason TEXT);
 CREATE TEMP TRIGGER migration_000005_abort
 BEFORE INSERT ON migration_000005_guard
 BEGIN
-    SELECT RAISE(ABORT, 'project agent migration requires agent-compose-legacy-migrate');
+    SELECT RAISE(ABORT, 'project agent migration requires agent-compose-migrate');
 END;
 
 INSERT INTO migration_000005_guard
@@ -68,7 +68,7 @@ ALTER TABLE project_run RENAME TO project_run_v1;
 ALTER TABLE project_agent RENAME TO project_agent_v1;
 
 CREATE TABLE project_agent (
-    id TEXT PRIMARY KEY,
+    id TEXT NOT NULL PRIMARY KEY CHECK(trim(id) <> ''),
     name TEXT NOT NULL DEFAULT '',
     short_id TEXT NOT NULL DEFAULT '',
     project_id TEXT NOT NULL,

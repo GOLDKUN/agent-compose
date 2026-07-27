@@ -52,7 +52,7 @@ func TestProjectRunCapabilityGuideRoutesManagedScopeAndMergesBestEffort(t *testi
 	if err != nil {
 		t.Fatalf("read merged guide: %v", err)
 	}
-	if provider.scope != (capabilities.GuideScope{ManagedProjectID: "project-1", ManagedAgentID: "agent-1"}) {
+	if provider.scope != (capabilities.GuideScope{ProjectID: "project-1", AgentID: "agent-1"}) {
 		t.Fatalf("scope = %#v", provider.scope)
 	}
 	if content := string(guide); !strings.Contains(content, "global legacy") || !strings.Contains(content, "scoped internal/dev") {

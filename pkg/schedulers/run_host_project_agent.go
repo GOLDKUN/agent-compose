@@ -31,23 +31,23 @@ type HostProjectAgentRunner interface {
 
 func (h *RuntimeHost) ProjectAgent(ctx context.Context, prompt string, request domain.SchedulerAgentRequest) (domain.SchedulerAgentResult, error) {
 	sandboxPolicy := domain.SchedulerSandboxPolicyNew
-	if strings.TrimSpace(h.loader.Summary.SandboxPolicy) != "" {
-		sandboxPolicy = domain.NormalizeLoaderSandboxPolicy(h.loader.Summary.SandboxPolicy)
+	if strings.TrimSpace(h.scheduler.Summary.SandboxPolicy) != "" {
+		sandboxPolicy = domain.NormalizeSchedulerSandboxPolicy(h.scheduler.Summary.SandboxPolicy)
 	}
 	if strings.TrimSpace(domain.SchedulerAgentSandboxPolicy(request)) != "" {
-		sandboxPolicy = domain.NormalizeLoaderSandboxPolicy(domain.SchedulerAgentSandboxPolicy(request))
+		sandboxPolicy = domain.NormalizeSchedulerSandboxPolicy(domain.SchedulerAgentSandboxPolicy(request))
 	}
-	configHash, err := SchedulerSandboxConfigHash(h.loader)
+	configHash, err := SchedulerSandboxConfigHash(h.scheduler)
 	if err != nil {
 		return domain.SchedulerAgentResult{}, err
 	}
 	run, execErr, err := h.deps.ProjectAgentRunner.RunProjectAgent(ctx, HostProjectAgentRequest{
-		SchedulerID:        h.loader.Summary.ID,
+		SchedulerID:        h.scheduler.Summary.ID,
 		SchedulerRunID:     h.execution.ID,
-		ProjectID:          h.loader.Summary.ManagedProjectID,
-		AgentName:          h.loader.Summary.ManagedAgentName,
+		ProjectID:          h.scheduler.Summary.ProjectID,
+		AgentName:          h.scheduler.Summary.AgentName,
 		Prompt:             prompt,
-		ProjectSchedulerID: h.loader.Summary.ManagedSchedulerID,
+		ProjectSchedulerID: h.scheduler.Summary.ProjectSchedulerID,
 		TriggerID:          h.execution.TriggerID,
 		OutputSchemaJSON:   request.OutputSchema,
 		ClientRequestID:    h.nextProjectAgentRunID(),
@@ -69,7 +69,7 @@ func (h *RuntimeHost) ProjectAgent(ctx context.Context, prompt string, request d
 		eventName = "loader.agent.failed"
 		result.Text = firstHostNonEmpty(result.Text, run.Error, execErrString(execErr))
 	}
-	_ = h.addLinkedLoaderEvent(ctx, eventName, level, firstHostNonEmpty(result.Text, fmt.Sprintf("%s completed", result.Agent)), result, result.SandboxID, result.CellID, result.AgentThreadID)
+	_ = h.addLinkedSchedulerEvent(ctx, eventName, level, firstHostNonEmpty(result.Text, fmt.Sprintf("%s completed", result.Agent)), result, result.SandboxID, result.CellID, result.AgentThreadID)
 	h.publishAgentCompleted(result, &run)
 	if execErr != nil {
 		return result, execErr
@@ -82,8 +82,8 @@ func (h *RuntimeHost) nextProjectAgentRunID() string {
 	return fmt.Sprintf("%s:agent:%d", baseID, h.projectAgentRunSequence.Add(1))
 }
 
-func (h *RuntimeHost) useProjectManagedAgentRun(request domain.SchedulerAgentRequest) bool {
-	if strings.TrimSpace(h.loader.Summary.ManagedProjectID) == "" || strings.TrimSpace(h.loader.Summary.ManagedAgentName) == "" {
+func (h *RuntimeHost) useProjectAgentRun(request domain.SchedulerAgentRequest) bool {
+	if strings.TrimSpace(h.scheduler.Summary.ProjectID) == "" || strings.TrimSpace(h.scheduler.Summary.AgentName) == "" {
 		return false
 	}
 	if strings.TrimSpace(request.Agent) != "" || request.Timeout > 0 {

@@ -272,23 +272,23 @@ type schedulerRunProjectStoreFake struct {
 	lastBatchSandboxIDs []string
 }
 
-func (s *schedulerRunProjectStoreFake) ListLoaderEventsPage(_ context.Context, filter schedulers.SchedulerEventPageFilter) ([]domain.SchedulerEvent, error) {
+func (s *schedulerRunProjectStoreFake) ListSchedulerEventsPage(_ context.Context, filter schedulers.SchedulerEventPageFilter) ([]domain.SchedulerEvent, error) {
 	items := make([]domain.SchedulerEvent, 0, len(s.events))
 	for _, event := range s.events {
 		if !slices.Contains(filter.SchedulerIDs, event.SchedulerID) || (filter.RequireTrigger && event.TriggerID == "") ||
 			(strings.TrimSpace(filter.TriggerID) != "" && event.TriggerID != filter.TriggerID) || (strings.TrimSpace(filter.RunID) != "" && event.RunID != filter.RunID) {
 			continue
 		}
-		if !filter.BeforeCreatedAt.IsZero() && compareLoaderEventKey(event, filter.BeforeCreatedAt, filter.BeforeLoaderID, filter.BeforeEventID) >= 0 {
+		if !filter.BeforeCreatedAt.IsZero() && compareLoaderEventKey(event, filter.BeforeCreatedAt, filter.BeforeSchedulerID, filter.BeforeEventID) >= 0 {
 			continue
 		}
-		if !filter.AfterCreatedAt.IsZero() && compareLoaderEventKey(event, filter.AfterCreatedAt, filter.AfterLoaderID, filter.AfterEventID) <= 0 {
+		if !filter.AfterCreatedAt.IsZero() && compareLoaderEventKey(event, filter.AfterCreatedAt, filter.AfterSchedulerID, filter.AfterEventID) <= 0 {
 			continue
 		}
-		if !filter.FromCreatedAt.IsZero() && compareLoaderEventKey(event, filter.FromCreatedAt, filter.FromLoaderID, filter.FromEventID) < 0 {
+		if !filter.FromCreatedAt.IsZero() && compareLoaderEventKey(event, filter.FromCreatedAt, filter.FromSchedulerID, filter.FromEventID) < 0 {
 			continue
 		}
-		if !filter.ThroughCreatedAt.IsZero() && compareLoaderEventKey(event, filter.ThroughCreatedAt, filter.ThroughLoaderID, filter.ThroughEventID) > 0 {
+		if !filter.ThroughCreatedAt.IsZero() && compareLoaderEventKey(event, filter.ThroughCreatedAt, filter.ThroughSchedulerID, filter.ThroughEventID) > 0 {
 			continue
 		}
 		items = append(items, event)
@@ -305,10 +305,10 @@ func (s *schedulerRunProjectStoreFake) ListLoaderEventsPage(_ context.Context, f
 	return append([]domain.SchedulerEvent(nil), items[start:end]...), nil
 }
 
-func (s *schedulerRunProjectStoreFake) CountLoaderEventsPage(_ context.Context, filter schedulers.SchedulerEventPageFilter) (int, error) {
+func (s *schedulerRunProjectStoreFake) CountSchedulerEventsPage(_ context.Context, filter schedulers.SchedulerEventPageFilter) (int, error) {
 	filter.Offset = 0
 	filter.Limit = int(^uint(0) >> 1)
-	items, err := s.ListLoaderEventsPage(context.Background(), filter)
+	items, err := s.ListSchedulerEventsPage(context.Background(), filter)
 	return len(items), err
 }
 
@@ -348,7 +348,7 @@ func (s *schedulerRunProjectStoreFake) GetProjectRevision(context.Context, strin
 	return domain.ProjectRevisionRecord{}, nil
 }
 
-func (s *schedulerRunProjectStoreFake) GetLoaderRunForLoaders(_ context.Context, loaderIDs []string, runID string) (domain.SchedulerRunSummary, error) {
+func (s *schedulerRunProjectStoreFake) GetSchedulerRunForSchedulers(_ context.Context, loaderIDs []string, runID string) (domain.SchedulerRunSummary, error) {
 	for _, run := range s.runs {
 		if run.ID != runID {
 			continue
@@ -362,7 +362,7 @@ func (s *schedulerRunProjectStoreFake) GetLoaderRunForLoaders(_ context.Context,
 	return domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrNotFound, "loader run", runID, fmt.Sprintf("loader run %s not found", runID), nil)
 }
 
-func (s *schedulerRunProjectStoreFake) ListLoaderRunsPage(_ context.Context, filter schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error) {
+func (s *schedulerRunProjectStoreFake) ListSchedulerRunsPage(_ context.Context, filter schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error) {
 	s.lastRunFilter = filter
 	start := min(max(filter.Offset, 0), len(s.runs))
 	if filter.BeforeRunID != "" {
@@ -378,15 +378,15 @@ func (s *schedulerRunProjectStoreFake) ListLoaderRunsPage(_ context.Context, fil
 	return append([]domain.SchedulerRunSummary(nil), s.runs[start:end]...), nil
 }
 
-func (s *schedulerRunProjectStoreFake) CountLoaderRunsPage(context.Context, schedulers.SchedulerRunPageFilter) (int, error) {
+func (s *schedulerRunProjectStoreFake) CountSchedulerRunsPage(context.Context, schedulers.SchedulerRunPageFilter) (int, error) {
 	return len(s.runs), nil
 }
 
-func (s *schedulerRunProjectStoreFake) ListLoaderRunSandboxIDs(_ context.Context, _ []schedulers.SchedulerRunKey) (map[schedulers.SchedulerRunKey][]string, error) {
+func (s *schedulerRunProjectStoreFake) ListSchedulerRunSandboxIDs(_ context.Context, _ []schedulers.SchedulerRunKey) (map[schedulers.SchedulerRunKey][]string, error) {
 	return s.sandboxIDs, nil
 }
 
-func (s *schedulerRunProjectStoreFake) BatchGetLatestLoaderRunsBySandboxIDs(_ context.Context, loaderIDs, sandboxIDs []string) (map[string]domain.SchedulerRunSummary, error) {
+func (s *schedulerRunProjectStoreFake) BatchGetLatestSchedulerRunsBySandboxIDs(_ context.Context, loaderIDs, sandboxIDs []string) (map[string]domain.SchedulerRunSummary, error) {
 	s.lastBatchLoaderIDs = append([]string(nil), loaderIDs...)
 	s.lastBatchSandboxIDs = append([]string(nil), sandboxIDs...)
 	return s.batchRunsBySandbox, nil
@@ -421,11 +421,11 @@ func (f *schedulerRunRuntimeFake) InvokeScheduler(_ context.Context, loaderID, p
 	return f.invokeResult, nil
 }
 
-func (f *schedulerRunRuntimeFake) SetLoaderEnabled(context.Context, string, bool) (domain.Scheduler, error) {
+func (f *schedulerRunRuntimeFake) SetSchedulerEnabled(context.Context, string, bool) (domain.Scheduler, error) {
 	return domain.Scheduler{}, nil
 }
 
-func (f *schedulerRunRuntimeFake) SetLoaderTriggerEnabled(context.Context, string, string, bool) (domain.Scheduler, error) {
+func (f *schedulerRunRuntimeFake) SetSchedulerTriggerEnabled(context.Context, string, string, bool) (domain.Scheduler, error) {
 	return domain.Scheduler{}, nil
 }
 

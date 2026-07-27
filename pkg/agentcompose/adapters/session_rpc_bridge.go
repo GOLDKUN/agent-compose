@@ -149,7 +149,7 @@ func (b *SandboxRPCBridge) CallJSONWithSource(ctx context.Context, method, reque
 	}
 }
 
-func (b *SandboxRPCBridge) publishLoaderTopic(topic string, payload map[string]any) {
+func (b *SandboxRPCBridge) publishSchedulerTopic(topic string, payload map[string]any) {
 	if b == nil || b.bus == nil {
 		return
 	}
@@ -269,7 +269,7 @@ func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandb
 	}
 	domain.RestoreSandboxTransientFields(loaded, session)
 	b.indexCapabilitySandbox(loaded)
-	b.publishLoaderTopic("agent-compose.session.created", schedulers.SessionTopicPayload(loaded, source))
+	b.publishSchedulerTopic("agent-compose.session.created", schedulers.SessionTopicPayload(loaded, source))
 	return loaded, nil
 }
 
@@ -300,7 +300,7 @@ func (b *SandboxRPCBridge) resumeSandbox(ctx context.Context, sandboxID, source 
 		return nil, api.ConnectErrorForDomain(err)
 	}
 	b.indexCapabilitySandbox(loaded)
-	b.publishLoaderTopic("agent-compose.session.resumed", schedulers.SessionTopicPayload(loaded, source))
+	b.publishSchedulerTopic("agent-compose.session.resumed", schedulers.SessionTopicPayload(loaded, source))
 	return loaded, nil
 }
 
@@ -332,7 +332,7 @@ func (b *SandboxRPCBridge) stopSandbox(ctx context.Context, sandboxID, source st
 	}
 	b.revokeCapabilitySandbox(loaded.Summary.ID)
 	if stopped {
-		b.publishLoaderTopic("agent-compose.session.stopped", schedulers.SessionTopicPayload(loaded, source))
+		b.publishSchedulerTopic("agent-compose.session.stopped", schedulers.SessionTopicPayload(loaded, source))
 	}
 	return loaded, nil
 }

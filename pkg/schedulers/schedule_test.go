@@ -33,7 +33,7 @@ func testLoaderScheduleModelWorkflows(t *testing.T) {
 
 	specJSON, err := schedulers.SchedulerCronSpecJSON("*/5 * * * *", "Asia/Shanghai")
 	if err != nil {
-		t.Fatalf("loaderCronSpecJSON returned error: %v", err)
+		t.Fatalf("schedulerCronSpecJSON returned error: %v", err)
 	}
 	next, err = schedulers.SchedulerTriggerNextFireAt(now, domain.SchedulerTrigger{Kind: domain.SchedulerTriggerKindCron, SpecJSON: specJSON}, false)
 	if err != nil {
@@ -55,17 +55,17 @@ func testLoaderScheduleModelWorkflows(t *testing.T) {
 		t.Fatalf("invalid cron source = %q", source)
 	}
 
-	normalized, err := schedulers.NormalizeLoaderCronSpecJSON(`{"expr":"@hourly"}`)
+	normalized, err := schedulers.NormalizeSchedulerCronSpecJSON(`{"expr":"@hourly"}`)
 	if err != nil {
-		t.Fatalf("normalizeLoaderCronSpecJSON returned error: %v", err)
+		t.Fatalf("normalizeSchedulerCronSpecJSON returned error: %v", err)
 	}
 	if !strings.Contains(normalized, `"timezone":"UTC"`) {
 		t.Fatalf("normalized cron spec = %q", normalized)
 	}
-	if _, err := schedulers.NormalizeLoaderCronSpecJSON(`{"expr":""}`); err == nil {
+	if _, err := schedulers.NormalizeSchedulerCronSpecJSON(`{"expr":""}`); err == nil {
 		t.Fatalf("empty cron expression returned nil error")
 	}
-	if _, err := schedulers.NormalizeLoaderCronSpecJSON(`{"expr":"* * * * *","timezone":"No/SuchZone"}`); err == nil {
+	if _, err := schedulers.NormalizeSchedulerCronSpecJSON(`{"expr":"* * * * *","timezone":"No/SuchZone"}`); err == nil {
 		t.Fatalf("invalid cron timezone returned nil error")
 	}
 	if _, err := schedulers.SchedulerTriggerNextFireAt(now, domain.SchedulerTrigger{Kind: domain.SchedulerTriggerKindCron, SpecJSON: `{"expr":"bad cron"}`}, false); err == nil {
@@ -86,13 +86,13 @@ func testLoaderScheduleModelWorkflows(t *testing.T) {
 		t.Fatalf("unexpected topic match")
 	}
 
-	if domain.NormalizeLoaderSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || domain.NormalizeLoaderSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
+	if domain.NormalizeSchedulerSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || domain.NormalizeSchedulerSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
 		t.Fatalf("session policy normalization failed")
 	}
-	if domain.NormalizeLoaderConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || domain.NormalizeLoaderConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
+	if domain.NormalizeSchedulerConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || domain.NormalizeSchedulerConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
 		t.Fatalf("concurrency policy normalization failed")
 	}
-	if domain.NormalizeLoaderRunStatus("failed") != domain.SchedulerRunStatusFailed || domain.NormalizeLoaderRunStatus("bad") != domain.SchedulerRunStatusRunning {
+	if domain.NormalizeSchedulerRunStatus("failed") != domain.SchedulerRunStatusFailed || domain.NormalizeSchedulerRunStatus("bad") != domain.SchedulerRunStatusRunning {
 		t.Fatalf("run status normalization failed")
 	}
 	if !domain.TimeIsSet(now) || domain.NonZeroTimeUnixMilli(time.Time{}) != 0 || domain.NonZeroTimeUnixMilli(now) != now.UnixMilli() {
@@ -104,10 +104,10 @@ func testLoaderScheduleModelWorkflows(t *testing.T) {
 	if !domain.SchedulerTriggerScheduledAt(now, 0).IsZero() || !domain.SchedulerTriggerScheduledAt(now, 1).Equal(now.Add(time.Millisecond)) {
 		t.Fatalf("scheduled at helper returned unexpected values")
 	}
-	if domain.DefaultLoaderName(now) != "Scheduler 2026-06-02 09:00" {
-		t.Fatalf("default loader name = %q", domain.DefaultLoaderName(now))
+	if domain.DefaultSchedulerName(now) != "Scheduler 2026-06-02 09:00" {
+		t.Fatalf("default loader name = %q", domain.DefaultSchedulerName(now))
 	}
-	if script := domain.DefaultLoaderScript(); !strings.Contains(script, "function main") || !strings.Contains(script, "scheduler.interval") || !strings.Contains(script, "scheduler.on") {
+	if script := domain.DefaultSchedulerScript(); !strings.Contains(script, "function main") || !strings.Contains(script, "scheduler.interval") || !strings.Contains(script, "scheduler.on") {
 		t.Fatalf("default loader script missing expected registrations: %s", script)
 	}
 }

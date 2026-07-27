@@ -124,9 +124,9 @@ func TestRuntimeHostProjectAgentPath(t *testing.T) {
 	ctx := context.Background()
 	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:                 "loader-project",
-		ManagedProjectID:   "project-1",
-		ManagedAgentName:   "reviewer",
-		ManagedSchedulerID: "scheduler-1",
+		ProjectID:          "project-1",
+		AgentName:          "reviewer",
+		ProjectSchedulerID: "scheduler-1",
 	}}
 	run := &domain.SchedulerRunSummary{ID: "run-project", SchedulerID: loader.Summary.ID, TriggerID: "trigger-1"}
 	events := &hostEventsFake{}
@@ -182,9 +182,9 @@ func TestRuntimeHostProjectAgentPath(t *testing.T) {
 
 func TestRuntimeHostProjectAgentUsesUniqueRequestIDs(t *testing.T) {
 	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
-		ID:               "loader-project",
-		ManagedProjectID: "project-1",
-		ManagedAgentName: "reviewer",
+		ID:        "loader-project",
+		ProjectID: "project-1",
+		AgentName: "reviewer",
 	}}
 	run := &domain.SchedulerRunSummary{ID: "run-project", SchedulerID: loader.Summary.ID, TriggerID: "trigger-1"}
 	projectRunner := &hostProjectAgentRunnerFake{run: domain.ProjectRunRecord{
@@ -235,7 +235,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 	}
 
 	projectEvents := &hostEventsFake{}
-	projectLoader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-project-errors", ManagedProjectID: "project-1", ManagedAgentName: "reviewer"}}
+	projectLoader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-project-errors", ProjectID: "project-1", AgentName: "reviewer"}}
 	projectHost := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
 		Events: projectEvents,
 		ProjectAgentRunner: &hostProjectAgentRunnerFake{run: domain.ProjectRunRecord{
@@ -413,12 +413,12 @@ func (s *hostStoreFake) UpdateEventPayload(_ context.Context, eventID, payloadJS
 	return nil
 }
 
-func (s *hostStoreFake) GetLoaderState(_ context.Context, _, key string) (string, bool, error) {
+func (s *hostStoreFake) GetSchedulerState(_ context.Context, _, key string) (string, bool, error) {
 	value, ok := s.state[key]
 	return value, ok, nil
 }
 
-func (s *hostStoreFake) SetLoaderState(_ context.Context, _, key, valueJSON string) error {
+func (s *hostStoreFake) SetSchedulerState(_ context.Context, _, key, valueJSON string) error {
 	if s.state == nil {
 		s.state = map[string]string{}
 	}
@@ -426,7 +426,7 @@ func (s *hostStoreFake) SetLoaderState(_ context.Context, _, key, valueJSON stri
 	return nil
 }
 
-func (s *hostStoreFake) DeleteLoaderState(_ context.Context, _, key string) error {
+func (s *hostStoreFake) DeleteSchedulerState(_ context.Context, _, key string) error {
 	delete(s.state, key)
 	return nil
 }
@@ -449,15 +449,15 @@ type hostEventsFake struct {
 	items []domain.SchedulerEvent
 }
 
-func (e *hostEventsFake) Add(ctx context.Context, loaderID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
-	_, err := e.AddRecord(ctx, loaderID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+func (e *hostEventsFake) Add(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
+	_, err := e.AddRecord(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
 	return err
 }
 
-func (e *hostEventsFake) AddRecord(_ context.Context, loaderID, runID, triggerID, eventType, level, message string, _ any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
+func (e *hostEventsFake) AddRecord(_ context.Context, schedulerID, runID, triggerID, eventType, level, message string, _ any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
 	event := domain.SchedulerEvent{
 		ID:                  fmt.Sprintf("event-%d", len(e.items)+1),
-		SchedulerID:         loaderID,
+		SchedulerID:         schedulerID,
 		RunID:               runID,
 		TriggerID:           triggerID,
 		Type:                eventType,
@@ -525,7 +525,7 @@ func (s *hostSessionsFake) Shutdown(_ context.Context, sessionID string) error {
 
 type hostAgentDefinitionsFake struct{}
 
-func (hostAgentDefinitionsFake) ResolveLoaderAgentDefinition(context.Context, domain.Scheduler) (*domain.AgentDefinition, error) {
+func (hostAgentDefinitionsFake) ResolveSchedulerAgentDefinition(context.Context, domain.Scheduler) (*domain.AgentDefinition, error) {
 	return nil, nil
 }
 
@@ -546,7 +546,7 @@ type hostCommandExecutorFake struct {
 	err    error
 }
 
-func (e *hostCommandExecutorFake) ExecuteLoaderCommand(context.Context, *domain.Sandbox, domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
+func (e *hostCommandExecutorFake) ExecuteSchedulerCommand(context.Context, *domain.Sandbox, domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
 	e.calls++
 	return e.result, e.err
 }

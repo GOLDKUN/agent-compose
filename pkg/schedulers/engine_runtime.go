@@ -41,7 +41,7 @@ func executeWithQJSPanicRecovery(
 	return execute()
 }
 
-func closeQJSLoaderRuntime(ctx context.Context, runtime *qjs.Runtime) {
+func closeQJSSchedulerRuntime(ctx context.Context, runtime *qjs.Runtime) {
 	defer func() {
 		// A canceled context may already have closed the module. qjs.Close then
 		// attempts to free the QuickJS runtime through that closed module.

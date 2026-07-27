@@ -25,8 +25,8 @@ func TestAdapterHelperCoverage(t *testing.T) {
 		if _, err := (SchedulerHostAgentExecutor{}).ExecuteAgent(context.Background(), nil, schedulers.HostAgentExecutionRequest{}); err == nil {
 			t.Fatalf("SchedulerHostAgentExecutor.ExecuteAgent returned nil error")
 		}
-		if _, err := (SchedulerHostCommandExecutor{}).ExecuteLoaderCommand(context.Background(), nil, domain.SchedulerCommandRequest{}); err == nil {
-			t.Fatalf("SchedulerHostCommandExecutor.ExecuteLoaderCommand returned nil error")
+		if _, err := (SchedulerHostCommandExecutor{}).ExecuteSchedulerCommand(context.Background(), nil, domain.SchedulerCommandRequest{}); err == nil {
+			t.Fatalf("SchedulerHostCommandExecutor.ExecuteSchedulerCommand returned nil error")
 		}
 		if _, err := (SchedulerHostLLMRunner{}).Generate(context.Background(), "prompt", "model", ""); err == nil {
 			t.Fatalf("SchedulerHostLLMRunner.Generate returned nil error")
@@ -43,7 +43,7 @@ func TestAdapterHelperCoverage(t *testing.T) {
 		if got := SchedulerSandboxRPCLinkedSandboxID("ListSandboxes", `{"sandboxId":"ignored"}`, `{}`); got != "" {
 			t.Fatalf("ListSandboxes linked id = %q, want empty", got)
 		}
-		if got := loaderSandboxIDFromJSON(`{"sandbox":{"summary":{"sandboxId":" nested "}}}`); got != "nested" {
+		if got := schedulerSandboxIDFromJSON(`{"sandbox":{"summary":{"sandboxId":" nested "}}}`); got != "nested" {
 			t.Fatalf("nested sandbox id = %q", got)
 		}
 	})
@@ -239,18 +239,18 @@ func TestCapabilitySandboxResolverCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveCapabilitySandbox returned error: %v", err)
 	}
-	if binding.SandboxID != "sandbox-running" || binding.ManagedProjectID != "project-1" || binding.ManagedAgentID != "agent-1" || len(binding.CapsetIDs) != 1 || binding.CapsetIDs[0] != "dev" {
+	if binding.SandboxID != "sandbox-running" || binding.ProjectID != "project-1" || binding.AgentID != "agent-1" || len(binding.CapsetIDs) != 1 || binding.CapsetIDs[0] != "dev" {
 		t.Fatalf("binding = %#v", binding)
 	}
 	if len(store.offsets) != 2 || store.offsets[0] != 0 || store.offsets[1] != 200 {
 		t.Fatalf("offsets = %#v", store.offsets)
 	}
 	legacyBinding, err := resolver.ResolveCapabilitySandbox(ctx, "token-legacy-scope")
-	if err != nil || legacyBinding.ManagedProjectID != "legacy-project" || legacyBinding.ManagedAgentID != "legacy-agent" {
+	if err != nil || legacyBinding.ProjectID != "legacy-project" || legacyBinding.AgentID != "legacy-agent" {
 		t.Fatalf("legacy scoped binding = %#v err=%v", legacyBinding, err)
 	}
 	unscopedBinding, err := resolver.ResolveCapabilitySandbox(ctx, "token-unscoped")
-	if err != nil || unscopedBinding.ManagedProjectID != "" || unscopedBinding.ManagedAgentID != "" {
+	if err != nil || unscopedBinding.ProjectID != "" || unscopedBinding.AgentID != "" {
 		t.Fatalf("unscoped binding = %#v err=%v", unscopedBinding, err)
 	}
 	resolver.RevokeSandbox("sandbox-running")

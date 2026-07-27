@@ -21,7 +21,7 @@ type PublishedTopicEvent struct {
 	Envelope map[string]any
 }
 
-func NewPublishedTopicEvent(topic, payloadJSON string, trigger TriggerEventMetadata, loaderID, runID string) (PublishedTopicEvent, error) {
+func NewPublishedTopicEvent(topic, payloadJSON string, trigger TriggerEventMetadata, schedulerID, runID string) (PublishedTopicEvent, error) {
 	topic = strings.TrimSpace(topic)
 	if err := ValidatePublishTopic(topic); err != nil {
 		return PublishedTopicEvent{}, err
@@ -78,7 +78,7 @@ func NewPublishedTopicEvent(topic, payloadJSON string, trigger TriggerEventMetad
 			DispatchStatus: domain.TopicEventDispatchPending,
 			ParentEventID:  parentEventID,
 			PublisherType:  domain.TopicEventSourceLoader,
-			PublisherID:    strings.TrimSpace(loaderID),
+			PublisherID:    strings.TrimSpace(schedulerID),
 			PublisherRunID: strings.TrimSpace(runID),
 		},
 		Envelope: envelope,

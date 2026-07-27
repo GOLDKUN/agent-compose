@@ -184,12 +184,12 @@ func (s *compiledDriverBoundaryStore) UpsertManagedLoader(_ context.Context, ite
 	return item, nil
 }
 
-func (s *compiledDriverBoundaryStore) ReplaceLoaderTriggers(_ context.Context, _ string, _ []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
+func (s *compiledDriverBoundaryStore) ReplaceSchedulerTriggers(_ context.Context, _ string, _ []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
 	s.recordWrite("loader_triggers")
 	return nil, nil
 }
 
-func (s *compiledDriverBoundaryStore) SetLoaderEnabled(_ context.Context, _ string, _ bool) error {
+func (s *compiledDriverBoundaryStore) SetSchedulerEnabled(_ context.Context, _ string, _ bool) error {
 	s.recordWrite("loader_enabled")
 	return nil
 }

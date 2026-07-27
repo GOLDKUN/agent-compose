@@ -22,11 +22,11 @@ func TestListInterruptedLoaderRunsOnlyReturnsOlderTriggerRuns(t *testing.T) {
 		{ID: "old-terminal", SchedulerID: "loader-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt.Add(-time.Hour), CompletedAt: startedAt.Add(-time.Minute)},
 		{ID: "old-empty-trigger", SchedulerID: "loader-a", Status: domain.SchedulerRunStatusRunning, StartedAt: startedAt.Add(-time.Hour)},
 	} {
-		if err := store.CreateLoaderRun(ctx, run); err != nil {
+		if err := store.CreateSchedulerRun(ctx, run); err != nil {
 			t.Fatalf("create run %s: %v", run.ID, err)
 		}
 	}
-	runs, err := store.ListInterruptedLoaderRuns(ctx, startedAt)
+	runs, err := store.ListInterruptedSchedulerRuns(ctx, startedAt)
 	if err != nil {
 		t.Fatalf("list interrupted runs: %v", err)
 	}

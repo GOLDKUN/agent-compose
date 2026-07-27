@@ -19,7 +19,7 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 		Script:   "function main(){}",
 		Triggers: []domain.SchedulerTrigger{{SchedulerID: "loader-1", ID: "trigger-1", Kind: domain.SchedulerTriggerKindEvent, Topic: "topic.test", Enabled: true}},
 	}
-	store.loaders[created.Summary.ID] = created
+	store.schedulers[created.Summary.ID] = created
 	notifier := &controllerTestNotifier{}
 	publisher := &controllerTestPublisher{}
 	root := t.TempDir()
@@ -49,16 +49,16 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 	}
 	updated := created
 	updated.Summary.Description = "updated"
-	if _, err := controller.SetLoaderEnabled(ctx, created.Summary.ID, false); err != nil {
-		t.Fatalf("SetLoaderEnabled returned error: %v", err)
+	if _, err := controller.SetSchedulerEnabled(ctx, created.Summary.ID, false); err != nil {
+		t.Fatalf("SetSchedulerEnabled returned error: %v", err)
 	}
-	if _, err := controller.SetLoaderTriggerEnabled(ctx, created.Summary.ID, "trigger-1", false); err != nil {
-		t.Fatalf("SetLoaderTriggerEnabled returned error: %v", err)
+	if _, err := controller.SetSchedulerTriggerEnabled(ctx, created.Summary.ID, "trigger-1", false); err != nil {
+		t.Fatalf("SetSchedulerTriggerEnabled returned error: %v", err)
 	}
-	if _, trigger, err := controller.LoadLoaderForRun(ctx, created.Summary.ID, "trigger-1"); err != nil || trigger == nil {
-		t.Fatalf("LoadLoaderForRun trigger=%#v err=%v", trigger, err)
+	if _, trigger, err := controller.LoadSchedulerForRun(ctx, created.Summary.ID, "trigger-1"); err != nil || trigger == nil {
+		t.Fatalf("LoadSchedulerForRun trigger=%#v err=%v", trigger, err)
 	}
-	if _, _, err := controller.LoadLoaderForRun(ctx, created.Summary.ID, "missing"); err == nil {
+	if _, _, err := controller.LoadSchedulerForRun(ctx, created.Summary.ID, "missing"); err == nil {
 		t.Fatalf("expected missing trigger error")
 	}
 	manualRun, err := controller.RunNow(ctx, created.Summary.ID, "trigger-1", `{"manual":true}`, time.Second)
@@ -88,8 +88,8 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 	if len(publisher.events) != 1 {
 		t.Fatalf("publisher events = %#v", publisher.events)
 	}
-	controller.ReplaceCachedLoaders(map[string]domain.Scheduler{created.Summary.ID: updated})
-	if len(controller.CachedLoadersMap()) != 1 || len(controller.SnapshotLoaders()) != 1 {
+	controller.ReplaceCachedSchedulers(map[string]domain.Scheduler{created.Summary.ID: updated})
+	if len(controller.CachedSchedulersMap()) != 1 || len(controller.SnapshotSchedulers()) != 1 {
 		t.Fatalf("cache not populated")
 	}
 	if !controller.EnterRun(domain.Scheduler{Summary: domain.SchedulerSummary{ID: created.Summary.ID, ConcurrencyPolicy: domain.SchedulerConcurrencyPolicySkip}}) {
@@ -106,12 +106,12 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 		t.Fatalf("parallel EnterRun should succeed")
 	}
 	controller.LeaveRun(created.Summary.ID)
-	event, err := controller.AddLoaderEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "loader.test", "", "message", map[string]any{"ok": true}, "session-1", "cell-1", "agent-session")
+	event, err := controller.AddSchedulerEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "loader.test", "", "message", map[string]any{"ok": true}, "session-1", "cell-1", "agent-session")
 	if err != nil || event.ID != "event-id" || event.Level != "info" {
-		t.Fatalf("AddLoaderEventRecord event=%#v err=%v", event, err)
+		t.Fatalf("AddSchedulerEventRecord event=%#v err=%v", event, err)
 	}
-	if _, err := controller.AddLoaderEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "loader.bad", "", "message", func() {}, "", "", ""); err == nil {
-		t.Fatalf("AddLoaderEventRecord invalid payload returned nil error")
+	if _, err := controller.AddSchedulerEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "loader.bad", "", "message", func() {}, "", "", ""); err == nil {
+		t.Fatalf("AddSchedulerEventRecord invalid payload returned nil error")
 	}
 	dir := controller.RunArtifactsDir(created.Summary.ID, "run-1")
 	if err := controller.WriteRunArtifact(dir, "output.txt", "hello"); err != nil {
@@ -174,7 +174,7 @@ func (controllerTestEngine) Execute(context.Context, SchedulerExecutionRequest, 
 }
 
 type controllerTestStore struct {
-	loaders    map[string]domain.Scheduler
+	schedulers map[string]domain.Scheduler
 	runs       []domain.SchedulerRunSummary
 	events     []domain.SchedulerEvent
 	deliveries []domain.EventDelivery
@@ -182,86 +182,86 @@ type controllerTestStore struct {
 }
 
 func newControllerTestStore() *controllerTestStore {
-	return &controllerTestStore{loaders: map[string]domain.Scheduler{}}
+	return &controllerTestStore{schedulers: map[string]domain.Scheduler{}}
 }
 
-func (s *controllerTestStore) ListLoaders(context.Context) ([]domain.Scheduler, error) {
-	items := make([]domain.Scheduler, 0, len(s.loaders))
-	for _, item := range s.loaders {
-		items = append(items, CloneLoader(item))
+func (s *controllerTestStore) ListSchedulers(context.Context) ([]domain.Scheduler, error) {
+	items := make([]domain.Scheduler, 0, len(s.schedulers))
+	for _, item := range s.schedulers {
+		items = append(items, CloneScheduler(item))
 	}
 	return items, nil
 }
 
-func (s *controllerTestStore) GetLoader(_ context.Context, loaderID string) (domain.Scheduler, error) {
-	return CloneLoader(s.loaders[loaderID]), nil
+func (s *controllerTestStore) GetScheduler(_ context.Context, schedulerID string) (domain.Scheduler, error) {
+	return CloneScheduler(s.schedulers[schedulerID]), nil
 }
 
-func (s *controllerTestStore) CreateLoader(_ context.Context, item domain.Scheduler) (domain.Scheduler, error) {
-	s.loaders[item.Summary.ID] = CloneLoader(item)
+func (s *controllerTestStore) CreateScheduler(_ context.Context, item domain.Scheduler) (domain.Scheduler, error) {
+	s.schedulers[item.Summary.ID] = CloneScheduler(item)
 	return item, nil
 }
 
-func (s *controllerTestStore) UpdateLoader(_ context.Context, item domain.Scheduler) (domain.Scheduler, error) {
-	current := CloneLoader(item)
-	current.Triggers = s.loaders[item.Summary.ID].Triggers
-	s.loaders[item.Summary.ID] = current
+func (s *controllerTestStore) UpdateScheduler(_ context.Context, item domain.Scheduler) (domain.Scheduler, error) {
+	current := CloneScheduler(item)
+	current.Triggers = s.schedulers[item.Summary.ID].Triggers
+	s.schedulers[item.Summary.ID] = current
 	return current, nil
 }
 
-func (s *controllerTestStore) DeleteLoader(_ context.Context, loaderID string) error {
-	delete(s.loaders, loaderID)
+func (s *controllerTestStore) DeleteScheduler(_ context.Context, schedulerID string) error {
+	delete(s.schedulers, schedulerID)
 	return nil
 }
 
-func (s *controllerTestStore) ReplaceLoaderTriggers(_ context.Context, loaderID string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
+func (s *controllerTestStore) ReplaceSchedulerTriggers(_ context.Context, schedulerID string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
 	if s.replaceErr != nil {
 		return nil, s.replaceErr
 	}
-	loader := s.loaders[loaderID]
-	loader.Triggers = append([]domain.SchedulerTrigger(nil), triggers...)
-	s.loaders[loaderID] = loader
+	scheduler := s.schedulers[schedulerID]
+	scheduler.Triggers = append([]domain.SchedulerTrigger(nil), triggers...)
+	s.schedulers[schedulerID] = scheduler
 	return triggers, nil
 }
 
-func (s *controllerTestStore) SetLoaderEnabled(_ context.Context, loaderID string, enabled bool) error {
-	loader := s.loaders[loaderID]
-	loader.Summary.Enabled = enabled
-	s.loaders[loaderID] = loader
+func (s *controllerTestStore) SetSchedulerEnabled(_ context.Context, schedulerID string, enabled bool) error {
+	scheduler := s.schedulers[schedulerID]
+	scheduler.Summary.Enabled = enabled
+	s.schedulers[schedulerID] = scheduler
 	return nil
 }
 
-func (s *controllerTestStore) SetLoaderTriggerEnabled(_ context.Context, loaderID, triggerID string, enabled bool) error {
-	loader := s.loaders[loaderID]
-	for i := range loader.Triggers {
-		if loader.Triggers[i].ID == triggerID {
-			loader.Triggers[i].Enabled = enabled
+func (s *controllerTestStore) SetSchedulerTriggerEnabled(_ context.Context, schedulerID, triggerID string, enabled bool) error {
+	scheduler := s.schedulers[schedulerID]
+	for i := range scheduler.Triggers {
+		if scheduler.Triggers[i].ID == triggerID {
+			scheduler.Triggers[i].Enabled = enabled
 		}
 	}
-	s.loaders[loaderID] = loader
+	s.schedulers[schedulerID] = scheduler
 	return nil
 }
 
-func (s *controllerTestStore) AddLoaderEvent(_ context.Context, event domain.SchedulerEvent) error {
+func (s *controllerTestStore) AddSchedulerEvent(_ context.Context, event domain.SchedulerEvent) error {
 	s.events = append(s.events, event)
 	return nil
 }
 
-func (s *controllerTestStore) CreateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *controllerTestStore) CreateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.runs = append(s.runs, run)
 	return nil
 }
 
-func (s *controllerTestStore) UpdateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *controllerTestStore) UpdateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.runs = append(s.runs, run)
 	return nil
 }
 
-func (s *controllerTestStore) UpdateLoaderLastError(context.Context, string, string) error {
+func (s *controllerTestStore) UpdateSchedulerLastError(context.Context, string, string) error {
 	return nil
 }
 
-func (s *controllerTestStore) MarkLoaderTriggerFired(context.Context, string, string, time.Time, time.Time) error {
+func (s *controllerTestStore) MarkSchedulerTriggerFired(context.Context, string, string, time.Time, time.Time) error {
 	return nil
 }
 

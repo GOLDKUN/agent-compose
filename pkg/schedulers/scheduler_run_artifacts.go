@@ -10,8 +10,8 @@ import (
 	"agent-compose/pkg/identity"
 )
 
-func (a FSArtifacts) InspectRunArtifacts(loaderID, runID, recordedDir string) (SchedulerRunArtifactInfo, error) {
-	target, err := a.safeRunArtifactsPath(loaderID, runID, recordedDir)
+func (a FSArtifacts) InspectRunArtifacts(schedulerID, runID, recordedDir string) (SchedulerRunArtifactInfo, error) {
+	target, err := a.safeRunArtifactsPath(schedulerID, runID, recordedDir)
 	if err != nil {
 		return SchedulerRunArtifactInfo{}, err
 	}
@@ -50,8 +50,8 @@ func (a FSArtifacts) InspectRunArtifacts(loaderID, runID, recordedDir string) (S
 	return info, nil
 }
 
-func (a FSArtifacts) RemoveRunArtifacts(loaderID, runID, recordedDir string) (SchedulerRunArtifactInfo, error) {
-	info, err := a.InspectRunArtifacts(loaderID, runID, recordedDir)
+func (a FSArtifacts) RemoveRunArtifacts(schedulerID, runID, recordedDir string) (SchedulerRunArtifactInfo, error) {
+	info, err := a.InspectRunArtifacts(schedulerID, runID, recordedDir)
 	if err != nil || !info.Exists {
 		return info, err
 	}
@@ -61,10 +61,10 @@ func (a FSArtifacts) RemoveRunArtifacts(loaderID, runID, recordedDir string) (Sc
 	return info, nil
 }
 
-func (a FSArtifacts) safeRunArtifactsPath(loaderID, runID, recordedDir string) (string, error) {
-	loaderID = strings.TrimSpace(loaderID)
+func (a FSArtifacts) safeRunArtifactsPath(schedulerID, runID, recordedDir string) (string, error) {
+	schedulerID = strings.TrimSpace(schedulerID)
 	runID = strings.TrimSpace(runID)
-	if !identity.IsID(loaderID) || !identity.IsID(runID) {
+	if !identity.IsID(schedulerID) || !identity.IsID(runID) {
 		return "", fmt.Errorf("loader and run ids must be complete resource ids")
 	}
 	if strings.TrimSpace(a.DataRoot) == "" {
@@ -74,7 +74,7 @@ func (a FSArtifacts) safeRunArtifactsPath(loaderID, runID, recordedDir string) (
 	if err != nil {
 		return "", fmt.Errorf("resolve scheduler run artifacts data root: %w", err)
 	}
-	runsRoot := filepath.Join(dataRoot, "schedulers", loaderID, "runs")
+	runsRoot := filepath.Join(dataRoot, "schedulers", schedulerID, "runs")
 	runsRoot, err = filepath.Abs(runsRoot)
 	if err != nil {
 		return "", fmt.Errorf("resolve scheduler run artifacts root: %w", err)

@@ -14,9 +14,9 @@ import (
 )
 
 type RunStore interface {
-	CreateLoaderRun(ctx context.Context, run domain.SchedulerRunSummary) error
-	UpdateLoaderRun(ctx context.Context, run domain.SchedulerRunSummary) error
-	UpdateLoaderLastError(ctx context.Context, loaderID, lastError string) error
+	CreateSchedulerRun(ctx context.Context, run domain.SchedulerRunSummary) error
+	UpdateSchedulerRun(ctx context.Context, run domain.SchedulerRunSummary) error
+	UpdateSchedulerLastError(ctx context.Context, schedulerID, lastError string) error
 }
 
 type RunHost interface {
@@ -37,7 +37,7 @@ type RuntimeExecutionContext struct {
 	Kind      ExecutionKind
 }
 
-type RunHostFactory func(loader domain.Scheduler, execution RuntimeExecutionContext, triggerEvent TriggerEventMetadata) RunHost
+type RunHostFactory func(scheduler domain.Scheduler, execution RuntimeExecutionContext, triggerEvent TriggerEventMetadata) RunHost
 
 type RunOptions struct {
 	RetryWhenBusy  bool
@@ -55,11 +55,11 @@ type RunExecutorDependencies struct {
 	Store                      RunStore
 	Engine                     SchedulerEngine
 	HostFactory                RunHostFactory
-	ArtifactsDir               func(loaderID, runID string) string
+	ArtifactsDir               func(schedulerID, runID string) string
 	WriteArtifact              func(dir, name, content string) error
-	EnterRun                   func(loader domain.Scheduler) bool
-	LeaveRun                   func(loaderID string)
-	AddLoaderEvent             func(ctx context.Context, loaderID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error
+	EnterRun                   func(scheduler domain.Scheduler) bool
+	LeaveRun                   func(schedulerID string)
+	AddSchedulerEvent          func(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error
 	UpdateTriggerEventDelivery func(ctx context.Context, run domain.SchedulerRunSummary)
 	Notify                     func(reason string)
 	Refresh                    func(ctx context.Context) error
@@ -69,14 +69,17 @@ type RunExecutor struct {
 	deps RunExecutorDependencies
 }
 
+// Scheduler event types, notification reasons, error text, and structured log
+// keys are observable compatibility contracts. Their historical loader
+// spellings must remain stable for stored records and existing consumers.
 var ErrRunBusyForRetry = errors.New("loader is already running")
 
 func NewRunExecutor(deps RunExecutorDependencies) *RunExecutor {
 	return &RunExecutor{deps: deps}
 }
 
-func (e *RunExecutor) Run(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-	prepared, err := e.Prepare(ctx, loader, trigger, payloadJSON, source, options)
+func (e *RunExecutor) Run(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+	prepared, err := e.Prepare(ctx, scheduler, trigger, payloadJSON, source, options)
 	if err != nil {
 		return domain.SchedulerRunSummary{}, err
 	}
@@ -88,33 +91,33 @@ func (e *RunExecutor) Run(ctx context.Context, loader domain.Scheduler, trigger 
 	return e.Execute(ctx, prepared)
 }
 
-func (e *RunExecutor) Prepare(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error) {
+func (e *RunExecutor) Prepare(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error) {
 	payloadJSON, err := domain.NormalizeJSONDocument(payloadJSON)
 	if err != nil {
 		if options.AlreadyEntered {
-			e.leaveRun(loader.Summary.ID)
+			e.leaveRun(scheduler.Summary.ID)
 		}
 		return PreparedRun{}, err
 	}
 	now := time.Now().UTC()
 	run := domain.SchedulerRunSummary{
 		ID:               identity.NewRandomID(identity.ResourceRun),
-		SchedulerID:      loader.Summary.ID,
+		SchedulerID:      scheduler.Summary.ID,
 		TriggerSource:    strings.TrimSpace(source),
 		Status:           domain.SchedulerRunStatusRunning,
 		StartedAt:        now,
 		PayloadJSON:      payloadJSON,
-		SourceScriptHash: domain.SchedulerSourceSHA(loader.Script),
-		ArtifactsDir:     e.artifactsDir(loader.Summary.ID, ""),
+		SourceScriptHash: domain.SchedulerSourceSHA(scheduler.Script),
+		ArtifactsDir:     e.artifactsDir(scheduler.Summary.ID, ""),
 	}
 	if trigger != nil {
 		run.TriggerID = trigger.ID
 		run.TriggerKind = trigger.Kind
 	}
-	run.ArtifactsDir = e.artifactsDir(loader.Summary.ID, run.ID)
+	run.ArtifactsDir = e.artifactsDir(scheduler.Summary.ID, run.ID)
 
 	entered := options.AlreadyEntered
-	if !entered && !e.enterRun(loader) {
+	if !entered && !e.enterRun(scheduler) {
 		if options.RetryWhenBusy {
 			return PreparedRun{}, ErrRunBusyForRetry
 		}
@@ -125,31 +128,31 @@ func (e *RunExecutor) Prepare(ctx context.Context, loader domain.Scheduler, trig
 		run.Status = domain.SchedulerRunStatusSkipped
 		run.CompletedAt = now
 		run.Error = "loader is already running"
-		if err := e.deps.Store.CreateLoaderRun(ctx, run); err != nil {
+		if err := e.deps.Store.CreateSchedulerRun(ctx, run); err != nil {
 			return PreparedRun{}, err
 		}
 		e.updateTriggerEventDelivery(ctx, run)
 		e.notify("loader_run_updated")
-		_ = e.deps.Store.UpdateLoaderLastError(ctx, loader.Summary.ID, run.Error)
-		_ = e.addLoaderEvent(ctx, loader.Summary.ID, run.ID, run.TriggerID, "loader.run.skipped", "warn", run.Error, nil, "", "", "")
+		_ = e.deps.Store.UpdateSchedulerLastError(ctx, scheduler.Summary.ID, run.Error)
+		_ = e.addSchedulerEvent(ctx, scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.skipped", "warn", run.Error, nil, "", "", "")
 		_ = e.writeArtifact(run.ArtifactsDir, "error.txt", run.Error)
-		return PreparedRun{Scheduler: loader, Trigger: trigger, Run: run, PayloadJSON: payloadJSON}, nil
+		return PreparedRun{Scheduler: scheduler, Trigger: trigger, Run: run, PayloadJSON: payloadJSON}, nil
 	}
 
 	if err := os.MkdirAll(run.ArtifactsDir, 0o755); err != nil {
-		e.leaveRun(loader.Summary.ID)
+		e.leaveRun(scheduler.Summary.ID)
 		return PreparedRun{}, fmt.Errorf("create loader run artifacts dir: %w", err)
 	}
 	_ = e.writeArtifact(run.ArtifactsDir, "payload.json", payloadJSON)
 
-	if err := e.deps.Store.CreateLoaderRun(ctx, run); err != nil {
-		e.leaveRun(loader.Summary.ID)
+	if err := e.deps.Store.CreateSchedulerRun(ctx, run); err != nil {
+		e.leaveRun(scheduler.Summary.ID)
 		return PreparedRun{}, err
 	}
 	e.updateTriggerEventDelivery(ctx, run)
 	e.notify("loader_run_updated")
-	_ = e.addLoaderEvent(ctx, loader.Summary.ID, run.ID, run.TriggerID, "loader.run.started", "info", "loader run started", map[string]any{"source": run.TriggerSource}, "", "", "")
-	return PreparedRun{Scheduler: loader, Trigger: trigger, Run: run, PayloadJSON: payloadJSON}, nil
+	_ = e.addSchedulerEvent(ctx, scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.started", "info", "loader run started", map[string]any{"source": run.TriggerSource}, "", "", "")
+	return PreparedRun{Scheduler: scheduler, Trigger: trigger, Run: run, PayloadJSON: payloadJSON}, nil
 }
 
 func (e *RunExecutor) Execute(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error) {
@@ -175,7 +178,7 @@ func (e *RunExecutor) Execute(ctx context.Context, prepared PreparedRun) (domain
 		host.CleanupCommandSessions(writeCtx)
 	}
 	for _, warning := range execution.Warnings {
-		_ = e.addLoaderEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.deprecated_alias.warning", "warning", warning, nil, "", "", "")
+		_ = e.addSchedulerEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.deprecated_alias.warning", "warning", warning, nil, "", "", "")
 	}
 
 	completedAt := time.Now().UTC()
@@ -185,24 +188,24 @@ func (e *RunExecutor) Execute(ctx context.Context, prepared PreparedRun) (domain
 		run.Status = domain.SchedulerRunStatusCanceled
 		run.Error = cancelCause.Error()
 		_ = e.writeArtifact(run.ArtifactsDir, "error.txt", run.Error)
-		_ = e.deps.Store.UpdateLoaderLastError(writeCtx, prepared.Scheduler.Summary.ID, run.Error)
-		_ = e.addLoaderEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.canceled", "warn", run.Error, nil, "", "", "")
+		_ = e.deps.Store.UpdateSchedulerLastError(writeCtx, prepared.Scheduler.Summary.ID, run.Error)
+		_ = e.addSchedulerEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.canceled", "warn", run.Error, nil, "", "", "")
 	} else if execErr != nil {
 		run.Status = domain.SchedulerRunStatusFailed
 		run.Error = execErr.Error()
 		_ = e.writeArtifact(run.ArtifactsDir, "error.txt", run.Error)
-		_ = e.deps.Store.UpdateLoaderLastError(writeCtx, prepared.Scheduler.Summary.ID, run.Error)
-		_ = e.addLoaderEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.failed", "error", run.Error, nil, "", "", "")
+		_ = e.deps.Store.UpdateSchedulerLastError(writeCtx, prepared.Scheduler.Summary.ID, run.Error)
+		_ = e.addSchedulerEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.failed", "error", run.Error, nil, "", "", "")
 	} else {
 		run.Status = domain.SchedulerRunStatusSucceeded
 		run.ResultJSON = execution.ResultJSON
 		if execution.ResultJSON != "" {
 			_ = e.writeArtifact(run.ArtifactsDir, "result.json", execution.ResultJSON)
 		}
-		_ = e.deps.Store.UpdateLoaderLastError(writeCtx, prepared.Scheduler.Summary.ID, "")
-		_ = e.addLoaderEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.completed", "info", "loader run completed", map[string]any{"resultJson": execution.ResultJSON}, "", "", "")
+		_ = e.deps.Store.UpdateSchedulerLastError(writeCtx, prepared.Scheduler.Summary.ID, "")
+		_ = e.addSchedulerEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.completed", "info", "loader run completed", map[string]any{"resultJson": execution.ResultJSON}, "", "", "")
 	}
-	if err := e.deps.Store.UpdateLoaderRun(writeCtx, run); err != nil {
+	if err := e.deps.Store.UpdateSchedulerRun(writeCtx, run); err != nil {
 		return domain.SchedulerRunSummary{}, err
 	}
 	e.updateTriggerEventDelivery(writeCtx, run)
@@ -231,20 +234,20 @@ func (e *RunExecutor) Abort(ctx context.Context, prepared PreparedRun, reason st
 	run.DurationMs = completedAt.Sub(run.StartedAt).Milliseconds()
 	run.Error = reason
 	_ = e.writeArtifact(run.ArtifactsDir, "error.txt", run.Error)
-	_ = e.deps.Store.UpdateLoaderLastError(ctx, prepared.Scheduler.Summary.ID, run.Error)
-	_ = e.addLoaderEvent(ctx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.failed", "error", run.Error, nil, "", "", "")
-	if err := e.deps.Store.UpdateLoaderRun(ctx, run); err != nil {
+	_ = e.deps.Store.UpdateSchedulerLastError(ctx, prepared.Scheduler.Summary.ID, run.Error)
+	_ = e.addSchedulerEvent(ctx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "loader.run.failed", "error", run.Error, nil, "", "", "")
+	if err := e.deps.Store.UpdateSchedulerRun(ctx, run); err != nil {
 		slog.Warn("failed to abort prepared loader run", "loader_id", prepared.Scheduler.Summary.ID, "run_id", run.ID, "error", err)
 	}
 	e.updateTriggerEventDelivery(ctx, run)
 	e.notify("loader_run_updated")
 }
 
-func (e *RunExecutor) artifactsDir(loaderID, runID string) string {
+func (e *RunExecutor) artifactsDir(schedulerID, runID string) string {
 	if e.deps.ArtifactsDir == nil {
 		return ""
 	}
-	return e.deps.ArtifactsDir(loaderID, runID)
+	return e.deps.ArtifactsDir(schedulerID, runID)
 }
 
 func (e *RunExecutor) writeArtifact(dir, name, content string) error {
@@ -254,24 +257,24 @@ func (e *RunExecutor) writeArtifact(dir, name, content string) error {
 	return e.deps.WriteArtifact(dir, name, content)
 }
 
-func (e *RunExecutor) enterRun(loader domain.Scheduler) bool {
+func (e *RunExecutor) enterRun(scheduler domain.Scheduler) bool {
 	if e.deps.EnterRun == nil {
 		return true
 	}
-	return e.deps.EnterRun(loader)
+	return e.deps.EnterRun(scheduler)
 }
 
-func (e *RunExecutor) leaveRun(loaderID string) {
+func (e *RunExecutor) leaveRun(schedulerID string) {
 	if e.deps.LeaveRun != nil {
-		e.deps.LeaveRun(loaderID)
+		e.deps.LeaveRun(schedulerID)
 	}
 }
 
-func (e *RunExecutor) addLoaderEvent(ctx context.Context, loaderID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
-	if e.deps.AddLoaderEvent == nil {
+func (e *RunExecutor) addSchedulerEvent(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
+	if e.deps.AddSchedulerEvent == nil {
 		return nil
 	}
-	return e.deps.AddLoaderEvent(ctx, loaderID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+	return e.deps.AddSchedulerEvent(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
 }
 
 func (e *RunExecutor) updateTriggerEventDelivery(ctx context.Context, run domain.SchedulerRunSummary) {

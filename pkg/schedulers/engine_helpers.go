@@ -10,22 +10,22 @@ import (
 	cronlib "github.com/robfig/cron/v3"
 )
 
-const loaderDefaultCronTimezone = "UTC"
+const schedulerDefaultCronTimezone = "UTC"
 
-type loaderCronSpec struct {
+type schedulerCronSpec struct {
 	Kind     string `json:"kind,omitempty"`
 	Expr     string `json:"expr"`
 	Timezone string `json:"timezone,omitempty"`
 }
 
-var loaderCronParser = cronlib.NewParser(cronlib.SecondOptional | cronlib.Minute | cronlib.Hour | cronlib.Dom | cronlib.Month | cronlib.Dow | cronlib.Descriptor)
+var schedulerCronParser = cronlib.NewParser(cronlib.SecondOptional | cronlib.Minute | cronlib.Hour | cronlib.Dom | cronlib.Month | cronlib.Dow | cronlib.Descriptor)
 
-func loaderCronSpecJSON(expr, timezone string) (string, error) {
+func schedulerCronSpecJSON(expr, timezone string) (string, error) {
 	return SchedulerCronSpecJSON(expr, timezone)
 }
 
 func SchedulerCronSpecJSON(expr, timezone string) (string, error) {
-	spec, err := normalizeLoaderCronSpec(loaderCronSpec{
+	spec, err := normalizeSchedulerCronSpec(schedulerCronSpec{
 		Kind:     domain.SchedulerTriggerKindCron,
 		Expr:     expr,
 		Timezone: timezone,
@@ -36,8 +36,8 @@ func SchedulerCronSpecJSON(expr, timezone string) (string, error) {
 	return marshalJSONCompact(spec)
 }
 
-func NormalizeLoaderCronSpecJSON(raw string) (string, error) {
-	spec, err := parseLoaderCronSpecJSON(raw)
+func NormalizeSchedulerCronSpecJSON(raw string) (string, error) {
+	spec, err := parseSchedulerCronSpecJSON(raw)
 	if err != nil {
 		return "", err
 	}
@@ -55,7 +55,7 @@ func SchedulerTriggerNextFireAt(now time.Time, trigger domain.SchedulerTrigger, 
 		}
 		return domain.SchedulerTriggerScheduledAt(now, trigger.IntervalMs), nil
 	case domain.SchedulerTriggerKindCron:
-		spec, err := parseLoaderCronSpecJSON(trigger.SpecJSON)
+		spec, err := parseSchedulerCronSpecJSON(trigger.SpecJSON)
 		if err != nil {
 			return time.Time{}, err
 		}
@@ -63,7 +63,7 @@ func SchedulerTriggerNextFireAt(now time.Time, trigger domain.SchedulerTrigger, 
 		if err != nil {
 			return time.Time{}, fmt.Errorf("load cron timezone %q: %w", spec.Timezone, err)
 		}
-		schedule, err := loaderCronParser.Parse(spec.Expr)
+		schedule, err := schedulerCronParser.Parse(spec.Expr)
 		if err != nil {
 			return time.Time{}, fmt.Errorf("parse cron expression %q: %w", spec.Expr, err)
 		}
@@ -80,7 +80,7 @@ func SchedulerTriggerSource(trigger domain.SchedulerTrigger) string {
 	case domain.SchedulerTriggerKindTimeout:
 		return fmt.Sprintf("timeout:%d", trigger.IntervalMs)
 	case domain.SchedulerTriggerKindCron:
-		spec, err := parseLoaderCronSpecJSON(trigger.SpecJSON)
+		spec, err := parseSchedulerCronSpecJSON(trigger.SpecJSON)
 		if err != nil {
 			return "cron"
 		}
@@ -90,33 +90,33 @@ func SchedulerTriggerSource(trigger domain.SchedulerTrigger) string {
 	}
 }
 
-func parseLoaderCronSpecJSON(raw string) (loaderCronSpec, error) {
+func parseSchedulerCronSpecJSON(raw string) (schedulerCronSpec, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return loaderCronSpec{}, fmt.Errorf("cron spec is required")
+		return schedulerCronSpec{}, fmt.Errorf("cron spec is required")
 	}
-	var spec loaderCronSpec
+	var spec schedulerCronSpec
 	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
-		return loaderCronSpec{}, fmt.Errorf("decode cron spec: %w", err)
+		return schedulerCronSpec{}, fmt.Errorf("decode cron spec: %w", err)
 	}
-	return normalizeLoaderCronSpec(spec)
+	return normalizeSchedulerCronSpec(spec)
 }
 
-func normalizeLoaderCronSpec(spec loaderCronSpec) (loaderCronSpec, error) {
+func normalizeSchedulerCronSpec(spec schedulerCronSpec) (schedulerCronSpec, error) {
 	spec.Kind = domain.SchedulerTriggerKindCron
 	spec.Expr = strings.TrimSpace(spec.Expr)
 	spec.Timezone = strings.TrimSpace(spec.Timezone)
 	if spec.Expr == "" {
-		return loaderCronSpec{}, fmt.Errorf("cron expr is required")
+		return schedulerCronSpec{}, fmt.Errorf("cron expr is required")
 	}
 	if spec.Timezone == "" {
-		spec.Timezone = loaderDefaultCronTimezone
+		spec.Timezone = schedulerDefaultCronTimezone
 	}
 	if _, err := time.LoadLocation(spec.Timezone); err != nil {
-		return loaderCronSpec{}, fmt.Errorf("load cron timezone %q: %w", spec.Timezone, err)
+		return schedulerCronSpec{}, fmt.Errorf("load cron timezone %q: %w", spec.Timezone, err)
 	}
-	if _, err := loaderCronParser.Parse(spec.Expr); err != nil {
-		return loaderCronSpec{}, fmt.Errorf("parse cron expression %q: %w", spec.Expr, err)
+	if _, err := schedulerCronParser.Parse(spec.Expr); err != nil {
+		return schedulerCronSpec{}, fmt.Errorf("parse cron expression %q: %w", spec.Expr, err)
 	}
 	return spec, nil
 }
@@ -125,15 +125,15 @@ func normalizeAgentKind(agent string) string {
 	return domain.NormalizeAgentKind(agent)
 }
 
-func normalizeLoaderSandboxPolicy(policy string) string {
-	return domain.NormalizeLoaderSandboxPolicy(policy)
+func normalizeSchedulerSandboxPolicy(policy string) string {
+	return domain.NormalizeSchedulerSandboxPolicy(policy)
 }
 
 func normalizeEnvItems(items []domain.SandboxEnvVar) []domain.SandboxEnvVar {
 	return domain.NormalizeEnvItems(items)
 }
 
-func loaderJSONResult(text, outputSchemaJSON, sourceName string) (any, error) {
+func schedulerJSONResult(text, outputSchemaJSON, sourceName string) (any, error) {
 	return JSONResult(text, outputSchemaJSON, sourceName)
 }
 

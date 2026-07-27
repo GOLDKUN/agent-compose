@@ -1,7 +1,6 @@
 package schedulers
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -13,7 +12,7 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func NormalizeLoader(item domain.Scheduler, assignID bool) (domain.Scheduler, error) {
+func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler, error) {
 	now := time.Now().UTC()
 	item.Summary.ID = strings.TrimSpace(item.Summary.ID)
 	if assignID && item.Summary.ID == "" {
@@ -24,10 +23,10 @@ func NormalizeLoader(item domain.Scheduler, assignID bool) (domain.Scheduler, er
 	}
 	item.Summary.Name = strings.TrimSpace(item.Summary.Name)
 	if item.Summary.Name == "" {
-		item.Summary.Name = domain.DefaultLoaderName(now)
+		item.Summary.Name = domain.DefaultSchedulerName(now)
 	}
 	item.Summary.Description = strings.TrimSpace(item.Summary.Description)
-	runtime, err := domain.NormalizeLoaderRuntime(item.Summary.Runtime)
+	runtime, err := domain.NormalizeSchedulerRuntime(item.Summary.Runtime)
 	if err != nil {
 		return domain.Scheduler{}, err
 	}
@@ -51,21 +50,21 @@ func NormalizeLoader(item domain.Scheduler, assignID bool) (domain.Scheduler, er
 	if item.Summary.DefaultAgent == "" {
 		item.Summary.DefaultAgent = "codex"
 	}
-	item.Summary.SandboxPolicy = domain.NormalizeLoaderSandboxPolicy(item.Summary.SandboxPolicy)
-	item.Summary.ConcurrencyPolicy = domain.NormalizeLoaderConcurrencyPolicy(item.Summary.ConcurrencyPolicy)
+	item.Summary.SandboxPolicy = domain.NormalizeSchedulerSandboxPolicy(item.Summary.SandboxPolicy)
+	item.Summary.ConcurrencyPolicy = domain.NormalizeSchedulerConcurrencyPolicy(item.Summary.ConcurrencyPolicy)
 	item.Summary.CapsetIDs = capabilities.NormalizeCapsetIDs(item.Summary.CapsetIDs)
-	item.Summary.ManagedProjectID = strings.TrimSpace(item.Summary.ManagedProjectID)
-	item.Summary.ManagedAgentName = strings.TrimSpace(item.Summary.ManagedAgentName)
-	item.Summary.ManagedSchedulerID = strings.TrimSpace(item.Summary.ManagedSchedulerID)
-	if item.Summary.ManagedProjectID == "" {
-		item.Summary.ManagedRevision = 0
-		item.Summary.ManagedAgentName = ""
-		item.Summary.ManagedSchedulerID = ""
+	item.Summary.ProjectID = strings.TrimSpace(item.Summary.ProjectID)
+	item.Summary.AgentName = strings.TrimSpace(item.Summary.AgentName)
+	item.Summary.ProjectSchedulerID = strings.TrimSpace(item.Summary.ProjectSchedulerID)
+	if item.Summary.ProjectID == "" {
+		item.Summary.ProjectRevision = 0
+		item.Summary.AgentName = ""
+		item.Summary.ProjectSchedulerID = ""
 	} else {
-		if item.Summary.ManagedAgentName == "" || item.Summary.ManagedSchedulerID == "" {
+		if item.Summary.AgentName == "" || item.Summary.ProjectSchedulerID == "" {
 			return domain.Scheduler{}, fmt.Errorf("managed loader agent name and scheduler id are required")
 		}
-		if item.Summary.ManagedRevision < 0 {
+		if item.Summary.ProjectRevision < 0 {
 			return domain.Scheduler{}, fmt.Errorf("managed loader project revision cannot be negative")
 		}
 	}
@@ -79,59 +78,8 @@ func NormalizeLoader(item domain.Scheduler, assignID bool) (domain.Scheduler, er
 	return item, nil
 }
 
-func EncodeVolumeMountSpecs(items []domain.VolumeMountSpec) (string, error) {
-	normalized, err := domain.NormalizeVolumeMountSpecs(items)
-	if err != nil {
-		return "", err
-	}
-	if normalized == nil {
-		normalized = []domain.VolumeMountSpec{}
-	}
-	data, err := json.Marshal(normalized)
-	if err != nil {
-		return "", fmt.Errorf("encode loader volumes: %w", err)
-	}
-	return string(data), nil
-}
-
-func DecodeVolumeMountSpecs(raw string) ([]domain.VolumeMountSpec, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-	var items []domain.VolumeMountSpec
-	if err := json.Unmarshal([]byte(raw), &items); err != nil {
-		return nil, fmt.Errorf("decode loader volumes: %w", err)
-	}
-	return domain.NormalizeVolumeMountSpecs(items)
-}
-
-func EncodeEnvItems(items []domain.SandboxEnvVar) (string, error) {
-	normalized := domain.NormalizeEnvItems(items)
-	if normalized == nil {
-		normalized = []domain.SandboxEnvVar{}
-	}
-	data, err := json.Marshal(normalized)
-	if err != nil {
-		return "", fmt.Errorf("encode loader env items: %w", err)
-	}
-	return string(data), nil
-}
-
-func DecodeEnvItems(raw string) ([]domain.SandboxEnvVar, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-	var items []domain.SandboxEnvVar
-	if err := json.Unmarshal([]byte(raw), &items); err != nil {
-		return nil, fmt.Errorf("decode loader env items: %w", err)
-	}
-	return domain.NormalizeEnvItems(items), nil
-}
-
-func NormalizeLoaderTrigger(loaderID string, trigger domain.SchedulerTrigger) (domain.SchedulerTrigger, error) {
-	trigger.SchedulerID = strings.TrimSpace(loaderID)
+func NormalizeSchedulerTrigger(schedulerID string, trigger domain.SchedulerTrigger) (domain.SchedulerTrigger, error) {
+	trigger.SchedulerID = strings.TrimSpace(schedulerID)
 	trigger.ID = strings.TrimSpace(trigger.ID)
 	if trigger.SchedulerID == "" {
 		return domain.SchedulerTrigger{}, fmt.Errorf("loader id is required")
@@ -139,7 +87,7 @@ func NormalizeLoaderTrigger(loaderID string, trigger domain.SchedulerTrigger) (d
 	if trigger.ID == "" {
 		return domain.SchedulerTrigger{}, fmt.Errorf("loader trigger id is required")
 	}
-	kind, err := domain.NormalizeLoaderTriggerKind(trigger.Kind)
+	kind, err := domain.NormalizeSchedulerTriggerKind(trigger.Kind)
 	if err != nil {
 		return domain.SchedulerTrigger{}, err
 	}
@@ -164,7 +112,7 @@ func NormalizeLoaderTrigger(loaderID string, trigger domain.SchedulerTrigger) (d
 	case domain.SchedulerTriggerKindCron:
 		trigger.Topic = ""
 		trigger.IntervalMs = 0
-		normalizedSpecJSON, err := NormalizeLoaderCronSpecJSON(trigger.SpecJSON)
+		normalizedSpecJSON, err := NormalizeSchedulerCronSpecJSON(trigger.SpecJSON)
 		if err != nil {
 			return domain.SchedulerTrigger{}, fmt.Errorf("loader cron trigger %s: %w", trigger.ID, err)
 		}

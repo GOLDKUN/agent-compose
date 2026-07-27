@@ -15,13 +15,13 @@ import (
 const defaultSchedulerStreamBatchSize = 100
 
 type schedulerEventStreamSelection struct {
-	project    domain.ProjectRecord
-	schedulers map[string]domain.ProjectSchedulerRecord
-	loaderIDs  []string
-	agentName  string
-	triggerID  string
-	runID      string
-	store      ProjectSchedulerEventStore
+	project      domain.ProjectRecord
+	schedulers   map[string]domain.ProjectSchedulerRecord
+	schedulerIDs []string
+	agentName    string
+	triggerID    string
+	runID        string
+	store        ProjectSchedulerEventStore
 }
 
 // StreamProjectSchedulerEvents sends a finite scheduler-event scan in display
@@ -37,12 +37,12 @@ func (h *ProjectHandler) StreamProjectSchedulerEvents(ctx context.Context, req *
 	}
 	PrepareStreamingHeaders(stream.ResponseHeader())
 	baseFilter := schedulers.SchedulerEventPageFilter{
-		SchedulerIDs:   selection.loaderIDs,
+		SchedulerIDs:   selection.schedulerIDs,
 		RequireTrigger: true,
 		TriggerID:      selection.triggerID,
 		RunID:          selection.runID,
 	}
-	upper, err := selection.store.ListLoaderEventsPage(ctx, loaderEventPage(baseFilter, 1, 0, false))
+	upper, err := selection.store.ListSchedulerEventsPage(ctx, schedulerEventPage(baseFilter, 1, 0, false))
 	if err != nil {
 		return ConnectErrorForDomain(err)
 	}
@@ -51,7 +51,7 @@ func (h *ProjectHandler) StreamProjectSchedulerEvents(ctx context.Context, req *
 	}
 	var lower *domain.SchedulerEvent
 	if tail := req.Msg.GetTail(); tail > 0 {
-		boundary, queryErr := selection.store.ListLoaderEventsPage(ctx, loaderEventPage(baseFilter, 1, int(tail-1), false))
+		boundary, queryErr := selection.store.ListSchedulerEventsPage(ctx, schedulerEventPage(baseFilter, 1, int(tail-1), false))
 		if queryErr != nil {
 			return ConnectErrorForDomain(queryErr)
 		}
@@ -67,15 +67,15 @@ func (h *ProjectHandler) sendSchedulerEventPages(ctx context.Context, stream *co
 	var emitted uint64
 	checkpoint := ""
 	for {
-		filter := loaderEventPage(base, batchSize, 0, true)
-		filter.ThroughCreatedAt, filter.ThroughLoaderID, filter.ThroughEventID = upper.CreatedAt, upper.SchedulerID, upper.ID
+		filter := schedulerEventPage(base, batchSize, 0, true)
+		filter.ThroughCreatedAt, filter.ThroughSchedulerID, filter.ThroughEventID = upper.CreatedAt, upper.SchedulerID, upper.ID
 		if lower != nil {
-			filter.FromCreatedAt, filter.FromLoaderID, filter.FromEventID = lower.CreatedAt, lower.SchedulerID, lower.ID
+			filter.FromCreatedAt, filter.FromSchedulerID, filter.FromEventID = lower.CreatedAt, lower.SchedulerID, lower.ID
 		}
 		if after != nil {
-			filter.AfterCreatedAt, filter.AfterLoaderID, filter.AfterEventID = after.CreatedAt, after.SchedulerID, after.ID
+			filter.AfterCreatedAt, filter.AfterSchedulerID, filter.AfterEventID = after.CreatedAt, after.SchedulerID, after.ID
 		}
-		events, err := selection.store.ListLoaderEventsPage(ctx, filter)
+		events, err := selection.store.ListSchedulerEventsPage(ctx, filter)
 		if err != nil {
 			return ConnectErrorForDomain(err)
 		}
@@ -96,7 +96,7 @@ func (h *ProjectHandler) sendSchedulerEventPages(ctx context.Context, stream *co
 		if err := stream.Send(&agentcomposev2.StreamProjectSchedulerEventsResponse{Events: items, Checkpoint: checkpoint, EmittedCount: emitted}); err != nil {
 			return err
 		}
-		if len(events) < batchSize || sameLoaderEventKey(last, upper) {
+		if len(events) < batchSize || sameSchedulerEventKey(last, upper) {
 			break
 		}
 	}
@@ -125,12 +125,12 @@ func (h *ProjectHandler) schedulerEventStreamSelection(ctx context.Context, req 
 		agentName, triggerID, runID = runScheduler.AgentName, run.TriggerID, run.ID
 		schedulerRecords = []domain.ProjectSchedulerRecord{runScheduler}
 	}
-	loaderIDs, byLoaderID := schedulerLoaderIndex(schedulerRecords)
+	schedulerIDs, bySchedulerID := schedulerRecordIndex(schedulerRecords)
 	store, ok := h.store.(ProjectSchedulerEventStore)
 	if !ok {
 		return schedulerEventStreamSelection{}, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler event store is required"))
 	}
-	return schedulerEventStreamSelection{project: project, schedulers: byLoaderID, loaderIDs: loaderIDs, agentName: agentName, triggerID: triggerID, runID: runID, store: store}, nil
+	return schedulerEventStreamSelection{project: project, schedulers: bySchedulerID, schedulerIDs: schedulerIDs, agentName: agentName, triggerID: triggerID, runID: runID, store: store}, nil
 }
 
 // StreamSchedulerRuns sends bounded run batches until the finite scan or the
@@ -152,24 +152,24 @@ func (h *ProjectHandler) StreamSchedulerRuns(ctx context.Context, req *connect.R
 	if err != nil {
 		return ConnectErrorForDomain(err)
 	}
-	loaderIDs, byLoaderID := schedulerLoaderIndex(schedulerRecords)
+	schedulerIDs, bySchedulerID := schedulerRecordIndex(schedulerRecords)
 	PrepareStreamingHeaders(stream.ResponseHeader())
 	return h.sendSchedulerRunPages(ctx, stream, schedulerRunStreamSelection{
-		project: project, schedulers: byLoaderID, loaderIDs: loaderIDs, agentName: strings.TrimSpace(req.Msg.GetAgentName()),
+		project: project, schedulers: bySchedulerID, schedulerIDs: schedulerIDs, agentName: strings.TrimSpace(req.Msg.GetAgentName()),
 		triggerID: strings.TrimSpace(req.Msg.GetTriggerId()), status: status, store: store, limit: req.Msg.GetLimit(), batchSize: batchSize,
 	})
 }
 
 type schedulerRunStreamSelection struct {
-	project    domain.ProjectRecord
-	schedulers map[string]domain.ProjectSchedulerRecord
-	loaderIDs  []string
-	agentName  string
-	triggerID  string
-	status     string
-	store      ProjectSchedulerRunStore
-	limit      uint32
-	batchSize  int
+	project      domain.ProjectRecord
+	schedulers   map[string]domain.ProjectSchedulerRecord
+	schedulerIDs []string
+	agentName    string
+	triggerID    string
+	status       string
+	store        ProjectSchedulerRunStore
+	limit        uint32
+	batchSize    int
 }
 
 func (h *ProjectHandler) sendSchedulerRunPages(ctx context.Context, stream *connect.ServerStream[agentcomposev2.StreamSchedulerRunsResponse], selection schedulerRunStreamSelection) error {
@@ -184,11 +184,11 @@ func (h *ProjectHandler) sendSchedulerRunPages(ctx context.Context, stream *conn
 		if pageSize == 0 {
 			return stream.Send(&agentcomposev2.StreamSchedulerRunsResponse{Complete: true, Checkpoint: checkpoint, EmittedCount: emitted, Truncated: true})
 		}
-		filter := schedulers.SchedulerRunPageFilter{SchedulerIDs: selection.loaderIDs, RequireTrigger: true, TriggerID: selection.triggerID, Status: selection.status, Limit: pageSize + 1}
+		filter := schedulers.SchedulerRunPageFilter{SchedulerIDs: selection.schedulerIDs, RequireTrigger: true, TriggerID: selection.triggerID, Status: selection.status, Limit: pageSize + 1}
 		if before != nil {
-			filter.BeforeStartedAt, filter.BeforeLoaderID, filter.BeforeRunID = before.StartedAt, before.SchedulerID, before.ID
+			filter.BeforeStartedAt, filter.BeforeSchedulerID, filter.BeforeRunID = before.StartedAt, before.SchedulerID, before.ID
 		}
-		runs, err := selection.store.ListLoaderRunsPage(ctx, filter)
+		runs, err := selection.store.ListSchedulerRunsPage(ctx, filter)
 		if err != nil {
 			return ConnectErrorForDomain(err)
 		}
@@ -226,7 +226,7 @@ func (h *ProjectHandler) schedulerRunStreamItems(ctx context.Context, schedulerR
 	sandboxIDs := make(map[schedulers.SchedulerRunKey][]string)
 	if sandboxStore, ok := h.store.(ProjectSchedulerRunSandboxStore); ok {
 		var err error
-		sandboxIDs, err = sandboxStore.ListLoaderRunSandboxIDs(ctx, keys)
+		sandboxIDs, err = sandboxStore.ListSchedulerRunSandboxIDs(ctx, keys)
 		if err != nil {
 			return nil, ConnectErrorForDomain(err)
 		}
@@ -244,18 +244,18 @@ func (h *ProjectHandler) schedulerRunStreamItems(ctx context.Context, schedulerR
 	return items, nil
 }
 
-func schedulerLoaderIndex(schedulers []domain.ProjectSchedulerRecord) ([]string, map[string]domain.ProjectSchedulerRecord) {
-	loaderIDs := make([]string, 0, len(schedulers))
-	byLoaderID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
+func schedulerRecordIndex(schedulers []domain.ProjectSchedulerRecord) ([]string, map[string]domain.ProjectSchedulerRecord) {
+	schedulerIDs := make([]string, 0, len(schedulers))
+	bySchedulerID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
 	for _, scheduler := range schedulers {
-		loaderID := strings.TrimSpace(scheduler.ID)
-		if loaderID == "" {
+		schedulerID := strings.TrimSpace(scheduler.ID)
+		if schedulerID == "" {
 			continue
 		}
-		loaderIDs = append(loaderIDs, loaderID)
-		byLoaderID[loaderID] = scheduler
+		schedulerIDs = append(schedulerIDs, schedulerID)
+		bySchedulerID[schedulerID] = scheduler
 	}
-	return loaderIDs, byLoaderID
+	return schedulerIDs, bySchedulerID
 }
 
 func schedulerStreamBatchSize(value uint32) (int, error) {
@@ -268,13 +268,13 @@ func schedulerStreamBatchSize(value uint32) (int, error) {
 	return int(value), nil
 }
 
-func loaderEventPage(base schedulers.SchedulerEventPageFilter, limit, offset int, ascending bool) schedulers.SchedulerEventPageFilter {
+func schedulerEventPage(base schedulers.SchedulerEventPageFilter, limit, offset int, ascending bool) schedulers.SchedulerEventPageFilter {
 	base.Limit = limit
 	base.Offset = offset
 	base.Ascending = ascending
 	return base
 }
 
-func sameLoaderEventKey(left, right domain.SchedulerEvent) bool {
+func sameSchedulerEventKey(left, right domain.SchedulerEvent) bool {
 	return left.SchedulerID == right.SchedulerID && left.ID == right.ID && left.CreatedAt.Equal(right.CreatedAt)
 }

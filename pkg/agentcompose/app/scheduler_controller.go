@@ -18,7 +18,7 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
-func NewLoaderController(di do.Injector) (*schedulers.Controller, error) {
+func NewSchedulerController(di do.Injector) (*schedulers.Controller, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
 	queue, err := webhooks.NewRunQueueFromConfig(config)
 	if err != nil {
@@ -48,9 +48,9 @@ func NewLoaderController(di do.Injector) (*schedulers.Controller, error) {
 		Notifier:  notifier,
 		Artifacts: schedulers.FSArtifacts{DataRoot: config.DataRoot},
 		ReserveSlots: func(event domain.SchedulerTopicEvent, count int) ([]*webhooks.Reservation, bool) {
-			return reserveLoaderEventQueueSlots(config, &queue, event, count)
+			return reserveSchedulerEventQueueSlots(config, &queue, event, count)
 		},
-		HostFactory: func(loader domain.Scheduler, execution schedulers.RuntimeExecutionContext, triggerEvent schedulers.TriggerEventMetadata) schedulers.RunHost {
+		HostFactory: func(scheduler domain.Scheduler, execution schedulers.RuntimeExecutionContext, triggerEvent schedulers.TriggerEventMetadata) schedulers.RunHost {
 			events := schedulers.HostEventRecorder(nil)
 			if execution.Kind == schedulers.ExecutionKindTrigger {
 				events = adapters.SchedulerHostEvents{Controller: controller}
@@ -62,19 +62,19 @@ func NewLoaderController(di do.Injector) (*schedulers.Controller, error) {
 				AgentDefinitions:        do.MustInvoke[*adapters.SchedulerSandboxRunner](di),
 				AgentExecutor:           adapters.SchedulerHostAgentExecutor{Executor: do.MustInvoke[*adapters.AgentExecutor](di)},
 				CommandExecutor:         adapters.SchedulerHostCommandExecutor{Executor: do.MustInvoke[*adapters.SchedulerCommandExecutor](di)},
-				ProjectAgentRunner:      loaderProjectAgentRunner{controller: do.MustInvoke[*runs.Controller](di)},
+				ProjectAgentRunner:      schedulerProjectAgentRunner{controller: do.MustInvoke[*runs.Controller](di)},
 				LLM:                     adapters.SchedulerHostLLMRunner{Client: do.MustInvoke[*adapters.LLMClient](di)},
 				SandboxRPC:              do.MustInvoke[*adapters.SandboxRPCBridge](di),
 				Publisher:               controller,
 				CommandRequiresCleanup:  schedulers.CommandRequestRequiresCleanup,
 				LinkedSandboxIDFromJSON: adapters.SchedulerSandboxRPCLinkedSandboxID,
-			}, loader, execution, triggerEvent)
+			}, scheduler, execution, triggerEvent)
 		},
 	})
 	return controller, nil
 }
 
-func reserveLoaderEventQueueSlots(config *appconfig.Config, queue **webhooks.RunQueue, event domain.SchedulerTopicEvent, count int) ([]*webhooks.Reservation, bool) {
+func reserveSchedulerEventQueueSlots(config *appconfig.Config, queue **webhooks.RunQueue, event domain.SchedulerTopicEvent, count int) ([]*webhooks.Reservation, bool) {
 	if count <= 0 {
 		return nil, true
 	}
@@ -103,34 +103,34 @@ func reserveLoaderEventQueueSlots(config *appconfig.Config, queue **webhooks.Run
 	return reservations, true
 }
 
-type loaderProjectAgentRunner struct {
+type schedulerProjectAgentRunner struct {
 	controller *runs.Controller
 }
 
-func (r loaderProjectAgentRunner) RunProjectAgent(ctx context.Context, request schedulers.HostProjectAgentRequest) (domain.ProjectRunRecord, error, error) {
+func (r schedulerProjectAgentRunner) RunProjectAgent(ctx context.Context, request schedulers.HostProjectAgentRequest) (domain.ProjectRunRecord, error, error) {
 	cleanupPolicy := agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_UNSPECIFIED
-	stickyLoaderID := ""
+	stickySchedulerID := ""
 	stickyTriggerID := ""
-	if domain.NormalizeLoaderSandboxPolicy(request.SandboxPolicy) == domain.SchedulerSandboxPolicySticky {
+	if domain.NormalizeSchedulerSandboxPolicy(request.SandboxPolicy) == domain.SchedulerSandboxPolicySticky {
 		cleanupPolicy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING
-		stickyLoaderID = request.SchedulerID
+		stickySchedulerID = request.SchedulerID
 		stickyTriggerID = request.TriggerID
 	}
 	run, execErr, err := r.controller.RunProjectAgent(ctx, runs.RunAgentRequest{
-		ProjectID:               request.ProjectID,
-		AgentName:               request.AgentName,
-		Prompt:                  request.Prompt,
-		Source:                  domain.ProjectRunSourceScheduler,
-		SchedulerID:             request.ProjectSchedulerID,
-		SchedulerRunID:          request.SchedulerRunID,
-		TriggerID:               request.TriggerID,
-		OutputSchemaJSON:        request.OutputSchemaJSON,
-		ClientRequestID:         request.ClientRequestID,
-		Volumes:                 request.Volumes,
-		CleanupPolicy:           cleanupPolicy,
-		StickyBindingLoaderID:   stickyLoaderID,
-		StickyBindingTriggerID:  stickyTriggerID,
-		StickyBindingConfigHash: request.SandboxConfigHash,
+		ProjectID:                request.ProjectID,
+		AgentName:                request.AgentName,
+		Prompt:                   request.Prompt,
+		Source:                   domain.ProjectRunSourceScheduler,
+		SchedulerID:              request.ProjectSchedulerID,
+		SchedulerRunID:           request.SchedulerRunID,
+		TriggerID:                request.TriggerID,
+		OutputSchemaJSON:         request.OutputSchemaJSON,
+		ClientRequestID:          request.ClientRequestID,
+		Volumes:                  request.Volumes,
+		CleanupPolicy:            cleanupPolicy,
+		StickyBindingSchedulerID: stickySchedulerID,
+		StickyBindingTriggerID:   stickyTriggerID,
+		StickyBindingConfigHash:  request.SandboxConfigHash,
 	}, nil)
 	if err != nil {
 		return domain.ProjectRunRecord{}, nil, err

@@ -12,7 +12,7 @@ import (
 	"agent-compose/pkg/projects"
 )
 
-func (s *loaderStore) loadSchedulerDefinition(ctx context.Context, schedulerID string) (domain.Scheduler, error) {
+func (s *schedulerStore) loadSchedulerDefinition(ctx context.Context, schedulerID string) (domain.Scheduler, error) {
 	schedulerID = strings.TrimSpace(schedulerID)
 	if schedulerID == "" {
 		return domain.Scheduler{}, fmt.Errorf("scheduler id is required")
@@ -72,11 +72,11 @@ func (s *loaderStore) loadSchedulerDefinition(ctx context.Context, schedulerID s
 		definition.Summary.CreatedAt = scheduler.CreatedAt
 		definition.Summary.UpdatedAt = scheduler.UpdatedAt
 		definition.Summary.LastError = scheduler.LastError
-		definition.Triggers, err = s.listLoaderTriggers(ctx, schedulerID)
+		definition.Triggers, err = s.listSchedulerTriggers(ctx, schedulerID)
 		if err != nil {
 			return domain.Scheduler{}, err
 		}
-		if err := s.hydrateLoaderSummaryCounts(ctx, &definition.Summary); err != nil {
+		if err := s.hydrateSchedulerSummaryCounts(ctx, &definition.Summary); err != nil {
 			return domain.Scheduler{}, err
 		}
 		return definition, nil

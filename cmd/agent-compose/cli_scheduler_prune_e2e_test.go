@@ -113,7 +113,7 @@ func (f *schedulerPruneE2EFixture) seedHistory(t *testing.T, dataRoot string) {
 	ctx := context.Background()
 	completedAt := time.Now().UTC().Add(-time.Hour)
 	f.artifactDir = filepath.Join(dataRoot, "schedulers", f.scheduler.ID, "runs", f.runID)
-	if err := f.store.CreateLoaderRun(ctx, domain.SchedulerRunSummary{
+	if err := f.store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{
 		ID: f.runID, SchedulerID: f.scheduler.ID, TriggerID: f.triggerID,
 		TriggerKind: domain.SchedulerTriggerKindCron, TriggerSource: "manual", Status: domain.SchedulerRunStatusSucceeded,
 		StartedAt: completedAt.Add(-time.Minute), CompletedAt: completedAt, DurationMs: 60_000,
@@ -121,7 +121,7 @@ func (f *schedulerPruneE2EFixture) seedHistory(t *testing.T, dataRoot string) {
 	}); err != nil {
 		t.Fatalf("create loader run: %v", err)
 	}
-	if err := f.store.AddLoaderEvent(ctx, domain.SchedulerEvent{
+	if err := f.store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
 		ID: "loader-event-scheduler-prune-e2e", SchedulerID: f.scheduler.ID, RunID: f.runID, TriggerID: f.triggerID,
 		Type: "loader.run.completed", Level: "info", Message: "scheduler prune e2e completed", CreatedAt: completedAt,
 	}); err != nil {
@@ -199,7 +199,7 @@ func (f schedulerPruneE2EFixture) assertHistoryVisible(t *testing.T) {
 func (f schedulerPruneE2EFixture) assertPersisted(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := f.store.GetLoaderRun(ctx, f.scheduler.ID, f.runID); err != nil {
+	if _, err := f.store.GetSchedulerRun(ctx, f.scheduler.ID, f.runID); err != nil {
 		t.Fatalf("loader run missing after dry-run: %v", err)
 	}
 	if _, err := os.Stat(f.artifactDir); err != nil {
@@ -211,7 +211,7 @@ func (f schedulerPruneE2EFixture) assertPersisted(t *testing.T) {
 func (f schedulerPruneE2EFixture) assertHistoryRemoved(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := f.store.GetLoaderRun(ctx, f.scheduler.ID, f.runID); err == nil {
+	if _, err := f.store.GetSchedulerRun(ctx, f.scheduler.ID, f.runID); err == nil {
 		t.Fatal("loader run still exists after forced prune")
 	}
 	if _, err := os.Stat(f.artifactDir); !os.IsNotExist(err) {
@@ -238,7 +238,7 @@ func (f schedulerPruneE2EFixture) assertHistoryRemoved(t *testing.T) {
 func (f schedulerPruneE2EFixture) assertRelationCounts(t *testing.T, want int) {
 	t.Helper()
 	ctx := context.Background()
-	events, err := f.store.ListLoaderEventsPage(ctx, schedulers.SchedulerEventPageFilter{
+	events, err := f.store.ListSchedulerEventsPage(ctx, schedulers.SchedulerEventPageFilter{
 		SchedulerIDs: []string{f.scheduler.ID}, RunID: f.runID, Limit: 10,
 	})
 	if err != nil || len(events) != want {

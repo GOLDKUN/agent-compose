@@ -77,13 +77,13 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	}
 
 	startedAt := time.UnixMilli(1_720_000_000_000).UTC()
-	if err := store.CreateLoaderRun(ctx, domain.SchedulerRunSummary{
+	if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{
 		ID: targetRunID, SchedulerID: loaderID, TriggerID: "trigger-regression",
 		Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt,
 	}); err != nil {
 		t.Fatalf("create target scheduler run: %v", err)
 	}
-	if err := store.AddLoaderEvent(ctx, domain.SchedulerEvent{
+	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
 		ID: "event-target", SchedulerID: loaderID, RunID: targetRunID,
 		TriggerID: "trigger-regression", Type: "loader.agent.completed",
 		LinkedSandboxID: targetID, CreatedAt: startedAt,
@@ -92,7 +92,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	}
 	for index := 0; index < 501; index++ {
 		runID := fmt.Sprintf("run-newer-%03d", index)
-		if err := store.CreateLoaderRun(ctx, domain.SchedulerRunSummary{
+		if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{
 			ID: runID, SchedulerID: loaderID, TriggerID: "trigger-regression",
 			Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt.Add(time.Duration(index+1) * time.Second),
 		}); err != nil {

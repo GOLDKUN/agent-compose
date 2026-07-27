@@ -134,18 +134,18 @@ func TestControllerRemoveProjectMarksProjectRemovedAndIsIdempotent(t *testing.T)
 }
 
 func TestManagedSchedulerErrorHelpersCoverage(t *testing.T) {
-	plain := &managedSchedulerBuildError{message: "missing script"}
+	plain := &projectSchedulerBuildError{message: "missing script"}
 	if plain.Error() != "missing script" {
 		t.Fatalf("plain build error = %q", plain.Error())
 	}
-	withPath := &managedSchedulerBuildError{path: "agents.worker.scheduler.script", message: "invalid script"}
+	withPath := &projectSchedulerBuildError{path: "agents.worker.scheduler.script", message: "invalid script"}
 	if withPath.Error() != "agents.worker.scheduler.script: invalid script" {
 		t.Fatalf("path build error = %q", withPath.Error())
 	}
-	if issue := managedSchedulerBuildIssue(withPath); issue.Path != withPath.path || issue.Message != withPath.message {
+	if issue := projectSchedulerBuildIssue(withPath); issue.Path != withPath.path || issue.Message != withPath.message {
 		t.Fatalf("managed scheduler build issue = %#v", issue)
 	}
-	if issue := managedSchedulerBuildIssue(errors.New("boom")); issue.Path != "schedulers" || issue.Message != "boom" {
+	if issue := projectSchedulerBuildIssue(errors.New("boom")); issue.Path != "schedulers" || issue.Message != "boom" {
 		t.Fatalf("fallback scheduler build issue = %#v", issue)
 	}
 
@@ -181,7 +181,7 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	changes, err := DownProject(ctx, project, DownOptions{
 		Store:     schedulerStore,
 		Sandboxes: sessionStore,
-		RefreshLoaders: func(context.Context) error {
+		RefreshSchedulers: func(context.Context) error {
 			refreshed = true
 			return nil
 		},
@@ -208,19 +208,19 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 		t.Fatalf("SandboxHasTag returned unexpected values")
 	}
 
-	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{}); err == nil {
-		t.Fatalf("DisableProjectManagedSchedulers without store returned nil error")
+	if _, err := DisableProjectSchedulers(ctx, project, DownOptions{}); err == nil {
+		t.Fatalf("DisableProjectSchedulers without store returned nil error")
 	}
-	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{Store: &downCoverageStore{listErr: errors.New("list failed")}}); err == nil {
-		t.Fatalf("DisableProjectManagedSchedulers list error returned nil error")
+	if _, err := DisableProjectSchedulers(ctx, project, DownOptions{Store: &downCoverageStore{listErr: errors.New("list failed")}}); err == nil {
+		t.Fatalf("DisableProjectSchedulers list error returned nil error")
 	}
-	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{
+	if _, err := DisableProjectSchedulers(ctx, project, DownOptions{
 		Store: &downCoverageStore{items: []domain.ProjectSchedulerRecord{{ProjectID: project.ID, SchedulerID: "scheduler-1", Enabled: true}}},
-		RefreshLoaders: func(context.Context) error {
+		RefreshSchedulers: func(context.Context) error {
 			return errors.New("refresh failed")
 		},
 	}); err == nil {
-		t.Fatalf("DisableProjectManagedSchedulers refresh error returned nil error")
+		t.Fatalf("DisableProjectSchedulers refresh error returned nil error")
 	}
 	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{}); err == nil {
 		t.Fatalf("StopProjectRunningSandboxes without sandboxes returned nil error")
@@ -358,11 +358,11 @@ func (s *controllerCoverageStore) SetProjectSchedulerEnabled(context.Context, st
 	return domain.ProjectSchedulerRecord{}, nil
 }
 
-func (s *controllerCoverageStore) GetLoader(context.Context, string) (domain.Scheduler, error) {
+func (s *controllerCoverageStore) GetScheduler(context.Context, string) (domain.Scheduler, error) {
 	return domain.Scheduler{}, sql.ErrNoRows
 }
 
-func (s *controllerCoverageStore) ReplaceLoaderTriggers(context.Context, string, []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
+func (s *controllerCoverageStore) ReplaceSchedulerTriggers(context.Context, string, []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
 	return nil, nil
 }
 

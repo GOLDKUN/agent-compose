@@ -101,6 +101,6 @@ type dashboardRunStore struct {
 	err  error
 }
 
-func (s dashboardRunStore) ListRecentLoaderRuns(context.Context, int) ([]domain.SchedulerRunSummary, error) {
+func (s dashboardRunStore) ListRecentSchedulerRuns(context.Context, int) ([]domain.SchedulerRunSummary, error) {
 	return s.runs, s.err
 }

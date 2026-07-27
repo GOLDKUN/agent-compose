@@ -44,7 +44,7 @@ type SchedulerSandboxRunner struct {
 	LifecycleLocks   *sandboxes.LifecycleLocks
 }
 
-func NewLoaderSandboxRunner(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, workspaceEnsurer workspaces.WorkspaceEnsurer, driver sandboxes.SandboxDriver, cap capabilities.Provider, volumeResolver SchedulerVolumeResolver, streams *sandboxes.StreamBroker, publisher schedulers.ControllerPublisher, capTokens *CapabilitySandboxResolver, agentExecutor *AgentExecutor, locks ...*sandboxes.LifecycleLocks) *SchedulerSandboxRunner {
+func NewSchedulerSandboxRunner(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, workspaceEnsurer workspaces.WorkspaceEnsurer, driver sandboxes.SandboxDriver, cap capabilities.Provider, volumeResolver SchedulerVolumeResolver, streams *sandboxes.StreamBroker, publisher schedulers.ControllerPublisher, capTokens *CapabilitySandboxResolver, agentExecutor *AgentExecutor, locks ...*sandboxes.LifecycleLocks) *SchedulerSandboxRunner {
 	runner := &SchedulerSandboxRunner{Config: config, Store: store, ConfigDB: configDB, workspaceEnsurer: workspaceEnsurer, Driver: driver, Cap: cap, Volumes: volumeResolver, Streams: streams, Publisher: publisher, CapTokens: capTokens, AgentExecutor: agentExecutor}
 	if len(locks) > 0 {
 		runner.LifecycleLocks = locks[0]
@@ -91,14 +91,16 @@ func (r *SchedulerSandboxRunner) Shutdown(ctx context.Context, sessionID string)
 	return nil
 }
 
-func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, loader domain.Scheduler, request domain.SchedulerAgentRequest, titleOverridesSession bool) (*domain.Sandbox, string, error) {
-	agentDefinition, err := r.ResolveLoaderAgentDefinition(ctx, loader)
+// Ensure preserves historical loader wording in observable errors, event
+// types, payload keys, and sandbox tags for CLI and integration compatibility.
+func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, titleOverridesSession bool) (*domain.Sandbox, string, error) {
+	agentDefinition, err := r.ResolveSchedulerAgentDefinition(ctx, scheduler)
 	if err != nil {
 		return nil, "", err
 	}
-	effectivePolicy := domain.NormalizeLoaderSandboxPolicy(loader.Summary.SandboxPolicy)
+	effectivePolicy := domain.NormalizeSchedulerSandboxPolicy(scheduler.Summary.SandboxPolicy)
 	if strings.TrimSpace(domain.SchedulerAgentSandboxPolicy(request)) != "" {
-		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(domain.SchedulerAgentSandboxPolicy(request))
+		effectivePolicy = domain.NormalizeSchedulerSandboxPolicy(domain.SchedulerAgentSandboxPolicy(request))
 	}
 	hasOverrides := schedulers.AgentRequestOverridesSession(request, titleOverridesSession)
 	forceNew := effectivePolicy == domain.SchedulerSandboxPolicyNew || hasOverrides
@@ -118,43 +120,43 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, loader domain.Sched
 		}
 	}
 	if agentConfig.Provider == "" {
-		agentConfig.Provider = domain.NormalizeAgentKind(loader.Summary.DefaultAgent)
+		agentConfig.Provider = domain.NormalizeAgentKind(scheduler.Summary.DefaultAgent)
 	}
 	if agentConfig.Provider == "" {
 		agentConfig.Provider = domain.DefaultAgentProvider
 	}
-	providerEnvItems = domain.MergeEnvItems(providerEnvItems, loader.EnvItems)
+	providerEnvItems = domain.MergeEnvItems(providerEnvItems, scheduler.EnvItems)
 	providerEnvItems = domain.MergeEnvItems(providerEnvItems, domain.SchedulerAgentSandboxEnv(request))
 	envItems := domain.MergeEnvItems(globalEnvItems, providerEnvItems)
 	envItems = llms.FilterPersistedRuntimeEnv(envItems)
-	workspaceID := r.workspaceID(loader, request, agentDefinition)
+	workspaceID := r.workspaceID(scheduler, request, agentDefinition)
 	workspaceSnapshot, err := r.workspaceSnapshot(ctx, workspaceID)
 	if err != nil {
 		return nil, "", err
 	}
-	driver, err := r.driver(request, loader, agentDefinition)
+	driver, err := r.driver(request, scheduler, agentDefinition)
 	if err != nil {
 		return nil, "", err
 	}
-	if err := validateLoaderRuntimeDriverCompiled(driver); err != nil {
+	if err := validateSchedulerRuntimeDriverCompiled(driver); err != nil {
 		return nil, "", err
 	}
-	guestImage := r.guestImage(request, loader, agentDefinition, driver)
-	volumeMounts, volumeWarnings, err := r.resolveVolumeMounts(ctx, loader, request, agentDefinition)
+	guestImage := r.guestImage(request, scheduler, agentDefinition, driver)
+	volumeMounts, volumeWarnings, err := r.resolveVolumeMounts(ctx, scheduler, request, agentDefinition)
 	if err != nil {
 		return nil, "", err
 	}
-	baseConfigHash, err := loaderSandboxConfigHash(loader)
+	baseConfigHash, err := schedulerSandboxConfigHash(scheduler)
 	if err != nil {
 		return nil, "", err
 	}
-	configHash, err := loaderRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, providerEnvItems, envItems, workspaceSnapshot, driver, guestImage, volumeMounts)
+	configHash, err := schedulerRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, providerEnvItems, envItems, workspaceSnapshot, driver, guestImage, volumeMounts)
 	if err != nil {
 		return nil, "", err
 	}
 	var previousBinding *domain.SchedulerBinding
 	if !forceNew {
-		if session, eventType, reused, binding, err := r.reuseCompatibleLoaderBinding(ctx, loader, request.BindingTriggerID, configHash); err != nil {
+		if session, eventType, reused, binding, err := r.reuseCompatibleSchedulerBinding(ctx, scheduler, request.BindingTriggerID, configHash); err != nil {
 			return nil, "", err
 		} else if reused {
 			return session, eventType, nil
@@ -163,29 +165,32 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, loader domain.Sched
 		}
 	}
 
-	capabilityVars, capabilityTags := capabilities.BuildGatewaySandboxVars(capabilities.ProxyTarget(r.Cap), loader.Summary.CapsetIDs)
+	capabilityVars, capabilityTags := capabilities.BuildGatewaySandboxVars(capabilities.ProxyTarget(r.Cap), scheduler.Summary.CapsetIDs)
 	envItems = domain.MergeEnvItems(envItems, capabilityVars)
+	// Origin values and loader_id/loader_name tags are queried by existing
+	// sandbox consumers. Preserve them even though the owning domain is now
+	// named scheduler internally.
 	origin := "loader"
-	if strings.TrimSpace(loader.Summary.ManagedProjectID) != "" {
+	if strings.TrimSpace(scheduler.Summary.ProjectID) != "" {
 		origin = "scheduler"
 	}
 	tags := []domain.SandboxTag{
 		{Name: "origin", Value: origin},
-		{Name: "loader_id", Value: loader.Summary.ID},
-		{Name: "loader_name", Value: loader.Summary.Name},
+		{Name: "loader_id", Value: scheduler.Summary.ID},
+		{Name: "loader_name", Value: scheduler.Summary.Name},
 		{Name: domain.AgentSandboxTagProvider, Value: agentConfig.Provider},
 	}
 	if origin == "scheduler" {
-		projectID := strings.TrimSpace(loader.Summary.ManagedProjectID)
+		projectID := strings.TrimSpace(scheduler.Summary.ProjectID)
 		tags = append(tags,
 			domain.SandboxTag{Name: "project", Value: projectID},
 			domain.SandboxTag{Name: "project_id", Value: projectID},
-			domain.SandboxTag{Name: "agent", Value: loader.Summary.ManagedAgentName},
-			domain.SandboxTag{Name: "scheduler_id", Value: loader.Summary.ManagedSchedulerID},
+			domain.SandboxTag{Name: "agent", Value: scheduler.Summary.AgentName},
+			domain.SandboxTag{Name: "scheduler_id", Value: scheduler.Summary.ProjectSchedulerID},
 		)
 	}
 	tags = append(tags, capabilityTags...)
-	title := firstNonEmpty(strings.TrimSpace(request.Title), strings.TrimSpace(loader.Summary.Name), domain.DefaultLoaderName(time.Now().UTC()))
+	title := firstNonEmpty(strings.TrimSpace(request.Title), strings.TrimSpace(scheduler.Summary.Name), domain.DefaultSchedulerName(time.Now().UTC()))
 	if agentDefinition != nil {
 		tags = append(tags,
 			domain.SandboxTag{Name: domain.AgentSandboxTagSource, Value: domain.AgentSandboxTagSourceVal},
@@ -193,7 +198,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, loader domain.Sched
 			domain.SandboxTag{Name: domain.AgentSandboxTagName, Value: agentDefinition.Name},
 		)
 	}
-	session, err := r.Store.CreateSandboxWithOptions(ctx, title, "", driver, guestImage, workspaceID, domain.SandboxTypeScript+":"+loader.Summary.ID, workspaceSnapshot, envItems, tags, sandboxstore.CreateSandboxOptions{
+	session, err := r.Store.CreateSandboxWithOptions(ctx, title, "", driver, guestImage, workspaceID, domain.SandboxTypeScript+":"+scheduler.Summary.ID, workspaceSnapshot, envItems, tags, sandboxstore.CreateSandboxOptions{
 		JupyterEnabled: request.JupyterEnabled,
 		VolumeMounts:   volumeMounts,
 	})
@@ -213,7 +218,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, loader domain.Sched
 		_ = r.Store.UpdateSandbox(ctx, session)
 		return nil, "", err
 	}
-	writeCapabilityGuide(ctx, r.Cap, r.Store, r.Streams, session, loader.Summary.CapsetIDs)
+	writeCapabilityGuide(ctx, r.Cap, r.Store, r.Streams, session, scheduler.Summary.CapsetIDs)
 	if r.AgentExecutor == nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = r.Store.UpdateSandbox(ctx, session)
@@ -242,7 +247,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, loader domain.Sched
 		r.Streams.PublishEventAdded(session.Summary.ID, event)
 	}
 	if effectivePolicy == domain.SchedulerSandboxPolicySticky && !forceNew {
-		claimed, err := r.bindLoaderSandbox(ctx, loader, request.BindingTriggerID, session.Summary.ID, configHash, previousBinding)
+		claimed, err := r.bindSchedulerSandbox(ctx, scheduler, request.BindingTriggerID, session.Summary.ID, configHash, previousBinding)
 		if err != nil {
 			_ = r.Shutdown(ctx, session.Summary.ID)
 			return nil, "", fmt.Errorf("persist loader sticky sandbox binding: %w", err)
@@ -251,7 +256,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, loader domain.Sched
 			if err := r.Shutdown(ctx, session.Summary.ID); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return nil, "", fmt.Errorf("retire unclaimed loader sticky sandbox: %w", err)
 			}
-			winner, eventType, reused, err := r.reuseWinningLoaderBinding(ctx, loader.Summary.ID, request.BindingTriggerID, configHash)
+			winner, eventType, reused, err := r.reuseWinningSchedulerBinding(ctx, scheduler.Summary.ID, request.BindingTriggerID, configHash)
 			if err != nil {
 				return nil, "", fmt.Errorf("reuse concurrently claimed loader sticky sandbox: %w", err)
 			}
@@ -267,13 +272,15 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, loader domain.Sched
 	}
 	domain.RestoreSandboxTransientFields(loaded, session)
 	r.indexCapabilitySandbox(loaded)
+	// This topic payload and returned event type are historical external
+	// contracts; source, loaderId, and loader.sandbox.created stay unchanged.
 	r.publish("agent-compose.session.created", map[string]any{
 		"sandboxId":     loaded.Summary.ID,
 		"title":         loaded.Summary.Title,
 		"driver":        loaded.Summary.Driver,
 		"triggerSource": loaded.Summary.TriggerSource,
 		"source":        "loader",
-		"loaderId":      loader.Summary.ID,
+		"loaderId":      scheduler.Summary.ID,
 	})
 	return loaded, "loader.sandbox.created", nil
 }
@@ -359,8 +366,8 @@ func (r *SchedulerSandboxRunner) revokeCapabilitySandbox(sandboxID string) {
 	}
 }
 
-func (r *SchedulerSandboxRunner) ResolveLoaderAgentDefinition(ctx context.Context, loader domain.Scheduler) (*domain.AgentDefinition, error) {
-	agentID := strings.TrimSpace(loader.Summary.AgentID)
+func (r *SchedulerSandboxRunner) ResolveSchedulerAgentDefinition(ctx context.Context, scheduler domain.Scheduler) (*domain.AgentDefinition, error) {
+	agentID := strings.TrimSpace(scheduler.Summary.AgentID)
 	if agentID == "" {
 		return nil, nil
 	}
@@ -374,10 +381,10 @@ func (r *SchedulerSandboxRunner) ResolveLoaderAgentDefinition(ctx context.Contex
 	return &agent, nil
 }
 
-func (r *SchedulerSandboxRunner) workspaceID(loader domain.Scheduler, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition) string {
-	workspaceID := firstNonEmpty(strings.TrimSpace(request.WorkspaceID), strings.TrimSpace(loader.Summary.WorkspaceID))
+func (r *SchedulerSandboxRunner) workspaceID(scheduler domain.Scheduler, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition) string {
+	workspaceID := firstNonEmpty(strings.TrimSpace(request.WorkspaceID), strings.TrimSpace(scheduler.Summary.WorkspaceID))
 	if agentDefinition != nil {
-		workspaceID = firstNonEmpty(strings.TrimSpace(request.WorkspaceID), strings.TrimSpace(loader.Summary.WorkspaceID), strings.TrimSpace(agentDefinition.WorkspaceID))
+		workspaceID = firstNonEmpty(strings.TrimSpace(request.WorkspaceID), strings.TrimSpace(scheduler.Summary.WorkspaceID), strings.TrimSpace(agentDefinition.WorkspaceID))
 	}
 	return workspaceID
 }
@@ -393,15 +400,15 @@ func (r *SchedulerSandboxRunner) workspaceSnapshot(ctx context.Context, workspac
 	return toSandboxWorkspaceSnapshot(workspaceConfig), nil
 }
 
-func (r *SchedulerSandboxRunner) driver(request domain.SchedulerAgentRequest, loader domain.Scheduler, agentDefinition *domain.AgentDefinition) (string, error) {
-	driverValue := firstNonEmpty(strings.TrimSpace(request.Driver), strings.TrimSpace(loader.Summary.Driver))
+func (r *SchedulerSandboxRunner) driver(request domain.SchedulerAgentRequest, scheduler domain.Scheduler, agentDefinition *domain.AgentDefinition) (string, error) {
+	driverValue := firstNonEmpty(strings.TrimSpace(request.Driver), strings.TrimSpace(scheduler.Summary.Driver))
 	if agentDefinition != nil {
-		driverValue = firstNonEmpty(strings.TrimSpace(request.Driver), strings.TrimSpace(loader.Summary.Driver), strings.TrimSpace(agentDefinition.Driver))
+		driverValue = firstNonEmpty(strings.TrimSpace(request.Driver), strings.TrimSpace(scheduler.Summary.Driver), strings.TrimSpace(agentDefinition.Driver))
 	}
 	return driverpkg.ResolveSandboxRuntimeDriver(driverValue, r.Config.RuntimeDriver)
 }
 
-func validateLoaderRuntimeDriverCompiled(driver string) error {
+func validateSchedulerRuntimeDriverCompiled(driver string) error {
 	err := driverpkg.ValidateCompiledRuntimeDriver(driver)
 	if errors.Is(err, driverpkg.ErrRuntimeDriverNotCompiled) {
 		return domain.ClassifyError(domain.ErrUnsupported, "", err)
@@ -409,16 +416,16 @@ func validateLoaderRuntimeDriverCompiled(driver string) error {
 	return err
 }
 
-func (r *SchedulerSandboxRunner) guestImage(request domain.SchedulerAgentRequest, loader domain.Scheduler, agentDefinition *domain.AgentDefinition, driver string) string {
+func (r *SchedulerSandboxRunner) guestImage(request domain.SchedulerAgentRequest, scheduler domain.Scheduler, agentDefinition *domain.AgentDefinition, driver string) string {
 	agentGuestImage := ""
 	if agentDefinition != nil {
 		agentGuestImage = agentDefinition.GuestImage
 	}
-	return driverpkg.ResolveSandboxGuestImage(request.GuestImage, loader.Summary.GuestImage, agentGuestImage, driverpkg.DefaultGuestImageForDriver(r.Config, driver))
+	return driverpkg.ResolveSandboxGuestImage(request.GuestImage, scheduler.Summary.GuestImage, agentGuestImage, driverpkg.DefaultGuestImageForDriver(r.Config, driver))
 }
 
-func (r *SchedulerSandboxRunner) resolveVolumeMounts(ctx context.Context, loader domain.Scheduler, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition) ([]domain.SandboxVolumeMount, []string, error) {
-	specs, err := mergeLoaderVolumeMountSpecs(agentDefinitionVolumes(agentDefinition), loader.Volumes, request.Volumes)
+func (r *SchedulerSandboxRunner) resolveVolumeMounts(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition) ([]domain.SandboxVolumeMount, []string, error) {
+	specs, err := mergeSchedulerVolumeMountSpecs(agentDefinitionVolumes(agentDefinition), scheduler.Volumes, request.Volumes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -428,11 +435,11 @@ func (r *SchedulerSandboxRunner) resolveVolumeMounts(ctx context.Context, loader
 	if r.Volumes == nil {
 		return nil, nil, fmt.Errorf("volume resolver is required")
 	}
-	projectVolumes, err := r.loaderProjectVolumes(ctx, loader)
+	projectVolumes, err := r.schedulerProjectVolumes(ctx, scheduler)
 	if err != nil {
 		return nil, nil, err
 	}
-	projectRoot, err := r.loaderProjectRoot(ctx, loader)
+	projectRoot, err := r.schedulerProjectRoot(ctx, scheduler)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -442,8 +449,8 @@ func (r *SchedulerSandboxRunner) resolveVolumeMounts(ctx context.Context, loader
 	})
 }
 
-func (r *SchedulerSandboxRunner) loaderProjectVolumes(ctx context.Context, loader domain.Scheduler) (map[string]domain.VolumeRecord, error) {
-	projectID := strings.TrimSpace(loader.Summary.ManagedProjectID)
+func (r *SchedulerSandboxRunner) schedulerProjectVolumes(ctx context.Context, scheduler domain.Scheduler) (map[string]domain.VolumeRecord, error) {
+	projectID := strings.TrimSpace(scheduler.Summary.ProjectID)
 	if projectID == "" {
 		return nil, nil
 	}
@@ -457,8 +464,8 @@ func (r *SchedulerSandboxRunner) loaderProjectVolumes(ctx context.Context, loade
 	return projectVolumes, nil
 }
 
-func (r *SchedulerSandboxRunner) loaderProjectRoot(ctx context.Context, loader domain.Scheduler) (string, error) {
-	projectID := strings.TrimSpace(loader.Summary.ManagedProjectID)
+func (r *SchedulerSandboxRunner) schedulerProjectRoot(ctx context.Context, scheduler domain.Scheduler) (string, error) {
+	projectID := strings.TrimSpace(scheduler.Summary.ProjectID)
 	if projectID == "" {
 		return "", nil
 	}
@@ -469,10 +476,10 @@ func (r *SchedulerSandboxRunner) loaderProjectRoot(ctx context.Context, loader d
 	if err != nil {
 		return "", fmt.Errorf("get loader project %s: %w", projectID, err)
 	}
-	return loaderProjectRoot(project), nil
+	return schedulerProjectRoot(project), nil
 }
 
-func loaderProjectRoot(project domain.ProjectRecord) string {
+func schedulerProjectRoot(project domain.ProjectRecord) string {
 	sourcePath := strings.TrimSpace(project.SourcePath)
 	if sourcePath == "" {
 		return ""
@@ -484,7 +491,7 @@ func loaderProjectRoot(project domain.ProjectRecord) string {
 	return filepath.Dir(sourcePath)
 }
 
-func mergeLoaderVolumeMountSpecs(groups ...[]domain.VolumeMountSpec) ([]domain.VolumeMountSpec, error) {
+func mergeSchedulerVolumeMountSpecs(groups ...[]domain.VolumeMountSpec) ([]domain.VolumeMountSpec, error) {
 	var merged []domain.VolumeMountSpec
 	byTarget := make(map[string]int)
 	for _, group := range groups {

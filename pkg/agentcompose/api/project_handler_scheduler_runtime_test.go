@@ -91,14 +91,14 @@ type schedulerRuntimeFake struct {
 	triggerCalls int
 }
 
-func (f *schedulerRuntimeFake) SetLoaderEnabled(_ context.Context, loaderID string, enabled bool) (domain.Scheduler, error) {
+func (f *schedulerRuntimeFake) SetSchedulerEnabled(_ context.Context, loaderID string, enabled bool) (domain.Scheduler, error) {
 	f.enabledCalls++
 	f.loaderID = loaderID
 	f.loader.Summary.Enabled = enabled
 	return f.loader, nil
 }
 
-func (f *schedulerRuntimeFake) SetLoaderTriggerEnabled(_ context.Context, loaderID, triggerID string, enabled bool) (domain.Scheduler, error) {
+func (f *schedulerRuntimeFake) SetSchedulerTriggerEnabled(_ context.Context, loaderID, triggerID string, enabled bool) (domain.Scheduler, error) {
 	f.triggerCalls++
 	f.loaderID = loaderID
 	f.triggerID = triggerID

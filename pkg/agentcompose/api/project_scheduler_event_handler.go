@@ -13,8 +13,8 @@ import (
 )
 
 type ProjectSchedulerEventStore interface {
-	ListLoaderEventsPage(context.Context, schedulers.SchedulerEventPageFilter) ([]domain.SchedulerEvent, error)
-	CountLoaderEventsPage(context.Context, schedulers.SchedulerEventPageFilter) (int, error)
+	ListSchedulerEventsPage(context.Context, schedulers.SchedulerEventPageFilter) ([]domain.SchedulerEvent, error)
+	CountSchedulerEventsPage(context.Context, schedulers.SchedulerEventPageFilter) (int, error)
 }
 
 func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *connect.Request[agentcomposev2.ListProjectSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListProjectSchedulerEventsResponse], error) {
@@ -44,22 +44,22 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 	if err != nil {
 		return nil, err
 	}
-	loaderIDs := make([]string, 0, len(schedulerRecords))
-	byLoaderID := make(map[string]domain.ProjectSchedulerRecord, len(schedulerRecords))
+	schedulerIDs := make([]string, 0, len(schedulerRecords))
+	bySchedulerID := make(map[string]domain.ProjectSchedulerRecord, len(schedulerRecords))
 	for _, scheduler := range schedulerRecords {
-		loaderID := strings.TrimSpace(scheduler.ID)
-		if loaderID == "" {
+		schedulerID := strings.TrimSpace(scheduler.ID)
+		if schedulerID == "" {
 			continue
 		}
-		loaderIDs = append(loaderIDs, loaderID)
-		byLoaderID[loaderID] = scheduler
+		schedulerIDs = append(schedulerIDs, schedulerID)
+		bySchedulerID[schedulerID] = scheduler
 	}
 	store, ok := h.store.(ProjectSchedulerEventStore)
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler event store is required"))
 	}
-	events, err := store.ListLoaderEventsPage(ctx, schedulers.SchedulerEventPageFilter{
-		SchedulerIDs:   loaderIDs,
+	events, err := store.ListSchedulerEventsPage(ctx, schedulers.SchedulerEventPageFilter{
+		SchedulerIDs:   schedulerIDs,
 		RequireTrigger: true,
 		TriggerID:      triggerID,
 		RunID:          runID,
@@ -69,15 +69,15 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	total, err := store.CountLoaderEventsPage(ctx, schedulers.SchedulerEventPageFilter{
-		SchedulerIDs: loaderIDs, RequireTrigger: true, TriggerID: triggerID, RunID: runID,
+	total, err := store.CountSchedulerEventsPage(ctx, schedulers.SchedulerEventPageFilter{
+		SchedulerIDs: schedulerIDs, RequireTrigger: true, TriggerID: triggerID, RunID: runID,
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
 	response := &agentcomposev2.ListProjectSchedulerEventsResponse{Events: make([]*agentcomposev2.SchedulerEvent, 0, len(events)), Total: uint32(total)}
 	for _, event := range events {
-		scheduler, ok := byLoaderID[event.SchedulerID]
+		scheduler, ok := bySchedulerID[event.SchedulerID]
 		if !ok {
 			continue
 		}

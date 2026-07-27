@@ -312,8 +312,8 @@ func (s *projectStore) ListProjectAgents(ctx context.Context, projectID string) 
 	return items, nil
 }
 
-func (s *projectStore) ListProjectAgentsByManagedAgentIDs(ctx context.Context, managedAgentIDs []string) (map[string]ProjectAgentRecord, error) {
-	ids := normalizedNonEmptyStrings(managedAgentIDs)
+func (s *projectStore) ListProjectAgentsByIDs(ctx context.Context, agentIDs []string) (map[string]ProjectAgentRecord, error) {
+	ids := normalizedNonEmptyStrings(agentIDs)
 	if len(ids) == 0 {
 		return map[string]ProjectAgentRecord{}, nil
 	}

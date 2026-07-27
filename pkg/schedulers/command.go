@@ -31,10 +31,10 @@ func CommandCellSource(request domain.SchedulerCommandRequest) string {
 	return strings.Join(items, " ")
 }
 
-func CommandRequestRequiresCleanup(loader domain.Scheduler, request domain.SchedulerCommandRequest) bool {
-	effectivePolicy := domain.NormalizeLoaderSandboxPolicy(loader.Summary.SandboxPolicy)
+func CommandRequestRequiresCleanup(scheduler domain.Scheduler, request domain.SchedulerCommandRequest) bool {
+	effectivePolicy := domain.NormalizeSchedulerSandboxPolicy(scheduler.Summary.SandboxPolicy)
 	if strings.TrimSpace(domain.SchedulerCommandSandboxPolicy(request)) != "" {
-		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(domain.SchedulerCommandSandboxPolicy(request))
+		effectivePolicy = domain.NormalizeSchedulerSandboxPolicy(domain.SchedulerCommandSandboxPolicy(request))
 	}
 	return effectivePolicy == domain.SchedulerSandboxPolicyNew || CommandRequestOverridesSandbox(request)
 }

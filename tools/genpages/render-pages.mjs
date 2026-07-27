@@ -31,6 +31,13 @@ const manuals = [
     alternate: "zh-CN/guest-image-abi.html",
   },
   {
+    source: "v2-storage-migration.md",
+    output: "v2-storage-migration.html",
+    title: "V2 Storage Migration",
+    lang: "en",
+    alternate: "zh-CN/v2-storage-migration.html",
+  },
+  {
     source: "zh-CN/command-line-manual.md",
     output: "zh-CN/command-line-manual.html",
     title: "命令行手册",
@@ -50,6 +57,13 @@ const manuals = [
     title: "自定义 Guest Image ABI",
     lang: "zh-CN",
     alternate: "../guest-image-abi.html",
+  },
+  {
+    source: "zh-CN/v2-storage-migration.md",
+    output: "zh-CN/v2-storage-migration.html",
+    title: "V2 存储迁移",
+    lang: "zh-CN",
+    alternate: "../v2-storage-migration.html",
   },
 ];
 
@@ -78,12 +92,13 @@ function renderPage(manual, body) {
   const nested = currentPage.includes("/");
   const root = nested ? "../" : "./";
   const labels = lang === "zh-CN"
-    ? ["首页", "命令行手册", "YAML 配置手册"]
-    : ["Home", "CLI Manual", "YAML Manual"];
+    ? ["首页", "命令行手册", "YAML 配置手册", "V2 存储迁移"]
+    : ["Home", "CLI Manual", "YAML Manual", "V2 Storage Migration"];
   const navItems = [
     [root, labels[0], ""],
     ["command-line-manual.html", labels[1], "command-line-manual.html"],
     ["agent-compose-yaml-manual.html", labels[2], "agent-compose-yaml-manual.html"],
+    ["v2-storage-migration.html", labels[3], "v2-storage-migration.html"],
   ];
   const nav = navItems
     .map(([href, label, page]) => {

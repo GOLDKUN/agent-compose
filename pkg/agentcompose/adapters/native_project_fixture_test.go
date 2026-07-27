@@ -13,7 +13,7 @@ import (
 func createNativeTestAgent(t testing.TB, ctx context.Context, store *configstore.ConfigStore, definition domain.AgentDefinition) domain.AgentDefinition {
 	t.Helper()
 	projectID := "test-project-" + definition.ID
-	agentName := strings.TrimSpace(definition.ManagedAgentName)
+	agentName := strings.TrimSpace(definition.AgentName)
 	if agentName == "" {
 		agentName = definition.Name
 	}
@@ -89,10 +89,10 @@ func createNativeTestScheduler(t testing.TB, ctx context.Context, store *configs
 	if _, err := store.UpsertProjectScheduler(ctx, domain.ProjectSchedulerRecord{ID: scheduler.Summary.ID, ProjectID: project.ID, SchedulerID: scheduler.Summary.ID, AgentName: agentName, Revision: revision.Revision, Enabled: scheduler.Summary.Enabled, TriggerCount: len(scheduler.Triggers), SpecJSON: "{}"}); err != nil {
 		t.Fatalf("upsert native scheduler: %v", err)
 	}
-	if _, err := store.ReplaceLoaderTriggers(ctx, scheduler.Summary.ID, scheduler.Triggers); err != nil {
+	if _, err := store.ReplaceSchedulerTriggers(ctx, scheduler.Summary.ID, scheduler.Triggers); err != nil {
 		t.Fatalf("replace native scheduler triggers: %v", err)
 	}
-	loaded, err := store.GetLoader(ctx, scheduler.Summary.ID)
+	loaded, err := store.GetScheduler(ctx, scheduler.Summary.ID)
 	if err != nil {
 		t.Fatalf("load native scheduler: %v", err)
 	}

@@ -112,7 +112,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerPaths(t *testing.T) {
 			fixture.ctx,
 			projectRunEnsurerRecord("run-sticky"),
 			Preparation{Workspace: projectRunWorkspaceSnapshot("prepared-conflict")},
-			RunAgentRequest{StickyBindingLoaderID: "loader-1", StickyBindingTriggerID: "trigger-1"},
+			RunAgentRequest{StickyBindingSchedulerID: "loader-1", StickyBindingTriggerID: "trigger-1"},
 		)
 		if err != nil {
 			t.Fatalf("ensureProjectRunSandbox returned error: %v", err)

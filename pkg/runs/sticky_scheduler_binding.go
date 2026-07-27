@@ -62,21 +62,21 @@ func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, pr
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func (c *Controller) resolveStickyLoaderBinding(ctx context.Context, store stickyBindingStore, loaderID, triggerID, configHash string) (string, *domain.SchedulerBinding, []string, error) {
+func (c *Controller) resolveStickySchedulerBinding(ctx context.Context, store stickyBindingStore, schedulerID, triggerID, configHash string) (string, *domain.SchedulerBinding, []string, error) {
 	for range 3 {
-		binding, found, err := store.GetLoaderBinding(ctx, loaderID, triggerID)
+		binding, found, err := store.GetSchedulerBinding(ctx, schedulerID, triggerID)
 		if err != nil {
 			return "", nil, nil, fmt.Errorf("load sticky sandbox binding: %w", err)
 		}
 		if !found {
 			return "", nil, nil, nil
 		}
-		retiringHash, retiring := schedulers.RetiringLoaderBindingConfigHash(binding)
+		retiringHash, retiring := schedulers.RetiringSchedulerBindingConfigHash(binding)
 		if retiring && retiringHash == configHash {
 			return "", &binding, nil, nil
 		}
 		if !retiring {
-			binding, current, err := claimLegacyStickyLoaderBindingConfigHash(ctx, store, binding, configHash)
+			binding, current, err := claimLegacyStickySchedulerBindingConfigHash(ctx, store, binding, configHash)
 			if err != nil {
 				return "", &binding, nil, fmt.Errorf("adopt legacy sticky sandbox configuration: %w", err)
 			}
@@ -88,8 +88,8 @@ func (c *Controller) resolveStickyLoaderBinding(ctx context.Context, store stick
 			}
 		}
 
-		retiringBinding := schedulers.RetiringLoaderBinding(binding, configHash)
-		claimed, err := store.CompareAndSwapLoaderBinding(ctx, &binding, retiringBinding)
+		retiringBinding := schedulers.RetiringSchedulerBinding(binding, configHash)
+		claimed, err := store.CompareAndSwapSchedulerBinding(ctx, &binding, retiringBinding)
 		if err != nil {
 			return "", &binding, nil, fmt.Errorf("claim stale sticky sandbox %s retirement: %w", binding.SandboxID, err)
 		}
@@ -114,28 +114,28 @@ func (c *Controller) resolveStickyLoaderBinding(ctx context.Context, store stick
 	return "", nil, nil, fmt.Errorf("sticky sandbox binding changed concurrently")
 }
 
-func claimLegacyStickyLoaderBindingConfigHash(ctx context.Context, store stickyBindingStore, binding domain.SchedulerBinding, configHash string) (domain.SchedulerBinding, bool, error) {
-	replacement, legacy := schedulers.AdoptLegacyLoaderBindingConfigHash(binding, configHash)
+func claimLegacyStickySchedulerBindingConfigHash(ctx context.Context, store stickyBindingStore, binding domain.SchedulerBinding, configHash string) (domain.SchedulerBinding, bool, error) {
+	replacement, legacy := schedulers.AdoptLegacySchedulerBindingConfigHash(binding, configHash)
 	if !legacy {
 		return binding, true, nil
 	}
-	claimed, err := store.CompareAndSwapLoaderBinding(ctx, &binding, replacement)
+	claimed, err := store.CompareAndSwapSchedulerBinding(ctx, &binding, replacement)
 	if err != nil {
 		return binding, false, err
 	}
 	return replacement, claimed, nil
 }
 
-func loadCompatibleStickyLoaderBinding(ctx context.Context, store stickyBindingStore, loaderID, triggerID, configHash string) (domain.SchedulerBinding, bool, error) {
+func loadCompatibleStickySchedulerBinding(ctx context.Context, store stickyBindingStore, schedulerID, triggerID, configHash string) (domain.SchedulerBinding, bool, error) {
 	for range 3 {
-		binding, found, err := store.GetLoaderBinding(ctx, loaderID, triggerID)
+		binding, found, err := store.GetSchedulerBinding(ctx, schedulerID, triggerID)
 		if err != nil || !found {
 			return domain.SchedulerBinding{}, false, err
 		}
-		if _, retiring := schedulers.RetiringLoaderBindingConfigHash(binding); retiring {
+		if _, retiring := schedulers.RetiringSchedulerBindingConfigHash(binding); retiring {
 			return domain.SchedulerBinding{}, false, nil
 		}
-		binding, current, err := claimLegacyStickyLoaderBindingConfigHash(ctx, store, binding, configHash)
+		binding, current, err := claimLegacyStickySchedulerBindingConfigHash(ctx, store, binding, configHash)
 		if err != nil {
 			return domain.SchedulerBinding{}, false, err
 		}

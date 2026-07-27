@@ -75,15 +75,15 @@ func RegisterDependencies(di do.Injector) {
 	do.Provide(di, NewEventDispatcher)
 	do.Provide(di, NewDashboardOverviewAggregator)
 	do.Provide(di, NewDashboardOverviewHub)
-	do.Provide(di, schedulers.NewLoaderEngine)
+	do.Provide(di, schedulers.NewSchedulerEngine)
 	do.Provide(di, NewSandboxDriver)
 	do.Provide(di, NewCellExecutor)
 	do.Provide(di, NewAgentRunner)
 	do.Provide(di, NewAgentExecutor)
-	do.Provide(di, NewLoaderCommandExecutor)
-	do.Provide(di, NewLoaderSandboxRunner)
+	do.Provide(di, NewSchedulerCommandExecutor)
+	do.Provide(di, NewSchedulerSandboxRunner)
 	do.Provide(di, NewSandboxRPCBridge)
-	do.Provide(di, NewLoaderController)
+	do.Provide(di, NewSchedulerController)
 	do.Provide(di, NewRunController)
 	do.Provide(di, NewSandboxRunTargetResolver)
 	do.Provide(di, NewSandboxRemovalCoordinator)
@@ -383,8 +383,8 @@ func NewAgentExecutor(di do.Injector) (*adapters.AgentExecutor, error) {
 	), nil
 }
 
-func NewLoaderCommandExecutor(di do.Injector) (*adapters.SchedulerCommandExecutor, error) {
-	return adapters.NewLoaderCommandExecutor(
+func NewSchedulerCommandExecutor(di do.Injector) (*adapters.SchedulerCommandExecutor, error) {
+	return adapters.NewSchedulerCommandExecutor(
 		do.MustInvoke[*appconfig.Config](di),
 		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
@@ -393,8 +393,8 @@ func NewLoaderCommandExecutor(di do.Injector) (*adapters.SchedulerCommandExecuto
 	), nil
 }
 
-func NewLoaderSandboxRunner(di do.Injector) (*adapters.SchedulerSandboxRunner, error) {
-	return adapters.NewLoaderSandboxRunner(
+func NewSchedulerSandboxRunner(di do.Injector) (*adapters.SchedulerSandboxRunner, error) {
+	return adapters.NewSchedulerSandboxRunner(
 		do.MustInvoke[*appconfig.Config](di),
 		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),

@@ -27,7 +27,7 @@ func (c *Controller) resolveTriggerForManualRun(ctx context.Context, req RunAgen
 	if c.configDB == nil {
 		return result, fmt.Errorf("config store is required")
 	}
-	scheduler, loader, trigger, err := c.manualTriggerLoader(ctx, req.ProjectID, req.AgentName, triggerID)
+	scheduler, definition, trigger, err := c.manualTriggerScheduler(ctx, req.ProjectID, req.AgentName, triggerID)
 	if err != nil {
 		return result, err
 	}
@@ -38,7 +38,7 @@ func (c *Controller) resolveTriggerForManualRun(ctx context.Context, req RunAgen
 	if !trigger.Enabled {
 		warnings = append(warnings, fmt.Sprintf("trigger %s is disabled; running because it was requested manually", trigger.ID))
 	}
-	captured, err := c.captureManualTriggerAgentRequest(ctx, loader, trigger, req.PayloadJSON)
+	captured, err := c.captureManualTriggerAgentRequest(ctx, definition, trigger, req.PayloadJSON)
 	if err != nil {
 		return result, err
 	}
@@ -55,18 +55,18 @@ func (c *Controller) resolveTriggerForManualRun(ctx context.Context, req RunAgen
 	}
 	result.Request.Env = append(result.Request.Env, envVarSpecsFromSandboxEnv(domain.SchedulerAgentSandboxEnv(captured.request))...)
 	effectivePolicy := domain.SchedulerSandboxPolicyNew
-	if strings.TrimSpace(loader.Summary.SandboxPolicy) != "" {
-		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(loader.Summary.SandboxPolicy)
+	if strings.TrimSpace(definition.Summary.SandboxPolicy) != "" {
+		effectivePolicy = domain.NormalizeSchedulerSandboxPolicy(definition.Summary.SandboxPolicy)
 	}
 	if strings.TrimSpace(domain.SchedulerAgentSandboxPolicy(captured.request)) != "" {
-		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(domain.SchedulerAgentSandboxPolicy(captured.request))
+		effectivePolicy = domain.NormalizeSchedulerSandboxPolicy(domain.SchedulerAgentSandboxPolicy(captured.request))
 	}
 	if effectivePolicy == domain.SchedulerSandboxPolicySticky {
-		configHash, err := schedulers.SchedulerSandboxConfigHash(loader)
+		configHash, err := schedulers.SchedulerSandboxConfigHash(definition)
 		if err != nil {
 			return result, err
 		}
-		result.Request.StickyBindingLoaderID = loader.Summary.ID
+		result.Request.StickyBindingSchedulerID = definition.Summary.ID
 		result.Request.StickyBindingTriggerID = trigger.ID
 		result.Request.StickyBindingConfigHash = configHash
 		result.Request.CleanupPolicy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING
@@ -75,7 +75,7 @@ func (c *Controller) resolveTriggerForManualRun(ctx context.Context, req RunAgen
 	return result, nil
 }
 
-func (c *Controller) manualTriggerLoader(ctx context.Context, projectID, agentName, triggerID string) (domain.ProjectSchedulerRecord, domain.Scheduler, *domain.SchedulerTrigger, error) {
+func (c *Controller) manualTriggerScheduler(ctx context.Context, projectID, agentName, triggerID string) (domain.ProjectSchedulerRecord, domain.Scheduler, *domain.SchedulerTrigger, error) {
 	projectID = strings.TrimSpace(projectID)
 	agentName = strings.TrimSpace(agentName)
 	triggerID = strings.TrimSpace(triggerID)
@@ -87,30 +87,30 @@ func (c *Controller) manualTriggerLoader(ctx context.Context, projectID, agentNa
 		if strings.TrimSpace(scheduler.AgentName) != agentName || strings.TrimSpace(scheduler.ID) == "" {
 			continue
 		}
-		loader, err := c.configDB.GetLoader(ctx, scheduler.ID)
+		definition, err := c.configDB.GetScheduler(ctx, scheduler.ID)
 		if err != nil {
 			return domain.ProjectSchedulerRecord{}, domain.Scheduler{}, nil, err
 		}
-		if !managedLoaderMatchesProjectAgent(loader, projectID, agentName, scheduler.SchedulerID) {
+		if !schedulerMatchesProjectAgent(definition, projectID, agentName, scheduler.SchedulerID) {
 			continue
 		}
-		for index := range loader.Triggers {
-			if loader.Triggers[index].ID != triggerID {
+		for index := range definition.Triggers {
+			if definition.Triggers[index].ID != triggerID {
 				continue
 			}
-			trigger := loader.Triggers[index]
-			return scheduler, loader, &trigger, nil
+			trigger := definition.Triggers[index]
+			return scheduler, definition, &trigger, nil
 		}
 	}
 	id := strings.Join([]string{projectID, agentName, triggerID}, "/")
 	return domain.ProjectSchedulerRecord{}, domain.Scheduler{}, nil, domain.ResourceError(domain.ErrNotFound, "project trigger", id, fmt.Sprintf("project trigger %s not found", id), nil)
 }
 
-func managedLoaderMatchesProjectAgent(loader domain.Scheduler, projectID, agentName, schedulerID string) bool {
-	summary := loader.Summary
-	return strings.TrimSpace(summary.ManagedProjectID) == strings.TrimSpace(projectID) &&
-		strings.TrimSpace(summary.ManagedAgentName) == strings.TrimSpace(agentName) &&
-		strings.TrimSpace(summary.ManagedSchedulerID) == strings.TrimSpace(schedulerID)
+func schedulerMatchesProjectAgent(definition domain.Scheduler, projectID, agentName, schedulerID string) bool {
+	summary := definition.Summary
+	return strings.TrimSpace(summary.ProjectID) == strings.TrimSpace(projectID) &&
+		strings.TrimSpace(summary.AgentName) == strings.TrimSpace(agentName) &&
+		strings.TrimSpace(summary.ProjectSchedulerID) == strings.TrimSpace(schedulerID)
 }
 
 type capturedManualTriggerAgentRequest struct {
@@ -118,8 +118,8 @@ type capturedManualTriggerAgentRequest struct {
 	request domain.SchedulerAgentRequest
 }
 
-func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON string) (capturedManualTriggerAgentRequest, error) {
-	if c.loaderEngine == nil {
+func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, definition domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON string) (capturedManualTriggerAgentRequest, error) {
+	if c.schedulerEngine == nil {
 		return capturedManualTriggerAgentRequest{}, fmt.Errorf("loader engine is required")
 	}
 	payloadJSON = strings.TrimSpace(payloadJSON)
@@ -127,9 +127,9 @@ func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, loade
 		payloadJSON = `{}`
 	}
 	host := &manualTriggerCaptureHost{}
-	_, err := c.loaderEngine.Execute(ctx, schedulers.SchedulerExecutionRequest{
-		Runtime:     loader.Summary.Runtime,
-		Script:      loader.Script,
+	_, err := c.schedulerEngine.Execute(ctx, schedulers.SchedulerExecutionRequest{
+		Runtime:     definition.Summary.Runtime,
+		Script:      definition.Script,
 		Trigger:     trigger,
 		PayloadJSON: payloadJSON,
 	}, host)

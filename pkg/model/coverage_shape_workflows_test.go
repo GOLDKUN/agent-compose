@@ -89,36 +89,36 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 	}
 
 	for _, runtime := range []string{"", domain.SchedulerRuntimeScheduler} {
-		if got, err := domain.NormalizeLoaderRuntime(runtime); err != nil || got != domain.SchedulerRuntimeScheduler {
-			t.Fatalf("NormalizeLoaderRuntime(%q) = %q/%v", runtime, got, err)
+		if got, err := domain.NormalizeSchedulerRuntime(runtime); err != nil || got != domain.SchedulerRuntimeScheduler {
+			t.Fatalf("NormalizeSchedulerRuntime(%q) = %q/%v", runtime, got, err)
 		}
 	}
 	for _, runtime := range []string{"qjs", "quickjs", "bad"} {
-		if _, err := domain.NormalizeLoaderRuntime(runtime); err == nil {
-			t.Fatalf("NormalizeLoaderRuntime(%q) returned nil error", runtime)
+		if _, err := domain.NormalizeSchedulerRuntime(runtime); err == nil {
+			t.Fatalf("NormalizeSchedulerRuntime(%q) returned nil error", runtime)
 		}
 	}
 	for _, kind := range []string{domain.SchedulerTriggerKindInterval, domain.SchedulerTriggerKindEvent, domain.SchedulerTriggerKindTimeout, domain.SchedulerTriggerKindCron} {
-		if got, err := domain.NormalizeLoaderTriggerKind(kind); err != nil || got != kind {
-			t.Fatalf("NormalizeLoaderTriggerKind(%q) = %q/%v", kind, got, err)
+		if got, err := domain.NormalizeSchedulerTriggerKind(kind); err != nil || got != kind {
+			t.Fatalf("NormalizeSchedulerTriggerKind(%q) = %q/%v", kind, got, err)
 		}
 	}
-	if _, err := domain.NormalizeLoaderTriggerKind("bad"); err == nil {
-		t.Fatalf("NormalizeLoaderTriggerKind bad returned nil error")
+	if _, err := domain.NormalizeSchedulerTriggerKind("bad"); err == nil {
+		t.Fatalf("NormalizeSchedulerTriggerKind bad returned nil error")
 	}
-	if domain.NormalizeLoaderSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || domain.NormalizeLoaderSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
-		t.Fatalf("NormalizeLoaderSandboxPolicy returned unexpected values")
+	if domain.NormalizeSchedulerSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || domain.NormalizeSchedulerSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
+		t.Fatalf("NormalizeSchedulerSandboxPolicy returned unexpected values")
 	}
-	if domain.NormalizeLoaderConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || domain.NormalizeLoaderConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
-		t.Fatalf("NormalizeLoaderConcurrencyPolicy returned unexpected values")
+	if domain.NormalizeSchedulerConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || domain.NormalizeSchedulerConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
+		t.Fatalf("NormalizeSchedulerConcurrencyPolicy returned unexpected values")
 	}
 	for _, status := range []string{domain.SchedulerRunStatusRunning, domain.SchedulerRunStatusSucceeded, domain.SchedulerRunStatusFailed, domain.SchedulerRunStatusCanceled, domain.SchedulerRunStatusSkipped} {
-		if domain.NormalizeLoaderRunStatus(status) != status {
-			t.Fatalf("NormalizeLoaderRunStatus(%q) changed", status)
+		if domain.NormalizeSchedulerRunStatus(status) != status {
+			t.Fatalf("NormalizeSchedulerRunStatus(%q) changed", status)
 		}
 	}
-	if domain.NormalizeLoaderRunStatus("bad") != domain.SchedulerRunStatusRunning {
-		t.Fatalf("NormalizeLoaderRunStatus bad did not default")
+	if domain.NormalizeSchedulerRunStatus("bad") != domain.SchedulerRunStatusRunning {
+		t.Fatalf("NormalizeSchedulerRunStatus bad did not default")
 	}
 	if !domain.SchedulerTriggerTopicMatches("agent-compose.session.*", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("agent-compose.loader", "") {
 		t.Fatalf("SchedulerTriggerTopicMatches returned unexpected values")
@@ -135,7 +135,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 	if !domain.SchedulerTriggerScheduledAt(now, 10).After(now) || !domain.SchedulerTriggerScheduledAt(now, 0).IsZero() {
 		t.Fatalf("SchedulerTriggerScheduledAt returned unexpected values")
 	}
-	if domain.DefaultLoaderName(now) == "" || !strings.Contains(domain.DefaultLoaderScript(), "scheduler.interval") || domain.SchedulerSourceSHA("script") == "" || domain.SchedulerTriggerStableID("kind", "topic", 1, "cb", 0) == "" {
+	if domain.DefaultSchedulerName(now) == "" || !strings.Contains(domain.DefaultSchedulerScript(), "scheduler.interval") || domain.SchedulerSourceSHA("script") == "" || domain.SchedulerTriggerStableID("kind", "topic", 1, "cb", 0) == "" {
 		t.Fatalf("loader default/hash helpers returned empty values")
 	}
 	if err := domain.ValidateTopicEventName("runtime.topic-1"); err != nil {

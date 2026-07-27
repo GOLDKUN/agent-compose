@@ -22,11 +22,11 @@ type Provider interface {
 	ProxyTarget() string
 }
 
-// GuideScope identifies the managed agent whose project-scoped OctoBus
+// GuideScope identifies the project agent whose project-scoped OctoBus
 // declarations may be used while rendering a sandbox capability guide.
 type GuideScope struct {
-	ManagedProjectID string
-	ManagedAgentID   string
+	ProjectID string
+	AgentID   string
 }
 
 // GuideScopeFromSandbox derives the canonical project and agent scope shared
@@ -36,8 +36,8 @@ func GuideScopeFromSandbox(sandbox *domain.Sandbox) GuideScope {
 		return GuideScope{}
 	}
 	return GuideScope{
-		ManagedProjectID: sandboxTagValue(sandbox, "project", "project_id"),
-		ManagedAgentID:   sandboxTagValue(sandbox, domain.AgentSandboxTagID),
+		ProjectID: sandboxTagValue(sandbox, "project", "project_id"),
+		AgentID:   sandboxTagValue(sandbox, domain.AgentSandboxTagID),
 	}
 }
 

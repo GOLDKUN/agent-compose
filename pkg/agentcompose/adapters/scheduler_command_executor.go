@@ -31,11 +31,11 @@ type SchedulerCommandExecutor struct {
 	Streams  *sandboxes.StreamBroker
 }
 
-func NewLoaderCommandExecutor(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, runtimes RuntimeProvider, streams *sandboxes.StreamBroker) *SchedulerCommandExecutor {
+func NewSchedulerCommandExecutor(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, runtimes RuntimeProvider, streams *sandboxes.StreamBroker) *SchedulerCommandExecutor {
 	return &SchedulerCommandExecutor{Config: config, Store: store, ConfigDB: configDB, Runtimes: runtimes, Streams: streams}
 }
 
-func (e *SchedulerCommandExecutor) ExecuteLoaderCommand(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
+func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
 	appconfig.ApplyDefaultGuestPaths(e.Config)
 	if session.Summary.VMStatus != domain.VMStatusRunning {
 		return domain.SchedulerCommandResult{}, fmt.Errorf("session is not running")
@@ -72,7 +72,7 @@ func (e *SchedulerCommandExecutor) ExecuteLoaderCommand(ctx context.Context, ses
 		CreatedAt: startedAt,
 		Running:   true,
 	}
-	execSession, facadeToken, err := e.prepareLoaderCommandLLMFacadeEnv(ctx, session, request, cellID)
+	execSession, facadeToken, err := e.prepareSchedulerCommandLLMFacadeEnv(ctx, session, request, cellID)
 	if err != nil {
 		return domain.SchedulerCommandResult{}, err
 	}
@@ -97,7 +97,7 @@ func (e *SchedulerCommandExecutor) ExecuteLoaderCommand(ctx context.Context, ses
 		"request": filepath.Join(hostCellDir, "command-request.json"),
 		"result":  filepath.Join(hostCellDir, "command-result.json"),
 	}
-	buildLoaderCommandResult := func(result domain.ExecResult) domain.SchedulerCommandResult {
+	buildSchedulerCommandResult := func(result domain.ExecResult) domain.SchedulerCommandResult {
 		return domain.SchedulerCommandResult{
 			Stdout:    result.Stdout,
 			Stderr:    result.Stderr,
@@ -134,7 +134,7 @@ func (e *SchedulerCommandExecutor) ExecuteLoaderCommand(ctx context.Context, ses
 			recovered.Output = firstNonEmpty(recovered.Stderr, recovered.Stdout, finalErr.Error())
 		}
 		if err := execution.WriteCellArtifacts(hostCellDir, source, recovered); err != nil {
-			return buildLoaderCommandResult(recovered), err
+			return buildSchedulerCommandResult(recovered), err
 		}
 		cellMu.Lock()
 		cell.Stdout = recovered.Stdout
@@ -146,7 +146,7 @@ func (e *SchedulerCommandExecutor) ExecuteLoaderCommand(ctx context.Context, ses
 		failedCell := cell
 		cellMu.Unlock()
 		if err := e.Store.AddCell(ctx, session, failedCell); err != nil {
-			return buildLoaderCommandResult(recovered), err
+			return buildSchedulerCommandResult(recovered), err
 		}
 		e.Streams.PublishCellCompleted(session.Summary.ID, failedCell)
 		event := domain.SandboxEvent{
@@ -158,7 +158,7 @@ func (e *SchedulerCommandExecutor) ExecuteLoaderCommand(ctx context.Context, ses
 		}
 		_ = e.Store.AddEvent(ctx, session.Summary.ID, event)
 		e.Streams.PublishEventAdded(session.Summary.ID, event)
-		return buildLoaderCommandResult(recovered), finalErr
+		return buildSchedulerCommandResult(recovered), finalErr
 	}
 
 	runtimeRequest := execution.RuntimeCommandRequestPayload(e.Config, request, guestCellDir)
@@ -190,7 +190,7 @@ func (e *SchedulerCommandExecutor) ExecuteLoaderCommand(ctx context.Context, ses
 		e.Streams.PublishCellOutput(session.Summary.ID, snapshot.ID, filtered.Text, filtered.Stream)
 	}
 	commandHome := e.Config.GuestHomePath
-	execResult, err := runtime.ExecStream(execCtx, execSession, vmState, execution.BuildLoaderCommandExecSpec(e.Config, execSession, filepath.Join(guestCellDir, "command-request.json"), commandHome), streamWriter)
+	execResult, err := runtime.ExecStream(execCtx, execSession, vmState, execution.BuildSchedulerCommandExecSpec(e.Config, execSession, filepath.Join(guestCellDir, "command-request.json"), commandHome), streamWriter)
 	retainFacadeToken = errors.Is(err, domain.ErrExecTerminationUnconfirmed)
 	streamErrMu.Lock()
 	deferredStreamErr := streamErr
@@ -253,7 +253,7 @@ func (e *SchedulerCommandExecutor) ExecuteLoaderCommand(ctx context.Context, ses
 	}, nil
 }
 
-func (e *SchedulerCommandExecutor) prepareLoaderCommandLLMFacadeEnv(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest, runID string) (*domain.Sandbox, string, error) {
+func (e *SchedulerCommandExecutor) prepareSchedulerCommandLLMFacadeEnv(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest, runID string) (*domain.Sandbox, string, error) {
 	if e == nil || e.Config == nil || e.ConfigDB == nil || session == nil {
 		return session, "", nil
 	}

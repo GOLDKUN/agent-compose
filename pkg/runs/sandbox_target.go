@@ -15,7 +15,7 @@ type SandboxRunTarget struct {
 
 type SandboxRunTargetStore interface {
 	ListLatestProjectRunsForSandboxes(context.Context, []string) (map[string]domain.ProjectRunRecord, error)
-	ListProjectAgentsByManagedAgentIDs(context.Context, []string) (map[string]domain.ProjectAgentRecord, error)
+	ListProjectAgentsByIDs(context.Context, []string) (map[string]domain.ProjectAgentRecord, error)
 }
 
 type SandboxRunTargetResolver struct {
@@ -40,21 +40,21 @@ func (r *SandboxRunTargetResolver) Resolve(ctx context.Context, sandbox *domain.
 func (r *SandboxRunTargetResolver) ResolveBatch(ctx context.Context, sandboxes []*domain.Sandbox) (map[string]SandboxRunTarget, error) {
 	result := make(map[string]SandboxRunTarget, len(sandboxes))
 	sandboxIDs := make([]string, 0, len(sandboxes))
-	managedAgentIDs := make([]string, 0, len(sandboxes))
+	agentIDs := make([]string, 0, len(sandboxes))
 	for _, sandbox := range sandboxes {
 		if sandbox == nil {
 			continue
 		}
 		sandboxIDs = append(sandboxIDs, sandbox.Summary.ID)
 		if id := sandboxTagValue(sandbox, domain.AgentSandboxTagID); id != "" {
-			managedAgentIDs = append(managedAgentIDs, id)
+			agentIDs = append(agentIDs, id)
 		}
 	}
 	runsBySandbox, err := r.store.ListLatestProjectRunsForSandboxes(ctx, sandboxIDs)
 	if err != nil {
 		return nil, err
 	}
-	agentsByManagedID, err := r.store.ListProjectAgentsByManagedAgentIDs(ctx, managedAgentIDs)
+	agentsByID, err := r.store.ListProjectAgentsByIDs(ctx, agentIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (r *SandboxRunTargetResolver) ResolveBatch(ctx context.Context, sandboxes [
 			result[id] = SandboxRunTarget{ProjectID: projectID, AgentName: agentName}
 			continue
 		}
-		if agent, ok := agentsByManagedID[sandboxTagValue(sandbox, domain.AgentSandboxTagID)]; ok {
+		if agent, ok := agentsByID[sandboxTagValue(sandbox, domain.AgentSandboxTagID)]; ok {
 			result[id] = SandboxRunTarget{ProjectID: agent.ProjectID, AgentName: agent.AgentName}
 			continue
 		}

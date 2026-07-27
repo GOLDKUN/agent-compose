@@ -28,10 +28,10 @@ const (
 
 type SandboxBinding struct {
 	SandboxID string
-	// ManagedProjectID and ManagedAgentID scope project-managed capability
-	// configuration. They remain empty for legacy and manually created sandboxes.
-	ManagedProjectID string
-	ManagedAgentID   string
+	// ProjectID and AgentID scope project capability configuration. They remain
+	// empty for manually created sandboxes.
+	ProjectID string
+	AgentID   string
 	// CapsetIDs is the set of capsets the sandbox is allowed to use. The guest
 	// picks one per call (x-octobus-capset); capproxy validates membership.
 	CapsetIDs []string

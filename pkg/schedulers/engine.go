@@ -52,23 +52,23 @@ type SchedulerEngine interface {
 
 type QJSSchedulerEngine struct{}
 
-type loaderRegistration struct {
+type schedulerRegistration struct {
 	trigger  domain.SchedulerTrigger
 	callback *qjs.Value
 	order    int
 }
 
-type loaderExecutionState struct {
+type schedulerExecutionState struct {
 	ctx           context.Context
 	host          SchedulerHost
 	jsonEncoder   *jsValueEncoder
-	registrations []loaderRegistration
+	registrations []schedulerRegistration
 	seenIDs       map[string]struct{}
 	warnings      []string
 	warningSet    map[string]struct{}
 }
 
-func NewLoaderEngine(do.Injector) (SchedulerEngine, error) {
+func NewSchedulerEngine(do.Injector) (SchedulerEngine, error) {
 	return &QJSSchedulerEngine{}, nil
 }
 
@@ -85,7 +85,7 @@ func (e *QJSSchedulerEngine) Execute(ctx context.Context, request SchedulerExecu
 }
 
 func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request SchedulerExecutionRequest, host SchedulerHost, validateOnly bool) (SchedulerExecutionResult, error) {
-	runtimeName, err := domain.NormalizeLoaderRuntime(request.Runtime)
+	runtimeName, err := domain.NormalizeSchedulerRuntime(request.Runtime)
 	if err != nil {
 		return SchedulerExecutionResult{}, err
 	}
@@ -100,23 +100,23 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 		Context:            ctx,
 		CloseOnContextDone: true,
 		MemoryLimit:        64 << 20,
-		MaxExecutionTime:   loaderEngineMaxExecutionTime(ctx),
+		MaxExecutionTime:   schedulerEngineMaxExecutionTime(ctx),
 	})
 	if err != nil {
 		return SchedulerExecutionResult{}, fmt.Errorf("create qjs runtime: %w", err)
 	}
-	defer closeQJSLoaderRuntime(ctx, rt)
+	defer closeQJSSchedulerRuntime(ctx, rt)
 
 	jsctx := rt.Context()
 	jsonEncoder, err := newJSValueEncoder(jsctx)
 	if err != nil {
 		return SchedulerExecutionResult{}, err
 	}
-	state := &loaderExecutionState{
+	state := &schedulerExecutionState{
 		ctx:           ctx,
 		host:          host,
 		jsonEncoder:   jsonEncoder,
-		registrations: make([]loaderRegistration, 0),
+		registrations: make([]schedulerRegistration, 0),
 		seenIDs:       make(map[string]struct{}),
 		warningSet:    make(map[string]struct{}),
 	}
@@ -181,7 +181,7 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 			}
 			executed = awaited
 		}
-		if jsonResult, ok, err := loaderResultJSON(state.jsonEncoder, executed); err != nil {
+		if jsonResult, ok, err := schedulerResultJSON(state.jsonEncoder, executed); err != nil {
 			state.freeCallbacks()
 			return SchedulerExecutionResult{}, err
 		} else if ok {
@@ -197,7 +197,7 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 	return result, nil
 }
 
-func loaderEngineMaxExecutionTime(ctx context.Context) int {
+func schedulerEngineMaxExecutionTime(ctx context.Context) int {
 	return EngineMaxExecutionTime(ctx)
 }
 
@@ -218,11 +218,11 @@ func EngineMaxExecutionTime(ctx context.Context) int {
 	return remainingMs
 }
 
-func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExecutionState) (*qjs.Value, error) {
+func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *schedulerExecutionState) (*qjs.Value, error) {
 	schedulerObj := jsctx.NewObject()
 	global := jsctx.Global()
 	global.SetPropertyStr("scheduler", schedulerObj)
-	if err := installLoaderSchemaBuilder(jsctx); err != nil {
+	if err := installSchedulerSchemaBuilder(jsctx); err != nil {
 		return nil, err
 	}
 
@@ -424,12 +424,12 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 		if prompt == "" {
 			return nil, fmt.Errorf("scheduler.agent requires a non-empty prompt")
 		}
-		options, err := parseLoaderAgentRequest(args, state)
+		options, err := parseSchedulerAgentRequest(args, state)
 		if err != nil {
 			return nil, err
 		}
 		var outputSchemaValue *qjs.Value
-		options.OutputSchema, outputSchemaValue, err = parseLoaderOutputSchema(jsctx, state.jsonEncoder, args, "scheduler.agent")
+		options.OutputSchema, outputSchemaValue, err = parseSchedulerOutputSchema(jsctx, state.jsonEncoder, args, "scheduler.agent")
 		if err != nil {
 			return nil, err
 		}
@@ -438,7 +438,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 			return nil, err
 		}
 		if strings.TrimSpace(options.OutputSchema) != "" {
-			jsonValue, err := loaderJSONResult(firstNonEmpty(response.FinalText, response.Text, response.Output), options.OutputSchema, "agent finalText")
+			jsonValue, err := schedulerJSONResult(firstNonEmpty(response.FinalText, response.Text, response.Output), options.OutputSchema, "agent finalText")
 			if err != nil {
 				return nil, err
 			}
@@ -453,7 +453,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 			return nil, fmt.Errorf("decode scheduler.agent response: %w", err)
 		}
 		if strings.TrimSpace(options.OutputSchema) != "" {
-			if err := validateLoaderJSONWithSchema(jsctx, outputSchemaValue, value, "agent"); err != nil {
+			if err := validateSchedulerJSONWithSchema(jsctx, outputSchemaValue, value, "agent"); err != nil {
 				return nil, err
 			}
 		}
@@ -465,7 +465,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 		if state.host == nil {
 			return nil, fmt.Errorf("scheduler.exec is unavailable during validation")
 		}
-		request, err := parseLoaderExecRequest(call.Args(), state)
+		request, err := parseSchedulerExecRequest(call.Args(), state)
 		if err != nil {
 			return nil, err
 		}
@@ -473,7 +473,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 		if err != nil {
 			return nil, err
 		}
-		return loaderCommandResultValue(jsctx, "scheduler.exec", response)
+		return schedulerCommandResultValue(jsctx, "scheduler.exec", response)
 	})
 	schedulerObj.SetPropertyStr("exec", execFn)
 
@@ -481,7 +481,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 		if state.host == nil {
 			return nil, fmt.Errorf("scheduler.shell is unavailable during validation")
 		}
-		request, err := parseLoaderShellRequest(call.Args(), state)
+		request, err := parseSchedulerShellRequest(call.Args(), state)
 		if err != nil {
 			return nil, err
 		}
@@ -489,7 +489,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 		if err != nil {
 			return nil, err
 		}
-		return loaderCommandResultValue(jsctx, "scheduler.shell", response)
+		return schedulerCommandResultValue(jsctx, "scheduler.shell", response)
 	})
 	schedulerObj.SetPropertyStr("shell", shellFn)
 
@@ -505,12 +505,12 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 		if prompt == "" {
 			return nil, fmt.Errorf("scheduler.llm requires a non-empty prompt")
 		}
-		options, err := parseLoaderLLMRequest(args, state)
+		options, err := parseSchedulerLLMRequest(args, state)
 		if err != nil {
 			return nil, err
 		}
 		var outputSchemaValue *qjs.Value
-		options.OutputSchema, outputSchemaValue, err = parseLoaderOutputSchema(jsctx, state.jsonEncoder, args, "scheduler.llm")
+		options.OutputSchema, outputSchemaValue, err = parseSchedulerOutputSchema(jsctx, state.jsonEncoder, args, "scheduler.llm")
 		if err != nil {
 			return nil, err
 		}
@@ -519,7 +519,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 			return nil, err
 		}
 		if strings.TrimSpace(options.OutputSchema) != "" {
-			jsonValue, err := loaderJSONResult(response.Text, options.OutputSchema, "llm text")
+			jsonValue, err := schedulerJSONResult(response.Text, options.OutputSchema, "llm text")
 			if err != nil {
 				return nil, err
 			}
@@ -534,7 +534,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 			return nil, fmt.Errorf("decode scheduler.llm response: %w", err)
 		}
 		if strings.TrimSpace(options.OutputSchema) != "" {
-			if err := validateLoaderJSONWithSchema(jsctx, outputSchemaValue, value, "llm"); err != nil {
+			if err := validateSchedulerJSONWithSchema(jsctx, outputSchemaValue, value, "llm"); err != nil {
 				return nil, err
 			}
 		}
@@ -636,7 +636,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 			if state.host == nil {
 				return nil, fmt.Errorf("%s is unavailable during validation", apiNameCopy)
 			}
-			requestJSON, err := loaderRPCRequestJSON(state.jsonEncoder, call.Args(), apiNameCopy)
+			requestJSON, err := schedulerRPCRequestJSON(state.jsonEncoder, call.Args(), apiNameCopy)
 			if err != nil {
 				return nil, err
 			}
@@ -661,7 +661,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *loaderExe
 	return schedulerObj, nil
 }
 
-const loaderSchemaBuilderScript = `
+const schedulerSchemaBuilderScript = `
 (function () {
   function schema(json, validate) {
     return {
@@ -729,8 +729,8 @@ const loaderSchemaBuilderScript = `
 })();
 `
 
-func installLoaderSchemaBuilder(jsctx *qjs.Context) error {
-	value, err := jsctx.Eval("scheduler-z.js", qjs.Code(loaderSchemaBuilderScript))
+func installSchedulerSchemaBuilder(jsctx *qjs.Context) error {
+	value, err := jsctx.Eval("scheduler-z.js", qjs.Code(schedulerSchemaBuilderScript))
 	if err != nil {
 		return fmt.Errorf("install scheduler.z schema builder: %w", err)
 	}
@@ -740,7 +740,7 @@ func installLoaderSchemaBuilder(jsctx *qjs.Context) error {
 	return nil
 }
 
-func (e *QJSSchedulerEngine) executeRequestedHandler(jsctx *qjs.Context, state *loaderExecutionState, trigger *domain.SchedulerTrigger, payload *qjs.Value) (*qjs.Value, error) {
+func (e *QJSSchedulerEngine) executeRequestedHandler(jsctx *qjs.Context, state *schedulerExecutionState, trigger *domain.SchedulerTrigger, payload *qjs.Value) (*qjs.Value, error) {
 	global := jsctx.Global()
 	if trigger != nil && strings.TrimSpace(trigger.ID) != "" {
 		for _, registration := range state.registrations {
@@ -766,13 +766,13 @@ func (e *QJSSchedulerEngine) executeRequestedHandler(jsctx *qjs.Context, state *
 	return jsctx.NewUndefined(), nil
 }
 
-func (s *loaderExecutionState) register(trigger domain.SchedulerTrigger, callback *qjs.Value) error {
+func (s *schedulerExecutionState) register(trigger domain.SchedulerTrigger, callback *qjs.Value) error {
 	if _, ok := s.seenIDs[trigger.ID]; ok {
 		return fmt.Errorf("duplicate loader trigger id %q", trigger.ID)
 	}
 	cloned := callback.Clone()
 	s.seenIDs[trigger.ID] = struct{}{}
-	s.registrations = append(s.registrations, loaderRegistration{
+	s.registrations = append(s.registrations, schedulerRegistration{
 		trigger:  trigger,
 		callback: cloned,
 		order:    len(s.registrations),
@@ -780,7 +780,7 @@ func (s *loaderExecutionState) register(trigger domain.SchedulerTrigger, callbac
 	return nil
 }
 
-func (s *loaderExecutionState) unregister(id string, kinds ...string) bool {
+func (s *schedulerExecutionState) unregister(id string, kinds ...string) bool {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return false
@@ -789,7 +789,7 @@ func (s *loaderExecutionState) unregister(id string, kinds ...string) bool {
 	for _, kind := range kinds {
 		allowedKinds[strings.TrimSpace(kind)] = struct{}{}
 	}
-	next := make([]loaderRegistration, 0, len(s.registrations))
+	next := make([]schedulerRegistration, 0, len(s.registrations))
 	removed := false
 	for _, item := range s.registrations {
 		if item.trigger.ID == id {
@@ -814,13 +814,13 @@ func (s *loaderExecutionState) unregister(id string, kinds ...string) bool {
 	return removed
 }
 
-func (s *loaderExecutionState) freeCallbacks() {
+func (s *schedulerExecutionState) freeCallbacks() {
 	for i := range s.registrations {
 		s.registrations[i].callback = nil
 	}
 }
 
-func (s *loaderExecutionState) triggers() []domain.SchedulerTrigger {
+func (s *schedulerExecutionState) triggers() []domain.SchedulerTrigger {
 	items := make([]domain.SchedulerTrigger, 0, len(s.registrations))
 	for _, item := range s.registrations {
 		items = append(items, item.trigger)
@@ -929,7 +929,7 @@ func parseCronRegistration(args []*qjs.Value) (string, string, *qjs.Value, strin
 	if strings.TrimSpace(expr) == "" {
 		return "", "", nil, "", false, fmt.Errorf("scheduler.cron requires a non-empty expression")
 	}
-	specJSON, err := loaderCronSpecJSON(expr, timezone)
+	specJSON, err := schedulerCronSpecJSON(expr, timezone)
 	if err != nil {
 		return "", "", nil, "", false, err
 	}
@@ -996,39 +996,39 @@ func parseEventRegistration(args []*qjs.Value) (string, string, *qjs.Value, bool
 	return topic, id, callback, autoID, nil
 }
 
-func parseLoaderAgentRequest(args []*qjs.Value, state *loaderExecutionState) (domain.SchedulerAgentRequest, error) {
+func parseSchedulerAgentRequest(args []*qjs.Value, state *schedulerExecutionState) (domain.SchedulerAgentRequest, error) {
 	request := domain.SchedulerAgentRequest{}
 	if len(args) < 2 || args[1] == nil || args[1].IsUndefined() || args[1].IsNull() {
 		return request, nil
 	}
-	options, err := loaderAgentOptionsWithoutSchema(state.jsonEncoder, args[1])
+	options, err := schedulerAgentOptionsWithoutSchema(state.jsonEncoder, args[1])
 	if err != nil {
 		return domain.SchedulerAgentRequest{}, fmt.Errorf("decode scheduler.agent options: %w", err)
 	}
-	request.Agent = normalizeAgentKind(loaderStringOption(options, "agent"))
-	request.SandboxPolicy = loaderSandboxPolicyOption(options, state, "scheduler.agent")
-	request.Timeout, err = loaderDurationOption(options, "timeout", "agentTimeout", "agent_timeout")
+	request.Agent = normalizeAgentKind(schedulerStringOption(options, "agent"))
+	request.SandboxPolicy = schedulerSandboxPolicyOption(options, state, "scheduler.agent")
+	request.Timeout, err = schedulerDurationOption(options, "timeout", "agentTimeout", "agent_timeout")
 	if err != nil {
 		return domain.SchedulerAgentRequest{}, fmt.Errorf("decode scheduler.agent timeout: %w", err)
 	}
-	request.Title = loaderStringOption(options, "title")
-	request.Driver = loaderStringOption(options, "driver")
-	request.GuestImage = loaderStringOption(options, "guestImage", "guest_image")
-	request.PullPolicy = normalizeImagePullPolicy(loaderStringOption(options, "pullPolicy", "pull_policy"))
-	request.WorkspaceID = loaderStringOption(options, "workspaceId", "workspace_id")
-	request.JupyterEnabled = loaderBoolOption(options, "jupyter")
-	request.SandboxEnv, err = loaderSandboxEnvOption(options, state, "scheduler.agent")
+	request.Title = schedulerStringOption(options, "title")
+	request.Driver = schedulerStringOption(options, "driver")
+	request.GuestImage = schedulerStringOption(options, "guestImage", "guest_image")
+	request.PullPolicy = normalizeImagePullPolicy(schedulerStringOption(options, "pullPolicy", "pull_policy"))
+	request.WorkspaceID = schedulerStringOption(options, "workspaceId", "workspace_id")
+	request.JupyterEnabled = schedulerBoolOption(options, "jupyter")
+	request.SandboxEnv, err = schedulerSandboxEnvOption(options, state, "scheduler.agent")
 	if err != nil {
 		return domain.SchedulerAgentRequest{}, err
 	}
-	request.Volumes, err = loaderVolumeMountSpecsOption(options, "scheduler.agent")
+	request.Volumes, err = schedulerVolumeMountSpecsOption(options, "scheduler.agent")
 	if err != nil {
 		return domain.SchedulerAgentRequest{}, err
 	}
 	return request, nil
 }
 
-func loaderAgentOptionsWithoutSchema(encoder *jsValueEncoder, value *qjs.Value) (map[string]any, error) {
+func schedulerAgentOptionsWithoutSchema(encoder *jsValueEncoder, value *qjs.Value) (map[string]any, error) {
 	if value == nil || value.IsUndefined() || value.IsNull() {
 		return map[string]any{}, nil
 	}
@@ -1048,7 +1048,7 @@ func loaderAgentOptionsWithoutSchema(encoder *jsValueEncoder, value *qjs.Value) 
 	return options, nil
 }
 
-func parseLoaderOutputSchema(jsctx *qjs.Context, encoder *jsValueEncoder, args []*qjs.Value, apiName string) (string, *qjs.Value, error) {
+func parseSchedulerOutputSchema(jsctx *qjs.Context, encoder *jsValueEncoder, args []*qjs.Value, apiName string) (string, *qjs.Value, error) {
 	if len(args) < 2 || args[1] == nil || args[1].IsUndefined() || args[1].IsNull() {
 		return "", nil, nil
 	}
@@ -1061,7 +1061,7 @@ func parseLoaderOutputSchema(jsctx *qjs.Context, encoder *jsValueEncoder, args [
 		if schemaValue == nil || schemaValue.IsUndefined() || schemaValue.IsNull() {
 			continue
 		}
-		schemaJSON, err := loaderOutputSchemaJSON(jsctx, encoder, schemaValue)
+		schemaJSON, err := schedulerOutputSchemaJSON(jsctx, encoder, schemaValue)
 		if err != nil {
 			return "", nil, fmt.Errorf("decode %s %s: %w", apiName, key, err)
 		}
@@ -1070,7 +1070,7 @@ func parseLoaderOutputSchema(jsctx *qjs.Context, encoder *jsValueEncoder, args [
 	return "", nil, nil
 }
 
-func loaderOutputSchemaJSON(jsctx *qjs.Context, encoder *jsValueEncoder, value *qjs.Value) (string, error) {
+func schedulerOutputSchemaJSON(jsctx *qjs.Context, encoder *jsValueEncoder, value *qjs.Value) (string, error) {
 	if !value.IsObject() || value.IsArray() {
 		return "", fmt.Errorf("must be an object")
 	}
@@ -1088,7 +1088,7 @@ func loaderOutputSchemaJSON(jsctx *qjs.Context, encoder *jsValueEncoder, value *
 	return encoder.Encode(value)
 }
 
-func validateLoaderJSONWithSchema(jsctx *qjs.Context, schemaValue, responseValue *qjs.Value, apiName string) error {
+func validateSchedulerJSONWithSchema(jsctx *qjs.Context, schemaValue, responseValue *qjs.Value, apiName string) error {
 	if schemaValue == nil || responseValue == nil || !schemaValue.IsObject() {
 		return nil
 	}
@@ -1106,7 +1106,7 @@ func validateLoaderJSONWithSchema(jsctx *qjs.Context, schemaValue, responseValue
 	return nil
 }
 
-func parseLoaderExecRequest(args []*qjs.Value, state *loaderExecutionState) (domain.SchedulerCommandRequest, error) {
+func parseSchedulerExecRequest(args []*qjs.Value, state *schedulerExecutionState) (domain.SchedulerCommandRequest, error) {
 	if len(args) != 1 || args[0] == nil || args[0].IsUndefined() || args[0].IsNull() || !args[0].IsObject() || args[0].IsArray() {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("scheduler.exec requires a request object")
 	}
@@ -1114,23 +1114,23 @@ func parseLoaderExecRequest(args []*qjs.Value, state *loaderExecutionState) (dom
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("decode scheduler.exec request: %w", err)
 	}
-	request, err := loaderCommandRequestFromOptions(options, "scheduler.exec", state)
+	request, err := schedulerCommandRequestFromOptions(options, "scheduler.exec", state)
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, err
 	}
 	request.Mode = "exec"
-	request.Command = loaderStringOption(options, "command")
+	request.Command = schedulerStringOption(options, "command")
 	if strings.TrimSpace(request.Command) == "" {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("scheduler.exec requires a non-empty command")
 	}
-	request.Args, err = loaderStringArrayOption(options, "args")
+	request.Args, err = schedulerStringArrayOption(options, "args")
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("decode scheduler.exec args: %w", err)
 	}
 	return request, nil
 }
 
-func parseLoaderShellRequest(args []*qjs.Value, state *loaderExecutionState) (domain.SchedulerCommandRequest, error) {
+func parseSchedulerShellRequest(args []*qjs.Value, state *schedulerExecutionState) (domain.SchedulerCommandRequest, error) {
 	if len(args) == 0 || args[0] == nil || args[0].IsUndefined() || args[0].IsNull() {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("scheduler.shell requires a script")
 	}
@@ -1152,7 +1152,7 @@ func parseLoaderShellRequest(args []*qjs.Value, state *loaderExecutionState) (do
 		}
 		options = decoded
 	}
-	request, err := loaderCommandRequestFromOptions(options, "scheduler.shell", state)
+	request, err := schedulerCommandRequestFromOptions(options, "scheduler.shell", state)
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, err
 	}
@@ -1161,42 +1161,42 @@ func parseLoaderShellRequest(args []*qjs.Value, state *loaderExecutionState) (do
 	return request, nil
 }
 
-func loaderCommandRequestFromOptions(options map[string]any, apiName string, state *loaderExecutionState) (domain.SchedulerCommandRequest, error) {
+func schedulerCommandRequestFromOptions(options map[string]any, apiName string, state *schedulerExecutionState) (domain.SchedulerCommandRequest, error) {
 	var err error
 	request := domain.SchedulerCommandRequest{
-		Cwd:            loaderStringOption(options, "cwd"),
-		SandboxPolicy:  loaderSandboxPolicyOption(options, state, apiName),
-		Title:          loaderStringOption(options, "title"),
-		Driver:         loaderStringOption(options, "driver"),
-		GuestImage:     loaderStringOption(options, "guestImage", "guest_image"),
-		PullPolicy:     normalizeImagePullPolicy(loaderStringOption(options, "pullPolicy", "pull_policy")),
-		WorkspaceID:    loaderStringOption(options, "workspaceId", "workspace_id"),
-		JupyterEnabled: loaderBoolOption(options, "jupyter"),
+		Cwd:            schedulerStringOption(options, "cwd"),
+		SandboxPolicy:  schedulerSandboxPolicyOption(options, state, apiName),
+		Title:          schedulerStringOption(options, "title"),
+		Driver:         schedulerStringOption(options, "driver"),
+		GuestImage:     schedulerStringOption(options, "guestImage", "guest_image"),
+		PullPolicy:     normalizeImagePullPolicy(schedulerStringOption(options, "pullPolicy", "pull_policy")),
+		WorkspaceID:    schedulerStringOption(options, "workspaceId", "workspace_id"),
+		JupyterEnabled: schedulerBoolOption(options, "jupyter"),
 	}
-	request.Env, err = loaderStringMapOption(options, "env")
+	request.Env, err = schedulerStringMapOption(options, "env")
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("decode %s env: %w", apiName, err)
 	}
-	request.TimeoutMs, err = loaderInt64Option(options, "timeoutMs", "timeout_ms")
+	request.TimeoutMs, err = schedulerInt64Option(options, "timeoutMs", "timeout_ms")
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("decode %s timeoutMs: %w", apiName, err)
 	}
-	request.MaxOutputBytes, err = loaderInt64Option(options, "maxOutputBytes", "max_output_bytes")
+	request.MaxOutputBytes, err = schedulerInt64Option(options, "maxOutputBytes", "max_output_bytes")
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("decode %s maxOutputBytes: %w", apiName, err)
 	}
-	request.SandboxEnv, err = loaderSandboxEnvOption(options, state, apiName)
+	request.SandboxEnv, err = schedulerSandboxEnvOption(options, state, apiName)
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, fmt.Errorf("%s", strings.Replace(err.Error(), "scheduler.agent", apiName, 1))
 	}
-	request.Volumes, err = loaderVolumeMountSpecsOption(options, apiName)
+	request.Volumes, err = schedulerVolumeMountSpecsOption(options, apiName)
 	if err != nil {
 		return domain.SchedulerCommandRequest{}, err
 	}
 	return request, nil
 }
 
-func loaderVolumeMountSpecsOption(options map[string]any, apiName string) ([]domain.VolumeMountSpec, error) {
+func schedulerVolumeMountSpecsOption(options map[string]any, apiName string) ([]domain.VolumeMountSpec, error) {
 	value, ok := options["volumes"]
 	if !ok || value == nil {
 		return nil, nil
@@ -1207,7 +1207,7 @@ func loaderVolumeMountSpecsOption(options map[string]any, apiName string) ([]dom
 	}
 	specs := make([]domain.VolumeMountSpec, 0, len(items))
 	for i, item := range items {
-		spec, err := loaderVolumeMountSpec(item)
+		spec, err := schedulerVolumeMountSpec(item)
 		if err != nil {
 			return nil, fmt.Errorf("decode %s volumes[%d]: %w", apiName, i, err)
 		}
@@ -1220,19 +1220,19 @@ func loaderVolumeMountSpecsOption(options map[string]any, apiName string) ([]dom
 	return normalized, nil
 }
 
-func loaderVolumeMountSpec(value any) (domain.VolumeMountSpec, error) {
+func schedulerVolumeMountSpec(value any) (domain.VolumeMountSpec, error) {
 	switch typed := value.(type) {
 	case string:
-		return parseLoaderVolumeMountShortSyntax(typed)
+		return parseSchedulerVolumeMountShortSyntax(typed)
 	case map[string]any:
 		spec := domain.VolumeMountSpec{
-			Type:     loaderStringOption(typed, "type"),
-			Source:   loaderStringOption(typed, "source"),
-			Target:   loaderStringOption(typed, "target"),
-			ReadOnly: loaderBoolOption(typed, "readOnly", "read_only"),
+			Type:     schedulerStringOption(typed, "type"),
+			Source:   schedulerStringOption(typed, "source"),
+			Target:   schedulerStringOption(typed, "target"),
+			ReadOnly: schedulerBoolOption(typed, "readOnly", "read_only"),
 		}
 		if strings.TrimSpace(spec.Type) == "" {
-			spec.Type = inferLoaderVolumeMountType(spec.Source)
+			spec.Type = inferSchedulerVolumeMountType(spec.Source)
 		}
 		return spec, nil
 	default:
@@ -1240,7 +1240,7 @@ func loaderVolumeMountSpec(value any) (domain.VolumeMountSpec, error) {
 	}
 }
 
-func parseLoaderVolumeMountShortSyntax(raw string) (domain.VolumeMountSpec, error) {
+func parseSchedulerVolumeMountShortSyntax(raw string) (domain.VolumeMountSpec, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return domain.VolumeMountSpec{}, fmt.Errorf("volume short syntax is required")
@@ -1264,10 +1264,10 @@ func parseLoaderVolumeMountShortSyntax(raw string) (domain.VolumeMountSpec, erro
 			return domain.VolumeMountSpec{}, fmt.Errorf("unsupported volume short syntax mode %q", parts[2])
 		}
 	}
-	return domain.VolumeMountSpec{Type: inferLoaderVolumeMountType(source), Source: source, Target: target, ReadOnly: readOnly}, nil
+	return domain.VolumeMountSpec{Type: inferSchedulerVolumeMountType(source), Source: source, Target: target, ReadOnly: readOnly}, nil
 }
 
-func inferLoaderVolumeMountType(source string) string {
+func inferSchedulerVolumeMountType(source string) string {
 	source = strings.TrimSpace(source)
 	if filepath.IsAbs(source) || strings.HasPrefix(source, ".") {
 		return domain.VolumeMountTypeBind
@@ -1275,7 +1275,7 @@ func inferLoaderVolumeMountType(source string) string {
 	return domain.VolumeMountTypeVolume
 }
 
-func loaderCommandResultValue(jsctx *qjs.Context, apiName string, response domain.SchedulerCommandResult) (*qjs.Value, error) {
+func schedulerCommandResultValue(jsctx *qjs.Context, apiName string, response domain.SchedulerCommandResult) (*qjs.Value, error) {
 	data, err := json.Marshal(response)
 	if err != nil {
 		return nil, fmt.Errorf("encode %s response: %w", apiName, err)
@@ -1287,7 +1287,7 @@ func loaderCommandResultValue(jsctx *qjs.Context, apiName string, response domai
 	return value, nil
 }
 
-func loaderDurationOption(options map[string]any, keys ...string) (time.Duration, error) {
+func schedulerDurationOption(options map[string]any, keys ...string) (time.Duration, error) {
 	for _, key := range keys {
 		value, ok := options[key]
 		if !ok || value == nil {
@@ -1314,7 +1314,7 @@ func loaderDurationOption(options map[string]any, keys ...string) (time.Duration
 	return 0, nil
 }
 
-func loaderStringOption(options map[string]any, keys ...string) string {
+func schedulerStringOption(options map[string]any, keys ...string) string {
 	for _, key := range keys {
 		value, ok := options[key]
 		if !ok || value == nil {
@@ -1327,7 +1327,7 @@ func loaderStringOption(options map[string]any, keys ...string) string {
 	return ""
 }
 
-func loaderBoolOption(options map[string]any, keys ...string) bool {
+func schedulerBoolOption(options map[string]any, keys ...string) bool {
 	for _, key := range keys {
 		value, ok := options[key]
 		if !ok || value == nil {
@@ -1340,7 +1340,7 @@ func loaderBoolOption(options map[string]any, keys ...string) bool {
 	return false
 }
 
-func loaderStringArrayOption(options map[string]any, keys ...string) ([]string, error) {
+func schedulerStringArrayOption(options map[string]any, keys ...string) ([]string, error) {
 	for _, key := range keys {
 		value, ok := options[key]
 		if !ok || value == nil {
@@ -1366,7 +1366,7 @@ func loaderStringArrayOption(options map[string]any, keys ...string) ([]string, 
 	return nil, nil
 }
 
-func loaderStringMapOption(options map[string]any, keys ...string) (map[string]string, error) {
+func schedulerStringMapOption(options map[string]any, keys ...string) (map[string]string, error) {
 	for _, key := range keys {
 		value, ok := options[key]
 		if !ok || value == nil {
@@ -1397,7 +1397,7 @@ func loaderStringMapOption(options map[string]any, keys ...string) (map[string]s
 	return nil, nil
 }
 
-func loaderInt64Option(options map[string]any, keys ...string) (int64, error) {
+func schedulerInt64Option(options map[string]any, keys ...string) (int64, error) {
 	for _, key := range keys {
 		value, ok := options[key]
 		if !ok || value == nil {
@@ -1417,29 +1417,29 @@ func loaderInt64Option(options map[string]any, keys ...string) (int64, error) {
 	return 0, nil
 }
 
-func loaderSandboxPolicyOption(options map[string]any, state *loaderExecutionState, apiName string) string {
+func schedulerSandboxPolicyOption(options map[string]any, state *schedulerExecutionState, apiName string) string {
 	for _, key := range []string{"sandboxPolicy", "sandbox_policy"} {
-		if value := loaderStringOption(options, key); strings.TrimSpace(value) != "" {
-			return normalizeLoaderSandboxPolicy(value)
+		if value := schedulerStringOption(options, key); strings.TrimSpace(value) != "" {
+			return normalizeSchedulerSandboxPolicy(value)
 		}
 	}
 	return ""
 }
 
-func loaderSandboxEnvOption(options map[string]any, state *loaderExecutionState, apiName string) ([]domain.SandboxEnvVar, error) {
-	if items, ok, err := loaderEnvOption(options, []string{"sandboxEnv", "sandbox_env"}, apiName, "sandboxEnv"); ok || err != nil {
+func schedulerSandboxEnvOption(options map[string]any, state *schedulerExecutionState, apiName string) ([]domain.SandboxEnvVar, error) {
+	if items, ok, err := schedulerEnvOption(options, []string{"sandboxEnv", "sandbox_env"}, apiName, "sandboxEnv"); ok || err != nil {
 		return items, err
 	}
 	return nil, nil
 }
 
-func loaderEnvOption(options map[string]any, keys []string, apiName, label string) ([]domain.SandboxEnvVar, bool, error) {
+func schedulerEnvOption(options map[string]any, keys []string, apiName, label string) ([]domain.SandboxEnvVar, bool, error) {
 	for _, key := range keys {
 		value, ok := options[key]
 		if !ok {
 			continue
 		}
-		items, err := loaderSandboxEnvItems(value)
+		items, err := schedulerSandboxEnvItems(value)
 		if err != nil {
 			return nil, true, fmt.Errorf("decode %s %s: %w", apiName, label, err)
 		}
@@ -1448,7 +1448,7 @@ func loaderEnvOption(options map[string]any, keys []string, apiName, label strin
 	return nil, false, nil
 }
 
-func loaderSandboxEnvItems(value any) ([]domain.SandboxEnvVar, error) {
+func schedulerSandboxEnvItems(value any) ([]domain.SandboxEnvVar, error) {
 	switch typed := value.(type) {
 	case nil:
 		return nil, nil
@@ -1467,7 +1467,7 @@ func loaderSandboxEnvItems(value any) ([]domain.SandboxEnvVar, error) {
 			if name == "" {
 				continue
 			}
-			envValue, secret, err := loaderSandboxEnvValue(name, typed[key])
+			envValue, secret, err := schedulerSandboxEnvValue(name, typed[key])
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", name, err)
 			}
@@ -1481,11 +1481,11 @@ func loaderSandboxEnvItems(value any) ([]domain.SandboxEnvVar, error) {
 			if !ok {
 				return nil, fmt.Errorf("item %d must be an object", index)
 			}
-			name := loaderStringOption(entry, "name")
+			name := schedulerStringOption(entry, "name")
 			if name == "" {
 				return nil, fmt.Errorf("item %d requires a non-empty name", index)
 			}
-			envValue, secret, err := loaderSandboxEnvValue(name, entry["value"])
+			envValue, secret, err := schedulerSandboxEnvValue(name, entry["value"])
 			if err != nil {
 				return nil, fmt.Errorf("item %d: %w", index, err)
 			}
@@ -1509,8 +1509,8 @@ func loaderSandboxEnvItems(value any) ([]domain.SandboxEnvVar, error) {
 	}
 }
 
-func loaderSandboxEnvValue(name string, value any) (string, bool, error) {
-	secret := loaderSecretEnvName(name)
+func schedulerSandboxEnvValue(name string, value any) (string, bool, error) {
+	secret := schedulerSecretEnvName(name)
 	switch typed := value.(type) {
 	case nil:
 		return "", secret, nil
@@ -1524,7 +1524,7 @@ func loaderSandboxEnvValue(name string, value any) (string, bool, error) {
 	case float64:
 		return strings.TrimSpace(strings.TrimRight(strings.TrimRight(fmt.Sprintf("%f", typed), "0"), ".")), secret, nil
 	case map[string]any:
-		envValue, nestedSecret, err := loaderSandboxEnvValue(name, typed["value"])
+		envValue, nestedSecret, err := schedulerSandboxEnvValue(name, typed["value"])
 		if err != nil {
 			return "", false, err
 		}
@@ -1547,7 +1547,7 @@ func loaderSandboxEnvValue(name string, value any) (string, bool, error) {
 	}
 }
 
-func loaderSecretEnvName(name string) bool {
+func schedulerSecretEnvName(name string) bool {
 	name = strings.ToUpper(strings.TrimSpace(name))
 	if name == "" {
 		return false
@@ -1563,12 +1563,12 @@ func loaderSecretEnvName(name string) bool {
 	}
 }
 
-func parseLoaderLLMRequest(args []*qjs.Value, state *loaderExecutionState) (domain.SchedulerLLMRequest, error) {
+func parseSchedulerLLMRequest(args []*qjs.Value, state *schedulerExecutionState) (domain.SchedulerLLMRequest, error) {
 	request := domain.SchedulerLLMRequest{}
 	if len(args) < 2 || args[1] == nil || args[1].IsUndefined() || args[1].IsNull() {
 		return request, nil
 	}
-	options, err := loaderAgentOptionsWithoutSchema(state.jsonEncoder, args[1])
+	options, err := schedulerAgentOptionsWithoutSchema(state.jsonEncoder, args[1])
 	if err != nil {
 		return domain.SchedulerLLMRequest{}, fmt.Errorf("decode scheduler.llm options: %w", err)
 	}
@@ -1578,7 +1578,7 @@ func parseLoaderLLMRequest(args []*qjs.Value, state *loaderExecutionState) (doma
 	return request, nil
 }
 
-func loaderRPCRequestJSON(encoder *jsValueEncoder, args []*qjs.Value, apiName string) (string, error) {
+func schedulerRPCRequestJSON(encoder *jsValueEncoder, args []*qjs.Value, apiName string) (string, error) {
 	if len(args) == 0 {
 		return "", nil
 	}

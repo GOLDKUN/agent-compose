@@ -11,10 +11,10 @@ import (
 
 func TestFSArtifactsInspectAndRemoveRunArtifacts(t *testing.T) {
 	root := t.TempDir()
-	loaderID := identity.NewID(identity.ResourceLoader, "loader")
+	schedulerID := identity.NewID(identity.ResourceLoader, "loader")
 	runID := identity.NewID(identity.ResourceRun, "run")
 	artifacts := FSArtifacts{DataRoot: root}
-	dir := artifacts.RunDir(loaderID, runID)
+	dir := artifacts.RunDir(schedulerID, runID)
 	if err := os.MkdirAll(filepath.Join(dir, "nested"), 0o755); err != nil {
 		t.Fatalf("create artifact directory: %v", err)
 	}
@@ -25,18 +25,18 @@ func TestFSArtifactsInspectAndRemoveRunArtifacts(t *testing.T) {
 		t.Fatalf("write result: %v", err)
 	}
 
-	info, err := artifacts.InspectRunArtifacts(loaderID, runID, dir)
+	info, err := artifacts.InspectRunArtifacts(schedulerID, runID, dir)
 	if err != nil || !info.Exists || info.Path != dir || info.Bytes != 12 {
 		t.Fatalf("inspect info=%#v err=%v", info, err)
 	}
-	removed, err := artifacts.RemoveRunArtifacts(loaderID, runID, dir)
+	removed, err := artifacts.RemoveRunArtifacts(schedulerID, runID, dir)
 	if err != nil || removed != info {
 		t.Fatalf("remove info=%#v err=%v, want %#v", removed, err, info)
 	}
 	if _, err := os.Lstat(dir); !os.IsNotExist(err) {
 		t.Fatalf("artifact directory still exists: %v", err)
 	}
-	missing, err := artifacts.InspectRunArtifacts(loaderID, runID, dir)
+	missing, err := artifacts.InspectRunArtifacts(schedulerID, runID, dir)
 	if err != nil || missing.Exists || missing.Path != dir {
 		t.Fatalf("missing info=%#v err=%v", missing, err)
 	}
@@ -44,25 +44,25 @@ func TestFSArtifactsInspectAndRemoveRunArtifacts(t *testing.T) {
 
 func TestFSArtifactsRejectsUnsafeRunArtifactPaths(t *testing.T) {
 	root := t.TempDir()
-	loaderID := identity.NewID(identity.ResourceLoader, "loader")
+	schedulerID := identity.NewID(identity.ResourceLoader, "loader")
 	runID := identity.NewID(identity.ResourceRun, "run")
 	artifacts := FSArtifacts{DataRoot: root}
-	dir := artifacts.RunDir(loaderID, runID)
+	dir := artifacts.RunDir(schedulerID, runID)
 
 	tests := []struct {
-		name      string
-		loaderID  string
-		runID     string
-		recorded  string
-		wantError string
+		name        string
+		schedulerID string
+		runID       string
+		recorded    string
+		wantError   string
 	}{
-		{name: "invalid loader id", loaderID: "loader", runID: runID, wantError: "complete resource ids"},
-		{name: "invalid run id", loaderID: loaderID, runID: "run", wantError: "complete resource ids"},
-		{name: "recorded mismatch", loaderID: loaderID, runID: runID, recorded: filepath.Join(root, "elsewhere"), wantError: "does not match"},
+		{name: "invalid loader id", schedulerID: "loader", runID: runID, wantError: "complete resource ids"},
+		{name: "invalid run id", schedulerID: schedulerID, runID: "run", wantError: "complete resource ids"},
+		{name: "recorded mismatch", schedulerID: schedulerID, runID: runID, recorded: filepath.Join(root, "elsewhere"), wantError: "does not match"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := artifacts.InspectRunArtifacts(test.loaderID, test.runID, test.recorded)
+			_, err := artifacts.InspectRunArtifacts(test.schedulerID, test.runID, test.recorded)
 			if err == nil || !strings.Contains(err.Error(), test.wantError) {
 				t.Fatalf("error=%v, want %q", err, test.wantError)
 			}
@@ -76,7 +76,7 @@ func TestFSArtifactsRejectsUnsafeRunArtifactPaths(t *testing.T) {
 	if err := os.Symlink(outside, dir); err != nil {
 		t.Fatalf("create run symlink: %v", err)
 	}
-	if _, err := artifacts.InspectRunArtifacts(loaderID, runID, dir); err == nil || !strings.Contains(err.Error(), "must not be a symlink") {
+	if _, err := artifacts.InspectRunArtifacts(schedulerID, runID, dir); err == nil || !strings.Contains(err.Error(), "must not be a symlink") {
 		t.Fatalf("run symlink error=%v", err)
 	}
 	if _, err := os.Stat(outside); err != nil {
@@ -86,17 +86,17 @@ func TestFSArtifactsRejectsUnsafeRunArtifactPaths(t *testing.T) {
 
 func TestFSArtifactsRejectsSymlinkedParentBelowDataRoot(t *testing.T) {
 	root := t.TempDir()
-	loaderID := identity.NewID(identity.ResourceLoader, "loader")
+	schedulerID := identity.NewID(identity.ResourceLoader, "loader")
 	runID := identity.NewID(identity.ResourceRun, "run")
 	outside := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "schedulers"), 0o755); err != nil {
 		t.Fatalf("create schedulers root: %v", err)
 	}
-	if err := os.Symlink(outside, filepath.Join(root, "schedulers", loaderID)); err != nil {
+	if err := os.Symlink(outside, filepath.Join(root, "schedulers", schedulerID)); err != nil {
 		t.Fatalf("create loader symlink: %v", err)
 	}
 	artifacts := FSArtifacts{DataRoot: root}
-	if _, err := artifacts.InspectRunArtifacts(loaderID, runID, ""); err == nil || !strings.Contains(err.Error(), "parent must not contain symlinks") {
+	if _, err := artifacts.InspectRunArtifacts(schedulerID, runID, ""); err == nil || !strings.Contains(err.Error(), "parent must not contain symlinks") {
 		t.Fatalf("symlink parent error=%v", err)
 	}
 }

@@ -15,18 +15,20 @@ type SchedulerHostEvents struct {
 	Controller *schedulers.Controller
 }
 
-func (e SchedulerHostEvents) Add(ctx context.Context, loaderID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
+// Adapter errors retain their established loader wording because they can
+// surface through CLI and API error responses.
+func (e SchedulerHostEvents) Add(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
 	if e.Controller == nil {
 		return fmt.Errorf("loader controller is unavailable")
 	}
-	return e.Controller.AddLoaderEvent(ctx, loaderID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+	return e.Controller.AddSchedulerEvent(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
 }
 
-func (e SchedulerHostEvents) AddRecord(ctx context.Context, loaderID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
+func (e SchedulerHostEvents) AddRecord(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
 	if e.Controller == nil {
 		return domain.SchedulerEvent{}, fmt.Errorf("loader controller is unavailable")
 	}
-	return e.Controller.AddLoaderEventRecord(ctx, loaderID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+	return e.Controller.AddSchedulerEventRecord(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
 }
 
 type SchedulerHostAgentExecutor struct {
@@ -53,11 +55,11 @@ type SchedulerHostCommandExecutor struct {
 	Executor *SchedulerCommandExecutor
 }
 
-func (e SchedulerHostCommandExecutor) ExecuteLoaderCommand(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
+func (e SchedulerHostCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
 	if e.Executor == nil {
 		return domain.SchedulerCommandResult{}, fmt.Errorf("loader command executor is unavailable")
 	}
-	return e.Executor.ExecuteLoaderCommand(ctx, session, request)
+	return e.Executor.ExecuteSchedulerCommand(ctx, session, request)
 }
 
 type SchedulerHostLLMRunner struct {
@@ -81,16 +83,16 @@ func (r SchedulerHostLLMRunner) Generate(ctx context.Context, prompt, model, out
 }
 
 func SchedulerSandboxRPCLinkedSandboxID(method, requestJSON, responseJSON string) string {
-	if value := loaderSandboxIDFromJSON(responseJSON); value != "" {
+	if value := schedulerSandboxIDFromJSON(responseJSON); value != "" {
 		return value
 	}
 	if strings.TrimSpace(method) == "ListSandboxes" {
 		return ""
 	}
-	return loaderSandboxIDFromJSON(requestJSON)
+	return schedulerSandboxIDFromJSON(requestJSON)
 }
 
-func loaderSandboxIDFromJSON(raw string) string {
+func schedulerSandboxIDFromJSON(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""

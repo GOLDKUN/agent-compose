@@ -51,7 +51,7 @@ func ScanWorkspaceConfig(scan func(dest ...any) error) (domain.WorkspaceConfig, 
 	return item, nil
 }
 
-func ParseStoredLoaderTriggerTime(value any) time.Time {
+func ParseStoredSchedulerTriggerTime(value any) time.Time {
 	switch typed := value.(type) {
 	case nil:
 		return time.Time{}
@@ -62,7 +62,7 @@ func ParseStoredLoaderTriggerTime(value any) time.Time {
 	case float64:
 		return storeutil.ParseStoredUnixTimeAuto(int64(typed))
 	case []byte:
-		return ParseStoredLoaderTriggerTime(string(typed))
+		return ParseStoredSchedulerTriggerTime(string(typed))
 	case string:
 		trimmed := strings.TrimSpace(typed)
 		if trimmed == "" {

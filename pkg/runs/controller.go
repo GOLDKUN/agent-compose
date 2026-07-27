@@ -86,12 +86,12 @@ type ControllerStore interface {
 
 type TriggerResolverStore interface {
 	ListProjectSchedulers(context.Context, string) ([]domain.ProjectSchedulerRecord, error)
-	GetLoader(context.Context, string) (domain.Scheduler, error)
+	GetScheduler(context.Context, string) (domain.Scheduler, error)
 }
 
 type stickyBindingStore interface {
-	GetLoaderBinding(context.Context, string, string) (domain.SchedulerBinding, bool, error)
-	CompareAndSwapLoaderBinding(context.Context, *domain.SchedulerBinding, domain.SchedulerBinding) (bool, error)
+	GetSchedulerBinding(context.Context, string, string) (domain.SchedulerBinding, bool, error)
+	CompareAndSwapSchedulerBinding(context.Context, *domain.SchedulerBinding, domain.SchedulerBinding) (bool, error)
 }
 
 // SandboxRuntimeStore is the subset of sandbox runtime persistence the run
@@ -121,7 +121,7 @@ type Controller struct {
 	executor         AgentExecutor
 	runtime          RuntimeProvider
 	images           images.Backend
-	loaderEngine     schedulers.SchedulerEngine
+	schedulerEngine  schedulers.SchedulerEngine
 	cap              capabilities.Provider
 	volumes          VolumeResolver
 	streams          *sandboxes.StreamBroker
@@ -177,7 +177,7 @@ func NewController(deps ControllerDependencies) *Controller {
 		executor:         deps.Executor,
 		runtime:          deps.Runtime,
 		images:           deps.Images,
-		loaderEngine:     deps.SchedulerEngine,
+		schedulerEngine:  deps.SchedulerEngine,
 		cap:              deps.Cap,
 		volumes:          deps.Volumes,
 		streams:          deps.Streams,
@@ -191,26 +191,26 @@ func NewController(deps ControllerDependencies) *Controller {
 }
 
 type RunAgentRequest struct {
-	ProjectID               string
-	AgentName               string
-	Prompt                  string
-	Command                 string
-	Source                  string
-	SchedulerID             string
-	SchedulerRunID          string
-	TriggerID               string
-	PayloadJSON             string
-	ClientRequestID         string
-	Env                     []*agentcomposev2.EnvVarSpec
-	SandboxID               string
-	Volumes                 []domain.VolumeMountSpec
-	Driver                  string
-	OutputSchemaJSON        string
-	CleanupPolicy           agentcomposev2.RunSandboxCleanupPolicy
-	Jupyter                 *agentcomposev2.RunJupyterSpec
-	StickyBindingLoaderID   string
-	StickyBindingTriggerID  string
-	StickyBindingConfigHash string
+	ProjectID                string
+	AgentName                string
+	Prompt                   string
+	Command                  string
+	Source                   string
+	SchedulerID              string
+	SchedulerRunID           string
+	TriggerID                string
+	PayloadJSON              string
+	ClientRequestID          string
+	Env                      []*agentcomposev2.EnvVarSpec
+	SandboxID                string
+	Volumes                  []domain.VolumeMountSpec
+	Driver                   string
+	OutputSchemaJSON         string
+	CleanupPolicy            agentcomposev2.RunSandboxCleanupPolicy
+	Jupyter                  *agentcomposev2.RunJupyterSpec
+	StickyBindingSchedulerID string
+	StickyBindingTriggerID   string
+	StickyBindingConfigHash  string
 }
 
 type StreamSink struct {
@@ -1960,14 +1960,14 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	if err != nil {
 		return SandboxResult{}, err
 	}
-	stickyLoaderID := strings.TrimSpace(req.StickyBindingLoaderID)
+	stickySchedulerID := strings.TrimSpace(req.StickyBindingSchedulerID)
 	stickyTriggerID := strings.TrimSpace(req.StickyBindingTriggerID)
 	driver, err := driverpkg.ResolveSandboxRuntimeDriver(run.Driver, c.config.RuntimeDriver)
 	if err != nil {
 		return SandboxResult{}, err
 	}
 	driverValidated := false
-	if stickyLoaderID == "" || strings.TrimSpace(req.StickyBindingConfigHash) != "" {
+	if stickySchedulerID == "" || strings.TrimSpace(req.StickyBindingConfigHash) != "" {
 		if err := c.validateSandboxRuntimeDriver(driver); err != nil {
 			return SandboxResult{}, err
 		}
@@ -2005,11 +2005,11 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	var previousStickyBinding *domain.SchedulerBinding
 	boundSandbox := false
 	warnings := []string(nil)
-	if stickyLoaderID != "" && strings.TrimSpace(req.SandboxID) == "" {
+	if stickySchedulerID != "" && strings.TrimSpace(req.SandboxID) == "" {
 		if !hasBindingStore {
 			return SandboxResult{}, fmt.Errorf("sticky sandbox binding store is required")
 		}
-		sandboxID, binding, bindingWarnings, err := c.resolveStickyLoaderBinding(ctx, bindingStore, stickyLoaderID, stickyTriggerID, stickyConfigHash)
+		sandboxID, binding, bindingWarnings, err := c.resolveStickySchedulerBinding(ctx, bindingStore, stickySchedulerID, stickyTriggerID, stickyConfigHash)
 		if err != nil {
 			return SandboxResult{}, err
 		}
@@ -2032,7 +2032,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			return SandboxResult{}, fmt.Errorf("%w: run volumes cannot be combined with an existing sandbox", ErrInvalidRequest)
 		}
 		if boundSandbox && previousStickyBinding != nil {
-			current, found, err := bindingStore.GetLoaderBinding(ctx, stickyLoaderID, stickyTriggerID)
+			current, found, err := bindingStore.GetSchedulerBinding(ctx, stickySchedulerID, stickyTriggerID)
 			if err != nil {
 				return SandboxResult{}, fmt.Errorf("revalidate sticky sandbox binding: %w", err)
 			}
@@ -2051,8 +2051,8 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 				}
 				driverValidated = true
 			}
-			retiring := schedulers.RetiringLoaderBinding(*previousStickyBinding, stickyConfigHash)
-			claimed, claimErr := bindingStore.CompareAndSwapLoaderBinding(ctx, previousStickyBinding, retiring)
+			retiring := schedulers.RetiringSchedulerBinding(*previousStickyBinding, stickyConfigHash)
+			claimed, claimErr := bindingStore.CompareAndSwapSchedulerBinding(ctx, previousStickyBinding, retiring)
 			if claimErr != nil {
 				return SandboxResult{}, fmt.Errorf("claim unavailable sticky sandbox %s retirement: %w", sandboxID, claimErr)
 			}
@@ -2153,11 +2153,11 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	if err := c.startProjectRunSandboxRuntime(ctx, sandbox, "sandbox.created", "sandbox started for project run"); err != nil {
 		return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, err
 	}
-	if stickyLoaderID != "" {
+	if stickySchedulerID != "" {
 		if !hasBindingStore {
 			return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, fmt.Errorf("sticky sandbox binding store is required")
 		}
-		claimed, err := bindingStore.CompareAndSwapLoaderBinding(ctx, previousStickyBinding, domain.SchedulerBinding{SchedulerID: stickyLoaderID, TriggerID: stickyTriggerID, SandboxID: sandbox.Summary.ID, SandboxConfigHash: stickyConfigHash})
+		claimed, err := bindingStore.CompareAndSwapSchedulerBinding(ctx, previousStickyBinding, domain.SchedulerBinding{SchedulerID: stickySchedulerID, TriggerID: stickyTriggerID, SandboxID: sandbox.Summary.ID, SandboxConfigHash: stickyConfigHash})
 		if err != nil {
 			if stopErr := c.stopProjectRunSandbox(ctx, sandbox); stopErr != nil {
 				return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, errors.Join(fmt.Errorf("persist sticky sandbox binding: %w", err), fmt.Errorf("retire unbound sticky sandbox: %w", stopErr))
@@ -2168,7 +2168,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			if err := c.stopProjectRunSandbox(ctx, sandbox); err != nil {
 				return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, fmt.Errorf("retire unclaimed sticky sandbox: %w", err)
 			}
-			winner, compatible, err := loadCompatibleStickyLoaderBinding(ctx, bindingStore, stickyLoaderID, stickyTriggerID, stickyConfigHash)
+			winner, compatible, err := loadCompatibleStickySchedulerBinding(ctx, bindingStore, stickySchedulerID, stickyTriggerID, stickyConfigHash)
 			if err != nil {
 				return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, fmt.Errorf("load concurrently claimed sticky sandbox: %w", err)
 			}
@@ -2176,7 +2176,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 				reuseRequest := req
 				reuseRequest.SandboxID = winner.SandboxID
 				reuseRequest.Volumes = nil
-				reuseRequest.StickyBindingLoaderID = ""
+				reuseRequest.StickyBindingSchedulerID = ""
 				reuseRequest.StickyBindingTriggerID = ""
 				reuseRequest.StickyBindingConfigHash = ""
 				result, reuseErr := c.ensureProjectRunSandbox(ctx, run, prepared, reuseRequest)

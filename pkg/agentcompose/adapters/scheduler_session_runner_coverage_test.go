@@ -23,7 +23,7 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 	bridge.config.LLMModel = "gpt-loader-retry"
 	bridge.config.LLMAPIProtocol = "responses"
 	publisher := &loaderSessionPublisherFake{}
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
 
 	running, err := bridge.store.CreateSandbox(ctx, "running", "", driverpkg.RuntimeDriverBoxlite, "", "", "loader", nil, nil, nil)
 	if err != nil {
@@ -99,7 +99,7 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 func TestLoaderSandboxRunnerRejectsUnsupportedStickyResumeBeforeSideEffects(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
 	session, err := bridge.store.CreateSandbox(ctx, "historical sticky", "", driverpkg.RuntimeDriverMicrosandbox, "", "", "loader", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
@@ -141,7 +141,7 @@ func TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testing.
 			ctx := context.Background()
 			bridge, sandboxDriver := newTestSandboxRPCBridge(t)
 			publisher := &loaderSessionPublisherFake{}
-			runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, sandboxDriver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+			runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, sandboxDriver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
 			loader := domain.Scheduler{Summary: domain.SchedulerSummary{
 				ID:            "loader-uncompiled-" + runtimeDriver,
 				Name:          "Uncompiled " + runtimeDriver,
@@ -151,12 +151,12 @@ func TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testing.
 			loader = createNativeTestScheduler(t, ctx, bridge.configDB, loader)
 			triggerID := "trigger-uncompiled"
 			originalBinding := domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: triggerID, SandboxID: "missing-original-sandbox"}
-			if err := bridge.configDB.UpsertLoaderBinding(ctx, originalBinding); err != nil {
-				t.Fatalf("UpsertLoaderBinding returned error: %v", err)
+			if err := bridge.configDB.UpsertSchedulerBinding(ctx, originalBinding); err != nil {
+				t.Fatalf("UpsertSchedulerBinding returned error: %v", err)
 			}
-			originalBinding, found, err := bridge.configDB.GetLoaderBinding(ctx, loader.Summary.ID, triggerID)
+			originalBinding, found, err := bridge.configDB.GetSchedulerBinding(ctx, loader.Summary.ID, triggerID)
 			if err != nil || !found {
-				t.Fatalf("GetLoaderBinding before Ensure returned binding=%#v found=%v err=%v", originalBinding, found, err)
+				t.Fatalf("GetSchedulerBinding before Ensure returned binding=%#v found=%v err=%v", originalBinding, found, err)
 			}
 			beforeSandboxes, err := bridge.store.ListSandboxes(ctx, domain.SandboxListOptions{})
 			if err != nil {
@@ -175,11 +175,11 @@ func TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testing.
 			if err != nil || len(afterSandboxes.Sandboxes) != len(beforeSandboxes.Sandboxes) {
 				t.Fatalf("sandboxes changed: before=%d after=%d err=%v", len(beforeSandboxes.Sandboxes), len(afterSandboxes.Sandboxes), err)
 			}
-			binding, found, err := bridge.configDB.GetLoaderBinding(ctx, loader.Summary.ID, triggerID)
+			binding, found, err := bridge.configDB.GetSchedulerBinding(ctx, loader.Summary.ID, triggerID)
 			if err != nil || !found || binding != originalBinding {
 				t.Fatalf("binding changed: got=%#v found=%v err=%v, want %#v", binding, found, err, originalBinding)
 			}
-			events, err := bridge.configDB.ListLoaderEvents(ctx, loader.Summary.ID, 100)
+			events, err := bridge.configDB.ListSchedulerEvents(ctx, loader.Summary.ID, 100)
 			if err != nil || len(events) != 0 || len(publisher.events) != 0 {
 				t.Fatalf("events changed: persisted=%#v published=%#v err=%v", events, publisher.events, err)
 			}
@@ -222,7 +222,7 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 		}},
 		warnings: []string{"volume target /cache overlaps test path"},
 	}
-	runner := NewLoaderSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, resolver, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, resolver, bridge.streams, nil, nil, bridge.agentExecutor)
 	projectRoot := t.TempDir()
 	projectPath := filepath.Join(projectRoot, "agent-compose.yml")
 	if _, err := bridge.configDB.UpsertProject(ctx, domain.ProjectRecord{ID: "project-1", Name: "Project", SourcePath: projectPath}); err != nil {
@@ -236,7 +236,7 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 		t.Fatalf("UpsertProjectVolume returned error: %v", err)
 	}
 	loader := domain.Scheduler{
-		Summary: domain.SchedulerSummary{ID: "loader-1", Name: "Scheduler", Driver: driverpkg.RuntimeDriverDocker, ManagedProjectID: "project-1", ManagedAgentName: "reviewer", ManagedSchedulerID: "scheduler-1"},
+		Summary: domain.SchedulerSummary{ID: "loader-1", Name: "Scheduler", Driver: driverpkg.RuntimeDriverDocker, ProjectID: "project-1", AgentName: "reviewer", ProjectSchedulerID: "scheduler-1"},
 		Volumes: []domain.VolumeMountSpec{{
 			Type:   domain.VolumeMountTypeVolume,
 			Source: "loader-cache",

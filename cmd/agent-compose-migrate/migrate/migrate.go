@@ -16,14 +16,12 @@ import (
 	"sort"
 	"strings"
 
-	"agent-compose/pkg/storage/sqlite"
-
 	_ "modernc.org/sqlite"
 )
 
 const (
 	databaseName = "data.db"
-	journalName  = ".agent-compose-legacy-migrate.json"
+	journalName  = ".agent-compose-migrate.json"
 )
 
 var knownMigrationChecksums = map[int64]string{
@@ -31,8 +29,8 @@ var knownMigrationChecksums = map[int64]string{
 	2: "fa328b0bd1be3620d4a92b94bd39d6cb4a3a6d454ce1de643e82598f9c028a49",
 	3: "5bdbd3258245ce7fc025121625408b35b444a425ffcb89aed0b8b7a846969183",
 	4: "3d5c2ab028a6f7e1c461f0af3fc6d898807b60159f1625b8939987d6ce7b91cb",
-	5: "d8822e3a8a6a4b4f6571f7b42989d46d5fe46d585ae2290567f651dcfb1fda3f",
-	6: "ee52d06fe337d5f19216f69d8d17fcdf20f8f742baf7c2d77173a9060cfd27c9",
+	5: "dd9ded53e4c76b70f6da46cfd7f5cec59bb1dedf58460ab974fe72d41fe6a028",
+	6: "163a5651a54e7b807f2d626d05818a345c7fe92fa4d6efecf04ac394b32e5d94",
 	7: "3fa7341d89f6157a8d5ac700c92893a392060bd7303b46cfdccf8c78be05d0da",
 }
 
@@ -115,16 +113,25 @@ func Run(ctx context.Context, options Options) (Report, error) {
 		return fail(err)
 	}
 	report.SourceVersion = version
-	if version < 1 || version > 7 {
-		return fail(fmt.Errorf("source database is unversioned or has an unknown migration prefix; deterministic legacy shape conversion is required"))
+	if version < 0 || version > 7 {
+		return fail(fmt.Errorf("source database has an unknown migration version"))
 	}
-	if err := validateVersionedPrefix(ctx, sourceDB, version); err != nil {
-		return fail(err)
-	}
-	if err := rejectStandaloneV1Rows(ctx, sourceDB, version); err != nil {
+	if version == 0 {
+		if err := validateUnversionedSource(ctx, sourceDB); err != nil {
+			return fail(err)
+		}
+	} else if err := validateVersionedPrefix(ctx, sourceDB, version); err != nil {
 		return fail(err)
 	}
 	if options.DryRun {
+		warnings, targetVersion, copiedFiles, copiedBytes, err := dryRunMigration(ctx, sourceDB, source, version)
+		if err != nil {
+			return fail(err)
+		}
+		report.Warnings = append(report.Warnings, warnings...)
+		report.TargetVersion = targetVersion
+		report.CopiedFiles = copiedFiles
+		report.CopiedBytes = copiedBytes
 		report.Stage = "eligible"
 		return report, nil
 	}
@@ -155,10 +162,12 @@ func Run(ctx context.Context, options Options) (Report, error) {
 		return fail(fmt.Errorf("open target database: %w", err))
 	}
 	targetDB.SetMaxOpenConns(1)
-	if err := sqlite.Migrate(ctx, targetDB); err != nil {
+	warnings, schedulerIDs, err := prepareTargetDatabase(ctx, targetDB, version, source, target)
+	if err != nil {
 		_ = targetDB.Close()
-		return fail(fmt.Errorf("migrate target database: %w", err))
+		return fail(err)
 	}
+	report.Warnings = append(report.Warnings, warnings...)
 	report.TargetVersion, err = inspectVersion(ctx, targetDB)
 	if closeErr := targetDB.Close(); err == nil && closeErr != nil {
 		err = closeErr
@@ -171,7 +180,7 @@ func Run(ctx context.Context, options Options) (Report, error) {
 		return fail(err)
 	}
 	report.Stage = "files"
-	report.CopiedFiles, report.CopiedBytes, err = copyAuthoritativeFiles(source, target)
+	report.CopiedFiles, report.CopiedBytes, err = copyAuthoritativeFiles(source, target, schedulerIDs)
 	if err != nil {
 		return fail(err)
 	}
@@ -180,6 +189,41 @@ func Run(ctx context.Context, options Options) (Report, error) {
 	}
 	report.Stage = "complete"
 	return report, nil
+}
+
+func dryRunMigration(ctx context.Context, sourceDB *sql.DB, source string, version int64) ([]string, int64, int, int64, error) {
+	temporaryRoot, err := os.MkdirTemp("", "agent-compose-migrate-dry-run-*")
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("create dry-run workspace: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(temporaryRoot) }()
+	targetDBPath := filepath.Join(temporaryRoot, databaseName)
+	if err := snapshotDatabase(ctx, sourceDB, targetDBPath); err != nil {
+		return nil, 0, 0, 0, err
+	}
+	targetDB, err := sql.Open("sqlite", targetDBPath)
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("open dry-run database: %w", err)
+	}
+	targetDB.SetMaxOpenConns(1)
+	warnings, schedulerIDs, err := prepareTargetDatabase(ctx, targetDB, version, source, temporaryRoot)
+	if err != nil {
+		_ = targetDB.Close()
+		return nil, 0, 0, 0, err
+	}
+	targetVersion, err := inspectVersion(ctx, targetDB)
+	closeErr := targetDB.Close()
+	if err != nil {
+		return nil, 0, 0, 0, err
+	}
+	if closeErr != nil {
+		return nil, 0, 0, 0, fmt.Errorf("close dry-run database: %w", closeErr)
+	}
+	copiedFiles, copiedBytes, err := copyAuthoritativeFiles(source, temporaryRoot, schedulerIDs)
+	if err != nil {
+		return nil, 0, 0, 0, err
+	}
+	return warnings, targetVersion, copiedFiles, copiedBytes, nil
 }
 
 func validateSourceRoot(source string) error {
@@ -255,23 +299,6 @@ func validateVersionedPrefix(ctx context.Context, db *sql.DB, version int64) err
 	return nil
 }
 
-func rejectStandaloneV1Rows(ctx context.Context, db *sql.DB, version int64) error {
-	if version >= 5 {
-		return nil
-	}
-	var count int
-	query := `SELECT
-		(SELECT COUNT(*) FROM agent_definition d LEFT JOIN project_agent a ON a.managed_agent_id=d.id WHERE a.id IS NULL) +
-		(SELECT COUNT(*) FROM loader l LEFT JOIN project_scheduler s ON s.managed_loader_id=l.id WHERE s.id IS NULL)`
-	if err := db.QueryRowContext(ctx, query).Scan(&count); err != nil {
-		return fmt.Errorf("inspect standalone legacy definitions: %w", err)
-	}
-	if count != 0 {
-		return fmt.Errorf("source contains %d standalone agent or loader definitions; refusing to guess project ownership", count)
-	}
-	return nil
-}
-
 func prepareTarget(target, fingerprint string) (journal, error) {
 	info, err := os.Stat(target)
 	if errors.Is(err, os.ErrNotExist) {
@@ -307,62 +334,6 @@ func snapshotDatabase(ctx context.Context, source *sql.DB, target string) error 
 	return nil
 }
 
-func copyAuthoritativeFiles(source, target string) (int, int64, error) {
-	var files int
-	var bytes int64
-	err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, err := filepath.Rel(source, path)
-		if err != nil || rel == "." {
-			return err
-		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("refuse symlink in source data root: %s", rel)
-		}
-		if rel == databaseName || rel == databaseName+"-wal" || rel == databaseName+"-shm" || rel == journalName {
-			return nil
-		}
-		destination := filepath.Join(target, rel)
-		if entry.IsDir() {
-			return os.MkdirAll(destination, 0o700)
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("refuse non-regular source file: %s", rel)
-		}
-		if err := copyFile(path, destination, info.Mode().Perm()); err != nil {
-			return err
-		}
-		files++
-		bytes += info.Size()
-		return nil
-	})
-	return files, bytes, err
-}
-
-func copyFile(source, target string, mode fs.FileMode) error {
-	in, err := os.Open(source)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(out, in)
-	closeErr := out.Close()
-	if copyErr != nil {
-		return copyErr
-	}
-	return closeErr
-}
-
 func fingerprintRoot(root string) (string, error) {
 	var entries []string
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -373,22 +344,86 @@ func fingerprintRoot(root string) (string, error) {
 		if err != nil || rel == "." {
 			return err
 		}
-		if rel == databaseName+"-wal" || rel == databaseName+"-shm" {
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refuse symlink in source data root: %s", rel)
+		}
+		if rel == databaseName || rel == databaseName+"-wal" || rel == databaseName+"-shm" {
 			return nil
 		}
 		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
-		entries = append(entries, fmt.Sprintf("%s\x00%d\x00%d\x00%d", filepath.ToSlash(rel), info.Mode(), info.Size(), info.ModTime().UnixNano()))
+		contentHash := ""
+		if info.Mode().IsRegular() {
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			hash := sha256.New()
+			_, copyErr := io.Copy(hash, file)
+			closeErr := file.Close()
+			if copyErr != nil {
+				return copyErr
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+			contentHash = hex.EncodeToString(hash.Sum(nil))
+		}
+		entries = append(entries, fmt.Sprintf("%s\x00%d\x00%d\x00%s", filepath.ToSlash(rel), info.Mode(), info.Size(), contentHash))
 		return nil
 	})
 	if err != nil {
 		return "", fmt.Errorf("fingerprint source: %w", err)
 	}
+	databaseHash, err := fingerprintDatabase(filepath.Join(root, databaseName))
+	if err != nil {
+		return "", fmt.Errorf("fingerprint source database: %w", err)
+	}
+	entries = append(entries, databaseName+"\x00sqlite-snapshot\x00"+databaseHash)
 	sort.Strings(entries)
 	hash := sha256.Sum256([]byte(strings.Join(entries, "\n")))
 	return "sha256:" + hex.EncodeToString(hash[:]), nil
+}
+
+func fingerprintDatabase(path string) (string, error) {
+	db, err := openReadOnly(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = db.Close() }()
+
+	temporary, err := os.CreateTemp("", "agent-compose-source-fingerprint-*.db")
+	if err != nil {
+		return "", fmt.Errorf("create database fingerprint path: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	if err := temporary.Close(); err != nil {
+		_ = os.Remove(temporaryPath)
+		return "", fmt.Errorf("close database fingerprint path: %w", err)
+	}
+	if err := os.Remove(temporaryPath); err != nil {
+		return "", fmt.Errorf("prepare database fingerprint path: %w", err)
+	}
+	defer func() { _ = os.Remove(temporaryPath) }()
+	if err := snapshotDatabase(context.Background(), db, temporaryPath); err != nil {
+		return "", err
+	}
+	file, err := os.Open(temporaryPath)
+	if err != nil {
+		return "", fmt.Errorf("open database fingerprint snapshot: %w", err)
+	}
+	hash := sha256.New()
+	_, copyErr := io.Copy(hash, file)
+	closeErr := file.Close()
+	if copyErr != nil {
+		return "", fmt.Errorf("hash database fingerprint snapshot: %w", copyErr)
+	}
+	if closeErr != nil {
+		return "", fmt.Errorf("close database fingerprint snapshot: %w", closeErr)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func writeJournal(target string, state journal) error {

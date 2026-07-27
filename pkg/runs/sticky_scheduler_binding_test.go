@@ -100,21 +100,21 @@ func TestResolveStickyLoaderBindingInvalidatesBeforeRuntimeStop(t *testing.T) {
 	fixture.configDB.bindings = map[string]domain.SchedulerBinding{"loader-1/trigger-1": binding}
 	fixture.driver.onStop = func(*domain.Sandbox) error {
 		current := fixture.configDB.bindings["loader-1/trigger-1"]
-		desiredHash, retiring := schedulers.RetiringLoaderBindingConfigHash(current)
+		desiredHash, retiring := schedulers.RetiringSchedulerBindingConfigHash(current)
 		if !retiring || desiredHash != "sha256:new" {
 			return fmt.Errorf("binding at runtime stop = %#v, want retirement for sha256:new", current)
 		}
 		return nil
 	}
 
-	gotSandboxID, previous, _, err := fixture.controller.resolveStickyLoaderBinding(fixture.ctx, fixture.configDB, "loader-1", "trigger-1", "sha256:new")
+	gotSandboxID, previous, _, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, "loader-1", "trigger-1", "sha256:new")
 	if err != nil {
-		t.Fatalf("resolveStickyLoaderBinding returned error: %v", err)
+		t.Fatalf("resolveStickySchedulerBinding returned error: %v", err)
 	}
 	if gotSandboxID != "" || previous == nil {
-		t.Fatalf("resolveStickyLoaderBinding result = %q/%#v, want replacement binding", gotSandboxID, previous)
+		t.Fatalf("resolveStickySchedulerBinding result = %q/%#v, want replacement binding", gotSandboxID, previous)
 	}
-	if desiredHash, retiring := schedulers.RetiringLoaderBindingConfigHash(*previous); !retiring || desiredHash != "sha256:new" {
+	if desiredHash, retiring := schedulers.RetiringSchedulerBindingConfigHash(*previous); !retiring || desiredHash != "sha256:new" {
 		t.Fatalf("previous binding = %#v, want retirement for sha256:new", previous)
 	}
 }
@@ -133,12 +133,12 @@ func TestResolveStickyLoaderBindingAdoptsLegacyConfigHashWithoutStoppingSandbox(
 		"loader-1/trigger-1": {SchedulerID: "loader-1", TriggerID: "trigger-1", SandboxID: sandbox.Summary.ID},
 	}
 
-	gotSandboxID, binding, warnings, err := fixture.controller.resolveStickyLoaderBinding(fixture.ctx, fixture.configDB, "loader-1", "trigger-1", "sha256:current")
+	gotSandboxID, binding, warnings, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, "loader-1", "trigger-1", "sha256:current")
 	if err != nil {
-		t.Fatalf("resolveStickyLoaderBinding returned error: %v", err)
+		t.Fatalf("resolveStickySchedulerBinding returned error: %v", err)
 	}
 	if gotSandboxID != sandbox.Summary.ID || binding == nil || binding.SandboxConfigHash != "sha256:current" {
-		t.Fatalf("resolveStickyLoaderBinding result = %q/%#v, want adopted binding for %q", gotSandboxID, binding, sandbox.Summary.ID)
+		t.Fatalf("resolveStickySchedulerBinding result = %q/%#v, want adopted binding for %q", gotSandboxID, binding, sandbox.Summary.ID)
 	}
 	if len(warnings) != 0 || fixture.driver.stopped {
 		t.Fatalf("legacy reuse warnings/stopped = %#v/%v, want none/false", warnings, fixture.driver.stopped)
@@ -159,19 +159,19 @@ func TestResolveStickyLoaderBindingDoesNotReuseRetiringLegacyBinding(t *testing.
 	if err := fixture.store.UpdateSandbox(fixture.ctx, sandbox); err != nil {
 		t.Fatalf("UpdateSandbox returned error: %v", err)
 	}
-	retiring := schedulers.RetiringLoaderBinding(domain.SchedulerBinding{
+	retiring := schedulers.RetiringSchedulerBinding(domain.SchedulerBinding{
 		SchedulerID: "loader-1", TriggerID: "trigger-1", SandboxID: sandbox.Summary.ID, SandboxConfigHash: "sha256:old",
 	}, "sha256:new")
 	fixture.configDB.bindings = map[string]domain.SchedulerBinding{"loader-1/trigger-1": retiring}
 
-	gotSandboxID, previous, _, err := fixture.controller.resolveStickyLoaderBinding(fixture.ctx, fixture.configDB, "loader-1", "trigger-1", "")
+	gotSandboxID, previous, _, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, "loader-1", "trigger-1", "")
 	if err != nil {
-		t.Fatalf("resolveStickyLoaderBinding returned error: %v", err)
+		t.Fatalf("resolveStickySchedulerBinding returned error: %v", err)
 	}
 	if gotSandboxID != "" || previous == nil {
-		t.Fatalf("resolveStickyLoaderBinding result = %q/%#v, want replacement binding", gotSandboxID, previous)
+		t.Fatalf("resolveStickySchedulerBinding result = %q/%#v, want replacement binding", gotSandboxID, previous)
 	}
-	if desiredHash, ok := schedulers.RetiringLoaderBindingConfigHash(*previous); !ok || desiredHash != "" {
+	if desiredHash, ok := schedulers.RetiringSchedulerBindingConfigHash(*previous); !ok || desiredHash != "" {
 		t.Fatalf("previous binding = %#v, want legacy retirement claim", previous)
 	}
 }
@@ -201,9 +201,9 @@ func TestEnsureProjectRunSandboxConcurrentStickyClaimReusesWinner(t *testing.T) 
 	}
 
 	result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, run, prepared, RunAgentRequest{
-		StickyBindingLoaderID:   "loader-1",
-		StickyBindingTriggerID:  "trigger-1",
-		StickyBindingConfigHash: baseHash,
+		StickyBindingSchedulerID: "loader-1",
+		StickyBindingTriggerID:   "trigger-1",
+		StickyBindingConfigHash:  baseHash,
 	})
 	if err != nil {
 		t.Fatalf("ensureProjectRunSandbox returned error: %v", err)

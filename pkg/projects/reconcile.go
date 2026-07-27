@@ -28,25 +28,27 @@ type ReconcileSchedulerStore interface {
 	UpsertProjectScheduler(ctx context.Context, scheduler domain.ProjectSchedulerRecord) (domain.ProjectSchedulerRecord, error)
 	SetProjectSchedulerEnabled(ctx context.Context, projectID, schedulerID string, enabled bool) (domain.ProjectSchedulerRecord, error)
 	ListProjectSchedulers(ctx context.Context, projectID string) ([]domain.ProjectSchedulerRecord, error)
-	GetLoader(ctx context.Context, schedulerID string) (domain.Scheduler, error)
-	ReplaceLoaderTriggers(ctx context.Context, loaderID string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error)
+	GetScheduler(ctx context.Context, schedulerID string) (domain.Scheduler, error)
+	ReplaceSchedulerTriggers(ctx context.Context, schedulerID string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error)
 }
 
 type ReconcileSchedulerOptions struct {
-	CleanupFailedScheduler func(ctx context.Context, scheduler domain.ProjectSchedulerRecord, loaderID string)
-	RefreshLoaders         func(ctx context.Context) error
+	CleanupFailedScheduler func(ctx context.Context, scheduler domain.ProjectSchedulerRecord, schedulerID string)
+	RefreshSchedulers      func(ctx context.Context) error
 }
 
-func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, project domain.ProjectRecord, schedulers []domain.ProjectSchedulerRecord, loaders []domain.Scheduler, options ReconcileSchedulerOptions) ([]Change, bool, error) {
+func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, project domain.ProjectRecord, schedulers []domain.ProjectSchedulerRecord, definitions []domain.Scheduler, options ReconcileSchedulerOptions) ([]Change, bool, error) {
+	// Change resource names and error text are observable CLI output. Historical
+	// loader spellings remain stable while internal identifiers use scheduler.
 	if store == nil {
 		return nil, false, fmt.Errorf("config store is required")
 	}
 	currentByID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
-	loadersByID := make(map[string]domain.Scheduler, len(loaders))
-	for _, loader := range loaders {
-		loadersByID[loader.Summary.ID] = loader
+	definitionsByID := make(map[string]domain.Scheduler, len(definitions))
+	for _, definition := range definitions {
+		definitionsByID[definition.Summary.ID] = definition
 	}
-	changes := make([]Change, 0, len(schedulers)+len(loaders))
+	changes := make([]Change, 0, len(schedulers)+len(definitions))
 	unchanged := true
 	for _, scheduler := range schedulers {
 		currentByID[scheduler.SchedulerID] = scheduler
@@ -54,18 +56,18 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 		if err != nil {
 			return changes, false, fmt.Errorf("load project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 		}
-		loader, ok := loadersByID[scheduler.ID]
+		definition, ok := definitionsByID[scheduler.ID]
 		if !ok {
 			return changes, false, fmt.Errorf("managed loader %s for scheduler %s missing", scheduler.ID, scheduler.SchedulerID)
 		}
-		var existingLoader domain.Scheduler
+		var existingScheduler domain.Scheduler
 		if found {
-			existingLoader, err = store.GetLoader(ctx, loader.Summary.ID)
+			existingScheduler, err = store.GetScheduler(ctx, definition.Summary.ID)
 			if err != nil {
-				return changes, false, fmt.Errorf("load scheduler %s: %w", loader.Summary.ID, err)
+				return changes, false, fmt.Errorf("load scheduler %s: %w", definition.Summary.ID, err)
 			}
 		}
-		if found && SchedulerRecordUnchanged(existing, scheduler) && SchedulerDefinitionUnchanged(existingLoader, loader) {
+		if found && SchedulerRecordUnchanged(existing, scheduler) && SchedulerDefinitionUnchanged(existingScheduler, definition) {
 			changes = append(changes, Change{
 				Action:       ChangeActionUnchanged,
 				ResourceType: "project_scheduler",
@@ -74,8 +76,8 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 			}, Change{
 				Action:       ChangeActionUnchanged,
 				ResourceType: "loader",
-				ResourceID:   loader.Summary.ID,
-				Name:         loader.Summary.Name,
+				ResourceID:   definition.Summary.ID,
+				Name:         definition.Summary.Name,
 			})
 			continue
 		}
@@ -86,7 +88,7 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 			return changes, false, fmt.Errorf("stage project scheduler %s/%s disabled: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 		}
 
-		if _, err := store.ReplaceLoaderTriggers(ctx, saved.ID, loader.Triggers); err != nil {
+		if _, err := store.ReplaceSchedulerTriggers(ctx, saved.ID, definition.Triggers); err != nil {
 			cleanupFailedScheduler(ctx, options, saved, saved.ID)
 			return changes, false, fmt.Errorf("replace scheduler triggers %s: %w", saved.ID, err)
 		}
@@ -109,15 +111,15 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 			ResourceID:   saved.SchedulerID,
 			Name:         saved.AgentName,
 		})
-		loaderAction := SchedulerDefinitionChangeAction(existingLoader, found, loader)
-		if loaderAction != ChangeActionUnchanged {
+		schedulerAction := SchedulerDefinitionChangeAction(existingScheduler, found, definition)
+		if schedulerAction != ChangeActionUnchanged {
 			unchanged = false
 		}
 		changes = append(changes, Change{
-			Action:       loaderAction,
+			Action:       schedulerAction,
 			ResourceType: "loader",
-			ResourceID:   loader.Summary.ID,
-			Name:         loader.Summary.Name,
+			ResourceID:   definition.Summary.ID,
+			Name:         definition.Summary.Name,
 		})
 	}
 	existingSchedulers, err := store.ListProjectSchedulers(ctx, project.ID)
@@ -150,17 +152,17 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 			Message:      "disabled because the scheduler is no longer present in the project spec",
 		})
 	}
-	if options.RefreshLoaders != nil {
-		if err := options.RefreshLoaders(ctx); err != nil {
+	if options.RefreshSchedulers != nil {
+		if err := options.RefreshSchedulers(ctx); err != nil {
 			return changes, false, fmt.Errorf("refresh loader manager: %w", err)
 		}
 	}
 	return changes, unchanged, nil
 }
 
-func cleanupFailedScheduler(ctx context.Context, options ReconcileSchedulerOptions, scheduler domain.ProjectSchedulerRecord, loaderID string) {
+func cleanupFailedScheduler(ctx context.Context, options ReconcileSchedulerOptions, scheduler domain.ProjectSchedulerRecord, schedulerID string) {
 	if options.CleanupFailedScheduler != nil {
-		options.CleanupFailedScheduler(ctx, scheduler, loaderID)
+		options.CleanupFailedScheduler(ctx, scheduler, schedulerID)
 	}
 }
 

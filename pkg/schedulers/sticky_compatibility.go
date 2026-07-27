@@ -12,7 +12,7 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-type loaderSandboxConfig struct {
+type schedulerSandboxConfig struct {
 	WorkspaceID        string                   `json:"workspace_id,omitempty"`
 	AgentID            string                   `json:"agent_id,omitempty"`
 	Driver             string                   `json:"driver,omitempty"`
@@ -22,10 +22,10 @@ type loaderSandboxConfig struct {
 	CapsetIDs          []string                 `json:"capset_ids,omitempty"`
 	EnvItems           []domain.SandboxEnvVar   `json:"env_items,omitempty"`
 	Volumes            []domain.VolumeMountSpec `json:"volumes,omitempty"`
-	ManagedProjectID   string                   `json:"managed_project_id,omitempty"`
-	ManagedRevision    int64                    `json:"managed_project_revision,omitempty"`
-	ManagedAgentName   string                   `json:"managed_agent_name,omitempty"`
-	ManagedSchedulerID string                   `json:"managed_scheduler_id,omitempty"`
+	ProjectID          string                   `json:"managed_project_id,omitempty"`
+	ProjectRevision    int64                    `json:"managed_project_revision,omitempty"`
+	AgentName          string                   `json:"managed_agent_name,omitempty"`
+	ProjectSchedulerID string                   `json:"managed_scheduler_id,omitempty"`
 }
 
 // NormalizeStickySandboxVolumeMounts returns normalized mounts in a canonical
@@ -68,8 +68,8 @@ func NormalizeStickySandboxVolumeMounts(items []domain.SandboxVolumeMount) []dom
 // SchedulerSandboxConfigHash identifies the Scheduler configuration that is baked
 // into a sticky sandbox. Scheduling and presentation fields are deliberately
 // excluded because changing them does not require replacing the sandbox.
-func SchedulerSandboxConfigHash(loader domain.Scheduler) (string, error) {
-	driver := strings.TrimSpace(loader.Summary.Driver)
+func SchedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {
+	driver := strings.TrimSpace(scheduler.Summary.Driver)
 	if driver != "" {
 		var err error
 		driver, err = driverpkg.ResolveSandboxRuntimeDriver(driver, driver)
@@ -77,11 +77,11 @@ func SchedulerSandboxConfigHash(loader domain.Scheduler) (string, error) {
 			return "", err
 		}
 	}
-	volumes, err := domain.NormalizeVolumeMountSpecs(loader.Volumes)
+	volumes, err := domain.NormalizeVolumeMountSpecs(scheduler.Volumes)
 	if err != nil {
 		return "", err
 	}
-	capsetIDs := capabilities.NormalizeCapsetIDs(loader.Summary.CapsetIDs)
+	capsetIDs := capabilities.NormalizeCapsetIDs(scheduler.Summary.CapsetIDs)
 	sort.Strings(capsetIDs)
 	sort.Slice(volumes, func(i, j int) bool {
 		if volumes[i].Target != volumes[j].Target {
@@ -92,24 +92,24 @@ func SchedulerSandboxConfigHash(loader domain.Scheduler) (string, error) {
 		}
 		return volumes[i].Source < volumes[j].Source
 	})
-	defaultAgent := domain.NormalizeAgentKind(loader.Summary.DefaultAgent)
+	defaultAgent := domain.NormalizeAgentKind(scheduler.Summary.DefaultAgent)
 	if defaultAgent == "" {
 		defaultAgent = domain.DefaultAgentProvider
 	}
-	payload, err := json.Marshal(loaderSandboxConfig{
-		WorkspaceID:        strings.TrimSpace(loader.Summary.WorkspaceID),
-		AgentID:            strings.TrimSpace(loader.Summary.AgentID),
+	payload, err := json.Marshal(schedulerSandboxConfig{
+		WorkspaceID:        strings.TrimSpace(scheduler.Summary.WorkspaceID),
+		AgentID:            strings.TrimSpace(scheduler.Summary.AgentID),
 		Driver:             driver,
-		GuestImage:         strings.TrimSpace(loader.Summary.GuestImage),
+		GuestImage:         strings.TrimSpace(scheduler.Summary.GuestImage),
 		DefaultAgent:       defaultAgent,
-		SandboxPolicy:      domain.NormalizeLoaderSandboxPolicy(loader.Summary.SandboxPolicy),
+		SandboxPolicy:      domain.NormalizeSchedulerSandboxPolicy(scheduler.Summary.SandboxPolicy),
 		CapsetIDs:          capsetIDs,
-		EnvItems:           domain.NormalizeEnvItems(loader.EnvItems),
+		EnvItems:           domain.NormalizeEnvItems(scheduler.EnvItems),
 		Volumes:            volumes,
-		ManagedProjectID:   strings.TrimSpace(loader.Summary.ManagedProjectID),
-		ManagedRevision:    loader.Summary.ManagedRevision,
-		ManagedAgentName:   strings.TrimSpace(loader.Summary.ManagedAgentName),
-		ManagedSchedulerID: strings.TrimSpace(loader.Summary.ManagedSchedulerID),
+		ProjectID:          strings.TrimSpace(scheduler.Summary.ProjectID),
+		ProjectRevision:    scheduler.Summary.ProjectRevision,
+		AgentName:          strings.TrimSpace(scheduler.Summary.AgentName),
+		ProjectSchedulerID: strings.TrimSpace(scheduler.Summary.ProjectSchedulerID),
 	})
 	if err != nil {
 		return "", err

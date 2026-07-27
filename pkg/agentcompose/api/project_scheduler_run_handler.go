@@ -21,17 +21,17 @@ type ProjectSchedulerRunRuntime interface {
 }
 
 type ProjectSchedulerRunStore interface {
-	GetLoaderRunForLoaders(context.Context, []string, string) (domain.SchedulerRunSummary, error)
-	ListLoaderRunsPage(context.Context, schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error)
-	CountLoaderRunsPage(context.Context, schedulers.SchedulerRunPageFilter) (int, error)
+	GetSchedulerRunForSchedulers(context.Context, []string, string) (domain.SchedulerRunSummary, error)
+	ListSchedulerRunsPage(context.Context, schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error)
+	CountSchedulerRunsPage(context.Context, schedulers.SchedulerRunPageFilter) (int, error)
 }
 
 type ProjectSchedulerRunSandboxStore interface {
-	ListLoaderRunSandboxIDs(context.Context, []schedulers.SchedulerRunKey) (map[schedulers.SchedulerRunKey][]string, error)
+	ListSchedulerRunSandboxIDs(context.Context, []schedulers.SchedulerRunKey) (map[schedulers.SchedulerRunKey][]string, error)
 }
 
 type ProjectSchedulerRunSandboxLookupStore interface {
-	BatchGetLatestLoaderRunsBySandboxIDs(context.Context, []string, []string) (map[string]domain.SchedulerRunSummary, error)
+	BatchGetLatestSchedulerRunsBySandboxIDs(context.Context, []string, []string) (map[string]domain.SchedulerRunSummary, error)
 }
 
 const maxSchedulerRunBatchSandboxIDs = 500
@@ -138,22 +138,22 @@ func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Req
 		return nil, ConnectErrorForDomain(err)
 	}
 	triggerID := strings.TrimSpace(req.Msg.GetTriggerId())
-	loaderIDs := make([]string, 0, len(schedulerRecords))
-	byLoaderID := make(map[string]domain.ProjectSchedulerRecord, len(schedulerRecords))
+	schedulerIDs := make([]string, 0, len(schedulerRecords))
+	bySchedulerID := make(map[string]domain.ProjectSchedulerRecord, len(schedulerRecords))
 	for _, scheduler := range schedulerRecords {
-		loaderID := strings.TrimSpace(scheduler.ID)
-		if loaderID == "" {
+		schedulerID := strings.TrimSpace(scheduler.ID)
+		if schedulerID == "" {
 			continue
 		}
-		loaderIDs = append(loaderIDs, loaderID)
-		byLoaderID[loaderID] = scheduler
+		schedulerIDs = append(schedulerIDs, schedulerID)
+		bySchedulerID[schedulerID] = scheduler
 	}
 	store, err := h.schedulerRunStore()
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	runs, err := store.ListLoaderRunsPage(ctx, schedulers.SchedulerRunPageFilter{
-		SchedulerIDs:   loaderIDs,
+	runs, err := store.ListSchedulerRunsPage(ctx, schedulers.SchedulerRunPageFilter{
+		SchedulerIDs:   schedulerIDs,
 		RequireTrigger: true,
 		TriggerID:      triggerID,
 		Status:         status,
@@ -163,7 +163,7 @@ func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	total, err := store.CountLoaderRunsPage(ctx, schedulers.SchedulerRunPageFilter{SchedulerIDs: loaderIDs, RequireTrigger: true, TriggerID: triggerID, Status: status})
+	total, err := store.CountSchedulerRunsPage(ctx, schedulers.SchedulerRunPageFilter{SchedulerIDs: schedulerIDs, RequireTrigger: true, TriggerID: triggerID, Status: status})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -174,13 +174,13 @@ func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Req
 	}
 	sandboxIDs := make(map[schedulers.SchedulerRunKey][]string)
 	if sandboxStore, ok := h.store.(ProjectSchedulerRunSandboxStore); ok {
-		sandboxIDs, err = sandboxStore.ListLoaderRunSandboxIDs(ctx, keys)
+		sandboxIDs, err = sandboxStore.ListSchedulerRunSandboxIDs(ctx, keys)
 		if err != nil {
 			return nil, ConnectErrorForDomain(err)
 		}
 	}
 	for _, run := range runs {
-		scheduler, ok := byLoaderID[run.SchedulerID]
+		scheduler, ok := bySchedulerID[run.SchedulerID]
 		if !ok {
 			continue
 		}
@@ -208,8 +208,8 @@ func (h *ProjectHandler) BatchGetLatestSchedulerRuns(ctx context.Context, req *c
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler run sandbox lookup store is required"))
 	}
-	loaderIDs, schedulersByLoaderID := schedulerLoaderIndex(schedulerRecords)
-	runsBySandboxID, err := store.BatchGetLatestLoaderRunsBySandboxIDs(ctx, loaderIDs, sandboxIDs)
+	schedulerIDs, schedulersBySchedulerID := schedulerRecordIndex(schedulerRecords)
+	runsBySandboxID, err := store.BatchGetLatestSchedulerRunsBySandboxIDs(ctx, schedulerIDs, sandboxIDs)
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -219,7 +219,7 @@ func (h *ProjectHandler) BatchGetLatestSchedulerRuns(ctx context.Context, req *c
 			response.Results = append(response.Results, &agentcomposev2.SandboxSchedulerRun{SandboxId: sandboxID})
 			continue
 		}
-		scheduler, found := schedulersByLoaderID[run.SchedulerID]
+		scheduler, found := schedulersBySchedulerID[run.SchedulerID]
 		if !found {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler run sandbox lookup references an unknown project scheduler"))
 		}
@@ -293,17 +293,17 @@ func (h *ProjectHandler) resolveProjectSchedulerRun(ctx context.Context, ref *ag
 	if err != nil {
 		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, err
 	}
-	loaderIDs := make([]string, 0, len(schedulers))
+	schedulerIDs := make([]string, 0, len(schedulers))
 	for _, scheduler := range schedulers {
 		if strings.TrimSpace(scheduler.ID) != "" {
-			loaderIDs = append(loaderIDs, scheduler.ID)
+			schedulerIDs = append(schedulerIDs, scheduler.ID)
 		}
 	}
 	store, err := h.schedulerRunStore()
 	if err != nil {
 		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, err
 	}
-	run, err := store.GetLoaderRunForLoaders(ctx, loaderIDs, runID)
+	run, err := store.GetSchedulerRunForSchedulers(ctx, schedulerIDs, runID)
 	if err != nil {
 		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, err
 	}

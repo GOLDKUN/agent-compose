@@ -53,14 +53,14 @@ func TestLoaderSandboxConfigHashTracksSandboxSemantics(t *testing.T) {
 			item.Volumes = []domain.VolumeMountSpec{{Type: domain.VolumeMountTypeBind, Source: "/tmp/source", Target: "/workspace/data"}}
 		},
 		"managed revision": func(item *domain.Scheduler) {
-			item.Summary.ManagedProjectID = "project-1"
-			item.Summary.ManagedAgentName = "worker"
-			item.Summary.ManagedSchedulerID = "scheduler-1"
-			item.Summary.ManagedRevision = 2
+			item.Summary.ProjectID = "project-1"
+			item.Summary.AgentName = "worker"
+			item.Summary.ProjectSchedulerID = "scheduler-1"
+			item.Summary.ProjectRevision = 2
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			changed := CloneLoader(base)
+			changed := CloneScheduler(base)
 			mutate(&changed)
 			if got := mustLoaderSandboxConfigHash(t, changed); got == baseHash {
 				t.Fatalf("sandbox config hash did not change for %s", name)
@@ -83,7 +83,7 @@ func TestLoaderSandboxConfigHashIgnoresSchedulingAndOrdering(t *testing.T) {
 		Script:   "function main() {}",
 		EnvItems: []domain.SandboxEnvVar{{Name: "A", Value: "1"}, {Name: "B", Value: "2"}},
 	}
-	changed := CloneLoader(base)
+	changed := CloneScheduler(base)
 	changed.Summary.Name = "Renamed"
 	changed.Summary.Description = "new description"
 	changed.Summary.Enabled = !base.Summary.Enabled

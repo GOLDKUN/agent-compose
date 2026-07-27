@@ -15,17 +15,21 @@ import (
 	"github.com/google/uuid"
 )
 
+// Compatibility contract: quoted loader terms in this package are external
+// identifiers, not internal domain terminology. Persisted event types,
+// notification reasons, errors, log keys, and payload keys must keep their
+// historical values for existing databases, clients, and integrations.
 type ControllerStore interface {
 	RunStore
 	SchedulerStore
 	EventDeliveryStore
 
-	ListLoaders(ctx context.Context) ([]domain.Scheduler, error)
-	GetLoader(ctx context.Context, loaderID string) (domain.Scheduler, error)
-	ReplaceLoaderTriggers(ctx context.Context, loaderID string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error)
-	SetLoaderEnabled(ctx context.Context, loaderID string, enabled bool) error
-	SetLoaderTriggerEnabled(ctx context.Context, loaderID, triggerID string, enabled bool) error
-	AddLoaderEvent(ctx context.Context, event domain.SchedulerEvent) error
+	ListSchedulers(ctx context.Context) ([]domain.Scheduler, error)
+	GetScheduler(ctx context.Context, schedulerID string) (domain.Scheduler, error)
+	ReplaceSchedulerTriggers(ctx context.Context, schedulerID string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error)
+	SetSchedulerEnabled(ctx context.Context, schedulerID string, enabled bool) error
+	SetSchedulerTriggerEnabled(ctx context.Context, schedulerID, triggerID string, enabled bool) error
+	AddSchedulerEvent(ctx context.Context, event domain.SchedulerEvent) error
 }
 
 type ControllerNotifier interface {
@@ -37,7 +41,7 @@ type ControllerPublisher interface {
 }
 
 type ControllerArtifacts interface {
-	RunDir(loaderID, runID string) string
+	RunDir(schedulerID, runID string) string
 	Write(dir, name, content string) error
 }
 
@@ -45,8 +49,8 @@ type FSArtifacts struct {
 	DataRoot string
 }
 
-func (a FSArtifacts) RunDir(loaderID, runID string) string {
-	parts := []string{a.DataRoot, "schedulers", strings.TrimSpace(loaderID), "runs"}
+func (a FSArtifacts) RunDir(schedulerID, runID string) string {
+	parts := []string{a.DataRoot, "schedulers", strings.TrimSpace(schedulerID), "runs"}
 	if strings.TrimSpace(runID) != "" {
 		parts = append(parts, strings.TrimSpace(runID))
 	}
@@ -85,7 +89,7 @@ type Controller struct {
 
 	startOnce       sync.Once
 	mu              sync.RWMutex
-	loaders         map[string]domain.Scheduler
+	schedulers      map[string]domain.Scheduler
 	running         map[string]int
 	runExecutor     *RunExecutor
 	invocations     *InvocationExecutor
@@ -114,9 +118,9 @@ func NewController(deps ControllerDependencies) *Controller {
 		deps.NewID = uuid.NewString
 	}
 	c := &Controller{
-		deps:    deps,
-		loaders: deps.Schedulers,
-		running: deps.Running,
+		deps:       deps,
+		schedulers: deps.Schedulers,
+		running:    deps.Running,
 	}
 	c.init()
 	return c
@@ -132,8 +136,8 @@ func (c *Controller) init() {
 			WriteArtifact: c.WriteRunArtifact,
 			EnterRun:      c.EnterRun,
 			LeaveRun:      c.LeaveRun,
-			AddLoaderEvent: func(ctx context.Context, loaderID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
-				return c.AddLoaderEvent(ctx, loaderID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+			AddSchedulerEvent: func(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
+				return c.AddSchedulerEvent(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
 			},
 			UpdateTriggerEventDelivery: c.UpdateTriggerEventDelivery,
 			Notify:                     c.notify,
@@ -152,12 +156,12 @@ func (c *Controller) init() {
 	if c.schedulerRuns == nil {
 		runStore, _ := c.deps.Store.(schedulerRunStore)
 		c.schedulerRuns = newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
-			RootCtx:          c.deps.RootCtx,
-			Store:            runStore,
-			LoadLoaderForRun: c.LoadLoaderForRun,
-			Prepare:          c.Prepare,
-			Execute:          c.Execute,
-			RunTimeout:       c.runTimeout,
+			RootCtx:             c.deps.RootCtx,
+			Store:               runStore,
+			LoadSchedulerForRun: c.LoadSchedulerForRun,
+			Prepare:             c.Prepare,
+			Execute:             c.Execute,
+			RunTimeout:          c.runTimeout,
 		})
 	}
 	if c.scheduler == nil {
@@ -165,10 +169,10 @@ func (c *Controller) init() {
 			RootCtx:       c.deps.RootCtx,
 			Wake:          c.deps.Wake,
 			Store:         c.deps.Store,
-			Snapshot:      c.CachedLoadersMap,
-			ReplaceCached: c.ReplaceCachedLoaders,
-			Run: func(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-				return c.Run(ctx, loader, trigger, payloadJSON, source, options, triggerEventAck...)
+			Snapshot:      c.CachedSchedulersMap,
+			ReplaceCached: c.ReplaceCachedSchedulers,
+			Run: func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+				return c.Run(ctx, scheduler, trigger, payloadJSON, source, options, triggerEventAck...)
 			},
 			RunTimeout: c.runTimeout,
 		})
@@ -177,11 +181,11 @@ func (c *Controller) init() {
 		c.eventDispatcher = NewEventDispatcher(EventDispatcherDependencies{
 			RootCtx:      c.deps.RootCtx,
 			Store:        c.deps.Store,
-			Targets:      func(topic string) []EventTarget { return CollectEventTargets(c.SnapshotLoaders(), topic) },
+			Targets:      func(topic string) []EventTarget { return CollectEventTargets(c.SnapshotSchedulers(), topic) },
 			IsBusy:       c.AnyTargetBusy,
 			ReserveSlots: c.deps.ReserveSlots,
-			Run: func(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-				return c.Run(ctx, loader, trigger, payloadJSON, source, options, triggerEventAck...)
+			Run: func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+				return c.Run(ctx, scheduler, trigger, payloadJSON, source, options, triggerEventAck...)
 			},
 			Prepare:    c.Prepare,
 			Execute:    c.Execute,
@@ -211,18 +215,18 @@ func (c *Controller) ScheduleLoop() {
 }
 
 func (c *Controller) Refresh(ctx context.Context) error {
-	items, err := c.deps.Store.ListLoaders(ctx)
+	items, err := c.deps.Store.ListSchedulers(ctx)
 	if err != nil {
 		return err
 	}
 	next := make(map[string]domain.Scheduler, len(items))
 	for _, item := range items {
-		next[item.Summary.ID] = CloneLoader(item)
+		next[item.Summary.ID] = CloneScheduler(item)
 	}
 	c.mu.Lock()
-	clear(c.loaders)
+	clear(c.schedulers)
 	for id, item := range next {
-		c.loaders[id] = item
+		c.schedulers[id] = item
 	}
 	c.mu.Unlock()
 	c.WakeScheduler()
@@ -233,44 +237,48 @@ func (c *Controller) Validate(ctx context.Context, runtime, script string) (Sche
 	return c.deps.Engine.Validate(ctx, runtime, script)
 }
 
-func (c *Controller) SetLoaderEnabled(ctx context.Context, loaderID string, enabled bool) (domain.Scheduler, error) {
-	if err := c.deps.Store.SetLoaderEnabled(ctx, loaderID, enabled); err != nil {
+func (c *Controller) SetSchedulerEnabled(ctx context.Context, schedulerID string, enabled bool) (domain.Scheduler, error) {
+	if err := c.deps.Store.SetSchedulerEnabled(ctx, schedulerID, enabled); err != nil {
 		return domain.Scheduler{}, err
 	}
 	if err := c.Refresh(ctx); err != nil {
 		return domain.Scheduler{}, err
 	}
+	// Notification reasons are an existing pub/sub contract. Keep their
+	// historical loader spelling so current subscribers continue to match.
 	c.notify("loader_updated")
-	return c.deps.Store.GetLoader(ctx, loaderID)
+	return c.deps.Store.GetScheduler(ctx, schedulerID)
 }
 
-func (c *Controller) SetLoaderTriggerEnabled(ctx context.Context, loaderID, triggerID string, enabled bool) (domain.Scheduler, error) {
-	if err := c.deps.Store.SetLoaderTriggerEnabled(ctx, loaderID, triggerID, enabled); err != nil {
+func (c *Controller) SetSchedulerTriggerEnabled(ctx context.Context, schedulerID, triggerID string, enabled bool) (domain.Scheduler, error) {
+	if err := c.deps.Store.SetSchedulerTriggerEnabled(ctx, schedulerID, triggerID, enabled); err != nil {
 		return domain.Scheduler{}, err
 	}
 	if err := c.Refresh(ctx); err != nil {
 		return domain.Scheduler{}, err
 	}
+	// See SetSchedulerEnabled: this reason is consumed outside the scheduler
+	// domain and remains stable for compatibility.
 	c.notify("loader_updated")
-	return c.deps.Store.GetLoader(ctx, loaderID)
+	return c.deps.Store.GetScheduler(ctx, schedulerID)
 }
 
-func (c *Controller) RunNow(ctx context.Context, loaderID, triggerID, payloadJSON string, timeout time.Duration) (domain.SchedulerRunSummary, error) {
-	loader, trigger, err := c.LoadLoaderForRun(ctx, loaderID, triggerID)
+func (c *Controller) RunNow(ctx context.Context, schedulerID, triggerID, payloadJSON string, timeout time.Duration) (domain.SchedulerRunSummary, error) {
+	scheduler, trigger, err := c.LoadSchedulerForRun(ctx, schedulerID, triggerID)
 	if err != nil {
 		return domain.SchedulerRunSummary{}, err
 	}
 	runCtx, cancel := context.WithTimeout(c.deps.RootCtx, c.runTimeout(timeout))
 	defer cancel()
-	return c.Run(runCtx, loader, trigger, payloadJSON, "manual", RunOptions{})
+	return c.Run(runCtx, scheduler, trigger, payloadJSON, "manual", RunOptions{})
 }
 
-func (c *Controller) Run(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-	return c.runExecutor.Run(ctx, loader, trigger, payloadJSON, source, options, triggerEventAck...)
+func (c *Controller) Run(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+	return c.runExecutor.Run(ctx, scheduler, trigger, payloadJSON, source, options, triggerEventAck...)
 }
 
-func (c *Controller) Prepare(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error) {
-	return c.runExecutor.Prepare(ctx, loader, trigger, payloadJSON, source, options)
+func (c *Controller) Prepare(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error) {
+	return c.runExecutor.Prepare(ctx, scheduler, trigger, payloadJSON, source, options)
 }
 
 func (c *Controller) Execute(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error) {
@@ -338,50 +346,50 @@ func (c *Controller) WakeScheduler() {
 	}
 }
 
-func (c *Controller) CachedLoadersMap() map[string]domain.Scheduler {
+func (c *Controller) CachedSchedulersMap() map[string]domain.Scheduler {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	items := make(map[string]domain.Scheduler, len(c.loaders))
-	for id, item := range c.loaders {
-		items[id] = CloneLoader(item)
+	items := make(map[string]domain.Scheduler, len(c.schedulers))
+	for id, item := range c.schedulers {
+		items[id] = CloneScheduler(item)
 	}
 	return items
 }
 
-func (c *Controller) ReplaceCachedLoaders(updatedLoaders map[string]domain.Scheduler) {
+func (c *Controller) ReplaceCachedSchedulers(updatedSchedulers map[string]domain.Scheduler) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for id, item := range updatedLoaders {
-		c.loaders[id] = CloneLoader(item)
+	for id, item := range updatedSchedulers {
+		c.schedulers[id] = CloneScheduler(item)
 	}
 }
 
-func (c *Controller) SnapshotLoaders() []domain.Scheduler {
+func (c *Controller) SnapshotSchedulers() []domain.Scheduler {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	items := make([]domain.Scheduler, 0, len(c.loaders))
-	for _, item := range c.loaders {
-		items = append(items, CloneLoader(item))
+	items := make([]domain.Scheduler, 0, len(c.schedulers))
+	for _, item := range c.schedulers {
+		items = append(items, CloneScheduler(item))
 	}
 	return items
 }
 
-func (c *Controller) LoadLoaderForRun(ctx context.Context, loaderID, triggerID string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
-	loader, err := c.deps.Store.GetLoader(ctx, loaderID)
+func (c *Controller) LoadSchedulerForRun(ctx context.Context, schedulerID, triggerID string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
+	scheduler, err := c.deps.Store.GetScheduler(ctx, schedulerID)
 	if err != nil {
 		return domain.Scheduler{}, nil, err
 	}
 	if strings.TrimSpace(triggerID) == "" {
-		return loader, nil, nil
+		return scheduler, nil, nil
 	}
 	triggerID = strings.TrimSpace(triggerID)
-	for _, item := range loader.Triggers {
+	for _, item := range scheduler.Triggers {
 		if item.ID == triggerID {
 			current := item
-			return loader, &current, nil
+			return scheduler, &current, nil
 		}
 	}
-	id := strings.TrimSpace(loaderID) + "/" + triggerID
+	id := strings.TrimSpace(schedulerID) + "/" + triggerID
 	return domain.Scheduler{}, nil, domain.ResourceError(domain.ErrNotFound, "loader trigger", id, fmt.Sprintf("loader trigger %s not found", id), nil)
 }
 
@@ -420,27 +428,27 @@ func (c *Controller) UpdateTriggerEventDelivery(ctx context.Context, run domain.
 	}
 }
 
-func (c *Controller) EnterRun(loader domain.Scheduler) bool {
-	loaderID := strings.TrimSpace(loader.Summary.ID)
-	policy := domain.NormalizeLoaderConcurrencyPolicy(loader.Summary.ConcurrencyPolicy)
+func (c *Controller) EnterRun(scheduler domain.Scheduler) bool {
+	schedulerID := strings.TrimSpace(scheduler.Summary.ID)
+	policy := domain.NormalizeSchedulerConcurrencyPolicy(scheduler.Summary.ConcurrencyPolicy)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if policy != domain.SchedulerConcurrencyPolicyParallel && c.running[loaderID] > 0 {
+	if policy != domain.SchedulerConcurrencyPolicyParallel && c.running[schedulerID] > 0 {
 		return false
 	}
-	c.running[loaderID]++
+	c.running[schedulerID]++
 	return true
 }
 
-func (c *Controller) LeaveRun(loaderID string) {
-	loaderID = strings.TrimSpace(loaderID)
+func (c *Controller) LeaveRun(schedulerID string) {
+	schedulerID = strings.TrimSpace(schedulerID)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.running[loaderID] <= 1 {
-		delete(c.running, loaderID)
+	if c.running[schedulerID] <= 1 {
+		delete(c.running, schedulerID)
 		return
 	}
-	c.running[loaderID]--
+	c.running[schedulerID]--
 }
 
 func (c *Controller) AnyTargetBusy(targets []EventTarget) bool {
@@ -449,19 +457,19 @@ func (c *Controller) AnyTargetBusy(targets []EventTarget) bool {
 	return AnyTargetBusy(targets, c.running)
 }
 
-func (c *Controller) AddLoaderEvent(ctx context.Context, loaderID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
-	_, err := c.AddLoaderEventRecord(ctx, loaderID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+func (c *Controller) AddSchedulerEvent(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
+	_, err := c.AddSchedulerEventRecord(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
 	return err
 }
 
-func (c *Controller) AddLoaderEventRecord(ctx context.Context, loaderID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
+func (c *Controller) AddSchedulerEventRecord(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
 	payloadJSON, err := domain.MarshalJSONCompact(payload)
 	if err != nil {
 		return domain.SchedulerEvent{}, err
 	}
 	event := domain.SchedulerEvent{
 		ID:                  c.newID(),
-		SchedulerID:         strings.TrimSpace(loaderID),
+		SchedulerID:         strings.TrimSpace(schedulerID),
 		RunID:               strings.TrimSpace(runID),
 		TriggerID:           strings.TrimSpace(triggerID),
 		Type:                strings.TrimSpace(eventType),
@@ -473,17 +481,17 @@ func (c *Controller) AddLoaderEventRecord(ctx context.Context, loaderID, runID, 
 		LinkedAgentThreadID: strings.TrimSpace(linkedAgentThreadID),
 		CreatedAt:           c.now(),
 	}
-	if err := c.deps.Store.AddLoaderEvent(ctx, event); err != nil {
+	if err := c.deps.Store.AddSchedulerEvent(ctx, event); err != nil {
 		return domain.SchedulerEvent{}, err
 	}
 	return event, nil
 }
 
-func (c *Controller) RunArtifactsDir(loaderID, runID string) string {
+func (c *Controller) RunArtifactsDir(schedulerID, runID string) string {
 	if c.deps.Artifacts == nil {
 		return ""
 	}
-	return c.deps.Artifacts.RunDir(loaderID, runID)
+	return c.deps.Artifacts.RunDir(schedulerID, runID)
 }
 
 func (c *Controller) WriteRunArtifact(dir, name, content string) error {

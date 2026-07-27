@@ -87,14 +87,14 @@ func TestLoaderCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t *te
 	streams := sandboxes.NewStreamBrokerForTest()
 	ch, unsubscribe := streams.Subscribe(session.Summary.ID)
 	defer unsubscribe()
-	executor := NewLoaderCommandExecutor(config, store, nil, fakeRuntimeProvider{runtime: fakeLoaderCommandRuntime{}}, streams)
+	executor := NewSchedulerCommandExecutor(config, store, nil, fakeRuntimeProvider{runtime: fakeLoaderCommandRuntime{}}, streams)
 
-	result, err := executor.ExecuteLoaderCommand(ctx, session, domain.SchedulerCommandRequest{
+	result, err := executor.ExecuteSchedulerCommand(ctx, session, domain.SchedulerCommandRequest{
 		Mode:   "shell",
 		Script: "echo loader",
 	})
 	if err != nil {
-		t.Fatalf("ExecuteLoaderCommand returned error: %v", err)
+		t.Fatalf("ExecuteSchedulerCommand returned error: %v", err)
 	}
 	if !result.Success || result.Stdout != "loader stdout\n" || result.Stderr != "loader stderr\n" {
 		t.Fatalf("loader result = %#v", result)

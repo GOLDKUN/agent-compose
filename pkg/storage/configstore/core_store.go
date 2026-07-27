@@ -44,7 +44,7 @@ type ConfigStore struct {
 	db *sql.DB
 
 	*coreStore
-	*loaderStore
+	*schedulerStore
 	*eventStore
 	*projectStore
 	*llmStore
@@ -56,7 +56,7 @@ func FromDB(db *sql.DB) *ConfigStore {
 	return &ConfigStore{
 		db:                     db,
 		coreStore:              &coreStore{db: db},
-		loaderStore:            &loaderStore{db: db},
+		schedulerStore:         &schedulerStore{db: db},
 		eventStore:             &eventStore{db: db},
 		projectStore:           &projectStore{db: db},
 		llmStore:               &llmStore{db: db},

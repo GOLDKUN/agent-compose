@@ -74,7 +74,7 @@ func TestDriverConversionWorkflows(t *testing.T) {
 	commandReq := RuntimeCommandRequestPayload(config, domain.SchedulerCommandRequest{
 		Mode: "SHELL", Script: "echo ok", Env: map[string]string{"A": "B"},
 	}, "/state/cells/cell-1")
-	if commandReq.Mode != "shell" || commandReq.Cwd != "/workspace" || commandReq.MaxOutputBytes != DefaultLoaderCommandMaxOutputBytes {
+	if commandReq.Mode != "shell" || commandReq.Cwd != "/workspace" || commandReq.MaxOutputBytes != DefaultSchedulerCommandMaxOutputBytes {
 		t.Fatalf("runtime command request = %#v", commandReq)
 	}
 	session.EnvItems = []domain.SandboxEnvVar{{Name: "USER_VAR", Value: "ok"}, {Name: "LLM_API_KEY", Value: "secret"}}
@@ -86,7 +86,7 @@ func TestDriverConversionWorkflows(t *testing.T) {
 	if env["SESSION_ID"] != "" {
 		t.Fatalf("SESSION_ID should not be injected: %#v", env)
 	}
-	execSpec := BuildLoaderCommandExecSpec(config, session, "/state/cells/cell-1/request.json", "/home/agent")
+	execSpec := BuildSchedulerCommandExecSpec(config, session, "/state/cells/cell-1/request.json", "/home/agent")
 	if execSpec.Command != "sh" || len(execSpec.Args) != 2 || !strings.Contains(execSpec.Args[1], "agent-compose-runtime exec") || execSpec.Cwd != "/workspace" {
 		t.Fatalf("loader command spec = %#v", execSpec)
 	}

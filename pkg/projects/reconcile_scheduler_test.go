@@ -32,7 +32,7 @@ func TestReconcileSchedulersSkipsWritesForUnchangedScheduler(t *testing.T) {
 		Summary: domain.SchedulerSummary{
 			ID: "loader-1", Name: "worker scheduler", Enabled: true, Runtime: domain.SchedulerRuntimeScheduler,
 			DefaultAgent: "codex", SandboxPolicy: domain.SchedulerSandboxPolicySticky,
-			ManagedProjectID: project.ID, ManagedRevision: 3, ManagedAgentName: "worker", ManagedSchedulerID: scheduler.SchedulerID,
+			ProjectID: project.ID, ProjectRevision: 3, AgentName: "worker", ProjectSchedulerID: scheduler.SchedulerID,
 		},
 		Script:   `scheduler.interval("daily", function daily() {}, 86400000);`,
 		Triggers: []domain.SchedulerTrigger{trigger},
@@ -78,11 +78,11 @@ func (s *unchangedSchedulerReconcileStore) ListProjectSchedulers(context.Context
 	return []domain.ProjectSchedulerRecord{s.scheduler}, nil
 }
 
-func (s *unchangedSchedulerReconcileStore) GetLoader(context.Context, string) (domain.Scheduler, error) {
+func (s *unchangedSchedulerReconcileStore) GetScheduler(context.Context, string) (domain.Scheduler, error) {
 	return s.loader, nil
 }
 
-func (s *unchangedSchedulerReconcileStore) ReplaceLoaderTriggers(_ context.Context, _ string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
+func (s *unchangedSchedulerReconcileStore) ReplaceSchedulerTriggers(_ context.Context, _ string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
 	s.writes = append(s.writes, "replace triggers")
 	return triggers, nil
 }

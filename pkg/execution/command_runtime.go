@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const DefaultLoaderCommandMaxOutputBytes = int64(1024 * 1024)
+const DefaultSchedulerCommandMaxOutputBytes = int64(1024 * 1024)
 
 type RuntimeCommandRequest struct {
 	Mode           string            `json:"mode"`
@@ -31,7 +31,7 @@ func RuntimeCommandRequestPayload(config *appconfig.Config, request domain.Sched
 func RuntimeCommandRequestPayloadFromCommand(config *appconfig.Config, mode, command string, args []string, script, cwd string, env map[string]string, timeoutMs, maxOutputBytes int64, guestArtifactDir string) RuntimeCommandRequest {
 	appconfig.ApplyDefaultGuestPaths(config)
 	if maxOutputBytes <= 0 {
-		maxOutputBytes = DefaultLoaderCommandMaxOutputBytes
+		maxOutputBytes = DefaultSchedulerCommandMaxOutputBytes
 	}
 	cwd = strings.TrimSpace(cwd)
 	if cwd == "" {
@@ -50,7 +50,7 @@ func RuntimeCommandRequestPayloadFromCommand(config *appconfig.Config, mode, com
 	}
 }
 
-func BuildLoaderCommandExecSpec(config *appconfig.Config, session *domain.Sandbox, guestRequestPath, home string) domain.ExecSpec {
+func BuildSchedulerCommandExecSpec(config *appconfig.Config, session *domain.Sandbox, guestRequestPath, home string) domain.ExecSpec {
 	return BuildRuntimeCommandExecSpec(config, session, guestRequestPath, home)
 }
 

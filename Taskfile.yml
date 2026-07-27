@@ -319,7 +319,7 @@ tasks:
 
   build:
     desc: Build project binaries
-    deps: ['build:agent-compose', 'build:proto', 'build:runtime-sdk']
+    deps: ['build:agent-compose', 'build:migrator', 'build:proto', 'build:runtime-sdk']
     cmds:
       - echo "build all done"
 
@@ -416,11 +416,11 @@ tasks:
     cmds:
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} go build ./proto/agentcompose/v2 ./proto/agentcompose/v2/agentcomposev2connect
 
-  build:legacy-migrator:
+  build:migrator:
     desc: Build the standalone legacy data-root copy migrator
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} go build -o ./build/agent-compose-legacy-migrate ./cmd/agent-compose-legacy-migrate
+      - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} go build -o ./build/agent-compose-migrate ./cmd/agent-compose-migrate
 
   build:agent-compose:boxlite:
     desc: Deprecated alias for the Linux full agent-compose binary

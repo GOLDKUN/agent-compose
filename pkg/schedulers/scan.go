@@ -6,112 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/capabilities"
 	domain "agent-compose/pkg/model"
 )
 
-func ScanLoaderSummary(scan func(dest ...any) error) (domain.SchedulerSummary, error) {
-	var item domain.SchedulerSummary
-	var enabled int
-	var capsetIDsRaw string
-	var createdAtRaw any
-	var updatedAtRaw any
-	var latestRunAtRaw any
-	if err := scan(
-		&item.ID,
-		&item.Name,
-		&item.Description,
-		&item.Runtime,
-		&item.WorkspaceID,
-		&item.AgentID,
-		&item.Driver,
-		&item.GuestImage,
-		&item.DefaultAgent,
-		&item.SandboxPolicy,
-		&item.ConcurrencyPolicy,
-		&capsetIDsRaw,
-		&item.ManagedProjectID,
-		&item.ManagedRevision,
-		&item.ManagedAgentName,
-		&item.ManagedSchedulerID,
-		&enabled,
-		&item.LastError,
-		&createdAtRaw,
-		&updatedAtRaw,
-		&item.TriggerCount,
-		&item.RunCount,
-		&item.EventCount,
-		&latestRunAtRaw,
-	); err != nil {
-		return domain.SchedulerSummary{}, fmt.Errorf("scan loader summary: %w", err)
-	}
-	item.CapsetIDs = capabilities.DecodeCapsetIDs(capsetIDsRaw)
-	item.ManagedProjectID = strings.TrimSpace(item.ManagedProjectID)
-	item.ManagedAgentName = strings.TrimSpace(item.ManagedAgentName)
-	item.ManagedSchedulerID = strings.TrimSpace(item.ManagedSchedulerID)
-	item.Enabled = enabled != 0
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
-	item.LatestRunAt = parseStoredTime(latestRunAtRaw)
-	return item, nil
-}
-
-func ScanLoader(scan func(dest ...any) error) (domain.Scheduler, error) {
-	var item domain.Scheduler
-	var enabled int
-	var envJSON string
-	var volumesJSON string
-	var capsetIDsRaw string
-	var createdAtRaw any
-	var updatedAtRaw any
-	if err := scan(
-		&item.Summary.ID,
-		&item.Summary.Name,
-		&item.Summary.Description,
-		&item.Summary.Runtime,
-		&item.Script,
-		&item.Summary.WorkspaceID,
-		&item.Summary.AgentID,
-		&item.Summary.Driver,
-		&item.Summary.GuestImage,
-		&item.Summary.DefaultAgent,
-		&item.Summary.SandboxPolicy,
-		&item.Summary.ConcurrencyPolicy,
-		&capsetIDsRaw,
-		&envJSON,
-		&volumesJSON,
-		&item.Summary.ManagedProjectID,
-		&item.Summary.ManagedRevision,
-		&item.Summary.ManagedAgentName,
-		&item.Summary.ManagedSchedulerID,
-		&enabled,
-		&item.Summary.LastError,
-		&createdAtRaw,
-		&updatedAtRaw,
-	); err != nil {
-		return domain.Scheduler{}, fmt.Errorf("scan loader: %w", err)
-	}
-	item.Summary.CapsetIDs = capabilities.DecodeCapsetIDs(capsetIDsRaw)
-	item.Summary.ManagedProjectID = strings.TrimSpace(item.Summary.ManagedProjectID)
-	item.Summary.ManagedAgentName = strings.TrimSpace(item.Summary.ManagedAgentName)
-	item.Summary.ManagedSchedulerID = strings.TrimSpace(item.Summary.ManagedSchedulerID)
-	item.Summary.Enabled = enabled != 0
-	item.Summary.CreatedAt = parseStoredTime(createdAtRaw)
-	item.Summary.UpdatedAt = parseStoredTime(updatedAtRaw)
-	envItems, err := DecodeEnvItems(envJSON)
-	if err != nil {
-		return domain.Scheduler{}, err
-	}
-	item.EnvItems = envItems
-	volumes, err := DecodeVolumeMountSpecs(volumesJSON)
-	if err != nil {
-		return domain.Scheduler{}, err
-	}
-	item.Volumes = volumes
-	return item, nil
-}
-
-func ScanLoaderTrigger(scan func(dest ...any) error) (domain.SchedulerTrigger, error) {
+func ScanSchedulerTrigger(scan func(dest ...any) error) (domain.SchedulerTrigger, error) {
 	var item domain.SchedulerTrigger
 	var enabled int
 	var autoID int
@@ -122,12 +20,12 @@ func ScanLoaderTrigger(scan func(dest ...any) error) (domain.SchedulerTrigger, e
 	}
 	item.Enabled = enabled != 0
 	item.AutoID = autoID != 0
-	item.NextFireAt = parseStoredLoaderTriggerTime(nextFireAtRaw)
-	item.LastFiredAt = parseStoredLoaderTriggerTime(lastFiredAtRaw)
+	item.NextFireAt = parseStoredSchedulerTriggerTime(nextFireAtRaw)
+	item.LastFiredAt = parseStoredSchedulerTriggerTime(lastFiredAtRaw)
 	return item, nil
 }
 
-func ScanLoaderRun(scan func(dest ...any) error) (domain.SchedulerRunSummary, error) {
+func ScanSchedulerRun(scan func(dest ...any) error) (domain.SchedulerRunSummary, error) {
 	var item domain.SchedulerRunSummary
 	var startedAtRaw any
 	var completedAtRaw any
@@ -139,7 +37,7 @@ func ScanLoaderRun(scan func(dest ...any) error) (domain.SchedulerRunSummary, er
 	return item, nil
 }
 
-func ScanLoaderEvent(scan func(dest ...any) error) (domain.SchedulerEvent, error) {
+func ScanSchedulerEvent(scan func(dest ...any) error) (domain.SchedulerEvent, error) {
 	var item domain.SchedulerEvent
 	var createdAtRaw any
 	if err := scan(&item.SchedulerID, &item.ID, &item.RunID, &item.TriggerID, &item.Type, &item.Level, &item.Message, &item.PayloadJSON, &item.LinkedSandboxID, &item.LinkedCellID, &item.LinkedAgentThreadID, &createdAtRaw); err != nil {
@@ -149,7 +47,7 @@ func ScanLoaderEvent(scan func(dest ...any) error) (domain.SchedulerEvent, error
 	return item, nil
 }
 
-func ScanLoaderBinding(scan func(dest ...any) error) (domain.SchedulerBinding, error) {
+func ScanSchedulerBinding(scan func(dest ...any) error) (domain.SchedulerBinding, error) {
 	var item domain.SchedulerBinding
 	var createdAtRaw any
 	var updatedAtRaw any
@@ -161,7 +59,7 @@ func ScanLoaderBinding(scan func(dest ...any) error) (domain.SchedulerBinding, e
 	return item, nil
 }
 
-func parseStoredLoaderTriggerTime(value any) time.Time {
+func parseStoredSchedulerTriggerTime(value any) time.Time {
 	switch typed := value.(type) {
 	case nil:
 		return time.Time{}
@@ -172,7 +70,7 @@ func parseStoredLoaderTriggerTime(value any) time.Time {
 	case float64:
 		return parseStoredUnixTimeAuto(int64(typed))
 	case []byte:
-		return parseStoredLoaderTriggerTime(string(typed))
+		return parseStoredSchedulerTriggerTime(string(typed))
 	case string:
 		trimmed := strings.TrimSpace(typed)
 		if trimmed == "" {
@@ -226,21 +124,21 @@ func parseStoredUnixTimeAuto(value int64) time.Time {
 	return time.Unix(value, 0).UTC()
 }
 
-func SelectLoaderTriggerSQL() string {
+func SelectSchedulerTriggerSQL() string {
 	return `SELECT scheduler_id, trigger_id, kind, topic, interval_ms, enabled, auto_id, spec_json, next_fire_at, last_fired_at
         FROM scheduler_trigger`
 }
 
-func SelectLoaderRunSQL() string {
+func SelectSchedulerRunSQL() string {
 	return `SELECT scheduler_id, run_id, trigger_id, trigger_kind, trigger_source, status, started_at, completed_at, duration_ms, error, result_json, payload_json, source_script_sha256, artifacts_dir
         FROM scheduler_run`
 }
 
-func SelectLoaderEventSQL() string {
+func SelectSchedulerEventSQL() string {
 	return `SELECT scheduler_id, event_id, scheduler_run_id, trigger_id, type, level, message, payload_json, linked_sandbox_id, linked_cell_id, linked_agent_thread_id, created_at
         FROM scheduler_event`
 }
 
-func SelectLoaderBindingSQL() string {
+func SelectSchedulerBindingSQL() string {
 	return `SELECT scheduler_id, trigger_id, sandbox_id, sandbox_config_hash, created_at, updated_at FROM scheduler_sandbox_binding`
 }

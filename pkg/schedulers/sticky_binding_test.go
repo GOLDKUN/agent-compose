@@ -50,14 +50,14 @@ func TestRetiringLoaderBindingPreservesSandboxAndTracksDesiredConfig(t *testing.
 		SandboxID:         "sandbox-1",
 		SandboxConfigHash: "sha256:old",
 	}
-	retiring := RetiringLoaderBinding(binding, " sha256:new ")
+	retiring := RetiringSchedulerBinding(binding, " sha256:new ")
 	if retiring.SchedulerID != binding.SchedulerID || retiring.TriggerID != binding.TriggerID || retiring.SandboxID != binding.SandboxID {
 		t.Fatalf("retiring binding changed identity: got %#v want %#v", retiring, binding)
 	}
-	if desiredHash, ok := RetiringLoaderBindingConfigHash(retiring); !ok || desiredHash != "sha256:new" {
-		t.Fatalf("RetiringLoaderBindingConfigHash = %q/%v, want sha256:new/true", desiredHash, ok)
+	if desiredHash, ok := RetiringSchedulerBindingConfigHash(retiring); !ok || desiredHash != "sha256:new" {
+		t.Fatalf("RetiringSchedulerBindingConfigHash = %q/%v, want sha256:new/true", desiredHash, ok)
 	}
-	if _, ok := RetiringLoaderBindingConfigHash(binding); ok {
+	if _, ok := RetiringSchedulerBindingConfigHash(binding); ok {
 		t.Fatal("ordinary binding reported as retiring")
 	}
 }
@@ -68,7 +68,7 @@ func TestAdoptLegacyLoaderBindingConfigHash(t *testing.T) {
 		TriggerID:   "trigger-1",
 		SandboxID:   "sandbox-1",
 	}
-	adopted, ok := AdoptLegacyLoaderBindingConfigHash(binding, " sha256:current ")
+	adopted, ok := AdoptLegacySchedulerBindingConfigHash(binding, " sha256:current ")
 	if !ok {
 		t.Fatal("legacy binding was not adopted")
 	}
@@ -79,7 +79,7 @@ func TestAdoptLegacyLoaderBindingConfigHash(t *testing.T) {
 		t.Fatalf("adopted config hash = %q, want sha256:current", adopted.SandboxConfigHash)
 	}
 	if binding.SandboxConfigHash != "" {
-		t.Fatalf("AdoptLegacyLoaderBindingConfigHash mutated its input: %#v", binding)
+		t.Fatalf("AdoptLegacySchedulerBindingConfigHash mutated its input: %#v", binding)
 	}
 
 	for name, test := range map[string]struct {
@@ -89,14 +89,14 @@ func TestAdoptLegacyLoaderBindingConfigHash(t *testing.T) {
 		"current binding": {binding: adopted, desired: "sha256:other"},
 		"empty desired":   {binding: binding, desired: ""},
 		"retiring binding": {
-			binding: RetiringLoaderBinding(binding, "sha256:current"),
+			binding: RetiringSchedulerBinding(binding, "sha256:current"),
 			desired: "sha256:current",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, ok := AdoptLegacyLoaderBindingConfigHash(test.binding, test.desired)
+			got, ok := AdoptLegacySchedulerBindingConfigHash(test.binding, test.desired)
 			if ok || got != test.binding {
-				t.Fatalf("AdoptLegacyLoaderBindingConfigHash = %#v/%v, want unchanged/false", got, ok)
+				t.Fatalf("AdoptLegacySchedulerBindingConfigHash = %#v/%v, want unchanged/false", got, ok)
 			}
 		})
 	}

@@ -30,8 +30,8 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 		HostFactory: func(domain.Scheduler, schedulers.RuntimeExecutionContext, schedulers.TriggerEventMetadata) schedulers.RunHost {
 			return &runHostFake{}
 		},
-		ArtifactsDir: func(loaderID, runID string) string {
-			return filepath.Join(t.TempDir(), loaderID, runID)
+		ArtifactsDir: func(schedulerID, runID string) string {
+			return filepath.Join(t.TempDir(), schedulerID, runID)
 		},
 		WriteArtifact: func(dir, name, content string) error {
 			if strings.TrimSpace(dir) == "" || strings.TrimSpace(name) == "" {
@@ -40,10 +40,10 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 			return nil
 		},
 		EnterRun: func(domain.Scheduler) bool { return true },
-		LeaveRun: func(loaderID string) {
-			leaves = append(leaves, loaderID)
+		LeaveRun: func(schedulerID string) {
+			leaves = append(leaves, schedulerID)
 		},
-		AddLoaderEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
+		AddSchedulerEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
 			events = append(events, eventType)
 			return nil
 		},
@@ -83,10 +83,10 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 		HostFactory: func(domain.Scheduler, schedulers.RuntimeExecutionContext, schedulers.TriggerEventMetadata) schedulers.RunHost {
 			return &runHostFake{}
 		},
-		ArtifactsDir:  func(loaderID, runID string) string { return filepath.Join(t.TempDir(), loaderID, runID) },
+		ArtifactsDir:  func(schedulerID, runID string) string { return filepath.Join(t.TempDir(), schedulerID, runID) },
 		WriteArtifact: func(string, string, string) error { return nil },
 		EnterRun:      func(domain.Scheduler) bool { return false },
-		AddLoaderEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
+		AddSchedulerEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
 			events = append(events, eventType)
 			return nil
 		},
@@ -298,8 +298,8 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 			entered++
 			return entered == 1
 		},
-		LeaveRun: func(loaderID string) {
-			left = append(left, loaderID)
+		LeaveRun: func(schedulerID string) {
+			left = append(left, schedulerID)
 		},
 	})
 	dispatcher.Dispatch(domain.SchedulerTopicEvent{Topic: "topic.webhook", Source: domain.TopicEventSourceWebhook, CreatedAt: time.Now().UTC(), Retry: func(_ context.Context, reason string, _ time.Time) error {
@@ -415,21 +415,21 @@ type runStoreFake struct {
 	lastError map[string]string
 }
 
-func (s *runStoreFake) CreateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *runStoreFake) CreateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.created = append(s.created, run)
 	return nil
 }
 
-func (s *runStoreFake) UpdateLoaderRun(_ context.Context, run domain.SchedulerRunSummary) error {
+func (s *runStoreFake) UpdateSchedulerRun(_ context.Context, run domain.SchedulerRunSummary) error {
 	s.updated = append(s.updated, run)
 	return nil
 }
 
-func (s *runStoreFake) UpdateLoaderLastError(_ context.Context, loaderID, lastError string) error {
+func (s *runStoreFake) UpdateSchedulerLastError(_ context.Context, schedulerID, lastError string) error {
 	if s.lastError == nil {
 		s.lastError = map[string]string{}
 	}
-	s.lastError[loaderID] = lastError
+	s.lastError[schedulerID] = lastError
 	return nil
 }
 
@@ -484,8 +484,8 @@ type schedulerStoreFake struct {
 	fired []domain.SchedulerTrigger
 }
 
-func (s *schedulerStoreFake) MarkLoaderTriggerFired(_ context.Context, loaderID, triggerID string, lastFiredAt, nextFireAt time.Time) error {
-	s.fired = append(s.fired, domain.SchedulerTrigger{ID: loaderID + "/" + triggerID, LastFiredAt: lastFiredAt, NextFireAt: nextFireAt})
+func (s *schedulerStoreFake) MarkSchedulerTriggerFired(_ context.Context, schedulerID, triggerID string, lastFiredAt, nextFireAt time.Time) error {
+	s.fired = append(s.fired, domain.SchedulerTrigger{ID: schedulerID + "/" + triggerID, LastFiredAt: lastFiredAt, NextFireAt: nextFireAt})
 	return nil
 }
 

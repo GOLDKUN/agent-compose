@@ -16,31 +16,33 @@ import (
 	"agent-compose/pkg/schedulers"
 )
 
-func (r *SchedulerSandboxRunner) reuseCompatibleLoaderBinding(ctx context.Context, loader domain.Scheduler, triggerID, configHash string) (*domain.Sandbox, string, bool, *domain.SchedulerBinding, error) {
+// Sticky-binding errors and structured logs retain historical loader wording
+// because they are observable through CLI output and operational log queries.
+func (r *SchedulerSandboxRunner) reuseCompatibleSchedulerBinding(ctx context.Context, scheduler domain.Scheduler, triggerID, configHash string) (*domain.Sandbox, string, bool, *domain.SchedulerBinding, error) {
 	for range 3 {
-		binding, found, err := r.ConfigDB.GetLoaderBinding(ctx, loader.Summary.ID, triggerID)
+		binding, found, err := r.ConfigDB.GetSchedulerBinding(ctx, scheduler.Summary.ID, triggerID)
 		if err != nil || !found {
 			return nil, "", false, nil, err
 		}
-		binding, current, err := r.claimLegacyLoaderBindingConfigHash(ctx, binding, configHash)
+		binding, current, err := r.claimLegacySchedulerBindingConfigHash(ctx, binding, configHash)
 		if err != nil {
 			return nil, "", false, &binding, err
 		}
 		if !current {
 			continue
 		}
-		retiringHash, retiring := schedulers.RetiringLoaderBindingConfigHash(binding)
+		retiringHash, retiring := schedulers.RetiringSchedulerBindingConfigHash(binding)
 		if !retiring && binding.SandboxConfigHash == configHash {
-			session, eventType, current, err := r.loadOrResumeLoaderBinding(ctx, binding)
+			session, eventType, current, err := r.loadOrResumeSchedulerBinding(ctx, binding)
 			if !current {
 				continue
 			}
 			if err == nil {
 				return session, eventType, true, &binding, nil
 			}
-			slog.Warn("failed to reuse loader sticky sandbox, creating a new one", "loader_id", loader.Summary.ID, "sandbox_id", binding.SandboxID, "error", err)
-			replacement := schedulers.RetiringLoaderBinding(binding, configHash)
-			claimed, claimErr := r.ConfigDB.CompareAndSwapLoaderBinding(ctx, &binding, replacement)
+			slog.Warn("failed to reuse loader sticky sandbox, creating a new one", "loader_id", scheduler.Summary.ID, "sandbox_id", binding.SandboxID, "error", err)
+			replacement := schedulers.RetiringSchedulerBinding(binding, configHash)
+			claimed, claimErr := r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, &binding, replacement)
 			if claimErr != nil {
 				return nil, "", false, &binding, claimErr
 			}
@@ -54,8 +56,8 @@ func (r *SchedulerSandboxRunner) reuseCompatibleLoaderBinding(ctx context.Contex
 		}
 
 		if !retiring || retiringHash != configHash {
-			replacement := schedulers.RetiringLoaderBinding(binding, configHash)
-			claimed, err := r.ConfigDB.CompareAndSwapLoaderBinding(ctx, &binding, replacement)
+			replacement := schedulers.RetiringSchedulerBinding(binding, configHash)
+			claimed, err := r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, &binding, replacement)
 			if err != nil {
 				return nil, "", false, &binding, err
 			}
@@ -67,16 +69,16 @@ func (r *SchedulerSandboxRunner) reuseCompatibleLoaderBinding(ctx context.Contex
 		if err := r.Shutdown(ctx, binding.SandboxID); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, "", false, &binding, err
 		}
-		slog.Info("retired loader sticky sandbox with stale configuration", "loader_id", loader.Summary.ID, "trigger_id", triggerID, "sandbox_id", binding.SandboxID)
+		slog.Info("retired loader sticky sandbox with stale configuration", "loader_id", scheduler.Summary.ID, "trigger_id", triggerID, "sandbox_id", binding.SandboxID)
 		return nil, "", false, &binding, nil
 	}
 	return nil, "", false, nil, fmt.Errorf("loader sticky sandbox binding changed concurrently")
 }
 
-func (r *SchedulerSandboxRunner) loadOrResumeLoaderBinding(ctx context.Context, binding domain.SchedulerBinding) (*domain.Sandbox, string, bool, error) {
+func (r *SchedulerSandboxRunner) loadOrResumeSchedulerBinding(ctx context.Context, binding domain.SchedulerBinding) (*domain.Sandbox, string, bool, error) {
 	unlock := r.LifecycleLocks.Lock(binding.SandboxID)
 	defer unlock()
-	current, found, err := r.ConfigDB.GetLoaderBinding(ctx, binding.SchedulerID, binding.TriggerID)
+	current, found, err := r.ConfigDB.GetSchedulerBinding(ctx, binding.SchedulerID, binding.TriggerID)
 	if err != nil {
 		return nil, "", true, err
 	}
@@ -87,44 +89,44 @@ func (r *SchedulerSandboxRunner) loadOrResumeLoaderBinding(ctx context.Context, 
 	return session, eventType, true, err
 }
 
-func (r *SchedulerSandboxRunner) bindLoaderSandbox(ctx context.Context, loader domain.Scheduler, triggerID, sandboxID, configHash string, expected *domain.SchedulerBinding) (bool, error) {
-	return r.ConfigDB.CompareAndSwapLoaderBinding(ctx, expected, domain.SchedulerBinding{
-		SchedulerID:       loader.Summary.ID,
+func (r *SchedulerSandboxRunner) bindSchedulerSandbox(ctx context.Context, scheduler domain.Scheduler, triggerID, sandboxID, configHash string, expected *domain.SchedulerBinding) (bool, error) {
+	return r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, expected, domain.SchedulerBinding{
+		SchedulerID:       scheduler.Summary.ID,
 		TriggerID:         triggerID,
 		SandboxID:         sandboxID,
 		SandboxConfigHash: configHash,
 	})
 }
 
-func (r *SchedulerSandboxRunner) claimLegacyLoaderBindingConfigHash(ctx context.Context, binding domain.SchedulerBinding, configHash string) (domain.SchedulerBinding, bool, error) {
-	replacement, legacy := schedulers.AdoptLegacyLoaderBindingConfigHash(binding, configHash)
+func (r *SchedulerSandboxRunner) claimLegacySchedulerBindingConfigHash(ctx context.Context, binding domain.SchedulerBinding, configHash string) (domain.SchedulerBinding, bool, error) {
+	replacement, legacy := schedulers.AdoptLegacySchedulerBindingConfigHash(binding, configHash)
 	if !legacy {
 		return binding, true, nil
 	}
-	claimed, err := r.ConfigDB.CompareAndSwapLoaderBinding(ctx, &binding, replacement)
+	claimed, err := r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, &binding, replacement)
 	if err != nil {
 		return binding, false, err
 	}
 	return replacement, claimed, nil
 }
 
-func (r *SchedulerSandboxRunner) reuseWinningLoaderBinding(ctx context.Context, loaderID, triggerID, configHash string) (*domain.Sandbox, string, bool, error) {
+func (r *SchedulerSandboxRunner) reuseWinningSchedulerBinding(ctx context.Context, schedulerID, triggerID, configHash string) (*domain.Sandbox, string, bool, error) {
 	for range 3 {
-		binding, found, err := r.ConfigDB.GetLoaderBinding(ctx, loaderID, triggerID)
+		binding, found, err := r.ConfigDB.GetSchedulerBinding(ctx, schedulerID, triggerID)
 		if err != nil || !found {
 			return nil, "", false, err
 		}
-		binding, current, err := r.claimLegacyLoaderBindingConfigHash(ctx, binding, configHash)
+		binding, current, err := r.claimLegacySchedulerBindingConfigHash(ctx, binding, configHash)
 		if err != nil {
 			return nil, "", false, err
 		}
 		if !current {
 			continue
 		}
-		if _, retiring := schedulers.RetiringLoaderBindingConfigHash(binding); retiring || binding.SandboxConfigHash != configHash {
+		if _, retiring := schedulers.RetiringSchedulerBindingConfigHash(binding); retiring || binding.SandboxConfigHash != configHash {
 			return nil, "", false, nil
 		}
-		session, eventType, current, err := r.loadOrResumeLoaderBinding(ctx, binding)
+		session, eventType, current, err := r.loadOrResumeSchedulerBinding(ctx, binding)
 		if err != nil || !current {
 			return nil, "", false, err
 		}
@@ -133,45 +135,47 @@ func (r *SchedulerSandboxRunner) reuseWinningLoaderBinding(ctx context.Context, 
 	return nil, "", false, fmt.Errorf("loader sticky sandbox binding changed concurrently")
 }
 
-func loaderSandboxConfigHash(loader domain.Scheduler) (string, error) {
-	return schedulers.SchedulerSandboxConfigHash(loader)
+func schedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {
+	return schedulers.SchedulerSandboxConfigHash(scheduler)
 }
 
-type loaderEffectiveSandboxConfig struct {
-	SchedulerConfigHash string                      `json:"loader_config_hash"`
-	Agent               string                      `json:"agent,omitempty"`
-	AgentDefinition     *loaderAgentSandboxConfig   `json:"agent_definition,omitempty"`
-	SandboxPolicy       string                      `json:"sandbox_policy,omitempty"`
-	PullPolicy          string                      `json:"pull_policy,omitempty"`
-	JupyterEnabled      bool                        `json:"jupyter_enabled,omitempty"`
-	ProviderEnvItems    []domain.SandboxEnvVar      `json:"provider_env_items,omitempty"`
-	EnvItems            []domain.SandboxEnvVar      `json:"env_items,omitempty"`
-	Workspace           *domain.SandboxWorkspace    `json:"workspace,omitempty"`
-	Driver              string                      `json:"driver"`
-	GuestImage          string                      `json:"guest_image"`
-	VolumeMounts        []domain.SandboxVolumeMount `json:"volume_mounts,omitempty"`
+type schedulerEffectiveSandboxConfig struct {
+	// loader_config_hash is part of the canonical JSON used to calculate the
+	// sticky sandbox hash. Renaming it would invalidate every existing binding.
+	SchedulerConfigHash string                       `json:"loader_config_hash"`
+	Agent               string                       `json:"agent,omitempty"`
+	AgentDefinition     *schedulerAgentSandboxConfig `json:"agent_definition,omitempty"`
+	SandboxPolicy       string                       `json:"sandbox_policy,omitempty"`
+	PullPolicy          string                       `json:"pull_policy,omitempty"`
+	JupyterEnabled      bool                         `json:"jupyter_enabled,omitempty"`
+	ProviderEnvItems    []domain.SandboxEnvVar       `json:"provider_env_items,omitempty"`
+	EnvItems            []domain.SandboxEnvVar       `json:"env_items,omitempty"`
+	Workspace           *domain.SandboxWorkspace     `json:"workspace,omitempty"`
+	Driver              string                       `json:"driver"`
+	GuestImage          string                       `json:"guest_image"`
+	VolumeMounts        []domain.SandboxVolumeMount  `json:"volume_mounts,omitempty"`
 }
 
-type loaderAgentSandboxConfig struct {
-	ID                     string                   `json:"id"`
-	Provider               string                   `json:"provider"`
-	Model                  string                   `json:"model,omitempty"`
-	SystemPrompt           string                   `json:"system_prompt,omitempty"`
-	Driver                 string                   `json:"driver,omitempty"`
-	GuestImage             string                   `json:"guest_image,omitempty"`
-	WorkspaceID            string                   `json:"workspace_id,omitempty"`
-	EnvItems               []domain.SandboxEnvVar   `json:"env_items,omitempty"`
-	Volumes                []domain.VolumeMountSpec `json:"volumes,omitempty"`
-	ConfigJSON             string                   `json:"config_json"`
-	CapsetIDs              []string                 `json:"capset_ids,omitempty"`
-	Skills                 []domain.AgentSkill      `json:"skills,omitempty"`
-	ManagedProjectID       string                   `json:"managed_project_id,omitempty"`
-	ManagedProjectRevision int64                    `json:"managed_project_revision,omitempty"`
-	ManagedAgentName       string                   `json:"managed_agent_name,omitempty"`
+type schedulerAgentSandboxConfig struct {
+	ID              string                   `json:"id"`
+	Provider        string                   `json:"provider"`
+	Model           string                   `json:"model,omitempty"`
+	SystemPrompt    string                   `json:"system_prompt,omitempty"`
+	Driver          string                   `json:"driver,omitempty"`
+	GuestImage      string                   `json:"guest_image,omitempty"`
+	WorkspaceID     string                   `json:"workspace_id,omitempty"`
+	EnvItems        []domain.SandboxEnvVar   `json:"env_items,omitempty"`
+	Volumes         []domain.VolumeMountSpec `json:"volumes,omitempty"`
+	ConfigJSON      string                   `json:"config_json"`
+	CapsetIDs       []string                 `json:"capset_ids,omitempty"`
+	Skills          []domain.AgentSkill      `json:"skills,omitempty"`
+	ProjectID       string                   `json:"managed_project_id,omitempty"`
+	ProjectRevision int64                    `json:"managed_project_revision,omitempty"`
+	AgentName       string                   `json:"managed_agent_name,omitempty"`
 }
 
-func loaderRequestSandboxConfigHash(baseHash string, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition, providerEnvItems, envItems []domain.SandboxEnvVar, workspace *domain.SandboxWorkspace, driver, guestImage string, volumeMounts []domain.SandboxVolumeMount) (string, error) {
-	var agentConfig *loaderAgentSandboxConfig
+func schedulerRequestSandboxConfigHash(baseHash string, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition, providerEnvItems, envItems []domain.SandboxEnvVar, workspace *domain.SandboxWorkspace, driver, guestImage string, volumeMounts []domain.SandboxVolumeMount) (string, error) {
+	var agentConfig *schedulerAgentSandboxConfig
 	if agentDefinition != nil {
 		current, err := domain.NormalizeAgentDefinition(*agentDefinition, true)
 		if err != nil {
@@ -181,25 +185,25 @@ func loaderRequestSandboxConfigHash(baseHash string, request domain.SchedulerAge
 		sort.Strings(capsetIDs)
 		volumes := append([]domain.VolumeMountSpec(nil), current.Volumes...)
 		sort.Slice(volumes, func(i, j int) bool { return volumes[i].Target < volumes[j].Target })
-		agentConfig = &loaderAgentSandboxConfig{
-			ID:                     current.ID,
-			Provider:               current.Provider,
-			Model:                  current.Model,
-			SystemPrompt:           current.SystemPrompt,
-			Driver:                 current.Driver,
-			GuestImage:             current.GuestImage,
-			WorkspaceID:            current.WorkspaceID,
-			EnvItems:               current.EnvItems,
-			Volumes:                volumes,
-			ConfigJSON:             current.ConfigJSON,
-			CapsetIDs:              capsetIDs,
-			Skills:                 current.Skills,
-			ManagedProjectID:       current.ManagedProjectID,
-			ManagedProjectRevision: current.ManagedProjectRevision,
-			ManagedAgentName:       current.ManagedAgentName,
+		agentConfig = &schedulerAgentSandboxConfig{
+			ID:              current.ID,
+			Provider:        current.Provider,
+			Model:           current.Model,
+			SystemPrompt:    current.SystemPrompt,
+			Driver:          current.Driver,
+			GuestImage:      current.GuestImage,
+			WorkspaceID:     current.WorkspaceID,
+			EnvItems:        current.EnvItems,
+			Volumes:         volumes,
+			ConfigJSON:      current.ConfigJSON,
+			CapsetIDs:       capsetIDs,
+			Skills:          current.Skills,
+			ProjectID:       current.ProjectID,
+			ProjectRevision: current.ProjectRevision,
+			AgentName:       current.AgentName,
 		}
 	}
-	payload, err := json.Marshal(loaderEffectiveSandboxConfig{
+	payload, err := json.Marshal(schedulerEffectiveSandboxConfig{
 		SchedulerConfigHash: baseHash,
 		Agent:               domain.NormalizeAgentKind(request.Agent),
 		AgentDefinition:     agentConfig,

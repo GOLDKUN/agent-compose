@@ -9,8 +9,8 @@ import (
 	"agent-compose/pkg/schedulers"
 )
 
-func (s *loaderStore) ListInterruptedLoaderRuns(ctx context.Context, startedBefore time.Time) ([]domain.SchedulerRunSummary, error) {
-	rows, err := s.db.QueryContext(ctx, schedulers.SelectLoaderRunSQL()+`
+func (s *schedulerStore) ListInterruptedSchedulerRuns(ctx context.Context, startedBefore time.Time) ([]domain.SchedulerRunSummary, error) {
+	rows, err := s.db.QueryContext(ctx, schedulers.SelectSchedulerRunSQL()+`
 		WHERE trigger_id <> '' AND status = ? AND started_at < ?
 		ORDER BY started_at ASC, scheduler_id ASC, run_id ASC`,
 		domain.SchedulerRunStatusRunning, startedBefore.UTC().UnixMilli(),
@@ -21,7 +21,7 @@ func (s *loaderStore) ListInterruptedLoaderRuns(ctx context.Context, startedBefo
 	defer func() { _ = rows.Close() }()
 	result := make([]domain.SchedulerRunSummary, 0)
 	for rows.Next() {
-		run, scanErr := schedulers.ScanLoaderRun(rows.Scan)
+		run, scanErr := schedulers.ScanSchedulerRun(rows.Scan)
 		if scanErr != nil {
 			return nil, scanErr
 		}

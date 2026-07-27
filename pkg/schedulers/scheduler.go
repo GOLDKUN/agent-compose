@@ -9,7 +9,7 @@ import (
 )
 
 type SchedulerStore interface {
-	MarkLoaderTriggerFired(ctx context.Context, loaderID, triggerID string, lastFiredAt, nextFireAt time.Time) error
+	MarkSchedulerTriggerFired(ctx context.Context, schedulerID, triggerID string, lastFiredAt, nextFireAt time.Time) error
 }
 
 type SchedulerDependencies struct {
@@ -18,7 +18,7 @@ type SchedulerDependencies struct {
 	Store         SchedulerStore
 	Snapshot      func() map[string]domain.Scheduler
 	ReplaceCached func(map[string]domain.Scheduler)
-	Run           func(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error)
+	Run           func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error)
 	RunTimeout    func(time.Duration) time.Duration
 }
 
@@ -82,11 +82,11 @@ func (s *Scheduler) Dispatch(jobs []ScheduledRun) {
 
 func (s *Scheduler) NextFireAt() (time.Time, bool) {
 	var nextFireAt time.Time
-	for _, loader := range s.snapshot() {
-		if !loader.Summary.Enabled {
+	for _, scheduler := range s.snapshot() {
+		if !scheduler.Summary.Enabled {
 			continue
 		}
-		for _, trigger := range loader.Triggers {
+		for _, trigger := range scheduler.Triggers {
 			if !trigger.Enabled || !domain.SchedulerTriggerUsesSchedule(trigger.Kind) || trigger.NextFireAt.IsZero() {
 				continue
 			}
@@ -102,9 +102,9 @@ func (s *Scheduler) NextFireAt() (time.Time, bool) {
 }
 
 func (s *Scheduler) CollectDue(now time.Time) []ScheduledRun {
-	scheduled, updatedLoaders, scheduleErrs := CollectDueScheduledRuns(s.snapshot(), now)
-	if len(updatedLoaders) > 0 && s.deps.ReplaceCached != nil {
-		s.deps.ReplaceCached(updatedLoaders)
+	scheduled, updatedSchedulers, scheduleErrs := CollectDueScheduledRuns(s.snapshot(), now)
+	if len(updatedSchedulers) > 0 && s.deps.ReplaceCached != nil {
+		s.deps.ReplaceCached(updatedSchedulers)
 	}
 	for _, item := range scheduleErrs {
 		slog.Warn("failed to compute next loader schedule", "loader_id", item.SchedulerID, "trigger_id", item.TriggerID, "trigger_kind", item.TriggerKind, "error", item.Err)
@@ -113,7 +113,7 @@ func (s *Scheduler) CollectDue(now time.Time) []ScheduledRun {
 		if s.deps.Store == nil {
 			continue
 		}
-		if err := s.deps.Store.MarkLoaderTriggerFired(s.rootCtx(), job.Scheduler.Summary.ID, job.Trigger.ID, job.Trigger.LastFiredAt, job.Trigger.NextFireAt); err != nil {
+		if err := s.deps.Store.MarkSchedulerTriggerFired(s.rootCtx(), job.Scheduler.Summary.ID, job.Trigger.ID, job.Trigger.LastFiredAt, job.Trigger.NextFireAt); err != nil {
 			slog.Warn("failed to persist loader fire state", "loader_id", job.Scheduler.Summary.ID, "trigger_id", job.Trigger.ID, "trigger_kind", job.Trigger.Kind, "error", err)
 		}
 	}

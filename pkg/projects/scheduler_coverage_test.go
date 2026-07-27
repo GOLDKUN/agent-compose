@@ -11,7 +11,7 @@ import (
 )
 
 func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
-	triggers, script, err := ManagedLoaderTriggersAndScript("project-1", "worker", "nightly", &compose.NormalizedSchedulerSpec{
+	triggers, script, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "nightly", &compose.NormalizedSchedulerSpec{
 		Triggers: []compose.NormalizedTriggerSpec{
 			{Name: "cron-main", Kind: "cron", Cron: "*/5 * * * *", Prompt: "Run cron"},
 			{Name: "interval-main", Kind: "interval", Interval: "2s"},
@@ -20,7 +20,7 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("ManagedLoaderTriggersAndScript returned error: %v", err)
+		t.Fatalf("ProjectSchedulerTriggersAndScript returned error: %v", err)
 	}
 	if len(triggers) != 4 {
 		t.Fatalf("triggers = %#v", triggers)
@@ -33,23 +33,23 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 			t.Fatalf("script missing %q: %s", want, script)
 		}
 	}
-	_, policyRegistration, err := ManagedLoaderTriggerAndRegistration("sticky-trigger", "worker", compose.NormalizedTriggerSpec{Kind: "interval", Interval: "1s", SandboxPolicy: "sticky"})
+	_, policyRegistration, err := ProjectSchedulerTriggerAndRegistration("sticky-trigger", "worker", compose.NormalizedTriggerSpec{Kind: "interval", Interval: "1s", SandboxPolicy: "sticky"})
 	if err != nil || !strings.Contains(policyRegistration, `sandboxPolicy: "sticky"`) {
 		t.Fatalf("sticky registration = %q, err=%v", policyRegistration, err)
 	}
 
-	emptyTriggers, idleScript, err := ManagedLoaderTriggersAndScript("project-1", "worker", "", &compose.NormalizedSchedulerSpec{})
+	emptyTriggers, idleScript, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "", &compose.NormalizedSchedulerSpec{})
 	if err != nil {
-		t.Fatalf("empty ManagedLoaderTriggersAndScript returned error: %v", err)
+		t.Fatalf("empty ProjectSchedulerTriggersAndScript returned error: %v", err)
 	}
 	if len(emptyTriggers) != 0 || !strings.Contains(idleScript, `status: "idle"`) {
 		t.Fatalf("empty triggers/script = %#v/%s", emptyTriggers, idleScript)
 	}
 
-	if _, _, err := ManagedLoaderTriggersAndScript("project-1", "worker", "", nil); err == nil {
+	if _, _, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "", nil); err == nil {
 		t.Fatalf("nil scheduler returned nil error")
 	}
-	if _, _, err := ManagedLoaderTriggersAndScript("project-1", "worker", "", &compose.NormalizedSchedulerSpec{Triggers: []compose.NormalizedTriggerSpec{
+	if _, _, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "", &compose.NormalizedSchedulerSpec{Triggers: []compose.NormalizedTriggerSpec{
 		{Name: "dup", Kind: "interval", Interval: "1s"},
 		{Name: "dup", Kind: "interval", Interval: "2s"},
 	}}); err == nil {
@@ -63,8 +63,8 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 		{Kind: "event"},
 		{Kind: "unsupported"},
 	} {
-		if _, _, err := ManagedLoaderTriggerAndRegistration("trigger-id", "worker", item); err == nil {
-			t.Fatalf("ManagedLoaderTriggerAndRegistration(%#v) returned nil error", item)
+		if _, _, err := ProjectSchedulerTriggerAndRegistration("trigger-id", "worker", item); err == nil {
+			t.Fatalf("ProjectSchedulerTriggerAndRegistration(%#v) returned nil error", item)
 		}
 	}
 	if got := JSStringLiteral("line\nquote\""); !strings.Contains(got, `\n`) || !strings.Contains(got, `\"`) {

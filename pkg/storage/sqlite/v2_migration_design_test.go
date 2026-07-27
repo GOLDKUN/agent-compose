@@ -114,7 +114,7 @@ func TestV2MigrationDesignRejectsStandaloneAgentWithoutModification(t *testing.T
 	}
 
 	err := applyMigrationSet(ctx, db, chain)
-	if err == nil || !strings.Contains(err.Error(), "agent-compose-legacy-migrate") {
+	if err == nil || !strings.Contains(err.Error(), "agent-compose-migrate") {
 		t.Fatalf("migration error = %v, want copy migrator hint", err)
 	}
 	assertV4RollbackState(t, db, "agent_definition", "standalone-agent")
@@ -133,7 +133,7 @@ func TestV2MigrationDesignRejectsStandaloneSchedulerAndRollsBackAgentMigration(t
 	}
 
 	err := applyMigrationSet(ctx, db, chain)
-	if err == nil || !strings.Contains(err.Error(), "agent-compose-legacy-migrate") {
+	if err == nil || !strings.Contains(err.Error(), "agent-compose-migrate") {
 		t.Fatalf("migration error = %v, want copy migrator hint", err)
 	}
 	assertV4RollbackState(t, db, "loader", "standalone-loader")
@@ -147,6 +147,18 @@ func TestV2MigrationDesignBuildsCleanDatabaseThroughHistoricalChain(t *testing.T
 	assertSQLiteTablesAbsent(t, db, "agent_definition", "loader", "loader_run")
 	assertSQLiteTablesPresent(t, db, "project_agent", "project_scheduler", "scheduler_run")
 	assertNoForeignKeyViolations(t, db)
+	if _, err := db.Exec(`INSERT INTO project(id,name,created_at,updated_at) VALUES('identity-project','identity',1,1)`); err != nil {
+		t.Fatalf("seed identity constraint project: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO project_agent(id,project_id,agent_name,created_at,updated_at) VALUES('','identity-project','empty',1,1)`); err == nil {
+		t.Fatal("final project_agent schema accepted an empty native id")
+	}
+	if _, err := db.Exec(`INSERT INTO project_agent(id,project_id,agent_name,created_at,updated_at) VALUES('agent-valid','identity-project','worker',1,1)`); err != nil {
+		t.Fatalf("seed identity constraint agent: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO project_scheduler(id,project_id,scheduler_id,agent_name,created_at,updated_at) VALUES('','identity-project','scheduler','worker',1,1)`); err == nil {
+		t.Fatal("final project_scheduler schema accepted an empty native id")
+	}
 }
 
 func TestV2MigrationDesignUpgradesEveryHistoricalPrefix(t *testing.T) {

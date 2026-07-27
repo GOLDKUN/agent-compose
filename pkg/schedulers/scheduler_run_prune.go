@@ -64,14 +64,14 @@ type SchedulerRunPruneDatabaseResult struct {
 }
 
 type SchedulerRunPruneStore interface {
-	ListLoaderRunsForPrune(context.Context, SchedulerRunPruneFilter) ([]domain.SchedulerRunSummary, error)
-	CountLoaderRunPruneData(context.Context, []SchedulerRunKey) (SchedulerRunPruneDatabaseStats, error)
-	DeleteLoaderRunPruneData(context.Context, []SchedulerRunKey) (SchedulerRunPruneDatabaseResult, error)
+	ListSchedulerRunsForPrune(context.Context, SchedulerRunPruneFilter) ([]domain.SchedulerRunSummary, error)
+	CountSchedulerRunPruneData(context.Context, []SchedulerRunKey) (SchedulerRunPruneDatabaseStats, error)
+	DeleteSchedulerRunPruneData(context.Context, []SchedulerRunKey) (SchedulerRunPruneDatabaseResult, error)
 }
 
 type SchedulerRunArtifactPruner interface {
-	InspectRunArtifacts(loaderID, runID, recordedDir string) (SchedulerRunArtifactInfo, error)
-	RemoveRunArtifacts(loaderID, runID, recordedDir string) (SchedulerRunArtifactInfo, error)
+	InspectRunArtifacts(schedulerID, runID, recordedDir string) (SchedulerRunArtifactInfo, error)
+	RemoveRunArtifacts(schedulerID, runID, recordedDir string) (SchedulerRunArtifactInfo, error)
 }
 
 type SchedulerRunArtifactInfo struct {
@@ -94,7 +94,7 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 	if err != nil {
 		return SchedulerRunPruneResult{}, err
 	}
-	runs, err := store.ListLoaderRunsForPrune(ctx, filter)
+	runs, err := store.ListSchedulerRunsForPrune(ctx, filter)
 	if err != nil {
 		return SchedulerRunPruneResult{}, err
 	}
@@ -111,7 +111,7 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 		}
 	}
 	keys := schedulerRunKeys(runs)
-	databaseStats, err := store.CountLoaderRunPruneData(ctx, keys)
+	databaseStats, err := store.CountSchedulerRunPruneData(ctx, keys)
 	if err != nil {
 		return result, err
 	}
@@ -122,12 +122,12 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 		return result, fmt.Errorf("scheduler run artifact pruner is unavailable")
 	}
 	candidates := make([]schedulerRunPruneCandidate, 0, len(runs))
-	busyLoaders := make(map[string]struct{})
+	busySchedulers := make(map[string]struct{})
 	invalidArtifacts := 0
 	for _, run := range runs {
-		if c.loaderBusy(run.SchedulerID) {
+		if c.schedulerBusy(run.SchedulerID) {
 			result.SkippedRuns++
-			busyLoaders[run.SchedulerID] = struct{}{}
+			busySchedulers[run.SchedulerID] = struct{}{}
 			continue
 		}
 		candidate := schedulerRunPruneCandidate{run: run}
@@ -144,15 +144,15 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 		}
 		candidates = append(candidates, candidate)
 	}
-	if len(busyLoaders) > 0 {
+	if len(busySchedulers) > 0 {
 		busyRuns := result.SkippedRuns - min(result.SkippedRuns, uint64(invalidArtifacts))
-		result.Warnings = append(result.Warnings, fmt.Sprintf("skipped %d matching run(s) from %d busy scheduler(s)", busyRuns, len(busyLoaders)))
+		result.Warnings = append(result.Warnings, fmt.Sprintf("skipped %d matching run(s) from %d busy scheduler(s)", busyRuns, len(busySchedulers)))
 	}
 	if result.DryRun || len(candidates) == 0 {
 		return result, nil
 	}
 
-	removedDatabase, err := store.DeleteLoaderRunPruneData(ctx, schedulerRunCandidateKeys(candidates))
+	removedDatabase, err := store.DeleteSchedulerRunPruneData(ctx, schedulerRunCandidateKeys(candidates))
 	if err != nil {
 		return result, err
 	}
@@ -190,7 +190,7 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 }
 
 func normalizeSchedulerRunPruneFilter(request SchedulerRunPruneRequest, now time.Time) (SchedulerRunPruneFilter, error) {
-	loaderIDs := normalizedStrings(request.SchedulerIDs)
+	schedulerIDs := normalizedStrings(request.SchedulerIDs)
 	if request.OlderThan < 0 {
 		return SchedulerRunPruneFilter{}, domain.ClassifyError(domain.ErrInvalidArgument, "scheduler run prune older-than must not be negative", nil)
 	}
@@ -218,7 +218,7 @@ func normalizeSchedulerRunPruneFilter(request SchedulerRunPruneRequest, now time
 	}
 	sort.Strings(normalizedStatuses)
 	return SchedulerRunPruneFilter{
-		SchedulerIDs: loaderIDs,
+		SchedulerIDs: schedulerIDs,
 		TriggerID:    strings.TrimSpace(request.TriggerID),
 		Statuses:     normalizedStatuses,
 		OlderThan:    request.OlderThan,
@@ -267,8 +267,8 @@ func addSchedulerRunPruneDatabaseStats(target *SchedulerRunPruneStats, source Sc
 	target.EventSandboxLinks += source.EventSandboxLinks
 }
 
-func (c *Controller) loaderBusy(loaderID string) bool {
+func (c *Controller) schedulerBusy(schedulerID string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.running[strings.TrimSpace(loaderID)] > 0
+	return c.running[strings.TrimSpace(schedulerID)] > 0
 }

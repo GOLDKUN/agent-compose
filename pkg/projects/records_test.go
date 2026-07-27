@@ -60,7 +60,7 @@ func TestNewAgentDefinitionFromSpecKeepsStableNameWithPresentationMetadata(t *te
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
-	if definition.Name != agent.Name || definition.Description != "处理日常通用任务" || definition.ManagedAgentName != agent.Name {
+	if definition.Name != agent.Name || definition.Description != "处理日常通用任务" || definition.AgentName != agent.Name {
 		t.Fatalf("managed agent definition = %#v", definition)
 	}
 }

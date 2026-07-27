@@ -36,13 +36,13 @@ type ProjectStore interface {
 }
 
 type ProjectSchedulerStore interface {
-	GetLoader(context.Context, string) (domain.Scheduler, error)
-	ListLoaderEvents(context.Context, string, int) ([]domain.SchedulerEvent, error)
+	GetScheduler(context.Context, string) (domain.Scheduler, error)
+	ListSchedulerEvents(context.Context, string, int) ([]domain.SchedulerEvent, error)
 }
 
 type ProjectSchedulerRuntime interface {
-	SetLoaderEnabled(context.Context, string, bool) (domain.Scheduler, error)
-	SetLoaderTriggerEnabled(context.Context, string, string, bool) (domain.Scheduler, error)
+	SetSchedulerEnabled(context.Context, string, bool) (domain.Scheduler, error)
+	SetSchedulerTriggerEnabled(context.Context, string, string, bool) (domain.Scheduler, error)
 }
 
 type ProjectSchedulerInvocationRuntime interface {
@@ -64,19 +64,19 @@ type ProjectSchedulerPageStore interface {
 
 type ProjectHandler struct {
 	agentcomposev2connect.UnimplementedProjectServiceHandler
-	delegate       ProjectDelegate
-	store          ProjectStore
-	loaderRuntime  ProjectSchedulerRuntime
-	schedulerRuns  ProjectSchedulerRunRuntime
-	invocations    ProjectSchedulerInvocationRuntime
-	schedulerPrune ProjectSchedulerPruneRuntime
+	delegate         ProjectDelegate
+	store            ProjectStore
+	schedulerRuntime ProjectSchedulerRuntime
+	schedulerRuns    ProjectSchedulerRunRuntime
+	invocations      ProjectSchedulerInvocationRuntime
+	schedulerPrune   ProjectSchedulerPruneRuntime
 }
 
-func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, loaderRuntime ProjectSchedulerRuntime) *ProjectHandler {
-	schedulerRuns, _ := loaderRuntime.(ProjectSchedulerRunRuntime)
-	invocations, _ := loaderRuntime.(ProjectSchedulerInvocationRuntime)
-	schedulerPrune, _ := loaderRuntime.(ProjectSchedulerPruneRuntime)
-	return &ProjectHandler{delegate: delegate, store: store, loaderRuntime: loaderRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune}
+func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime) *ProjectHandler {
+	schedulerRuns, _ := schedulerRuntime.(ProjectSchedulerRunRuntime)
+	invocations, _ := schedulerRuntime.(ProjectSchedulerInvocationRuntime)
+	schedulerPrune, _ := schedulerRuntime.(ProjectSchedulerPruneRuntime)
+	return &ProjectHandler{delegate: delegate, store: store, schedulerRuntime: schedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune}
 }
 
 func (h *ProjectHandler) ValidateProject(ctx context.Context, req *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error) {
@@ -151,18 +151,18 @@ func (h *ProjectHandler) ListSchedulers(ctx context.Context, req *connect.Reques
 }
 
 func (h *ProjectHandler) effectiveSchedulerEnabled(ctx context.Context, scheduler domain.ProjectSchedulerRecord) (bool, error) {
-	loaderStore, ok := h.store.(ProjectSchedulerStore)
+	schedulerStore, ok := h.store.(ProjectSchedulerStore)
 	if !ok || scheduler.ID == "" {
 		return scheduler.Enabled, nil
 	}
-	loader, err := loaderStore.GetLoader(ctx, scheduler.ID)
+	definition, err := schedulerStore.GetScheduler(ctx, scheduler.ID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, sql.ErrNoRows) {
 			return scheduler.Enabled, nil
 		}
 		return false, connect.NewError(connect.CodeInternal, err)
 	}
-	return loader.Summary.Enabled, nil
+	return definition.Summary.Enabled, nil
 }
 
 func (h *ProjectHandler) ListSchedulerEvents(ctx context.Context, req *connect.Request[agentcomposev2.ListSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListSchedulerEventsResponse], error) {
@@ -179,11 +179,11 @@ func (h *ProjectHandler) ListSchedulerEvents(ctx context.Context, req *connect.R
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler runtime store is required"))
 	}
 	filter := schedulers.SchedulerEventPageFilter{SchedulerIDs: []string{scheduler.ID}, Offset: offset, Limit: limit}
-	events, err := store.ListLoaderEventsPage(ctx, filter)
+	events, err := store.ListSchedulerEventsPage(ctx, filter)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	total, err := store.CountLoaderEventsPage(ctx, filter)
+	total, err := store.CountSchedulerEventsPage(ctx, filter)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -199,14 +199,14 @@ func (h *ProjectHandler) SetSchedulerEnabled(ctx context.Context, req *connect.R
 	if err != nil {
 		return nil, projectConnectError(err)
 	}
-	if h.loaderRuntime == nil {
+	if h.schedulerRuntime == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler runtime controller is required"))
 	}
-	loader, err := h.loaderRuntime.SetLoaderEnabled(ctx, scheduler.ID, req.Msg.GetEnabled())
+	definition, err := h.schedulerRuntime.SetSchedulerEnabled(ctx, scheduler.ID, req.Msg.GetEnabled())
 	if err != nil {
 		return nil, projectConnectError(err)
 	}
-	scheduler.Enabled = loader.Summary.Enabled
+	scheduler.Enabled = definition.Summary.Enabled
 	return connect.NewResponse(&agentcomposev2.SetSchedulerEnabledResponse{Scheduler: ProjectSchedulersToProto([]domain.ProjectSchedulerRecord{scheduler})[0], Overridden: true}), nil
 }
 
@@ -215,18 +215,18 @@ func (h *ProjectHandler) SetSchedulerTriggerEnabled(ctx context.Context, req *co
 	if err != nil {
 		return nil, projectConnectError(err)
 	}
-	if h.loaderRuntime == nil {
+	if h.schedulerRuntime == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler runtime controller is required"))
 	}
 	triggerID := strings.TrimSpace(req.Msg.GetTriggerId())
 	if triggerID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("trigger id is required"))
 	}
-	loader, err := h.loaderRuntime.SetLoaderTriggerEnabled(ctx, scheduler.ID, triggerID, req.Msg.GetEnabled())
+	definition, err := h.schedulerRuntime.SetSchedulerTriggerEnabled(ctx, scheduler.ID, triggerID, req.Msg.GetEnabled())
 	if err != nil {
 		return nil, projectConnectError(err)
 	}
-	for _, trigger := range loader.Triggers {
+	for _, trigger := range definition.Triggers {
 		if trigger.ID == triggerID {
 			resolved := resolvedTriggerToProto(trigger, declaredTriggerSpec(scheduler, trigger.ID))
 			resolved.Overridden = true
@@ -305,17 +305,17 @@ func (h *ProjectHandler) schedulerResponse(ctx context.Context, scheduler domain
 	if err := json.Unmarshal([]byte(scheduler.SpecJSON), response.Spec); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode scheduler spec: %w", err))
 	}
-	loaderStore, ok := h.store.(ProjectSchedulerStore)
+	schedulerStore, ok := h.store.(ProjectSchedulerStore)
 	if !ok || scheduler.ID == "" {
 		return response, nil
 	}
-	loader, err := loaderStore.GetLoader(ctx, scheduler.ID)
+	definition, err := schedulerStore.GetScheduler(ctx, scheduler.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	response.Scheduler.Enabled = loader.Summary.Enabled
-	response.Overridden = loader.Summary.Enabled != response.Spec.Enabled
-	for _, trigger := range loader.Triggers {
+	response.Scheduler.Enabled = definition.Summary.Enabled
+	response.Overridden = definition.Summary.Enabled != response.Spec.Enabled
+	for _, trigger := range definition.Triggers {
 		response.Triggers = append(response.Triggers, resolvedTriggerToProto(trigger, declaredTriggerSpec(scheduler, trigger.ID)))
 	}
 	return response, nil

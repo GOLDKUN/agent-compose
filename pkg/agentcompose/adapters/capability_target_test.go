@@ -25,7 +25,7 @@ func (s *mutableCapabilityAgentStore) GetAgentDefinition(context.Context, string
 func TestProjectOctoBusTargetResolverUsesLatestDefinitionAndIsolatesToken(t *testing.T) {
 	store := &mutableCapabilityAgentStore{definition: projectCapabilityDefinition("https://first.example", "first-token")}
 	resolver := NewProjectOctoBusTargetResolver(store)
-	binding := capproxy.SandboxBinding{ManagedProjectID: "project-1", ManagedAgentID: "agent-1"}
+	binding := capproxy.SandboxBinding{ProjectID: "project-1", AgentID: "agent-1"}
 
 	first, err := resolver.ResolveCapabilityTarget(context.Background(), binding, "internal/dev")
 	if err != nil {
@@ -54,7 +54,7 @@ func TestProjectOctoBusTargetResolverRejectsMissingOrMismatchedScope(t *testing.
 		code    codes.Code
 	}{
 		{name: "missing scope", binding: capproxy.SandboxBinding{}, code: codes.FailedPrecondition},
-		{name: "wrong project", binding: capproxy.SandboxBinding{ManagedProjectID: "project-2", ManagedAgentID: "agent-1"}, code: codes.PermissionDenied},
+		{name: "wrong project", binding: capproxy.SandboxBinding{ProjectID: "project-2", AgentID: "agent-1"}, code: codes.PermissionDenied},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := resolver.ResolveCapabilityTarget(context.Background(), test.binding, "internal/dev")
@@ -68,7 +68,7 @@ func TestProjectOctoBusTargetResolverRejectsMissingOrMismatchedScope(t *testing.
 func TestProjectOctoBusTargetResolverRejectsMissingServerAndStoreFailure(t *testing.T) {
 	store := &mutableCapabilityAgentStore{definition: projectCapabilityDefinition("https://internal.example", "token")}
 	resolver := NewProjectOctoBusTargetResolver(store)
-	binding := capproxy.SandboxBinding{ManagedProjectID: "project-1", ManagedAgentID: "agent-1"}
+	binding := capproxy.SandboxBinding{ProjectID: "project-1", AgentID: "agent-1"}
 
 	_, err := resolver.ResolveCapabilityTarget(context.Background(), binding, "public/dev")
 	if status.Code(err) != codes.FailedPrecondition {
@@ -89,8 +89,8 @@ func TestProjectOctoBusTargetResolverRejectsMissingServerAndStoreFailure(t *test
 
 func projectCapabilityDefinition(url, token string) domain.AgentDefinition {
 	return domain.AgentDefinition{
-		ID:               "agent-1",
-		ManagedProjectID: "project-1",
-		ConfigJSON:       `{"octobus_servers":{"internal":{"url":"` + url + `","token":"` + token + `"}}}`,
+		ID:         "agent-1",
+		ProjectID:  "project-1",
+		ConfigJSON: `{"octobus_servers":{"internal":{"url":"` + url + `","token":"` + token + `"}}}`,
 	}
 }

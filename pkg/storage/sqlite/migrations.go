@@ -17,7 +17,7 @@ import (
 
 const baselineMigrationVersion int64 = 1
 
-const legacyMigratorHint = "use agent-compose-legacy-migrate with a read-only source and a new target data root"
+const legacyMigratorHint = "use agent-compose-migrate with a read-only source and a new target data root"
 
 var migrationFilenamePattern = regexp.MustCompile(`^([0-9]{6})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`)
 
@@ -29,6 +29,16 @@ type migration struct {
 	name      string
 	statement string
 	checksum  string
+}
+
+// EmbeddedMigration is a read-only view of an immutable migration asset.
+// Copy-migration tools use it to adopt an unversioned historical schema
+// without duplicating the released SQL files.
+type EmbeddedMigration struct {
+	Version   int64
+	Name      string
+	Statement string
+	Checksum  string
 }
 
 type appliedMigration struct {
@@ -50,6 +60,38 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("SQLite database is required")
 	}
 	return applyMigrations(ctx, db, embeddedMigrations)
+}
+
+// MigrateThrough applies the embedded migration prefix ending at maxVersion.
+// It is intended for tools that must perform a data conversion between two
+// released schema versions.
+func MigrateThrough(ctx context.Context, db *sql.DB, maxVersion int64) error {
+	if db == nil {
+		return fmt.Errorf("SQLite database is required")
+	}
+	migrations, err := loadMigrations(embeddedMigrations)
+	if err != nil {
+		return err
+	}
+	end := sort.Search(len(migrations), func(index int) bool { return migrations[index].version > maxVersion })
+	if end == 0 {
+		return fmt.Errorf("no embedded SQLite migrations through version %d", maxVersion)
+	}
+	return applyMigrationSet(ctx, db, migrations[:end])
+}
+
+// EmbeddedMigrationAt returns an immutable embedded migration by version.
+func EmbeddedMigrationAt(version int64) (EmbeddedMigration, bool, error) {
+	migrations, err := loadMigrations(embeddedMigrations)
+	if err != nil {
+		return EmbeddedMigration{}, false, err
+	}
+	for _, item := range migrations {
+		if item.version == version {
+			return EmbeddedMigration{Version: item.version, Name: item.name, Statement: item.statement, Checksum: item.checksum}, true, nil
+		}
+	}
+	return EmbeddedMigration{}, false, nil
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB, migrationFS fs.FS) error {

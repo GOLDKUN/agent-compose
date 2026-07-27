@@ -10,32 +10,32 @@ import (
 	"agent-compose/pkg/schedulers"
 )
 
-func (s *loaderStore) GetLoaderRunForLoaders(ctx context.Context, loaderIDs []string, runID string) (domain.SchedulerRunSummary, error) {
-	loaderIDs = normalizedLoaderRunPageIDs(loaderIDs)
+func (s *schedulerStore) GetSchedulerRunForSchedulers(ctx context.Context, schedulerIDs []string, runID string) (domain.SchedulerRunSummary, error) {
+	schedulerIDs = normalizedSchedulerRunPageIDs(schedulerIDs)
 	runID = strings.TrimSpace(runID)
-	if len(loaderIDs) == 0 {
-		return domain.SchedulerRunSummary{}, loaderRunPageNotFound(runID, nil)
+	if len(schedulerIDs) == 0 {
+		return domain.SchedulerRunSummary{}, schedulerRunPageNotFound(runID, nil)
 	}
 	refClause, refArgs, ok := resourceIDClause("run_id", runID)
 	if !ok {
 		refClause = `run_id = ?`
 		refArgs = []any{runID}
 	}
-	placeholders := make([]string, len(loaderIDs))
-	args := make([]any, 0, len(loaderIDs)+len(refArgs))
+	placeholders := make([]string, len(schedulerIDs))
+	args := make([]any, 0, len(schedulerIDs)+len(refArgs))
 	args = append(args, refArgs...)
-	for index, loaderID := range loaderIDs {
+	for index, schedulerID := range schedulerIDs {
 		placeholders[index] = "?"
-		args = append(args, loaderID)
+		args = append(args, schedulerID)
 	}
-	rows, err := s.db.QueryContext(ctx, schedulers.SelectLoaderRunSQL()+` WHERE `+refClause+` AND scheduler_id IN (`+strings.Join(placeholders, ",")+`) AND trigger_id <> '' ORDER BY scheduler_id ASC, run_id ASC LIMIT 2`, args...)
+	rows, err := s.db.QueryContext(ctx, schedulers.SelectSchedulerRunSQL()+` WHERE `+refClause+` AND scheduler_id IN (`+strings.Join(placeholders, ",")+`) AND trigger_id <> '' ORDER BY scheduler_id ASC, run_id ASC LIMIT 2`, args...)
 	if err != nil {
 		return domain.SchedulerRunSummary{}, err
 	}
 	defer func() { _ = rows.Close() }()
 	items := make([]domain.SchedulerRunSummary, 0, 2)
 	for rows.Next() {
-		item, scanErr := schedulers.ScanLoaderRun(rows.Scan)
+		item, scanErr := schedulers.ScanSchedulerRun(rows.Scan)
 		if scanErr != nil {
 			return domain.SchedulerRunSummary{}, scanErr
 		}
@@ -45,7 +45,7 @@ func (s *loaderStore) GetLoaderRunForLoaders(ctx context.Context, loaderIDs []st
 		return domain.SchedulerRunSummary{}, err
 	}
 	if len(items) == 0 {
-		return domain.SchedulerRunSummary{}, loaderRunPageNotFound(runID, sql.ErrNoRows)
+		return domain.SchedulerRunSummary{}, schedulerRunPageNotFound(runID, sql.ErrNoRows)
 	}
 	if len(items) > 1 {
 		return domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrAmbiguous, "scheduler run", runID, fmt.Sprintf("scheduler run reference %s is ambiguous", runID), nil)
@@ -53,25 +53,25 @@ func (s *loaderStore) GetLoaderRunForLoaders(ctx context.Context, loaderIDs []st
 	return items[0], nil
 }
 
-func loaderRunPageNotFound(runID string, cause error) error {
+func schedulerRunPageNotFound(runID string, cause error) error {
 	return domain.ResourceError(domain.ErrNotFound, "scheduler run", runID, fmt.Sprintf("scheduler run %s not found", runID), cause)
 }
 
-func (s *loaderStore) ListLoaderRunsPage(ctx context.Context, filter schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error) {
-	loaderIDs := normalizedLoaderRunPageIDs(filter.SchedulerIDs)
-	if len(loaderIDs) == 0 {
+func (s *schedulerStore) ListSchedulerRunsPage(ctx context.Context, filter schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error) {
+	schedulerIDs := normalizedSchedulerRunPageIDs(filter.SchedulerIDs)
+	if len(schedulerIDs) == 0 {
 		return []domain.SchedulerRunSummary{}, nil
 	}
 	if filter.Limit <= 0 {
 		filter.Limit = 50
 	}
-	placeholders := make([]string, len(loaderIDs))
-	args := make([]any, 0, len(loaderIDs)+7)
-	for index, loaderID := range loaderIDs {
+	placeholders := make([]string, len(schedulerIDs))
+	args := make([]any, 0, len(schedulerIDs)+7)
+	for index, schedulerID := range schedulerIDs {
 		placeholders[index] = "?"
-		args = append(args, loaderID)
+		args = append(args, schedulerID)
 	}
-	query := schedulers.SelectLoaderRunSQL() + ` WHERE scheduler_id IN (` + strings.Join(placeholders, ",") + `)`
+	query := schedulers.SelectSchedulerRunSQL() + ` WHERE scheduler_id IN (` + strings.Join(placeholders, ",") + `)`
 	if filter.RequireTrigger {
 		query += ` AND trigger_id <> ''`
 	}
@@ -86,7 +86,7 @@ func (s *loaderStore) ListLoaderRunsPage(ctx context.Context, filter schedulers.
 	if !filter.BeforeStartedAt.IsZero() {
 		query += ` AND (started_at < ? OR (started_at = ? AND (scheduler_id < ? OR (scheduler_id = ? AND run_id < ?))))`
 		beforeMillis := filter.BeforeStartedAt.UTC().UnixMilli()
-		args = append(args, beforeMillis, beforeMillis, strings.TrimSpace(filter.BeforeLoaderID), strings.TrimSpace(filter.BeforeLoaderID), strings.TrimSpace(filter.BeforeRunID))
+		args = append(args, beforeMillis, beforeMillis, strings.TrimSpace(filter.BeforeSchedulerID), strings.TrimSpace(filter.BeforeSchedulerID), strings.TrimSpace(filter.BeforeRunID))
 	}
 	query += ` ORDER BY started_at DESC, scheduler_id DESC, run_id DESC LIMIT ? OFFSET ?`
 	args = append(args, filter.Limit, max(filter.Offset, 0))
@@ -98,7 +98,7 @@ func (s *loaderStore) ListLoaderRunsPage(ctx context.Context, filter schedulers.
 
 	items := make([]domain.SchedulerRunSummary, 0)
 	for rows.Next() {
-		item, err := schedulers.ScanLoaderRun(rows.Scan)
+		item, err := schedulers.ScanSchedulerRun(rows.Scan)
 		if err != nil {
 			return nil, err
 		}
@@ -110,16 +110,16 @@ func (s *loaderStore) ListLoaderRunsPage(ctx context.Context, filter schedulers.
 	return items, nil
 }
 
-func (s *loaderStore) CountLoaderRunsPage(ctx context.Context, filter schedulers.SchedulerRunPageFilter) (int, error) {
-	loaderIDs := normalizedLoaderRunPageIDs(filter.SchedulerIDs)
-	if len(loaderIDs) == 0 {
+func (s *schedulerStore) CountSchedulerRunsPage(ctx context.Context, filter schedulers.SchedulerRunPageFilter) (int, error) {
+	schedulerIDs := normalizedSchedulerRunPageIDs(filter.SchedulerIDs)
+	if len(schedulerIDs) == 0 {
 		return 0, nil
 	}
-	args := make([]any, 0, len(loaderIDs)+2)
-	for _, loaderID := range loaderIDs {
-		args = append(args, loaderID)
+	args := make([]any, 0, len(schedulerIDs)+2)
+	for _, schedulerID := range schedulerIDs {
+		args = append(args, schedulerID)
 	}
-	query := `SELECT COUNT(*) FROM scheduler_run WHERE scheduler_id IN (` + placeholders(len(loaderIDs)) + `)`
+	query := `SELECT COUNT(*) FROM scheduler_run WHERE scheduler_id IN (` + placeholders(len(schedulerIDs)) + `)`
 	if filter.RequireTrigger {
 		query += ` AND trigger_id <> ''`
 	}
@@ -138,7 +138,7 @@ func (s *loaderStore) CountLoaderRunsPage(ctx context.Context, filter schedulers
 	return total, nil
 }
 
-func (s *loaderStore) ListLoaderRunSandboxIDs(ctx context.Context, keys []schedulers.SchedulerRunKey) (map[schedulers.SchedulerRunKey][]string, error) {
+func (s *schedulerStore) ListSchedulerRunSandboxIDs(ctx context.Context, keys []schedulers.SchedulerRunKey) (map[schedulers.SchedulerRunKey][]string, error) {
 	result := make(map[schedulers.SchedulerRunKey][]string)
 	clauses := make([]string, 0, len(keys))
 	args := make([]any, 0, len(keys)*2)
@@ -186,27 +186,27 @@ func (s *loaderStore) ListLoaderRunSandboxIDs(ctx context.Context, keys []schedu
 	return result, nil
 }
 
-func (s *loaderStore) BatchGetLatestLoaderRunsBySandboxIDs(ctx context.Context, loaderIDs, sandboxIDs []string) (map[string]domain.SchedulerRunSummary, error) {
-	loaderIDs = normalizedLoaderRunPageIDs(loaderIDs)
-	sandboxIDs = normalizedLoaderRunPageIDs(sandboxIDs)
+func (s *schedulerStore) BatchGetLatestSchedulerRunsBySandboxIDs(ctx context.Context, schedulerIDs, sandboxIDs []string) (map[string]domain.SchedulerRunSummary, error) {
+	schedulerIDs = normalizedSchedulerRunPageIDs(schedulerIDs)
+	sandboxIDs = normalizedSchedulerRunPageIDs(sandboxIDs)
 	result := make(map[string]domain.SchedulerRunSummary)
-	if len(loaderIDs) == 0 || len(sandboxIDs) == 0 {
+	if len(schedulerIDs) == 0 || len(sandboxIDs) == 0 {
 		return result, nil
 	}
 
-	args := make([]any, 0, len(loaderIDs)+len(sandboxIDs))
+	args := make([]any, 0, len(schedulerIDs)+len(sandboxIDs))
 	for _, sandboxID := range sandboxIDs {
 		args = append(args, sandboxID)
 	}
-	for _, loaderID := range loaderIDs {
-		args = append(args, loaderID)
+	for _, schedulerID := range schedulerIDs {
+		args = append(args, schedulerID)
 	}
 	query := `WITH associations AS (
 		SELECT DISTINCT linked_sandbox_id AS sandbox_id, scheduler_id, scheduler_run_id AS run_id
 		FROM scheduler_event
 		WHERE linked_sandbox_id <> ''
 			AND linked_sandbox_id IN (` + placeholders(len(sandboxIDs)) + `)
-			AND scheduler_id IN (` + placeholders(len(loaderIDs)) + `)
+			AND scheduler_id IN (` + placeholders(len(schedulerIDs)) + `)
 	), ranked AS (
 		SELECT a.sandbox_id,
 			r.scheduler_id, r.run_id, r.trigger_id, r.trigger_kind, r.trigger_source, r.status,
@@ -234,7 +234,7 @@ func (s *loaderStore) BatchGetLatestLoaderRunsBySandboxIDs(ctx context.Context, 
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var sandboxID string
-		run, scanErr := schedulers.ScanLoaderRun(func(dest ...any) error {
+		run, scanErr := schedulers.ScanSchedulerRun(func(dest ...any) error {
 			return rows.Scan(append([]any{&sandboxID}, dest...)...)
 		})
 		if scanErr != nil {
@@ -248,19 +248,19 @@ func (s *loaderStore) BatchGetLatestLoaderRunsBySandboxIDs(ctx context.Context, 
 	return result, nil
 }
 
-func normalizedLoaderRunPageIDs(loaderIDs []string) []string {
-	seen := make(map[string]struct{}, len(loaderIDs))
-	result := make([]string, 0, len(loaderIDs))
-	for _, loaderID := range loaderIDs {
-		loaderID = strings.TrimSpace(loaderID)
-		if loaderID == "" {
+func normalizedSchedulerRunPageIDs(schedulerIDs []string) []string {
+	seen := make(map[string]struct{}, len(schedulerIDs))
+	result := make([]string, 0, len(schedulerIDs))
+	for _, schedulerID := range schedulerIDs {
+		schedulerID = strings.TrimSpace(schedulerID)
+		if schedulerID == "" {
 			continue
 		}
-		if _, ok := seen[loaderID]; ok {
+		if _, ok := seen[schedulerID]; ok {
 			continue
 		}
-		seen[loaderID] = struct{}{}
-		result = append(result, loaderID)
+		seen[schedulerID] = struct{}{}
+		result = append(result, schedulerID)
 	}
 	return result
 }

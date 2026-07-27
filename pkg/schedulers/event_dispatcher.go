@@ -21,13 +21,13 @@ type EventDispatcherDependencies struct {
 	Targets      func(topic string) []EventTarget
 	IsBusy       func(targets []EventTarget) bool
 	ReserveSlots func(event domain.SchedulerTopicEvent, count int) ([]*webhooks.Reservation, bool)
-	Run          func(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error)
-	Prepare      func(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error)
+	Run          func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error)
+	Prepare      func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error)
 	Execute      func(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error)
 	Abort        func(ctx context.Context, prepared PreparedRun, reason string)
 	RunTimeout   func(time.Duration) time.Duration
-	EnterRun     func(loader domain.Scheduler) bool
-	LeaveRun     func(loaderID string)
+	EnterRun     func(scheduler domain.Scheduler) bool
+	LeaveRun     func(schedulerID string)
 }
 
 type EventDispatcher struct {
@@ -117,11 +117,11 @@ func (d *EventDispatcher) dispatchTargets(event domain.SchedulerTopicEvent, targ
 }
 
 func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEvent, targets []EventTarget, payloadJSON string, reservations []*webhooks.Reservation) {
-	acquiredLoaderIDs := make([]string, 0, len(targets))
+	acquiredSchedulerIDs := make([]string, 0, len(targets))
 	for _, target := range targets {
 		if !d.enterRun(target.Scheduler) {
-			for _, loaderID := range acquiredLoaderIDs {
-				d.leaveRun(loaderID)
+			for _, schedulerID := range acquiredSchedulerIDs {
+				d.leaveRun(schedulerID)
 			}
 			for _, reservation := range reservations {
 				reservation.Release()
@@ -129,7 +129,7 @@ func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEven
 			d.retry(event, "loader is already running")
 			return
 		}
-		acquiredLoaderIDs = append(acquiredLoaderIDs, target.Scheduler.Summary.ID)
+		acquiredSchedulerIDs = append(acquiredSchedulerIDs, target.Scheduler.Summary.ID)
 	}
 	prepared := make([]PreparedRun, 0, len(targets))
 	for index, target := range targets {
@@ -138,8 +138,8 @@ func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEven
 			for _, item := range prepared {
 				d.deps.Abort(context.WithoutCancel(d.rootCtx()), item, err.Error())
 			}
-			for _, loaderID := range acquiredLoaderIDs[index+1:] {
-				d.leaveRun(loaderID)
+			for _, schedulerID := range acquiredSchedulerIDs[index+1:] {
+				d.leaveRun(schedulerID)
 			}
 			for _, reservation := range reservations {
 				reservation.Release()
@@ -242,15 +242,15 @@ func (d *EventDispatcher) runTimeout(override time.Duration) time.Duration {
 	return d.deps.RunTimeout(override)
 }
 
-func (d *EventDispatcher) enterRun(loader domain.Scheduler) bool {
+func (d *EventDispatcher) enterRun(scheduler domain.Scheduler) bool {
 	if d.deps.EnterRun == nil {
 		return true
 	}
-	return d.deps.EnterRun(loader)
+	return d.deps.EnterRun(scheduler)
 }
 
-func (d *EventDispatcher) leaveRun(loaderID string) {
+func (d *EventDispatcher) leaveRun(schedulerID string) {
 	if d.deps.LeaveRun != nil {
-		d.deps.LeaveRun(loaderID)
+		d.deps.LeaveRun(schedulerID)
 	}
 }

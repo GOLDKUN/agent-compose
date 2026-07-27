@@ -72,8 +72,8 @@ func TestHistoricalUncompiledExecPreflightHasNoArtifactsOrRecords(t *testing.T) 
 	} else {
 		assertRuntimeNotCompiledError(t, err)
 	}
-	loader := NewLoaderCommandExecutor(config, store, nil, provider, nil)
-	_, err = loader.ExecuteLoaderCommand(ctx, session, domain.SchedulerCommandRequest{Mode: "shell", Script: "echo history"})
+	loader := NewSchedulerCommandExecutor(config, store, nil, provider, nil)
+	_, err = loader.ExecuteSchedulerCommand(ctx, session, domain.SchedulerCommandRequest{Mode: "shell", Script: "echo history"})
 	assertRuntimeNotCompiledError(t, err)
 
 	cells, err := store.ListCells(ctx, session.Summary.ID)
