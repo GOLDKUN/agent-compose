@@ -45,6 +45,22 @@ func TestRunHelpHidesOptionalModeFlagSentinel(t *testing.T) {
 	}
 }
 
+func TestRunHelpDescribesRemoveOnCompletion(t *testing.T) {
+	stdout, stderr, runCount, exitCode := executeCLICommand("run", "--help")
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("run --help code/stderr = %d / %q", exitCode, stderr)
+	}
+	if runCount != 0 {
+		t.Fatalf("daemon runner called %d times, want 0", runCount)
+	}
+	if !strings.Contains(stdout, "Remove a newly created sandbox after run completion") {
+		t.Fatalf("run --help does not describe completion-based sandbox removal:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Remove the sandbox after a successful run") {
+		t.Fatalf("run --help still limits sandbox removal to successful runs:\n%s", stdout)
+	}
+}
+
 func TestResolveAgentComposeSocketForCLIFallsBackToVarRun(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
 
