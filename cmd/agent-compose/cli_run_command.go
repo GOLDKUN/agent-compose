@@ -432,6 +432,9 @@ func (w *terminalStreamWriter) Finish() error {
 func normalizeComposeRunOptions(cmd *cobra.Command, options composeRunOptions) (composeRunOptions, error) {
 	options.SandboxID = strings.TrimSpace(options.SandboxID)
 	options.Driver = strings.TrimSpace(options.Driver)
+	if options.Remove && options.KeepRunning {
+		return options, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("run --rm cannot be combined with --keep-running")}
+	}
 	if options.Driver != "" {
 		driver, err := driverpkg.ResolveSandboxRuntimeDriver(options.Driver, "")
 		if err != nil {
