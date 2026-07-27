@@ -87,6 +87,28 @@ func TestAgentExecutorExecuteAgentRequestPersistsCellAndEvents(t *testing.T) {
 	}
 }
 
+func TestAgentAssistantMessageExcludesTranscriptFallback(t *testing.T) {
+	transcript := "$ command\ntool output"
+	if got := agentAssistantMessage(domain.AgentRunResult{
+		Agent:           "codex",
+		FinalText:       transcript,
+		FinalTextSource: domain.AgentFinalTextSourceTranscriptFallback,
+		Transcript:      transcript,
+		Success:         true,
+	}); got != "" {
+		t.Fatalf("fallback summary = %q, want empty", got)
+	}
+	if got := agentAssistantMessage(domain.AgentRunResult{
+		Agent:           "codex",
+		FinalText:       "final answer",
+		FinalTextSource: domain.AgentFinalTextSourceProviderMessage,
+		Transcript:      transcript + "\nfinal answer",
+		Success:         true,
+	}); got != "final answer" {
+		t.Fatalf("provider summary = %q", got)
+	}
+}
+
 func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()

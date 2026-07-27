@@ -12,6 +12,8 @@ import { flattenEnvMap } from "../mcp-config.js";
 
 export class OpenCodeRunner {
   private skillsConfigDir?: string;
+  private providerMessageID = "";
+  private providerMessageText = "";
 
   constructor(
     private readonly options: RunnerOptions,
@@ -160,10 +162,34 @@ export class OpenCodeRunner {
       this.writer.write(text);
     }
 
+    if (eventType === "text" && text) {
+      const part = isRecord(event.part) ? event.part : {};
+      const messageID = stringField(part, "messageID", "messageId", "message_id") ||
+        stringField(event, "messageID", "messageId", "message_id");
+      if (messageID && messageID !== this.providerMessageID) {
+        this.providerMessageID = messageID;
+        this.providerMessageText = "";
+      }
+      this.providerMessageText += text;
+    }
+
+    if (eventType === "step_finish" || eventType === "step-finish") {
+      const part = isRecord(event.part) ? event.part : {};
+      const stopReason = stringField(part, "reason", "stopReason", "stop_reason");
+      result.stopReason = stopReason || result.stopReason;
+      if (this.providerMessageText && stopReason !== "tool-calls" && stopReason !== "tool_calls") {
+        result.finalText = this.providerMessageText;
+        result.finalTextSource = "provider_message";
+      }
+      this.providerMessageID = "";
+      this.providerMessageText = "";
+    }
+
     if (eventType === "result" || eventType === "complete" || eventType === "completed") {
       const finalText = extractText(event.response) || extractText(event.result) || text;
       if (finalText) {
         result.finalText = finalText;
+        result.finalTextSource = "provider_message";
       }
       result.stopReason = stringField(event, "stopReason", "stop_reason", "finishReason", "finish_reason") || result.stopReason;
     }
@@ -174,6 +200,8 @@ export class OpenCodeRunner {
     if (this.options.outputSchema) {
       throw new Error("structured JSON output is not supported by opencode runner");
     }
+    this.providerMessageID = "";
+    this.providerMessageText = "";
 
     const stored = await readStoredThread(this.options.stateRoot, "opencode");
     const result: AgentResult = {
@@ -181,6 +209,7 @@ export class OpenCodeRunner {
       threadId: stored?.threadId || "",
       stopReason: "completed",
       finalText: "",
+      finalTextSource: "none",
       transcript: "",
       stderr: "",
     };
@@ -233,6 +262,7 @@ export class OpenCodeRunner {
     result.transcript = this.writer.transcript();
     if (!result.finalText && result.transcript) {
       result.finalText = result.transcript;
+      result.finalTextSource = "transcript_fallback";
     }
     await writeStoredThread(this.options.stateRoot, "opencode", result.threadId);
     return result;

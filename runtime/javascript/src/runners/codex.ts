@@ -155,7 +155,11 @@ export class CodexRunner {
       case "agent_message":
         appendDelta(this.writer, this.itemState as Map<string, string>, item.id, String(item.text || ""));
         if (event.type === "item.completed") {
-          result.finalText = String(item.text || result.finalText);
+          const finalText = String(item.text || "");
+          if (finalText) {
+            result.finalText = finalText;
+            result.finalTextSource = "provider_message";
+          }
         }
         break;
       case "reasoning":
@@ -206,6 +210,7 @@ export class CodexRunner {
       threadId: stored?.threadId || "",
       stopReason: "completed",
       finalText: "",
+      finalTextSource: "none",
       transcript: "",
       stderr: "",
     };
@@ -221,6 +226,7 @@ export class CodexRunner {
     result.transcript = this.writer.transcript();
     if (!result.finalText && result.transcript) {
       result.finalText = result.transcript;
+      result.finalTextSource = "transcript_fallback";
     }
     await writeStoredThread(this.options.stateRoot, "codex", result.threadId);
     return result;

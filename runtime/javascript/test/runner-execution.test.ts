@@ -149,6 +149,7 @@ describe("runner execution", () => {
           provider: "codex",
           threadId: "thread-new",
           finalText: "codex answer",
+          finalTextSource: "provider_message",
           transcript: "codex answer",
         });
       } finally {
@@ -160,6 +161,19 @@ describe("runner execution", () => {
       });
       const stored = JSON.parse(await fs.readFile(path.join(root, "state", "agents", "providers", "codex.json"), "utf8"));
       expect(stored.threadId).toBe("thread-new");
+    });
+  });
+
+  it("marks Codex transcript fallback without treating it as a provider message", async () => {
+    const { CodexRunner } = await import("../src/runners/codex.js");
+    await withTempSession(async (root) => {
+      codexState.events = [
+        { type: "item.completed", item: { id: "cmd", type: "command_execution", command: "pwd", aggregated_output: "/work\n" } },
+      ];
+      const result = await new CodexRunner(runnerOptions(root)).runPrompt("prompt");
+      expect(result.finalText).toContain("$ pwd");
+      expect(result.finalTextSource).toBe("transcript_fallback");
+      expect(result.transcript).toBe(result.finalText);
     });
   });
 
@@ -317,6 +331,7 @@ describe("runner execution", () => {
           threadId: "claude-session",
           stopReason: "end_turn",
           finalText: "final claude",
+          finalTextSource: "provider_message",
         });
         expect(result.transcript).toContain("partial");
         expect(result.transcript).toContain("used tool");
@@ -497,7 +512,7 @@ describe("runner execution", () => {
     });
   });
 
-  it("uses Claude transcript as final text when no result text is present", async () => {
+  it("marks Claude transcript fallback when no provider message is present", async () => {
     const { ClaudeRunner } = await import("../src/runners/claude.js");
     await withTempSession(async (root) => {
       claudeState.messages = [
@@ -507,9 +522,24 @@ describe("runner execution", () => {
       try {
         const result = await new ClaudeRunner(runnerOptions(root, "", "claude")).runPrompt("prompt");
         expect(result.finalText).toBe("transcript only");
+        expect(result.finalTextSource).toBe("transcript_fallback");
       } finally {
         stdio.restore();
       }
+    });
+  });
+
+  it("marks Gemini transcript fallback when no result message is present", async () => {
+    const { GeminiRunner } = await import("../src/runners/gemini.js");
+    await withTempSession(async (root) => {
+      childProcessState.stdoutLines = [
+        JSON.stringify({ type: "message", message: { text: "working" } }),
+        JSON.stringify({ type: "tool_result", result: { text: "tool output" } }),
+      ];
+      const result = await new GeminiRunner(runnerOptions(root, "", "gemini")).runPrompt("prompt");
+      expect(result.finalText).toContain("tool output");
+      expect(result.finalTextSource).toBe("transcript_fallback");
+      expect(result.transcript).toBe(result.finalText);
     });
   });
 
@@ -533,6 +563,7 @@ describe("runner execution", () => {
           provider: "gemini",
           threadId: "gemini-session",
           finalText: "gemini final",
+          finalTextSource: "provider_message",
         });
         expect(childProcessState.spawnCalls.at(-1)).toMatchObject({
           command: "gemini",
@@ -573,6 +604,53 @@ describe("runner execution", () => {
     });
   });
 
+  it("marks OpenCode transcript fallback when no completion message is present", async () => {
+    const { OpenCodeRunner } = await import("../src/runners/opencode.js");
+    await withTempSession(async (root) => {
+      childProcessState.stdoutLines = [
+        JSON.stringify({ type: "message", sessionID: "opencode-session", message: { content: "working" } }),
+        JSON.stringify({ type: "tool_result", result: { text: "tool output" } }),
+      ];
+      const result = await new OpenCodeRunner(runnerOptions(root, "", "opencode")).runPrompt("prompt");
+      expect(result.finalText).toContain("tool output");
+      expect(result.finalTextSource).toBe("transcript_fallback");
+      expect(result.transcript).toBe(result.finalText);
+    });
+  });
+
+  it("recognizes current OpenCode CLI text events as a provider message", async () => {
+    const { OpenCodeRunner } = await import("../src/runners/opencode.js");
+    await withTempSession(async (root) => {
+      childProcessState.stdoutLines = [
+        JSON.stringify({
+          type: "step_start",
+          sessionID: "opencode-session",
+          part: { type: "step-start", messageID: "opencode-message" },
+        }),
+        JSON.stringify({
+          type: "text",
+          sessionID: "opencode-session",
+          part: { type: "text", messageID: "opencode-message", text: "OpenCode final" },
+        }),
+        JSON.stringify({
+          type: "step_finish",
+          sessionID: "opencode-session",
+          part: { type: "step-finish", messageID: "opencode-message", reason: "stop" },
+        }),
+      ];
+
+      const result = await new OpenCodeRunner(runnerOptions(root, "", "opencode")).runPrompt("prompt");
+
+      expect(result).toMatchObject({
+        threadId: "opencode-session",
+        stopReason: "stop",
+        finalText: "OpenCode final",
+        finalTextSource: "provider_message",
+        transcript: "OpenCode final",
+      });
+    });
+  });
+
   it("runs Gemini stream-json output and keeps stdout protocol clean", async () => {
     const { GeminiRunner } = await import("../src/runners/gemini.js");
     await withTempSession(async (root) => {
@@ -596,6 +674,7 @@ describe("runner execution", () => {
           provider: "gemini",
           threadId: "gemini-session",
           finalText: "gemini final",
+          finalTextSource: "provider_message",
         });
         expect(result.transcript).toContain("hello");
         expect(result.transcript).toContain("[tool:ReadFile]");

@@ -25,17 +25,17 @@ type StartRequest struct {
 }
 
 type TransitionRequest struct {
-	RunID                  string
-	Status                 string
-	SandboxID              string
-	ExitCode               int
-	Error                  string
-	Output                 string
-	ResultJSON             string
-	LogsPath               string
-	ArtifactsDir           string
-	CleanupError           string
-	SkipTerminalAgentEvent bool
+	RunID          string
+	Status         string
+	SandboxID      string
+	ExitCode       int
+	Error          string
+	Output         string
+	ResultJSON     string
+	LogsPath       string
+	ArtifactsDir   string
+	CleanupError   string
+	TerminalEvents []domain.ProjectRunEventRecord
 }
 
 type ManagedAgentDefinition struct {
@@ -225,11 +225,9 @@ func (c *Coordinator) TransitionRun(ctx context.Context, req TransitionRequest) 
 		}
 		next.DurationMs = max(0, next.CompletedAt.Sub(next.StartedAt).Milliseconds())
 	}
-	batch := make([]domain.ProjectRunEventRecord, 0, 2)
+	batch := make([]domain.ProjectRunEventRecord, 0, len(req.TerminalEvents)+1)
 	if StatusIsTerminal(next.Status) {
-		if next.Output != "" && !req.SkipTerminalAgentEvent {
-			batch = append(batch, domain.ProjectRunEventRecord{ID: terminalAgentEventID(next.RunID), RunID: next.RunID, Kind: domain.ProjectRunEventKindAgentMessage, Text: next.Output, Agent: next.AgentName, Success: next.Status == domain.ProjectRunStatusSucceeded, ExitCode: next.ExitCode, StopReason: next.Error})
-		}
+		batch = append(batch, req.TerminalEvents...)
 		batch = append(batch, domain.ProjectRunEventRecord{ID: terminalStatusEventID(next.RunID), RunID: next.RunID, Kind: domain.ProjectRunEventKindStatus, PayloadJSON: next.ResultJSON, Success: next.Status == domain.ProjectRunStatusSucceeded, ExitCode: next.ExitCode, StopReason: next.Error})
 	}
 	updated, err := c.store.UpdateProjectRunWithEvents(ctx, next, batch)

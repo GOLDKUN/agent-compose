@@ -37,6 +37,7 @@ describe("CodexRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -89,6 +90,7 @@ describe("CodexRunner", () => {
 
       expect(result.threadId).toBe("thread-1");
       expect(result.finalText).toBe("hello!");
+      expect(result.finalTextSource).toBe("provider_message");
       expect(stdio.stderr).toContain("hello");
       expect(stdio.stderr).toContain("$ pwd");
       expect(stdio.stderr).toContain("[file_change]");
@@ -114,6 +116,7 @@ describe("CodexRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -145,6 +148,7 @@ describe("CodexRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -168,6 +172,7 @@ describe("CodexRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -547,6 +552,7 @@ describe("OpenCodeRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -563,10 +569,65 @@ describe("OpenCodeRunner", () => {
 
       expect(result.threadId).toBe("session-1");
       expect(result.finalText).toBe("done");
+      expect(result.finalTextSource).toBe("provider_message");
       expect(stdio.stderr).toContain("hello");
       expect(stdio.stderr).toContain(" from part");
       expect(stdio.stderr).toContain("[tool:bash]");
       expect(stdio.stderr).toContain("tool output");
+    });
+  });
+
+  it("uses current OpenCode text and step finish events as the provider message", async () => {
+    await withTempSession(async (root) => {
+      const runner = new OpenCodeRunner(runnerOptions(root, "", "opencode"));
+      const result = {
+        provider: "opencode" as const,
+        threadId: "",
+        stopReason: "completed",
+        finalText: "",
+        finalTextSource: "none" as const,
+        transcript: "",
+        stderr: "",
+      };
+      const stdio = captureStdio();
+      try {
+        runner.handleEvent({
+          type: "text",
+          sessionID: "session-1",
+          part: { type: "text", messageID: "message-1", text: "working" },
+        }, result);
+        runner.handleEvent({
+          type: "step_finish",
+          sessionID: "session-1",
+          part: { type: "step-finish", messageID: "message-1", reason: "tool-calls" },
+        }, result);
+        expect(result.finalTextSource).toBe("none");
+        runner.handleEvent({
+          type: "text",
+          sessionID: "session-1",
+          part: { type: "text", messageID: "message-2", text: "final " },
+        }, result);
+        runner.handleEvent({
+          type: "text",
+          sessionID: "session-1",
+          part: { type: "text", messageID: "message-2", text: "answer" },
+        }, result);
+        runner.handleEvent({
+          type: "step_finish",
+          sessionID: "session-1",
+          part: { type: "step-finish", messageID: "message-2", reason: "stop" },
+        }, result);
+      } finally {
+        stdio.restore();
+      }
+
+      expect(result).toMatchObject({
+        threadId: "session-1",
+        stopReason: "stop",
+        finalText: "final answer",
+        finalTextSource: "provider_message",
+      });
+      expect(stdio.stderr).toContain("workingfinal answer");
     });
   });
 
@@ -578,6 +639,7 @@ describe("OpenCodeRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       })).toThrow("bad");

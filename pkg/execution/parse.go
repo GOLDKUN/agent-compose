@@ -14,13 +14,14 @@ const (
 )
 
 type agentExecResponse struct {
-	Provider   string `json:"provider"`
-	ThreadID   string `json:"threadId"`
-	StopReason string `json:"stopReason"`
-	FinalText  string `json:"finalText"`
-	JSON       any    `json:"json"`
-	Transcript string `json:"transcript"`
-	Stderr     string `json:"stderr"`
+	Provider        string `json:"provider"`
+	ThreadID        string `json:"threadId"`
+	StopReason      string `json:"stopReason"`
+	FinalText       string `json:"finalText"`
+	FinalTextSource string `json:"finalTextSource"`
+	JSON            any    `json:"json"`
+	Transcript      string `json:"transcript"`
+	Stderr          string `json:"stderr"`
 }
 
 func ParseAgentExecResult(agent string, result domain.ExecResult) (domain.AgentRunResult, error) {
@@ -47,17 +48,44 @@ func ParseAgentExecResult(agent string, result domain.ExecResult) (domain.AgentR
 	} else if strings.TrimSpace(humanOutput) == "" {
 		humanOutput = strings.TrimSpace(payload.FinalText)
 	}
+	finalText := strings.TrimSpace(payload.FinalText)
+	transcript := strings.TrimSpace(payload.Transcript)
 	return domain.AgentRunResult{
-		Agent:         firstNonEmpty(strings.TrimSpace(payload.Provider), domain.NormalizeAgentKind(agent)),
-		DisplayOutput: humanOutput,
-		FinalText:     strings.TrimSpace(payload.FinalText),
-		JSONText:      strings.TrimSpace(payload.FinalText),
-		Transcript:    strings.TrimSpace(payload.Transcript),
-		ThreadID:      strings.TrimSpace(payload.ThreadID),
-		StopReason:    strings.TrimSpace(payload.StopReason),
-		ExitCode:      result.ExitCode,
-		Success:       result.Success,
+		Agent:           firstNonEmpty(strings.TrimSpace(payload.Provider), domain.NormalizeAgentKind(agent)),
+		DisplayOutput:   humanOutput,
+		FinalText:       finalText,
+		FinalTextSource: normalizeFinalTextSource(payload.FinalTextSource, finalText, transcript),
+		JSONText:        finalText,
+		Transcript:      transcript,
+		ThreadID:        strings.TrimSpace(payload.ThreadID),
+		StopReason:      strings.TrimSpace(payload.StopReason),
+		ExitCode:        result.ExitCode,
+		Success:         result.Success,
 	}, nil
+}
+
+func normalizeFinalTextSource(source, finalText, transcript string) domain.AgentFinalTextSource {
+	switch normalized := domain.AgentFinalTextSource(strings.TrimSpace(source)); normalized {
+	case domain.AgentFinalTextSourceProviderMessage:
+		return domain.AgentFinalTextSourceProviderMessage
+	case domain.AgentFinalTextSourceTranscriptFallback:
+		return domain.AgentFinalTextSourceTranscriptFallback
+	case domain.AgentFinalTextSourceNone:
+		return domain.AgentFinalTextSourceNone
+	case "":
+		if finalText == "" {
+			return domain.AgentFinalTextSourceNone
+		}
+		if transcript != "" && finalText == transcript {
+			return domain.AgentFinalTextSourceTranscriptFallback
+		}
+		return domain.AgentFinalTextSourceProviderMessage
+	default:
+		if finalText == "" {
+			return domain.AgentFinalTextSourceNone
+		}
+		return domain.AgentFinalTextSourceTranscriptFallback
+	}
 }
 
 func ParseCommandExecResult(result domain.ExecResult) (domain.RuntimeCommandResult, error) {

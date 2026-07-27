@@ -364,7 +364,7 @@ After the `prompt` subcommand completes successfully, stdout contains one
 structured result line:
 
 ```text
-__AGENT_RESULT__{"provider":"codex","threadId":"...","stopReason":"completed","finalText":"...","transcript":"...","stderr":""}
+__AGENT_RESULT__{"provider":"codex","threadId":"...","stopReason":"completed","finalText":"...","finalTextSource":"provider_message","transcript":"...","stderr":""}
 ```
 
 Fixed prefix:
@@ -381,8 +381,14 @@ JSON fields:
 | `threadId` | string | agent-compose thread id; adapters map provider-native resume ids into this field |
 | `stopReason` | string | Stop reason, usually `completed` |
 | `finalText` | string | Final response text |
+| `finalTextSource` | string | `provider_message` when the provider emitted a final assistant response, `transcript_fallback` when compatibility fallback copied the transcript, or `none` when no text is available |
 | `transcript` | string | Aggregated human-readable transcript |
 | `stderr` | string | Reserved field; currently empty for most providers |
+
+Consumers that create conversation messages must only use `finalText` when
+`finalTextSource` is `provider_message`. A transcript fallback remains available
+for compatibility and diagnostics, but represents execution activity rather
+than an assistant-authored response.
 
 The host parser searches backward from the last stdout line for the payload. If
 stdout does not contain it, the parser also searches merged output. The parser is
