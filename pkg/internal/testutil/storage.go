@@ -9,7 +9,7 @@ import (
 
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 	storagesqlite "agent-compose/pkg/storage/sqlite"
 )
 
@@ -27,13 +27,13 @@ func OpenConfigStore(t testing.TB, di do.Injector) (*configstore.ConfigStore, er
 
 // OpenStores opens config and sandbox stores over one migrated test database.
 // Both stores and the database are closed automatically with the test.
-func OpenStores(t testing.TB, config *appconfig.Config) (*configstore.ConfigStore, *sessionstore.Store, error) {
+func OpenStores(t testing.TB, config *appconfig.Config) (*configstore.ConfigStore, *sandboxstore.Store, error) {
 	t.Helper()
 	database, err := openDatabase(t, config)
 	if err != nil {
 		return nil, nil, err
 	}
-	sandboxes, err := sessionstore.NewWithDatabase(config, database.DB())
+	sandboxes, err := sandboxstore.NewWithDatabase(config, database.DB())
 	if err != nil {
 		return nil, nil, err
 	}

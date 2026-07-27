@@ -15,8 +15,8 @@ import (
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/imagecache"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestImageCacheCleanerProtectsResumableSandboxAndReleasesReclaimedSandbox(t *testing.T) {
@@ -25,9 +25,9 @@ func TestImageCacheCleanerProtectsResumableSandboxAndReleasesReclaimedSandbox(t 
 	if err := os.MkdirAll(filepath.Join(root, sandboxID), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := sessions.WriteOwnershipRecord(root, sessions.OwnershipRecord{
+	if err := sandboxes.WriteOwnershipRecord(root, sandboxes.OwnershipRecord{
 		SandboxID: sandboxID, SandboxPath: filepath.Join(root, sandboxID), LifecycleState: "active",
-		CacheDependencies: []sessions.CacheDependency{{Domain: "runtime-image", Identity: "sha256:guest"}},
+		CacheDependencies: []sandboxes.CacheDependency{{Domain: "runtime-image", Identity: "sha256:guest"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -56,9 +56,9 @@ func TestImageCacheCleanerProtectsResumableSandboxAndReleasesReclaimedSandbox(t 
 func TestImageCacheCleanerSkipsOnlyConfirmedOrphanOwnership(t *testing.T) {
 	root := t.TempDir()
 	for _, sandboxID := range []string{"orphan", "unreadable"} {
-		if err := sessions.WriteOwnershipRecord(root, sessions.OwnershipRecord{
+		if err := sandboxes.WriteOwnershipRecord(root, sandboxes.OwnershipRecord{
 			SandboxID: sandboxID, SandboxPath: filepath.Join(root, sandboxID), LifecycleState: "active",
-			CacheDependencies: []sessions.CacheDependency{{Domain: "runtime-image", Identity: sandboxID + ":latest"}},
+			CacheDependencies: []sandboxes.CacheDependency{{Domain: "runtime-image", Identity: sandboxID + ":latest"}},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -109,7 +109,7 @@ func TestImageCacheCleanerSerializesProtectionSnapshotWithSandboxRegistration(t 
 		DataRoot: root, SandboxRoot: filepath.Join(root, "sandboxes"), RuntimeDriver: "docker",
 		DefaultImage: "guest:latest", DockerDefaultImage: "guest:latest", JupyterProxyBasePath: "/jupyter",
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}

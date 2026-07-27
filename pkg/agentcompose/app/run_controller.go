@@ -14,12 +14,12 @@ import (
 	"agent-compose/pkg/capabilities"
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/dashboard"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/volumes"
 	"agent-compose/pkg/workspaces"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -34,7 +34,7 @@ func NewRunController(di do.Injector) (*runs.Controller, error) {
 	runtimeProvider := do.MustInvoke[adapters.RuntimeProvider](di)
 	return runs.NewController(runs.ControllerDependencies{
 		Config:           do.MustInvoke[*appconfig.Config](di),
-		Store:            do.MustInvoke[*sessionstore.Store](di),
+		Store:            do.MustInvoke[*sandboxstore.Store](di),
 		ConfigDB:         do.MustInvoke[*configstore.ConfigStore](di),
 		WorkspaceEnsurer: do.MustInvoke[workspaces.WorkspaceEnsurer](di),
 		Driver:           do.MustInvoke[*adapters.SandboxDriver](di),
@@ -42,17 +42,17 @@ func NewRunController(di do.Injector) (*runs.Controller, error) {
 		Runtime: func(session *domain.Sandbox) (runs.Runtime, error) {
 			return runtimeProvider.ForSession(session)
 		},
-		Images:         imageBackends.Auto,
-		LoaderEngine:   do.MustInvoke[loaders.LoaderEngine](di),
-		Cap:            do.MustInvoke[capabilities.Provider](di),
-		Volumes:        do.MustInvoke[*volumes.Manager](di),
-		Streams:        do.MustInvoke[*sessions.StreamBroker](di),
-		Bus:            do.MustInvoke[*loaders.Bus](di),
-		Dashboard:      dashboardHub,
-		CapTokens:      do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
-		RunLogs:        do.MustInvoke[*runs.RunLogHub](di),
-		LifecycleLocks: do.MustInvoke[*sessions.LifecycleLocks](di),
-		Removal:        do.MustInvoke[*sessions.RemovalCoordinator](di),
+		Images:          imageBackends.Auto,
+		SchedulerEngine: do.MustInvoke[schedulers.SchedulerEngine](di),
+		Cap:             do.MustInvoke[capabilities.Provider](di),
+		Volumes:         do.MustInvoke[*volumes.Manager](di),
+		Streams:         do.MustInvoke[*sandboxes.StreamBroker](di),
+		Bus:             do.MustInvoke[*schedulers.Bus](di),
+		Dashboard:       dashboardHub,
+		CapTokens:       do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
+		RunLogs:         do.MustInvoke[*runs.RunLogHub](di),
+		LifecycleLocks:  do.MustInvoke[*sandboxes.LifecycleLocks](di),
+		Removal:         do.MustInvoke[*sandboxes.RemovalCoordinator](di),
 	}), nil
 }
 

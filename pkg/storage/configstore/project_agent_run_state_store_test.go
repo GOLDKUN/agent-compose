@@ -18,11 +18,22 @@ func TestListProjectAgentRunStatesAggregatesAllAgentRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
+	for _, agentName := range []string{"agent-a", "agent-b"} {
+		agentID, err := domain.StableProjectAgentID(project.ID, agentName)
+		if err != nil {
+			t.Fatalf("derive agent id for %s: %v", agentName, err)
+		}
+		if _, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{ID: agentID, ProjectID: project.ID, AgentName: agentName}); err != nil {
+			t.Fatalf("create project agent %s: %v", agentName, err)
+		}
+	}
+	agentAID, _ := domain.StableProjectAgentID(project.ID, "agent-a")
+	agentBID, _ := domain.StableProjectAgentID(project.ID, "agent-b")
 	runs := []domain.ProjectRunRecord{
-		{RunID: "a-old-manual", ProjectID: project.ID, AgentName: "agent-a", Status: domain.ProjectRunStatusRunning, Source: domain.ProjectRunSourceManual},
-		{RunID: "a-scheduler", ProjectID: project.ID, AgentName: "agent-a", Status: domain.ProjectRunStatusRunning, Source: domain.ProjectRunSourceScheduler},
-		{RunID: "a-latest", ProjectID: project.ID, AgentName: "agent-a", Status: domain.ProjectRunStatusFailed, Source: domain.ProjectRunSourceAPI},
-		{RunID: "b-latest", ProjectID: project.ID, AgentName: "agent-b", Status: domain.ProjectRunStatusSucceeded, Source: domain.ProjectRunSourceManual},
+		{RunID: "a-old-manual", ProjectID: project.ID, AgentName: "agent-a", AgentID: agentAID, Status: domain.ProjectRunStatusRunning, Source: domain.ProjectRunSourceManual},
+		{RunID: "a-scheduler", ProjectID: project.ID, AgentName: "agent-a", AgentID: agentAID, Status: domain.ProjectRunStatusRunning, Source: domain.ProjectRunSourceScheduler},
+		{RunID: "a-latest", ProjectID: project.ID, AgentName: "agent-a", AgentID: agentAID, Status: domain.ProjectRunStatusFailed, Source: domain.ProjectRunSourceAPI},
+		{RunID: "b-latest", ProjectID: project.ID, AgentName: "agent-b", AgentID: agentBID, Status: domain.ProjectRunStatusSucceeded, Source: domain.ProjectRunSourceManual},
 	}
 	for _, run := range runs {
 		if _, err := store.CreateProjectRun(ctx, run); err != nil {
@@ -48,8 +59,8 @@ func TestListProjectAgentRunStatesAggregatesAllAgentRuns(t *testing.T) {
 	if _, err := store.db.ExecContext(ctx, `WITH RECURSIVE numbers(n) AS (
 		SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < 205
 	)
-	INSERT INTO project_run(run_id, project_id, agent_name, status, source, created_at, updated_at)
-	SELECT printf('bulk-%03d', n), ?, 'agent-b', ?, ?, 1600000000 + n, 1600000000 + n FROM numbers`, project.ID, domain.ProjectRunStatusRunning, domain.ProjectRunSourceManual); err != nil {
+	INSERT INTO project_run(run_id, project_id, agent_name, agent_id, status, source, created_at, updated_at)
+	SELECT printf('bulk-%03d', n), ?, 'agent-b', ?, ?, ?, 1600000000 + n, 1600000000 + n FROM numbers`, project.ID, agentBID, domain.ProjectRunStatusRunning, domain.ProjectRunSourceManual); err != nil {
 		t.Fatalf("create runs beyond legacy page limit: %v", err)
 	}
 

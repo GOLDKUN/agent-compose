@@ -14,18 +14,18 @@ import (
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 type AgentExecutor struct {
 	config  *appconfig.Config
-	store   *sessionstore.Store
-	streams *sessions.StreamBroker
+	store   *sandboxstore.Store
+	streams *sandboxes.StreamBroker
 	runner  *AgentRunner
 }
 
-func NewAgentExecutor(config *appconfig.Config, store *sessionstore.Store, streams *sessions.StreamBroker, runner *AgentRunner) *AgentExecutor {
+func NewAgentExecutor(config *appconfig.Config, store *sandboxstore.Store, streams *sandboxes.StreamBroker, runner *AgentRunner) *AgentExecutor {
 	return &AgentExecutor{config: config, store: store, streams: streams, runner: runner}
 }
 

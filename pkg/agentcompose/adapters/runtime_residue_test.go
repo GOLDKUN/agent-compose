@@ -9,7 +9,7 @@ import (
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 )
 
 func TestBoxLiteLifecycleResidueUsesJournalOwnershipAndOfficialRemoval(t *testing.T) {
@@ -19,8 +19,8 @@ func TestBoxLiteLifecycleResidueUsesJournalOwnershipAndOfficialRemoval(t *testin
 	if err := os.MkdirAll(filepath.Join(sandboxPath, "workspace"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := sessions.WriteOwnershipRecord(root, sessions.OwnershipRecord{
-		Version: sessions.OwnershipRecordVersion, SandboxID: sandboxID,
+	if err := sandboxes.WriteOwnershipRecord(root, sandboxes.OwnershipRecord{
+		Version: sandboxes.OwnershipRecordVersion, SandboxID: sandboxID,
 		Driver: driverpkg.RuntimeDriverBoxlite, RuntimeID: "box-id", SandboxPath: sandboxPath, LifecycleState: "active",
 	}); err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestBoxLiteLifecycleResidueUsesJournalOwnershipAndOfficialRemoval(t *testin
 	if _, err := os.Stat(sandboxPath); !os.IsNotExist(err) {
 		t.Fatalf("sandbox residue remains: %v", err)
 	}
-	if _, err := sessions.ReadOwnershipRecord(root, sandboxID); !os.IsNotExist(err) {
+	if _, err := sandboxes.ReadOwnershipRecord(root, sandboxID); !os.IsNotExist(err) {
 		t.Fatalf("lifecycle journal remains: %v", err)
 	}
 }
@@ -53,12 +53,12 @@ func TestBoxLiteLifecycleResidueRejectsChangedOwnership(t *testing.T) {
 	if err := os.MkdirAll(sandboxPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := sessions.WriteOwnershipRecord(root, sessions.OwnershipRecord{Version: 1, SandboxID: sandboxID, Driver: driverpkg.RuntimeDriverBoxlite, RuntimeID: "new-box", SandboxPath: sandboxPath, LifecycleState: "active"}); err != nil {
+	if err := sandboxes.WriteOwnershipRecord(root, sandboxes.OwnershipRecord{Version: 1, SandboxID: sandboxID, Driver: driverpkg.RuntimeDriverBoxlite, RuntimeID: "new-box", SandboxPath: sandboxPath, LifecycleState: "active"}); err != nil {
 		t.Fatal(err)
 	}
 	runtime := &boxLiteResidueRuntimeFake{}
 	manager := NewRuntimeResidueManager(&appconfig.Config{SandboxRoot: root}, runtime)
-	err := manager.RemoveRuntimeResidue(context.Background(), sessions.RuntimeResidue{Driver: driverpkg.RuntimeDriverBoxlite, SandboxID: sandboxID, RuntimeID: "old-box", OwnershipValid: true, Removable: true})
+	err := manager.RemoveRuntimeResidue(context.Background(), sandboxes.RuntimeResidue{Driver: driverpkg.RuntimeDriverBoxlite, SandboxID: sandboxID, RuntimeID: "old-box", OwnershipValid: true, Removable: true})
 	if err == nil || runtime.calls != 0 {
 		t.Fatalf("changed ownership removal err=%v calls=%d", err, runtime.calls)
 	}

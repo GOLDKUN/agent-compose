@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -66,7 +65,7 @@ type Config struct {
 	CodexStreamIdleTimeout     time.Duration
 	RuntimeBaseURL             string
 	AgentTimeout               time.Duration
-	LoaderRunTimeout           time.Duration
+	SchedulerRunTimeout        time.Duration
 	RuntimeDriver              string
 	BoxliteHome                string
 	BoxliteRuntimeDir          string
@@ -133,21 +132,10 @@ func NewConfig(di do.Injector) (*Config, error) {
 		return nil, err
 	}
 
-	sandboxRootExplicit := strings.TrimSpace(os.Getenv("SANDBOX_ROOT")) != "" || strings.TrimSpace(os.Getenv("SESSION_ROOT")) != ""
-	sandboxRoot, err := envWithLegacy(logger, "SANDBOX_ROOT", "SESSION_ROOT")
-	if err != nil {
-		return nil, err
-	}
+	sandboxRootExplicit := strings.TrimSpace(os.Getenv("SANDBOX_ROOT")) != ""
+	sandboxRoot := strings.TrimSpace(os.Getenv("SANDBOX_ROOT"))
 	if sandboxRoot == "" {
-		legacyRoot := filepath.Join(dataRoot, "sessions")
-		if nonEmpty, inspectErr := pathHasEntries(legacyRoot); inspectErr != nil {
-			return nil, fmt.Errorf("inspect legacy sessions root %s: %w", legacyRoot, inspectErr)
-		} else if nonEmpty {
-			sandboxRoot = legacyRoot
-			logger.Warn("using deprecated sessions storage root", "path", legacyRoot, "replacement", filepath.Join(dataRoot, "sandboxes"))
-		} else {
-			sandboxRoot = filepath.Join(dataRoot, "sandboxes")
-		}
+		sandboxRoot = filepath.Join(dataRoot, "sandboxes")
 	}
 
 	httpListen := strings.TrimSpace(os.Getenv("HTTP_LISTEN"))
@@ -237,10 +225,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 	if dockerHome == "" {
 		dockerHome = filepath.Join(dataRoot, "docker")
 	}
-	dockerHostSandboxRoot, err := envWithLegacy(logger, "DOCKER_HOST_SANDBOX_ROOT", "DOCKER_HOST_SESSION_ROOT")
-	if err != nil {
-		return nil, err
-	}
+	dockerHostSandboxRoot := strings.TrimSpace(os.Getenv("DOCKER_HOST_SANDBOX_ROOT"))
 
 	microsandboxHome := getenvFirst("MICROSANDBOX_HOME", "MSB_HOME")
 	if microsandboxHome == "" {
@@ -344,9 +329,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 	}
 
 	startTimeout := 30 * time.Minute
-	if raw, err := envWithLegacy(logger, "SANDBOX_START_TIMEOUT", "SESSION_START_TIMEOUT"); err != nil {
-		return nil, err
-	} else if raw != "" {
+	if raw := os.Getenv("SANDBOX_START_TIMEOUT"); raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
 			logger.Warn("failed to parse SANDBOX_START_TIMEOUT", "value", raw, "error", err)
 		} else {
@@ -355,9 +338,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 	}
 
 	stopTimeout := 30 * time.Second
-	if raw, err := envWithLegacy(logger, "SANDBOX_STOP_TIMEOUT", "SESSION_STOP_TIMEOUT"); err != nil {
-		return nil, err
-	} else if raw != "" {
+	if raw := os.Getenv("SANDBOX_STOP_TIMEOUT"); raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
 			logger.Warn("failed to parse SANDBOX_STOP_TIMEOUT", "value", raw, "error", err)
 		} else {
@@ -476,7 +457,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		CodexStreamIdleTimeout:     codexRuntime.streamIdleTimeout,
 		RuntimeBaseURL:             runtimeBaseURL,
 		AgentTimeout:               agentTimeout,
-		LoaderRunTimeout:           loaderRunTimeout,
+		SchedulerRunTimeout:        loaderRunTimeout,
 		RuntimeDriver:              runtimeDriver,
 		BoxliteHome:                boxliteHome,
 		BoxliteRuntimeDir:          boxliteRuntimeDir,
@@ -714,24 +695,6 @@ func envWithLegacy(logger *slog.Logger, newName, oldName string) (string, error)
 		return oldValue, nil
 	}
 	return "", nil
-}
-
-func pathHasEntries(path string) (bool, error) {
-	info, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if !info.IsDir() {
-		return false, nil
-	}
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return false, err
-	}
-	return len(entries) > 0, nil
 }
 
 func mustAbs(path string) string {

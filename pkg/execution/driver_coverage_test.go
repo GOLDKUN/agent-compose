@@ -71,7 +71,7 @@ func TestDriverConversionWorkflows(t *testing.T) {
 	}
 
 	config := &appconfig.Config{GuestWorkspacePath: "/workspace", GuestStateRoot: "/state", GuestRuntimeRoot: "/runtime", Version: "v-test"}
-	commandReq := RuntimeCommandRequestPayload(config, domain.LoaderCommandRequest{
+	commandReq := RuntimeCommandRequestPayload(config, domain.SchedulerCommandRequest{
 		Mode: "SHELL", Script: "echo ok", Env: map[string]string{"A": "B"},
 	}, "/state/cells/cell-1")
 	if commandReq.Mode != "shell" || commandReq.Cwd != "/workspace" || commandReq.MaxOutputBytes != DefaultLoaderCommandMaxOutputBytes {

@@ -17,7 +17,7 @@ import (
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -46,7 +46,7 @@ type SandboxProxyStateStore interface {
 }
 
 type SandboxWatchSource interface {
-	SubscribeSandbox(string) (<-chan sessions.WatchEvent, func())
+	SubscribeSandbox(string) (<-chan sandboxes.WatchEvent, func())
 }
 
 type SandboxStatsRuntime interface {
@@ -60,8 +60,8 @@ type SandboxRuntimeRemover interface {
 }
 
 type SandboxRemovalCoordinator interface {
-	Remove(context.Context, string, bool) (sessions.RemovalResult, error)
-	Prune(context.Context, sessions.PruneRequest) (sessions.PruneResult, error)
+	Remove(context.Context, string, bool) (sandboxes.RemovalResult, error)
+	Prune(context.Context, sandboxes.PruneRequest) (sandboxes.PruneResult, error)
 }
 
 type SandboxDashboardNotifier interface {
@@ -89,7 +89,7 @@ type SandboxHandler struct {
 	delegate   SandboxLifecycleDelegate
 	store      SandboxStore
 	remover    SandboxRuntimeRemover
-	reconciler SessionRuntimeReconciler
+	reconciler SandboxRuntimeReconciler
 	dashboard  SandboxDashboardNotifier
 	stats      SandboxStatsRuntimeResolver
 	runTargets SandboxRunTargetResolver
@@ -108,7 +108,7 @@ func (h *SandboxHandler) WithRunTargetResolver(resolver SandboxRunTargetResolver
 
 func NewSandboxHandler(delegate SandboxLifecycleDelegate, store SandboxStore, remover SandboxRuntimeRemover, dashboard SandboxDashboardNotifier, stats ...SandboxStatsRuntimeResolver) *SandboxHandler {
 	handler := &SandboxHandler{delegate: delegate, store: store, remover: remover, dashboard: dashboard}
-	if reconciler, ok := delegate.(SessionRuntimeReconciler); ok {
+	if reconciler, ok := delegate.(SandboxRuntimeReconciler); ok {
 		handler.reconciler = reconciler
 	}
 	if len(stats) > 0 {
@@ -244,32 +244,32 @@ func (h *SandboxHandler) WatchSandbox(ctx context.Context, req *connect.Request[
 	}
 }
 
-func sandboxWatchEventToV2(event sessions.WatchEvent) *agentcomposev2.WatchSandboxResponse {
+func sandboxWatchEventToV2(event sandboxes.WatchEvent) *agentcomposev2.WatchSandboxResponse {
 	response := &agentcomposev2.WatchSandboxResponse{CellId: event.CellID, Chunk: event.Chunk, Stream: StdioStreamToProto(event.Stream)}
 	switch event.EventType {
-	case sessions.WatchEventTypeSandboxUpdated:
+	case sandboxes.WatchEventTypeSandboxUpdated:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_SANDBOX_UPDATED
 		if event.Sandbox != nil {
 			response.Sandbox = sandboxToV2(&domain.Sandbox{Summary: *event.Sandbox})
 		}
-	case sessions.WatchEventTypeCellStarted:
+	case sandboxes.WatchEventTypeCellStarted:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_STARTED
 		response.Cell = sandboxHistoryCellToV2(event.Cell)
-	case sessions.WatchEventTypeCellOutput:
+	case sandboxes.WatchEventTypeCellOutput:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_OUTPUT
-	case sessions.WatchEventTypeCellCompleted:
+	case sandboxes.WatchEventTypeCellCompleted:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_COMPLETED
 		response.Cell = sandboxHistoryCellToV2(event.Cell)
-	case sessions.WatchEventTypeEventAdded:
+	case sandboxes.WatchEventTypeEventAdded:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_EVENT_ADDED
 		response.Event = sandboxHistoryEventToV2(event.Event)
 	}
 	return response
 }
 
-func (h *SandboxHandler) sandboxWatchEventToV2(ctx context.Context, event sessions.WatchEvent) *agentcomposev2.WatchSandboxResponse {
+func (h *SandboxHandler) sandboxWatchEventToV2(ctx context.Context, event sandboxes.WatchEvent) *agentcomposev2.WatchSandboxResponse {
 	response := sandboxWatchEventToV2(event)
-	if event.EventType == sessions.WatchEventTypeSandboxUpdated && event.Sandbox != nil {
+	if event.EventType == sandboxes.WatchEventTypeSandboxUpdated && event.Sandbox != nil {
 		response.Sandbox = h.sandboxToV2(ctx, &domain.Sandbox{Summary: *event.Sandbox})
 	}
 	return response
@@ -426,10 +426,10 @@ func (h *SandboxHandler) RemoveSandbox(ctx context.Context, req *connect.Request
 	if h.removal != nil {
 		result, err := h.removal.Remove(ctx, sandboxID, req.Msg.GetForce())
 		if err != nil {
-			if errors.Is(err, sessions.ErrSandboxRunning) {
+			if errors.Is(err, sandboxes.ErrSandboxRunning) {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
-			if errors.Is(err, sessions.ErrOwnershipUnknown) || errors.Is(err, sessions.ErrUnsafeResidue) {
+			if errors.Is(err, sandboxes.ErrOwnershipUnknown) || errors.Is(err, sandboxes.ErrUnsafeResidue) {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 			return nil, ConnectErrorForDomain(err)
@@ -488,7 +488,7 @@ func (h *SandboxHandler) PruneSandboxes(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.removal.Prune(ctx, sessions.PruneRequest{
+	result, err := h.removal.Prune(ctx, sandboxes.PruneRequest{
 		ProjectID: strings.TrimSpace(req.Msg.GetProjectId()), Statuses: append([]string(nil), req.Msg.GetStatus()...),
 		AgentName: strings.TrimSpace(req.Msg.GetAgentName()), Driver: strings.TrimSpace(req.Msg.GetDriver()),
 		OlderThan: olderThan, IncludeOrphans: req.Msg.GetIncludeOrphans(), Force: req.Msg.GetForce(),
@@ -502,11 +502,11 @@ func (h *SandboxHandler) PruneSandboxes(ctx context.Context, req *connect.Reques
 	}), nil
 }
 
-func sandboxPruneCandidatesToProto(items []sessions.PruneCandidate) []*agentcomposev2.SandboxPruneCandidate {
+func sandboxPruneCandidatesToProto(items []sandboxes.PruneCandidate) []*agentcomposev2.SandboxPruneCandidate {
 	out := make([]*agentcomposev2.SandboxPruneCandidate, 0, len(items))
 	for _, item := range items {
 		kind := agentcomposev2.SandboxPruneCandidateKind_SANDBOX_PRUNE_CANDIDATE_KIND_SANDBOX_RECORD
-		if item.Kind == sessions.PruneCandidateRuntimeResidue {
+		if item.Kind == sandboxes.PruneCandidateRuntimeResidue {
 			kind = agentcomposev2.SandboxPruneCandidateKind_SANDBOX_PRUNE_CANDIDATE_KIND_RUNTIME_RESIDUE
 		}
 		candidate := &agentcomposev2.SandboxPruneCandidate{

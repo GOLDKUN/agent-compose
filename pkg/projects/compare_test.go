@@ -21,11 +21,11 @@ func TestManagedAgentDefinitionChangeActionComparesEnabledState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			existing := domain.AgentDefinition{ID: "agent-1", Name: "worker", Enabled: tt.existing}
+			existing := domain.ProjectAgentRecord{ID: "agent-1", AgentName: "worker", SchedulerEnabled: tt.existing}
 			current := existing
-			current.Enabled = tt.current
-			if got := ManagedAgentDefinitionChangeAction(existing, true, current); got != tt.want {
-				t.Fatalf("ManagedAgentDefinitionChangeAction() = %q, want %q", got, tt.want)
+			current.SchedulerEnabled = tt.current
+			if got := ProjectAgentChangeAction(existing, true, current); got != tt.want {
+				t.Fatalf("ProjectAgentChangeAction() = %q, want %q", got, tt.want)
 			}
 		})
 	}

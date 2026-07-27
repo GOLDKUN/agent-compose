@@ -24,7 +24,7 @@ type RuntimeCommandRequest struct {
 	ArtifactDir    string            `json:"artifactDir"`
 }
 
-func RuntimeCommandRequestPayload(config *appconfig.Config, request domain.LoaderCommandRequest, guestCellDir string) RuntimeCommandRequest {
+func RuntimeCommandRequestPayload(config *appconfig.Config, request domain.SchedulerCommandRequest, guestCellDir string) RuntimeCommandRequest {
 	return RuntimeCommandRequestPayloadFromCommand(config, request.Mode, request.Command, request.Args, request.Script, request.Cwd, request.Env, request.TimeoutMs, request.MaxOutputBytes, guestCellDir)
 }
 

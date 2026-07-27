@@ -14,7 +14,7 @@ import (
 	"agent-compose/pkg/internal/testutil"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 
 	"github.com/samber/do/v2"
 )
@@ -146,7 +146,7 @@ func TestSandboxDriverStartSandboxVMSavesRuntimeState(t *testing.T) {
 		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestSandboxDriverStopSandboxVMAddsDockerStopContextMargin(t *testing.T) {
 		SandboxStartTimeout: 2 * time.Second,
 		SandboxStopTimeout:  2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -415,7 +415,7 @@ func TestSandboxDriverStopPreservesFacadeTokensUntilRemove(t *testing.T) {
 		SandboxStartTimeout: 2 * time.Second,
 		SandboxStopTimeout:  2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestSandboxDriverResumeReusesRuntimeWithoutRefreshingStartupEnv(t *testing.
 		SandboxStartTimeout: 2 * time.Second,
 		SandboxStopTimeout:  2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -530,7 +530,7 @@ func TestSandboxDriverResumeRecordsAttemptBeforeRuntimeFailure(t *testing.T) {
 		RuntimeDriver: driverpkg.RuntimeDriverBoxlite, BoxliteHome: filepath.Join(root, "boxlite"), DefaultImage: "guest:latest",
 		GuestWorkspacePath: "/workspace", SandboxStartTimeout: 2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -576,7 +576,7 @@ func TestSandboxDriverStartSandboxVMUsesPreparedAgentEnvironmentWithoutAddingPro
 		GuestWorkspacePath:  "/workspace",
 		SandboxStartTimeout: 2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}

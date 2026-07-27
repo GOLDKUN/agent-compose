@@ -101,7 +101,7 @@ func TestIntegrationCLISchedulerPruneMapsFiltersAndJSONStats(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
 		t.Fatalf("decode output: %v\n%s", err, stdout)
 	}
-	if !output.DryRun || output.Matched.Runs != 2 || output.Matched.LoaderEvents != 5 || output.Matched.ArtifactBytes != 19 ||
+	if !output.DryRun || output.Matched.Runs != 2 || output.Matched.SchedulerEvents != 5 || output.Matched.ArtifactBytes != 19 ||
 		output.Scheduler != "reviewer" || output.TriggerID != captured.GetTriggerId() || !slices.Equal(output.Statuses, []string{"failed", "succeeded"}) {
 		t.Fatalf("output=%#v", output)
 	}

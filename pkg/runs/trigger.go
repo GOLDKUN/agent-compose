@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -53,16 +53,16 @@ func (c *Controller) resolveTriggerForManualRun(ctx context.Context, req RunAgen
 	if strings.TrimSpace(result.Request.OutputSchemaJSON) == "" {
 		result.Request.OutputSchemaJSON = captured.request.OutputSchema
 	}
-	result.Request.Env = append(result.Request.Env, envVarSpecsFromSandboxEnv(domain.LoaderAgentSandboxEnv(captured.request))...)
-	effectivePolicy := domain.LoaderSandboxPolicyNew
+	result.Request.Env = append(result.Request.Env, envVarSpecsFromSandboxEnv(domain.SchedulerAgentSandboxEnv(captured.request))...)
+	effectivePolicy := domain.SchedulerSandboxPolicyNew
 	if strings.TrimSpace(loader.Summary.SandboxPolicy) != "" {
 		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(loader.Summary.SandboxPolicy)
 	}
-	if strings.TrimSpace(domain.LoaderAgentSandboxPolicy(captured.request)) != "" {
-		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(domain.LoaderAgentSandboxPolicy(captured.request))
+	if strings.TrimSpace(domain.SchedulerAgentSandboxPolicy(captured.request)) != "" {
+		effectivePolicy = domain.NormalizeLoaderSandboxPolicy(domain.SchedulerAgentSandboxPolicy(captured.request))
 	}
-	if effectivePolicy == domain.LoaderSandboxPolicySticky {
-		configHash, err := loaders.LoaderSandboxConfigHash(loader)
+	if effectivePolicy == domain.SchedulerSandboxPolicySticky {
+		configHash, err := schedulers.SchedulerSandboxConfigHash(loader)
 		if err != nil {
 			return result, err
 		}
@@ -75,21 +75,21 @@ func (c *Controller) resolveTriggerForManualRun(ctx context.Context, req RunAgen
 	return result, nil
 }
 
-func (c *Controller) manualTriggerLoader(ctx context.Context, projectID, agentName, triggerID string) (domain.ProjectSchedulerRecord, domain.Loader, *domain.LoaderTrigger, error) {
+func (c *Controller) manualTriggerLoader(ctx context.Context, projectID, agentName, triggerID string) (domain.ProjectSchedulerRecord, domain.Scheduler, *domain.SchedulerTrigger, error) {
 	projectID = strings.TrimSpace(projectID)
 	agentName = strings.TrimSpace(agentName)
 	triggerID = strings.TrimSpace(triggerID)
 	schedulers, err := c.configDB.ListProjectSchedulers(ctx, projectID)
 	if err != nil {
-		return domain.ProjectSchedulerRecord{}, domain.Loader{}, nil, err
+		return domain.ProjectSchedulerRecord{}, domain.Scheduler{}, nil, err
 	}
 	for _, scheduler := range schedulers {
-		if strings.TrimSpace(scheduler.AgentName) != agentName || strings.TrimSpace(scheduler.ManagedLoaderID) == "" {
+		if strings.TrimSpace(scheduler.AgentName) != agentName || strings.TrimSpace(scheduler.ID) == "" {
 			continue
 		}
-		loader, err := c.configDB.GetLoader(ctx, scheduler.ManagedLoaderID)
+		loader, err := c.configDB.GetLoader(ctx, scheduler.ID)
 		if err != nil {
-			return domain.ProjectSchedulerRecord{}, domain.Loader{}, nil, err
+			return domain.ProjectSchedulerRecord{}, domain.Scheduler{}, nil, err
 		}
 		if !managedLoaderMatchesProjectAgent(loader, projectID, agentName, scheduler.SchedulerID) {
 			continue
@@ -103,10 +103,10 @@ func (c *Controller) manualTriggerLoader(ctx context.Context, projectID, agentNa
 		}
 	}
 	id := strings.Join([]string{projectID, agentName, triggerID}, "/")
-	return domain.ProjectSchedulerRecord{}, domain.Loader{}, nil, domain.ResourceError(domain.ErrNotFound, "project trigger", id, fmt.Sprintf("project trigger %s not found", id), nil)
+	return domain.ProjectSchedulerRecord{}, domain.Scheduler{}, nil, domain.ResourceError(domain.ErrNotFound, "project trigger", id, fmt.Sprintf("project trigger %s not found", id), nil)
 }
 
-func managedLoaderMatchesProjectAgent(loader domain.Loader, projectID, agentName, schedulerID string) bool {
+func managedLoaderMatchesProjectAgent(loader domain.Scheduler, projectID, agentName, schedulerID string) bool {
 	summary := loader.Summary
 	return strings.TrimSpace(summary.ManagedProjectID) == strings.TrimSpace(projectID) &&
 		strings.TrimSpace(summary.ManagedAgentName) == strings.TrimSpace(agentName) &&
@@ -115,10 +115,10 @@ func managedLoaderMatchesProjectAgent(loader domain.Loader, projectID, agentName
 
 type capturedManualTriggerAgentRequest struct {
 	prompt  string
-	request domain.LoaderAgentRequest
+	request domain.SchedulerAgentRequest
 }
 
-func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, loader domain.Loader, trigger *domain.LoaderTrigger, payloadJSON string) (capturedManualTriggerAgentRequest, error) {
+func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON string) (capturedManualTriggerAgentRequest, error) {
 	if c.loaderEngine == nil {
 		return capturedManualTriggerAgentRequest{}, fmt.Errorf("loader engine is required")
 	}
@@ -127,7 +127,7 @@ func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, loade
 		payloadJSON = `{}`
 	}
 	host := &manualTriggerCaptureHost{}
-	_, err := c.loaderEngine.Execute(ctx, loaders.LoaderExecutionRequest{
+	_, err := c.loaderEngine.Execute(ctx, schedulers.SchedulerExecutionRequest{
 		Runtime:     loader.Summary.Runtime,
 		Script:      loader.Script,
 		Trigger:     trigger,
@@ -145,7 +145,7 @@ func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, loade
 type manualTriggerCaptureHost struct {
 	calls   int
 	prompt  string
-	request domain.LoaderAgentRequest
+	request domain.SchedulerAgentRequest
 }
 
 func (h *manualTriggerCaptureHost) Log(context.Context, string, any) error { return nil }
@@ -154,19 +154,19 @@ func (h *manualTriggerCaptureHost) PublishEvent(context.Context, string, string)
 	return domain.TopicEventRecord{}, fmt.Errorf("scheduler.event.publish is unavailable during manual trigger resolution")
 }
 
-func (h *manualTriggerCaptureHost) Agent(_ context.Context, prompt string, request domain.LoaderAgentRequest) (domain.LoaderAgentResult, error) {
+func (h *manualTriggerCaptureHost) Agent(_ context.Context, prompt string, request domain.SchedulerAgentRequest) (domain.SchedulerAgentResult, error) {
 	h.calls++
 	h.prompt = strings.TrimSpace(prompt)
 	h.request = request
-	return domain.LoaderAgentResult{Text: h.prompt, FinalText: h.prompt, Success: true}, nil
+	return domain.SchedulerAgentResult{Text: h.prompt, FinalText: h.prompt, Success: true}, nil
 }
 
-func (h *manualTriggerCaptureHost) Command(context.Context, domain.LoaderCommandRequest) (domain.LoaderCommandResult, error) {
-	return domain.LoaderCommandResult{}, fmt.Errorf("scheduler.command is unavailable during manual trigger resolution")
+func (h *manualTriggerCaptureHost) Command(context.Context, domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
+	return domain.SchedulerCommandResult{}, fmt.Errorf("scheduler.command is unavailable during manual trigger resolution")
 }
 
-func (h *manualTriggerCaptureHost) LLM(context.Context, string, domain.LoaderLLMRequest) (domain.LoaderLLMResult, error) {
-	return domain.LoaderLLMResult{}, fmt.Errorf("scheduler.llm is unavailable during manual trigger resolution")
+func (h *manualTriggerCaptureHost) LLM(context.Context, string, domain.SchedulerLLMRequest) (domain.SchedulerLLMResult, error) {
+	return domain.SchedulerLLMResult{}, fmt.Errorf("scheduler.llm is unavailable during manual trigger resolution")
 }
 
 func (h *manualTriggerCaptureHost) StateGet(context.Context, string) (string, bool, error) {
@@ -177,8 +177,8 @@ func (h *manualTriggerCaptureHost) StateSet(context.Context, string, string) err
 
 func (h *manualTriggerCaptureHost) StateDelete(context.Context, string) error { return nil }
 
-func (h *manualTriggerCaptureHost) CallSessionRPC(context.Context, string, string) (string, error) {
-	return "", fmt.Errorf("scheduler.session is unavailable during manual trigger resolution")
+func (h *manualTriggerCaptureHost) CallSandboxRPC(context.Context, string, string) (string, error) {
+	return "", fmt.Errorf("scheduler.sandbox is unavailable during manual trigger resolution")
 }
 
 func envVarSpecsFromSandboxEnv(items []domain.SandboxEnvVar) []*agentcomposev2.EnvVarSpec {

@@ -7,44 +7,44 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func TestReconcileManagedSchedulersSkipsWritesForUnchangedScheduler(t *testing.T) {
+func TestReconcileSchedulersSkipsWritesForUnchangedScheduler(t *testing.T) {
 	t.Parallel()
 
 	project := domain.ProjectRecord{ID: "project-1"}
-	trigger := domain.LoaderTrigger{
-		LoaderID:   "loader-1",
-		ID:         "daily",
-		Kind:       domain.LoaderTriggerKindInterval,
-		IntervalMs: 86_400_000,
-		Enabled:    true,
+	trigger := domain.SchedulerTrigger{
+		SchedulerID: "loader-1",
+		ID:          "daily",
+		Kind:        domain.SchedulerTriggerKindInterval,
+		IntervalMs:  86_400_000,
+		Enabled:     true,
 	}
 	scheduler := domain.ProjectSchedulerRecord{
-		ProjectID:       project.ID,
-		SchedulerID:     "scheduler-1",
-		AgentName:       "worker",
-		ManagedLoaderID: "loader-1",
-		Revision:        3,
-		Enabled:         true,
-		TriggerCount:    1,
-		SpecJSON:        `{"enabled":true}`,
+		ProjectID:    project.ID,
+		SchedulerID:  "scheduler-1",
+		AgentName:    "worker",
+		ID:           "loader-1",
+		Revision:     3,
+		Enabled:      true,
+		TriggerCount: 1,
+		SpecJSON:     `{"enabled":true}`,
 	}
-	loader := domain.Loader{
-		Summary: domain.LoaderSummary{
-			ID: "loader-1", Name: "worker scheduler", Enabled: true, Runtime: domain.LoaderRuntimeScheduler,
-			DefaultAgent: "codex", SandboxPolicy: domain.LoaderSandboxPolicySticky,
+	loader := domain.Scheduler{
+		Summary: domain.SchedulerSummary{
+			ID: "loader-1", Name: "worker scheduler", Enabled: true, Runtime: domain.SchedulerRuntimeScheduler,
+			DefaultAgent: "codex", SandboxPolicy: domain.SchedulerSandboxPolicySticky,
 			ManagedProjectID: project.ID, ManagedRevision: 3, ManagedAgentName: "worker", ManagedSchedulerID: scheduler.SchedulerID,
 		},
 		Script:   `scheduler.interval("daily", function daily() {}, 86400000);`,
-		Triggers: []domain.LoaderTrigger{trigger},
+		Triggers: []domain.SchedulerTrigger{trigger},
 	}
 	store := &unchangedSchedulerReconcileStore{scheduler: scheduler, loader: loader}
 
-	changes, unchanged, err := ReconcileManagedSchedulers(context.Background(), store, project, []domain.ProjectSchedulerRecord{scheduler}, []domain.Loader{loader}, ReconcileSchedulerOptions{})
+	changes, unchanged, err := ReconcileSchedulers(context.Background(), store, project, []domain.ProjectSchedulerRecord{scheduler}, []domain.Scheduler{loader}, ReconcileSchedulerOptions{})
 	if err != nil {
-		t.Fatalf("ReconcileManagedSchedulers returned error: %v", err)
+		t.Fatalf("ReconcileSchedulers returned error: %v", err)
 	}
 	if !unchanged {
-		t.Fatal("ReconcileManagedSchedulers reported an identical scheduler as changed")
+		t.Fatal("ReconcileSchedulers reported an identical scheduler as changed")
 	}
 	if len(changes) != 2 || changes[0].Action != ChangeActionUnchanged || changes[0].ResourceType != "project_scheduler" || changes[1].Action != ChangeActionUnchanged || changes[1].ResourceType != "loader" {
 		t.Fatalf("changes = %#v", changes)
@@ -56,7 +56,7 @@ func TestReconcileManagedSchedulersSkipsWritesForUnchangedScheduler(t *testing.T
 
 type unchangedSchedulerReconcileStore struct {
 	scheduler domain.ProjectSchedulerRecord
-	loader    domain.Loader
+	loader    domain.Scheduler
 	writes    []string
 }
 
@@ -78,21 +78,11 @@ func (s *unchangedSchedulerReconcileStore) ListProjectSchedulers(context.Context
 	return []domain.ProjectSchedulerRecord{s.scheduler}, nil
 }
 
-func (s *unchangedSchedulerReconcileStore) GetLoaderIfExists(context.Context, string) (domain.Loader, bool, error) {
-	return s.loader, true, nil
+func (s *unchangedSchedulerReconcileStore) GetLoader(context.Context, string) (domain.Scheduler, error) {
+	return s.loader, nil
 }
 
-func (s *unchangedSchedulerReconcileStore) UpsertManagedLoader(_ context.Context, item domain.Loader) (domain.Loader, error) {
-	s.writes = append(s.writes, "upsert loader")
-	return item, nil
-}
-
-func (s *unchangedSchedulerReconcileStore) ReplaceLoaderTriggers(_ context.Context, _ string, triggers []domain.LoaderTrigger) ([]domain.LoaderTrigger, error) {
+func (s *unchangedSchedulerReconcileStore) ReplaceLoaderTriggers(_ context.Context, _ string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
 	s.writes = append(s.writes, "replace triggers")
 	return triggers, nil
-}
-
-func (s *unchangedSchedulerReconcileStore) SetLoaderEnabled(context.Context, string, bool) error {
-	s.writes = append(s.writes, "set loader enabled")
-	return nil
 }

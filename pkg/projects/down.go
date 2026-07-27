@@ -31,11 +31,10 @@ type DownSandboxStore interface {
 }
 
 type DownOptions struct {
-	Store                DownStore
-	Sandboxes            DownSandboxStore
-	DisableManagedLoader func(ctx context.Context, loaderID, projectID, schedulerID string) error
-	RefreshLoaders       func(ctx context.Context) error
-	StopSandbox          func(ctx context.Context, sandbox *domain.Sandbox) error
+	Store          DownStore
+	Sandboxes      DownSandboxStore
+	RefreshLoaders func(ctx context.Context) error
+	StopSandbox    func(ctx context.Context, sandbox *domain.Sandbox) error
 }
 
 func DownProject(ctx context.Context, project domain.ProjectRecord, options DownOptions) ([]DownChange, error) {
@@ -70,11 +69,6 @@ func DisableProjectManagedSchedulers(ctx context.Context, project domain.Project
 		if err != nil {
 			return changes, fmt.Errorf("disable project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 		}
-		if options.DisableManagedLoader != nil {
-			if err := options.DisableManagedLoader(ctx, scheduler.ManagedLoaderID, project.ID, scheduler.SchedulerID); err != nil {
-				return changes, fmt.Errorf("disable managed loader %s: %w", scheduler.ManagedLoaderID, err)
-			}
-		}
 		changes = append(changes, DownChange{
 			Action:       DownChangeUpdated,
 			ResourceType: "project_scheduler",
@@ -82,11 +76,11 @@ func DisableProjectManagedSchedulers(ctx context.Context, project domain.Project
 			Name:         disabled.AgentName,
 			Message:      "disabled by project down",
 		})
-		if scheduler.ManagedLoaderID != "" {
+		if scheduler.ID != "" {
 			changes = append(changes, DownChange{
 				Action:       DownChangeUpdated,
 				ResourceType: "loader",
-				ResourceID:   scheduler.ManagedLoaderID,
+				ResourceID:   scheduler.ID,
 				Name:         scheduler.AgentName,
 				Message:      "disabled by project down",
 			})

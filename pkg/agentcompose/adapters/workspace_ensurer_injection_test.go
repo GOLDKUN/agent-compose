@@ -30,6 +30,6 @@ func TestWorkspaceEnsurerConstructorDependencies(t *testing.T) {
 		t.Fatalf("Lifecycle workspace ensurer = %p, want %p", got, ensurer)
 	}
 	if runner.workspaceEnsurer != ensurer {
-		t.Fatalf("LoaderSandboxRunner workspace ensurer = %p, want %p", runner.workspaceEnsurer, ensurer)
+		t.Fatalf("SchedulerSandboxRunner workspace ensurer = %p, want %p", runner.workspaceEnsurer, ensurer)
 	}
 }

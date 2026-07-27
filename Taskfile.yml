@@ -416,6 +416,12 @@ tasks:
     cmds:
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} go build ./proto/agentcompose/v2 ./proto/agentcompose/v2/agentcomposev2connect
 
+  build:legacy-migrator:
+    desc: Build the standalone legacy data-root copy migrator
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} go build -o ./build/agent-compose-legacy-migrate ./cmd/agent-compose-legacy-migrate
+
   build:agent-compose:boxlite:
     desc: Deprecated alias for the Linux full agent-compose binary
     cmds:

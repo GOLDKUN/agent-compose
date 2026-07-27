@@ -69,7 +69,7 @@ func TestWebhookHelpersAndQueueCoverageWorkflows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRunQueueFromConfig returned error: %v", err)
 	}
-	event := domain.LoaderTopicEvent{Topic: "webhook.github.push", Provider: "github", Payload: map[string]any{"body": map[string]any{"ref": "main", "count": float64(2), "ok": true, "none": nil}}}
+	event := domain.SchedulerTopicEvent{Topic: "webhook.github.push", Provider: "github", Payload: map[string]any{"body": map[string]any{"ref": "main", "count": float64(2), "ok": true, "none": nil}}}
 	name, workers := queue.Match(event)
 	if name != "github-main" || workers != 1 {
 		t.Fatalf("queue match name=%q workers=%d", name, workers)
@@ -306,7 +306,7 @@ func (s *webhookRouteStore) ListEventSandboxLinks(context.Context, []string) ([]
 }
 
 func (s *webhookRouteStore) ListEventDeliveries(context.Context, []string) ([]domain.EventDelivery, error) {
-	return []domain.EventDelivery{{EventID: "event-1", LoaderID: "loader-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded}}, nil
+	return []domain.EventDelivery{{EventID: "event-1", SchedulerID: "loader-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded}}, nil
 }
 
 func (s *webhookRouteStore) ListWebhookSources(context.Context) ([]domain.WebhookSource, error) {

@@ -20,9 +20,9 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/internal/testutil"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/workspaces"
 )
 
@@ -91,94 +91,94 @@ func (p testCapabilityProvider) ProxyTarget() string {
 	return p.target
 }
 
-func TestSandboxRPCBridgeCallJSONSupportsSessionRPCs(t *testing.T) {
+func TestSandboxRPCBridgeCallJSONSupportsSandboxRPCs(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
 
-	createJSON, err := bridge.CallJSON(ctx, "CreateSession", `{"title":"Loader Created","tags":[{"name":"origin","value":"test"}]}`)
+	createJSON, err := bridge.CallJSON(ctx, "CreateSandbox", `{"title":"Scheduler Created","tags":[{"name":"origin","value":"test"}]}`)
 	if err != nil {
-		t.Fatalf("CreateSession returned error: %v", err)
+		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
 	var created sandboxRPCResponse
 	if err := json.Unmarshal([]byte(createJSON), &created); err != nil {
 		t.Fatalf("unmarshal create response: %v", err)
 	}
-	sessionID := created.Session.Summary.SessionID
-	if sessionID == "" {
-		t.Fatalf("expected CreateSession to return a session id")
+	sandboxID := created.Sandbox.Summary.SandboxID
+	if sandboxID == "" {
+		t.Fatalf("expected CreateSandbox to return a sandbox id")
 	}
-	if got, want := created.Session.Summary.VMStatus, domain.VMStatusRunning; got != want {
-		t.Fatalf("CreateSession vm status = %q, want %q", got, want)
+	if got, want := created.Sandbox.Summary.VMStatus, domain.VMStatusRunning; got != want {
+		t.Fatalf("CreateSandbox vm status = %q, want %q", got, want)
 	}
 	if len(driver.startCalls) != 1 {
 		t.Fatalf("StartSandboxVM call count = %d, want 1", len(driver.startCalls))
 	}
 
-	getJSON, err := bridge.CallJSON(ctx, "GetSession", `{"sessionId":"`+sessionID+`"}`)
+	getJSON, err := bridge.CallJSON(ctx, "GetSandbox", `{"sandboxId":"`+sandboxID+`"}`)
 	if err != nil {
-		t.Fatalf("GetSession returned error: %v", err)
+		t.Fatalf("GetSandbox returned error: %v", err)
 	}
 	var gotSession sandboxRPCResponse
 	if err := json.Unmarshal([]byte(getJSON), &gotSession); err != nil {
 		t.Fatalf("unmarshal get response: %v", err)
 	}
-	if gotSession.Session.Summary.SessionID != sessionID {
-		t.Fatalf("GetSession session id = %q, want %q", gotSession.Session.Summary.SessionID, sessionID)
+	if gotSession.Sandbox.Summary.SandboxID != sandboxID {
+		t.Fatalf("GetSandbox sandbox id = %q, want %q", gotSession.Sandbox.Summary.SandboxID, sandboxID)
 	}
 
-	listJSON, err := bridge.CallJSON(ctx, "ListSessions", `{"vmStatus":" running "}`)
+	listJSON, err := bridge.CallJSON(ctx, "ListSandboxes", `{"vmStatus":" running "}`)
 	if err != nil {
-		t.Fatalf("ListSessions returned error: %v", err)
+		t.Fatalf("ListSandboxes returned error: %v", err)
 	}
 	var listed sandboxRPCListResponse
 	if err := json.Unmarshal([]byte(listJSON), &listed); err != nil {
 		t.Fatalf("unmarshal list response: %v", err)
 	}
-	if len(listed.Sessions) != 1 || listed.Sessions[0].SessionID != sessionID {
-		t.Fatalf("listed sessions = %#v, want one session %s", listed.Sessions, sessionID)
+	if len(listed.Sandboxes) != 1 || listed.Sandboxes[0].SandboxID != sandboxID {
+		t.Fatalf("listed sandboxes = %#v, want one sandbox %s", listed.Sandboxes, sandboxID)
 	}
-	if _, err := bridge.CallJSON(ctx, "ListSessions", `{"vmStatus":"definitely-invalid"}`); !errors.Is(err, domain.ErrInvalidArgument) || !strings.Contains(err.Error(), `invalid sandbox status "definitely-invalid"`) {
-		t.Fatalf("ListSessions invalid vmStatus error = %v", err)
-	}
-
-	if _, err := bridge.CallJSON(ctx, "GetSessionProxy", `{"sessionId":"`+sessionID+`"}`); err == nil || !strings.Contains(err.Error(), "jupyter is not enabled") {
-		t.Fatalf("GetSessionProxy error = %v, want jupyter disabled error", err)
+	if _, err := bridge.CallJSON(ctx, "ListSandboxes", `{"vmStatus":"definitely-invalid"}`); !errors.Is(err, domain.ErrInvalidArgument) || !strings.Contains(err.Error(), `invalid sandbox status "definitely-invalid"`) {
+		t.Fatalf("ListSandboxes invalid vmStatus error = %v", err)
 	}
 
-	stopJSON, err := bridge.CallJSON(ctx, "StopSession", `{"sessionId":"`+sessionID+`"}`)
+	if _, err := bridge.CallJSON(ctx, "GetSandboxProxy", `{"sandboxId":"`+sandboxID+`"}`); err == nil || !strings.Contains(err.Error(), "jupyter is not enabled") {
+		t.Fatalf("GetSandboxProxy error = %v, want jupyter disabled error", err)
+	}
+
+	stopJSON, err := bridge.CallJSON(ctx, "StopSandbox", `{"sandboxId":"`+sandboxID+`"}`)
 	if err != nil {
-		t.Fatalf("StopSession returned error: %v", err)
+		t.Fatalf("StopSandbox returned error: %v", err)
 	}
 	var stopped sandboxRPCResponse
 	if err := json.Unmarshal([]byte(stopJSON), &stopped); err != nil {
 		t.Fatalf("unmarshal stop response: %v", err)
 	}
-	if got, want := stopped.Session.Summary.VMStatus, domain.VMStatusStopped; got != want {
-		t.Fatalf("StopSession vm status = %q, want %q", got, want)
+	if got, want := stopped.Sandbox.Summary.VMStatus, domain.VMStatusStopped; got != want {
+		t.Fatalf("StopSandbox vm status = %q, want %q", got, want)
 	}
 	if len(driver.stopCalls) != 1 {
 		t.Fatalf("StopSandboxVM call count = %d, want 1", len(driver.stopCalls))
 	}
 
-	resumeJSON, err := bridge.CallJSON(ctx, "ResumeSession", `{"sessionId":"`+sessionID+`"}`)
+	resumeJSON, err := bridge.CallJSON(ctx, "ResumeSandbox", `{"sandboxId":"`+sandboxID+`"}`)
 	if err != nil {
-		t.Fatalf("ResumeSession returned error: %v", err)
+		t.Fatalf("ResumeSandbox returned error: %v", err)
 	}
 	var resumed sandboxRPCResponse
 	if err := json.Unmarshal([]byte(resumeJSON), &resumed); err != nil {
 		t.Fatalf("unmarshal resume response: %v", err)
 	}
-	if got, want := resumed.Session.Summary.VMStatus, domain.VMStatusRunning; got != want {
-		t.Fatalf("ResumeSession vm status = %q, want %q", got, want)
+	if got, want := resumed.Sandbox.Summary.VMStatus, domain.VMStatusRunning; got != want {
+		t.Fatalf("ResumeSandbox vm status = %q, want %q", got, want)
 	}
 	if len(driver.startCalls) != 2 {
 		t.Fatalf("StartSandboxVM call count after resume = %d, want 2", len(driver.startCalls))
 	}
 
-	if _, err := bridge.CallJSON(ctx, "MissingRPC", `{}`); err == nil || !strings.Contains(err.Error(), "unsupported session rpc") {
+	if _, err := bridge.CallJSON(ctx, "MissingRPC", `{}`); err == nil || !strings.Contains(err.Error(), "unsupported sandbox rpc") {
 		t.Fatalf("unsupported rpc error = %v", err)
 	}
-	if _, err := bridge.CallJSON(ctx, "GetSession", `{bad json`); err == nil || !strings.Contains(err.Error(), "decode session rpc request") {
+	if _, err := bridge.CallJSON(ctx, "GetSandbox", `{bad json`); err == nil || !strings.Contains(err.Error(), "decode sandbox rpc request") {
 		t.Fatalf("bad json error = %v", err)
 	}
 }
@@ -187,7 +187,7 @@ func TestSandboxRPCBridgeCreateSandboxInheritsSchedulerAgentEnvironment(t *testi
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
 	bridge.config.RuntimeBaseURL = "http://agent-compose.test:7410"
-	definition, err := bridge.configDB.CreateAgentDefinition(ctx, domain.AgentDefinition{
+	definition := createNativeTestAgent(t, ctx, bridge.configDB, domain.AgentDefinition{
 		ID:           "agent-scheduler",
 		Name:         "scheduler-agent",
 		Enabled:      true,
@@ -196,22 +196,19 @@ func TestSandboxRPCBridgeCreateSandboxInheritsSchedulerAgentEnvironment(t *testi
 		SystemPrompt: "Scheduler inherited prompt",
 		EnvItems:     []domain.SandboxEnvVar{{Name: "AGENT_ENV", Value: "from-agent"}},
 	})
-	if err != nil {
-		t.Fatalf("CreateAgentDefinition returned error: %v", err)
-	}
-	ctx = loaders.WithSandboxCreationContext(ctx, loaders.SandboxCreationContext{
+	ctx = schedulers.WithSandboxCreationContext(ctx, schedulers.SandboxCreationContext{
 		AgentDefinitionID: definition.ID,
 		Provider:          "claude",
 	})
-	responseJSON, err := bridge.CallJSONWithSource(ctx, "CreateSession", `{"title":"scheduler child","envItems":[{"name":"REQUEST_ENV","value":"from-script"}]}`, domain.SandboxTypeScript+":loader-1")
+	responseJSON, err := bridge.CallJSONWithSource(ctx, "CreateSandbox", `{"title":"scheduler child","envItems":[{"name":"REQUEST_ENV","value":"from-script"}]}`, domain.SandboxTypeScript+":loader-1")
 	if err != nil {
-		t.Fatalf("CreateSession returned error: %v", err)
+		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
 	var response sandboxRPCResponse
 	if err := json.Unmarshal([]byte(responseJSON), &response); err != nil {
 		t.Fatalf("unmarshal create response: %v", err)
 	}
-	loaded, err := bridge.store.GetSandbox(ctx, response.Session.Summary.SessionID)
+	loaded, err := bridge.store.GetSandbox(ctx, response.Sandbox.Summary.SandboxID)
 	if err != nil {
 		t.Fatalf("GetSandbox returned error: %v", err)
 	}
@@ -470,18 +467,18 @@ func TestSandboxRuntimeLivenessAndNotifierBranches(t *testing.T) {
 		t.Fatalf("driver runtime adapter liveness = alive %v checked %v err %v", alive, checked, err)
 	}
 
-	streams := sessions.NewStreamBrokerForTest()
+	streams := sandboxes.NewStreamBrokerForTest()
 	events, unsubscribe := streams.Subscribe("session-1")
 	defer unsubscribe()
 	notifier := sandboxLifecycleNotifier{streams: streams}
 	notifier.PublishSandboxUpdated(&session.Summary)
 	got := <-events
-	if got.EventType != sessions.WatchEventTypeSandboxUpdated || got.Sandbox.ID != "session-1" {
+	if got.EventType != sandboxes.WatchEventTypeSandboxUpdated || got.Sandbox.ID != "session-1" {
 		t.Fatalf("session update event = %#v", got)
 	}
 	notifier.PublishEventAdded("session-1", domain.SandboxEvent{ID: "event-1", Type: "test.event"})
 	got = <-events
-	if got.EventType != sessions.WatchEventTypeEventAdded || got.Event.ID != "event-1" {
+	if got.EventType != sandboxes.WatchEventTypeEventAdded || got.Event.ID != "event-1" {
 		t.Fatalf("event added = %#v", got)
 	}
 	notifier.NotifyDashboard("test")
@@ -512,7 +509,7 @@ func newTestSandboxRPCBridge(t *testing.T) (*SandboxRPCBridge, *fakeRPCSandboxDr
 		t.Fatalf("open test storage: %v", err)
 	}
 	driver := &fakeRPCSandboxDriver{}
-	streams := sessions.NewStreamBrokerForTest()
+	streams := sandboxes.NewStreamBrokerForTest()
 	agentExecutor := NewAgentExecutor(config, store, streams, NewAgentRunner(config, store, configDB, configDB, nil))
 	return NewSandboxRPCBridge(
 		config,

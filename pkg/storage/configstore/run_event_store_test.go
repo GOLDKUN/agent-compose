@@ -39,7 +39,8 @@ func TestProjectRunEventsAreOrderedIdempotentAndCascade(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	createdRun, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{RunID: "run-events", ProjectID: project.ID, SandboxID: "sandbox-events", Status: domain.ProjectRunStatusRunning})
+	agentID := createRunEventTestAgent(t, ctx, store, project.ID, "worker")
+	createdRun, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{RunID: "run-events", ProjectID: project.ID, AgentName: "worker", AgentID: agentID, SandboxID: "sandbox-events", Status: domain.ProjectRunStatusRunning})
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -57,7 +58,7 @@ func TestProjectRunEventsAreOrderedIdempotentAndCascade(t *testing.T) {
 	if err != nil || created || repeated.ID != first.ID || repeated.Text != "hello" {
 		t.Fatalf("repeat=%#v created=%v err=%v", repeated, created, err)
 	}
-	if _, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{RunID: "run-other-events", ProjectID: project.ID, Status: domain.ProjectRunStatusRunning}); err != nil {
+	if _, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{RunID: "run-other-events", ProjectID: project.ID, AgentName: "worker", AgentID: agentID, Status: domain.ProjectRunStatusRunning}); err != nil {
 		t.Fatalf("create other run: %v", err)
 	}
 	if _, _, err := store.AppendProjectRunEvent(ctx, domain.ProjectRunEventRecord{ID: first.ID, RunID: "run-other-events", Kind: domain.ProjectRunEventKindUserMessage, Text: "other"}); err == nil || !strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -114,10 +115,11 @@ func TestProjectRunAndEventsCommitAtomically(t *testing.T) {
 	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-atomic", Name: "atomic"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
+	agentID := createRunEventTestAgent(t, ctx, store, "project-atomic", "worker")
 	if _, err := store.db.ExecContext(ctx, `CREATE TRIGGER fail_run_event BEFORE INSERT ON project_run_event BEGIN SELECT RAISE(ABORT, 'forced event failure'); END`); err != nil {
 		t.Fatalf("create failure trigger: %v", err)
 	}
-	run := domain.ProjectRunRecord{RunID: "run-atomic", ProjectID: "project-atomic", Status: domain.ProjectRunStatusRunning}
+	run := domain.ProjectRunRecord{RunID: "run-atomic", ProjectID: "project-atomic", AgentName: "worker", AgentID: agentID, Status: domain.ProjectRunStatusRunning}
 	event := domain.ProjectRunEventRecord{ID: "event-initial-prompt", RunID: run.RunID, Kind: domain.ProjectRunEventKindUserMessage, Text: "hello"}
 	if _, err := store.CreateProjectRunWithEvents(ctx, run, []domain.ProjectRunEventRecord{event}); err == nil {
 		t.Fatal("create with failing event returned nil error")
@@ -175,10 +177,12 @@ func TestCreateProjectRunWithEventsIsIdempotent(t *testing.T) {
 	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-idempotent", Name: "idempotent"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
+	agentID := createRunEventTestAgent(t, ctx, store, "project-idempotent", "worker")
 	run := domain.ProjectRunRecord{
 		RunID:     "run-idempotent",
 		ProjectID: "project-idempotent",
 		AgentName: "worker",
+		AgentID:   agentID,
 		Prompt:    "hello",
 		Status:    domain.ProjectRunStatusRunning,
 	}
@@ -226,7 +230,8 @@ func TestProjectRunEventSequencesAreAtomicAcrossConnections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if _, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{RunID: "run-concurrent-events", ProjectID: project.ID, Status: domain.ProjectRunStatusRunning}); err != nil {
+	agentID := createRunEventTestAgent(t, ctx, store, project.ID, "worker")
+	if _, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{RunID: "run-concurrent-events", ProjectID: project.ID, AgentName: "worker", AgentID: agentID, Status: domain.ProjectRunStatusRunning}); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
 
@@ -271,4 +276,16 @@ func TestProjectRunEventSequencesAreAtomicAcrossConnections(t *testing.T) {
 			t.Fatalf("sequences = %v, want contiguous 1..%d", ordered, count)
 		}
 	}
+}
+
+func createRunEventTestAgent(t *testing.T, ctx context.Context, store *ConfigStore, projectID, agentName string) string {
+	t.Helper()
+	agentID, err := domain.StableProjectAgentID(projectID, agentName)
+	if err != nil {
+		t.Fatalf("derive project agent id: %v", err)
+	}
+	if _, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{ID: agentID, ProjectID: projectID, AgentName: agentName}); err != nil {
+		t.Fatalf("create project agent: %v", err)
+	}
+	return agentID
 }

@@ -105,10 +105,10 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 		t.Fatalf("docker localhost base = %q", base)
 	}
 
-	if provider, model := LoaderCommandFacadeAgentModel(map[string]string{"AGENT_PROVIDER": "claude", "CLAUDE_MODEL": "sonnet"}); provider != "claude" || model != "sonnet" {
+	if provider, model := SchedulerCommandFacadeAgentModel(map[string]string{"AGENT_PROVIDER": "claude", "CLAUDE_MODEL": "sonnet"}); provider != "claude" || model != "sonnet" {
 		t.Fatalf("claude model provider=%q model=%q", provider, model)
 	}
-	if provider, model := LoaderCommandFacadeAgentModel(map[string]string{"AGENT_PROVIDER": "opencode"}); provider != "" || model != "" {
+	if provider, model := SchedulerCommandFacadeAgentModel(map[string]string{"AGENT_PROVIDER": "opencode"}); provider != "" || model != "" {
 		t.Fatalf("opencode missing model provider=%q model=%q", provider, model)
 	}
 	filtered := FilterPersistedRuntimeEnv([]domain.SandboxEnvVar{{Name: "OPENAI_API_KEY", Value: "secret"}, {Name: "AGENT_COMPOSE_RUNTIME_BASE_URL", Value: "http://runtime"}, {Name: "VISIBLE", Value: "1"}})

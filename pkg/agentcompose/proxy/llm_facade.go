@@ -6,20 +6,16 @@ import (
 )
 
 const RuntimeLLMFacadePrefix = "/api/runtime/sandboxes/"
-const legacyRuntimeLLMFacadePrefix = "/api/runtime/sessions/"
 
 func IsRuntimeLLMFacadeRequest(r *http.Request) bool {
 	if r == nil || r.Method != http.MethodPost {
 		return false
 	}
 	path := r.URL.Path
-	prefix := RuntimeLLMFacadePrefix
-	if strings.HasPrefix(path, legacyRuntimeLLMFacadePrefix) {
-		prefix = legacyRuntimeLLMFacadePrefix
-	} else if !strings.HasPrefix(path, prefix) {
+	if !strings.HasPrefix(path, RuntimeLLMFacadePrefix) {
 		return false
 	}
-	parts := strings.Split(strings.TrimPrefix(path, prefix), "/")
+	parts := strings.Split(strings.TrimPrefix(path, RuntimeLLMFacadePrefix), "/")
 	if len(parts) < 5 || parts[0] == "" || parts[1] != "llm" {
 		return false
 	}

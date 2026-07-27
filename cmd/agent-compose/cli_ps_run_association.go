@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
@@ -76,8 +77,10 @@ func legacySchedulerAgentForProject(tags map[string]string, project *agentcompos
 		return ""
 	}
 	for _, scheduler := range project.GetSchedulers() {
-		managedLoaderID, err := domain.StableManagedLoaderID(projectID, scheduler.GetAgentName(), "")
-		if err == nil && loaderID == managedLoaderID {
+		agentName := strings.TrimSpace(scheduler.GetAgentName())
+		schedulerID, err := domain.StableProjectSchedulerID(projectID, agentName, "")
+		legacyLoaderID := identity.NewID(identity.ResourceLoader, projectID, agentName, "default")
+		if err == nil && (loaderID == schedulerID || loaderID == legacyLoaderID) {
 			return strings.TrimSpace(scheduler.GetAgentName())
 		}
 	}

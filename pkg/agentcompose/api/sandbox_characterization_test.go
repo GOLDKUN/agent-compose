@@ -12,7 +12,7 @@ import (
 
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -133,14 +133,14 @@ func TestV2SandboxWatchEventProjection(t *testing.T) {
 	cell := domain.NotebookCell{ID: "cell-1", Output: "done", CreatedAt: now}
 	event := domain.SandboxEvent{ID: "event-1", Type: "agent.completed", CreatedAt: now}
 	tests := []struct {
-		input sessions.WatchEvent
+		input sandboxes.WatchEvent
 		want  agentcomposev2.SandboxWatchEventType
 	}{
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeSandboxUpdated, Sandbox: &domain.SandboxSummary{ID: "sandbox-1"}}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_SANDBOX_UPDATED},
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeCellStarted, Cell: &cell}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_STARTED},
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeCellOutput, CellID: "cell-1", Chunk: "part"}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_OUTPUT},
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeCellCompleted, Cell: &cell}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_COMPLETED},
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeEventAdded, Event: &event}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_EVENT_ADDED},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeSandboxUpdated, Sandbox: &domain.SandboxSummary{ID: "sandbox-1"}}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_SANDBOX_UPDATED},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeCellStarted, Cell: &cell}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_STARTED},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeCellOutput, CellID: "cell-1", Chunk: "part"}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_OUTPUT},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeCellCompleted, Cell: &cell}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_COMPLETED},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeEventAdded, Event: &event}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_EVENT_ADDED},
 	}
 	for _, test := range tests {
 		if got := sandboxWatchEventToV2(test.input); got.GetEventType() != test.want {

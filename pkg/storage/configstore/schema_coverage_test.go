@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,20 +13,7 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sessionstore"
 )
-
-func TestConfigStoreMigrationAndTimeParsingWorkflows(t *testing.T) {
-	testConfigStoreMigrationAndTimeParsingWorkflows(t)
-}
-
-func TestIntegrationConfigStoreMigrationAndTimeParsingWorkflows(t *testing.T) {
-	testConfigStoreMigrationAndTimeParsingWorkflows(t)
-}
-
-func TestE2EConfigStoreMigrationAndTimeParsingWorkflows(t *testing.T) {
-	testConfigStoreMigrationAndTimeParsingWorkflows(t)
-}
 
 func TestConfigStoreProjectSchemaMigrationWorkflows(t *testing.T) {
 	testConfigStoreProjectSchemaMigrationWorkflows(t)
@@ -43,46 +29,6 @@ func TestConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 
 func TestConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 	testConfigStoreProjectCRUDCoverageWorkflows(t)
-}
-
-func TestConfigStoreMigratesLegacySQLiteSessionSchema(t *testing.T) {
-	testConfigStoreMigratesLegacySQLiteSessionSchema(t)
-}
-
-func TestConfigStoreRecoversInterruptedLoaderBindingTriggerMigration(t *testing.T) {
-	testConfigStoreRecoversInterruptedLoaderBindingTriggerMigration(t)
-}
-
-func TestConfigStoreAddsLoaderBindingSandboxConfigHash(t *testing.T) {
-	ctx := context.Background()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "config-hash.db"))
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.ExecContext(ctx, `CREATE TABLE loader_binding(
-		loader_id TEXT NOT NULL,
-		trigger_id TEXT NOT NULL DEFAULT '',
-		sandbox_id TEXT NOT NULL,
-		created_at INTEGER NOT NULL,
-		updated_at INTEGER NOT NULL,
-		PRIMARY KEY(loader_id, trigger_id)
-	)`); err != nil {
-		t.Fatalf("create loader binding fixture: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO loader_binding(loader_id, trigger_id, sandbox_id, created_at, updated_at)
-		VALUES('loader-1', 'trigger-1', 'sandbox-1', 1, 2)`); err != nil {
-		t.Fatalf("insert loader binding fixture: %v", err)
-	}
-	store := FromDB(db)
-	if err := store.initSchema(ctx); err != nil {
-		t.Fatalf("initSchema returned error: %v", err)
-	}
-	assertTableColumns(t, store, "loader_binding", "trigger_id", "sandbox_id", "sandbox_config_hash")
-	binding, found, err := store.GetLoaderBinding(ctx, "loader-1", "trigger-1")
-	if err != nil || !found || binding.SandboxID != "sandbox-1" || binding.SandboxConfigHash != "" {
-		t.Fatalf("migrated binding=%#v found=%v err=%v", binding, found, err)
-	}
 }
 
 func TestIntegrationConfigStoreProjectSchemaMigrationWorkflows(t *testing.T) {
@@ -115,113 +61,6 @@ func TestIntegrationConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 
 func TestE2EConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 	testConfigStoreProjectCRUDCoverageWorkflows(t)
-}
-
-func testConfigStoreMigratesLegacySQLiteSessionSchema(t *testing.T) {
-	t.Helper()
-	ctx := context.Background()
-	db := newMemoryDB(t)
-	legacySchema := []string{
-		`CREATE TABLE loader (
-			id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', runtime TEXT NOT NULL DEFAULT 'scheduler',
-			script TEXT NOT NULL, workspace_id TEXT NOT NULL DEFAULT '', agent_id TEXT NOT NULL DEFAULT '', driver TEXT NOT NULL DEFAULT '',
-			guest_image TEXT NOT NULL DEFAULT '', default_agent TEXT NOT NULL DEFAULT 'codex', session_policy TEXT NOT NULL DEFAULT 'sticky',
-			concurrency_policy TEXT NOT NULL DEFAULT 'skip', capset_ids TEXT NOT NULL DEFAULT '[]', env_json TEXT NOT NULL DEFAULT '[]',
-			volumes_json TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL DEFAULT 1, last_error TEXT NOT NULL DEFAULT '',
-			created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
-		)`,
-		`CREATE TABLE loader_binding(loader_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
-		`CREATE TABLE loader_event(
-			loader_id TEXT NOT NULL, event_id TEXT NOT NULL, run_id TEXT NOT NULL DEFAULT '', trigger_id TEXT NOT NULL DEFAULT '',
-			type TEXT NOT NULL, level TEXT NOT NULL DEFAULT 'info', message TEXT NOT NULL DEFAULT '', payload_json TEXT NOT NULL DEFAULT '',
-			linked_session_id TEXT NOT NULL DEFAULT '', linked_cell_id TEXT NOT NULL DEFAULT '', linked_agent_session_id TEXT NOT NULL DEFAULT '',
-			created_at INTEGER NOT NULL, PRIMARY KEY(loader_id, event_id)
-		)`,
-		`CREATE TABLE llm_facade_token(
-			token_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL, token_fingerprint TEXT NOT NULL, model TEXT NOT NULL DEFAULT '',
-			provider_id TEXT NOT NULL DEFAULT '', wire_api TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '',
-			issued_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER NOT NULL DEFAULT 0
-		)`,
-		`CREATE TABLE event_session_link(
-			event_id TEXT NOT NULL, session_id TEXT NOT NULL, relation TEXT NOT NULL, loader_id TEXT NOT NULL DEFAULT '',
-			run_id TEXT NOT NULL DEFAULT '', trigger_id TEXT NOT NULL DEFAULT '', loader_event_id TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL,
-			PRIMARY KEY(event_id, session_id, relation, run_id)
-		)`,
-	}
-	for _, stmt := range legacySchema {
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
-			t.Fatalf("create legacy fixture: %v", err)
-		}
-	}
-	rawToken := "legacy-raw-token"
-	hash, fingerprint := llms.HashFacadeToken(rawToken)
-	fixtures := []struct {
-		query string
-		args  []any
-	}{
-		{`INSERT INTO loader(id, name, script, session_policy, created_at, updated_at) VALUES('loader-1', 'legacy', 'return 1', 'ephemeral', 1, 1)`, nil},
-		{`INSERT INTO loader_binding(loader_id, session_id, created_at, updated_at) VALUES('loader-1', 'sandbox-1', 1, 1)`, nil},
-		{`INSERT INTO loader_event(loader_id, event_id, type, linked_session_id, linked_agent_session_id, created_at) VALUES('loader-1', 'event-1', 'legacy', 'sandbox-1', 'thread-1', 1)`, nil},
-		{`INSERT INTO llm_facade_token(token_hash, session_id, token_fingerprint, issued_at, expires_at) VALUES(?, 'sandbox-1', ?, 1, 0)`, []any{hash, fingerprint}},
-		{`INSERT INTO event_session_link(event_id, session_id, relation, created_at) VALUES('topic-event-1', 'sandbox-1', 'created', 1)`, nil},
-	}
-	for _, fixture := range fixtures {
-		if _, err := db.ExecContext(ctx, fixture.query, fixture.args...); err != nil {
-			t.Fatalf("insert legacy fixture: %v", err)
-		}
-	}
-	store := FromDB(db)
-	if err := store.initSchema(ctx); err != nil {
-		t.Fatalf("initSchema legacy migration returned error: %v", err)
-	}
-	if err := store.initSchema(ctx); err != nil {
-		t.Fatalf("second initSchema legacy migration returned error: %v", err)
-	}
-	assertTableColumns(t, store, "loader", "sandbox_policy")
-	assertTableMissingColumns(t, store, "loader", "session_policy")
-	assertTableColumns(t, store, "loader_binding", "trigger_id", "sandbox_id", "sandbox_config_hash")
-	assertTableColumns(t, store, "loader_event", "linked_sandbox_id", "linked_agent_thread_id")
-	assertTableColumns(t, store, "llm_facade_token", "sandbox_id")
-	if binding, found, err := store.GetLoaderBinding(ctx, "loader-1", ""); err != nil || !found || binding.SandboxID != "sandbox-1" {
-		t.Fatalf("migrated binding=%#v found=%v err=%v", binding, found, err)
-	}
-	if events, err := store.ListLoaderEvents(ctx, "loader-1", 10); err != nil || len(events) != 1 || events[0].LinkedSandboxID != "sandbox-1" || events[0].LinkedAgentThreadID != "thread-1" {
-		t.Fatalf("migrated loader events=%#v err=%v", events, err)
-	}
-	if token, err := store.GetLLMFacadeToken(ctx, rawToken); err != nil || token.SandboxID != "sandbox-1" {
-		t.Fatalf("migrated token=%#v err=%v", token, err)
-	}
-	if links, err := store.ListEventSandboxLinks(ctx, []string{"topic-event-1"}); err != nil || len(links) != 1 || links[0].SandboxID != "sandbox-1" {
-		t.Fatalf("migrated event links=%#v err=%v", links, err)
-	}
-	assertTableColumns(t, store, "event_session_link", "session_id")
-}
-
-func testConfigStoreRecoversInterruptedLoaderBindingTriggerMigration(t *testing.T) {
-	t.Helper()
-	ctx := context.Background()
-	db := newMemoryDB(t)
-	if _, err := db.ExecContext(ctx, `CREATE TABLE loader_binding_legacy(
-		loader_id TEXT PRIMARY KEY,
-		sandbox_id TEXT NOT NULL,
-		created_at INTEGER NOT NULL,
-		updated_at INTEGER NOT NULL
-	)`); err != nil {
-		t.Fatalf("create interrupted migration fixture: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO loader_binding_legacy(loader_id, sandbox_id, created_at, updated_at)
-		VALUES('loader-1', 'sandbox-1', 1, 2)`); err != nil {
-		t.Fatalf("insert interrupted migration fixture: %v", err)
-	}
-	store := FromDB(db)
-	if err := store.initSchema(ctx); err != nil {
-		t.Fatalf("initSchema interrupted migration recovery returned error: %v", err)
-	}
-	assertTableColumns(t, store, "loader_binding", "trigger_id", "sandbox_id", "sandbox_config_hash")
-	assertTableDoesNotExist(t, store, "loader_binding_legacy")
-	if binding, found, err := store.GetLoaderBinding(ctx, "loader-1", ""); err != nil || !found || binding.SandboxID != "sandbox-1" {
-		t.Fatalf("recovered binding=%#v found=%v err=%v", binding, found, err)
-	}
 }
 
 func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
@@ -298,7 +137,7 @@ func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 	}
 
 	agent, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{
-		ProjectID: project.ID, AgentName: "worker", ManagedAgentID: "managed-agent-1", Revision: thirdRevision.Revision,
+		ProjectID: project.ID, AgentName: "worker", ID: "managed-agent-1", Revision: thirdRevision.Revision,
 		Provider: "codex", Model: "gpt", Image: "guest:latest", Driver: driverpkg.RuntimeDriverBoxlite, SchedulerEnabled: true, SpecJSON: `{"name":"worker"}`,
 	})
 	if err != nil {
@@ -308,7 +147,7 @@ func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 	if agent, err = store.UpsertProjectAgent(ctx, agent); err != nil || agent.Model != "gpt-updated" {
 		t.Fatalf("UpsertProjectAgent update agent=%#v err=%v", agent, err)
 	}
-	if got, err := store.GetProjectAgent(ctx, project.ID, "worker"); err != nil || got.ManagedAgentID != "managed-agent-1" {
+	if got, err := store.GetProjectAgent(ctx, project.ID, "worker"); err != nil || got.ID != "managed-agent-1" {
 		t.Fatalf("GetProjectAgent got=%#v err=%v", got, err)
 	}
 	if _, err := store.GetProjectAgent(ctx, project.ID, "missing-agent"); !errors.Is(err, domain.ErrNotFound) {
@@ -318,7 +157,7 @@ func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 		t.Fatalf("ListProjectAgents agents=%#v err=%v", agents, err)
 	}
 	scheduler, err := store.UpsertProjectScheduler(ctx, domain.ProjectSchedulerRecord{
-		ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ManagedLoaderID: "loader-1", Revision: thirdRevision.Revision, Enabled: true, TriggerCount: 2, SpecJSON: `{"id":"scheduler-1"}`,
+		ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Revision: thirdRevision.Revision, Enabled: true, TriggerCount: 2, SpecJSON: `{"id":"scheduler-1"}`,
 	})
 	if err != nil {
 		t.Fatalf("UpsertProjectScheduler returned error: %v", err)
@@ -346,15 +185,8 @@ func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 		t.Fatalf("ListProjectSchedulers schedulers=%#v err=%v", schedulers, err)
 	}
 
-	managedAgent, err := store.UpsertManagedAgentDefinition(ctx, domain.AgentDefinition{ID: "managed-agent-1", Name: "Managed", Enabled: true, Provider: "codex", ManagedProjectID: project.ID, ManagedAgentName: "worker", Driver: driverpkg.RuntimeDriverBoxlite, GuestImage: "guest:latest"})
-	if err != nil {
-		t.Fatalf("UpsertManagedAgentDefinition returned error: %v", err)
-	}
-	if got, err := store.GetManagedAgentDefinition(ctx, managedAgent.ID); err != nil || got.ManagedProjectID != project.ID {
-		t.Fatalf("GetManagedAgentDefinition got=%#v err=%v", got, err)
-	}
 	run, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{
-		RunID: "run-1", ProjectID: project.ID, ProjectName: project.Name, ProjectRevision: thirdRevision.Revision, AgentName: "worker", ManagedAgentID: managedAgent.ID,
+		RunID: "run-1", ProjectID: project.ID, ProjectName: project.Name, ProjectRevision: thirdRevision.Revision, AgentName: "worker", AgentID: agent.ID,
 		Source: domain.ProjectRunSourceAPI, SchedulerID: scheduler.SchedulerID, TriggerID: "trigger-1", Status: domain.ProjectRunStatusPending, Prompt: "prompt", ResultJSON: "{}",
 	})
 	if err != nil {
@@ -574,7 +406,7 @@ func testConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 		t.Fatalf("ListDescendantEventIDs ids=%#v err=%v", ids, err)
 	}
 
-	if err := store.UpsertEventDelivery(ctx, domain.EventDelivery{EventID: event.ID, LoaderID: "loader-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded}); err != nil {
+	if err := store.UpsertEventDelivery(ctx, domain.EventDelivery{EventID: event.ID, SchedulerID: "loader-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded}); err != nil {
 		t.Fatalf("UpsertEventDelivery returned error: %v", err)
 	}
 	if err := store.UpsertEventDelivery(ctx, domain.EventDelivery{}); err == nil {
@@ -583,7 +415,7 @@ func testConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 	if deliveries, err := store.ListEventDeliveries(ctx, []string{"", event.ID, event.ID}); err != nil || len(deliveries) != 1 {
 		t.Fatalf("ListEventDeliveries deliveries=%#v err=%v", deliveries, err)
 	}
-	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{EventID: event.ID, SandboxID: "sandbox-1", Relation: "created", LoaderID: "loader-1", RunID: "run-1", TriggerID: "trigger-1", LoaderEventID: "loader-event-1"}); err != nil {
+	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{EventID: event.ID, SandboxID: "sandbox-1", Relation: "created", SchedulerID: "loader-1", RunID: "run-1", TriggerID: "trigger-1", SchedulerEventID: "loader-event-1"}); err != nil {
 		t.Fatalf("AddEventSandboxLink returned error: %v", err)
 	}
 	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{}); err == nil {
@@ -673,66 +505,17 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 		t.Fatalf("ListWorkspaceConfigs items=%#v err=%v", items, err)
 	}
 
-	agent, err := store.CreateAgentDefinition(ctx, domain.AgentDefinition{
-		ID: "agent-1", Name: "Agent", Enabled: true, Provider: "codex", Model: "gpt", SystemPrompt: "prompt",
-		Driver: driverpkg.RuntimeDriverBoxlite, GuestImage: "guest:latest", WorkspaceID: workspace.ID,
-		EnvItems: []domain.SandboxEnvVar{{Name: "TOKEN", Value: "secret", Secret: true}}, CapsetIDs: []string{"dev"},
-		Skills: []domain.AgentSkill{{Name: "pdf", Provider: "git", URL: "https://github.com/anthropics/skills.git", Path: "skills/pdf", Token: "${GIT_TOKEN}"}},
-	})
-	if err != nil {
-		t.Fatalf("CreateAgentDefinition returned error: %v", err)
-	}
-	if len(agent.Skills) != 1 || agent.Skills[0].Name != "pdf" {
-		t.Fatalf("agent skills = %#v", agent.Skills)
-	}
-	if !AgentMatchesQuery(agent, "agent") || !AgentMatchesQuery(agent, "codex") {
-		t.Fatalf("AgentMatchesQuery failed")
-	}
-	update := agent
-	update.Description = "updated"
-	update.Skills = nil
-	updatedAgent, err := store.UpdateAgentDefinition(ctx, update)
-	if err != nil {
-		t.Fatalf("UpdateAgentDefinition returned error: %v", err)
-	}
-	if len(updatedAgent.Skills) != 1 || updatedAgent.Skills[0].Name != "pdf" {
-		t.Fatalf("updated agent skills = %#v", updatedAgent.Skills)
-	}
-	if loadedAgent, err := store.GetAgentDefinitionIncludingDeleted(ctx, agent.ID); err != nil {
-		t.Fatalf("GetAgentDefinitionIncludingDeleted returned error: %v", err)
-	} else if len(loadedAgent.Skills) != 1 || loadedAgent.Skills[0].Name != "pdf" {
-		t.Fatalf("loaded agent skills = %#v", loadedAgent.Skills)
-	}
-	if result, err := store.ListAgentDefinitions(ctx, domain.AgentDefinitionListOptions{Query: "agent", IncludeDisabled: true, Limit: 10}); err != nil || result.TotalCount != 1 {
-		t.Fatalf("ListAgentDefinitions result=%#v err=%v", result, err)
-	}
-	managedAgent, err := store.UpsertManagedAgentDefinition(ctx, domain.AgentDefinition{
-		ID: "managed-agent-1", Name: "Managed", Enabled: true, Provider: "codex", ManagedProjectID: "project-1", ManagedAgentName: "worker", ManagedProjectRevision: 1,
-		Skills: []domain.AgentSkill{{Name: "local-review", Provider: "file", Path: "/tmp/skills/local-review"}},
-	})
-	if err != nil {
-		t.Fatalf("UpsertManagedAgentDefinition returned error: %v", err)
-	}
-	if managedAgents, err := store.ListManagedAgentDefinitions(ctx, "project-1", true); err != nil || len(managedAgents) != 1 || managedAgents[0].ID != managedAgent.ID {
-		t.Fatalf("ListManagedAgentDefinitions agents=%#v err=%v", managedAgents, err)
-	} else if len(managedAgents[0].Skills) != 1 || managedAgents[0].Skills[0].Name != "local-review" {
-		t.Fatalf("managed agent skills = %#v", managedAgents[0].Skills)
-	}
-	if _, err := store.SetAgentDefinitionEnabled(ctx, agent.ID, false); err != nil {
-		t.Fatalf("SetAgentDefinitionEnabled returned error: %v", err)
-	}
-
-	loader, err := store.CreateLoader(ctx, Loader{
-		Summary:  domain.LoaderSummary{ID: "loader-1", Name: "Loader", Enabled: true, Runtime: domain.LoaderRuntimeScheduler, DefaultAgent: "agent-1", AgentID: agent.ID},
+	loader, err := upsertNativeTestScheduler(ctx, store, Scheduler{
+		Summary:  domain.SchedulerSummary{ID: "loader-1", Name: "Scheduler", Enabled: true, Runtime: domain.SchedulerRuntimeScheduler, DefaultAgent: "codex"},
 		Script:   "function main(){}",
 		EnvItems: []domain.SandboxEnvVar{{Name: "LOADER", Value: "value"}},
 	})
 	if err != nil {
-		t.Fatalf("CreateLoader returned error: %v", err)
+		t.Fatalf("create native scheduler returned error: %v", err)
 	}
-	triggers, err := store.ReplaceLoaderTriggers(ctx, loader.Summary.ID, []domain.LoaderTrigger{
-		{ID: "interval", Kind: domain.LoaderTriggerKindInterval, IntervalMs: 1000, Enabled: true},
-		{ID: "event", Kind: domain.LoaderTriggerKindEvent, Topic: "topic", Enabled: true},
+	triggers, err := store.ReplaceLoaderTriggers(ctx, loader.Summary.ID, []domain.SchedulerTrigger{
+		{ID: "interval", Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 1000, Enabled: true},
+		{ID: "event", Kind: domain.SchedulerTriggerKindEvent, Topic: "topic", Enabled: true},
 	})
 	if err != nil || len(triggers) != 2 {
 		t.Fatalf("ReplaceLoaderTriggers triggers=%#v err=%v", triggers, err)
@@ -761,21 +544,8 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if err := store.UpdateLoaderLastError(ctx, "", "last error"); err == nil {
 		t.Fatalf("UpdateLoaderLastError empty id returned nil error")
 	}
-	loader.Summary.Description = "updated"
-	if _, err := store.UpdateLoader(ctx, loader); err != nil {
-		t.Fatalf("UpdateLoader returned error: %v", err)
-	}
-	if _, err := store.UpsertManagedLoader(ctx, Loader{
-		Summary: domain.LoaderSummary{ID: "managed-loader-1", Name: "Managed Loader", Enabled: true, Runtime: domain.LoaderRuntimeScheduler, DefaultAgent: "codex", ManagedProjectID: "project-1", ManagedAgentName: "worker", ManagedSchedulerID: "sched-1"},
-		Script:  "function main(){}",
-	}); err != nil {
-		t.Fatalf("UpsertManagedLoader returned error: %v", err)
-	}
-	if managedLoaders, err := store.ListManagedLoaders(ctx, "project-1"); err != nil || len(managedLoaders) != 1 {
-		t.Fatalf("ListManagedLoaders loaders=%#v err=%v", managedLoaders, err)
-	}
-	if _, found, err := store.GetLoaderIfExists(ctx, loader.Summary.ID); err != nil || !found {
-		t.Fatalf("GetLoaderIfExists found=%v err=%v", found, err)
+	if loaded, err := store.GetLoader(ctx, loader.Summary.ID); err != nil || loaded.Summary.ID != loader.Summary.ID {
+		t.Fatalf("GetLoader loaded=%#v err=%v", loaded, err)
 	}
 	if summaries, err := store.ListLoaderSummaries(ctx); err != nil || len(summaries) < 1 {
 		t.Fatalf("ListLoaderSummaries summaries=%#v err=%v", summaries, err)
@@ -783,11 +553,11 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if loaders, err := store.ListLoaders(ctx); err != nil || len(loaders) < 1 {
 		t.Fatalf("ListLoaders loaders=%#v err=%v", loaders, err)
 	}
-	run := domain.LoaderRunSummary{ID: "run-1", LoaderID: loader.Summary.ID, TriggerID: "event", TriggerKind: domain.LoaderTriggerKindEvent, TriggerSource: "manual", Status: domain.LoaderRunStatusRunning, StartedAt: time.Now().UTC(), PayloadJSON: `{}`}
+	run := domain.SchedulerRunSummary{ID: "run-1", SchedulerID: loader.Summary.ID, TriggerID: "event", TriggerKind: domain.SchedulerTriggerKindEvent, TriggerSource: "manual", Status: domain.SchedulerRunStatusRunning, StartedAt: time.Now().UTC(), PayloadJSON: `{}`}
 	if err := store.CreateLoaderRun(ctx, run); err != nil {
 		t.Fatalf("CreateLoaderRun returned error: %v", err)
 	}
-	run.Status = domain.LoaderRunStatusSucceeded
+	run.Status = domain.SchedulerRunStatusSucceeded
 	run.CompletedAt = time.Now().UTC()
 	if err := store.UpdateLoaderRun(ctx, run); err != nil {
 		t.Fatalf("UpdateLoaderRun returned error: %v", err)
@@ -815,7 +585,7 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if runs, err := store.ListRecentLoaderRuns(ctx, 0); err != nil || len(runs) != 1 {
 		t.Fatalf("ListRecentLoaderRuns default limit runs=%#v err=%v", runs, err)
 	}
-	if err := store.AddLoaderEvent(ctx, domain.LoaderEvent{ID: "event-1", LoaderID: loader.Summary.ID, RunID: run.ID, Type: "loader.test", Level: "info", CreatedAt: time.Now().UTC()}); err != nil {
+	if err := store.AddLoaderEvent(ctx, domain.SchedulerEvent{ID: "event-1", SchedulerID: loader.Summary.ID, RunID: run.ID, Type: "loader.test", Level: "info", CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("AddLoaderEvent returned error: %v", err)
 	}
 	if events, err := store.ListLoaderEvents(ctx, loader.Summary.ID, 10); err != nil || len(events) != 1 {
@@ -836,20 +606,20 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if err := store.SetLoaderState(ctx, "", "key", `{}`); err == nil {
 		t.Fatalf("SetLoaderState empty loader returned nil error")
 	}
-	if err := store.UpsertLoaderBinding(ctx, domain.LoaderBinding{LoaderID: loader.Summary.ID, SandboxID: "sandbox-1"}); err != nil {
+	if err := store.UpsertLoaderBinding(ctx, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, SandboxID: "sandbox-1"}); err != nil {
 		t.Fatalf("UpsertLoaderBinding returned error: %v", err)
 	}
 	if binding, found, err := store.GetLoaderBinding(ctx, loader.Summary.ID, ""); err != nil || !found || binding.SandboxID != "sandbox-1" {
 		t.Fatalf("GetLoaderBinding binding=%#v found=%v err=%v", binding, found, err)
 	}
-	if err := store.UpsertLoaderBinding(ctx, domain.LoaderBinding{LoaderID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-2", SandboxConfigHash: "sha256:config"}); err != nil {
+	if err := store.UpsertLoaderBinding(ctx, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-2", SandboxConfigHash: "sha256:config"}); err != nil {
 		t.Fatalf("UpsertLoaderBinding trigger scope returned error: %v", err)
 	}
 	if binding, found, err := store.GetLoaderBinding(ctx, loader.Summary.ID, "trigger-1"); err != nil || !found || binding.SandboxID != "sandbox-2" || binding.SandboxConfigHash != "sha256:config" {
 		t.Fatalf("GetLoaderBinding trigger binding=%#v found=%v err=%v", binding, found, err)
 	}
-	wrongExpected := domain.LoaderBinding{LoaderID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "stale", SandboxConfigHash: "sha256:config"}
-	claimed, err := store.CompareAndSwapLoaderBinding(ctx, &wrongExpected, domain.LoaderBinding{LoaderID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-3", SandboxConfigHash: "sha256:new"})
+	wrongExpected := domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "stale", SandboxConfigHash: "sha256:config"}
+	claimed, err := store.CompareAndSwapLoaderBinding(ctx, &wrongExpected, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-3", SandboxConfigHash: "sha256:new"})
 	if err != nil || claimed {
 		t.Fatalf("CompareAndSwapLoaderBinding stale expected claimed=%v err=%v, want false/nil", claimed, err)
 	}
@@ -857,25 +627,22 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("GetLoaderBinding before compare-and-swap current=%#v found=%v err=%v", current, found, err)
 	}
-	claimed, err = store.CompareAndSwapLoaderBinding(ctx, &current, domain.LoaderBinding{LoaderID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-3", SandboxConfigHash: "sha256:new"})
+	claimed, err = store.CompareAndSwapLoaderBinding(ctx, &current, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-3", SandboxConfigHash: "sha256:new"})
 	if err != nil || !claimed {
 		t.Fatalf("CompareAndSwapLoaderBinding current claimed=%v err=%v, want true/nil", claimed, err)
 	}
-	claimed, err = store.CompareAndSwapLoaderBinding(ctx, nil, domain.LoaderBinding{LoaderID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-4", SandboxConfigHash: "sha256:other"})
+	claimed, err = store.CompareAndSwapLoaderBinding(ctx, nil, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-4", SandboxConfigHash: "sha256:other"})
 	if err != nil || claimed {
 		t.Fatalf("CompareAndSwapLoaderBinding occupied insert claimed=%v err=%v, want false/nil", claimed, err)
 	}
 	if binding, found, err := store.GetLoaderBinding(ctx, loader.Summary.ID, ""); err != nil || !found || binding.SandboxID != "sandbox-1" {
 		t.Fatalf("loader-level binding changed: binding=%#v found=%v err=%v", binding, found, err)
 	}
-	if binding, found, err := store.GetLoaderBinding(ctx, "missing", ""); err != nil || found || binding.LoaderID != "" {
+	if binding, found, err := store.GetLoaderBinding(ctx, "missing", ""); err != nil || found || binding.SchedulerID != "" {
 		t.Fatalf("GetLoaderBinding missing binding=%#v found=%v err=%v", binding, found, err)
 	}
-	if err := store.UpsertLoaderBinding(ctx, domain.LoaderBinding{}); err == nil {
+	if err := store.UpsertLoaderBinding(ctx, domain.SchedulerBinding{}); err == nil {
 		t.Fatalf("UpsertLoaderBinding empty binding returned nil error")
-	}
-	if disabled, err := store.DisableLoadersByDefaultAgent(ctx, agent.ID); err != nil || disabled < 1 {
-		t.Fatalf("DisableLoadersByDefaultAgent disabled=%d err=%v", disabled, err)
 	}
 
 	if has, err := store.HasLLMProviders(ctx); err != nil || has {
@@ -909,15 +676,6 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	}
 	testConfigStoreLLMBootstrapResolveCoverage(t, ctx)
 
-	if err := store.DeleteLoader(ctx, loader.Summary.ID); err != nil {
-		t.Fatalf("DeleteLoader returned error: %v", err)
-	}
-	if err := store.DeleteAgentDefinition(ctx, agent.ID); err != nil {
-		t.Fatalf("DeleteAgentDefinition returned error: %v", err)
-	}
-	if _, err := store.GetAgentDefinitionIncludingDeleted(ctx, agent.ID); err != nil {
-		t.Fatalf("GetAgentDefinitionIncludingDeleted after delete returned error: %v", err)
-	}
 	if err := store.DeleteWorkspaceConfig(ctx, workspace.ID); err != nil {
 		t.Fatalf("DeleteWorkspaceConfig returned error: %v", err)
 	}
@@ -993,84 +751,6 @@ func testConfigStoreLLMBootstrapResolveCoverage(t *testing.T, ctx context.Contex
 	}
 }
 
-func testConfigStoreMigrationAndTimeParsingWorkflows(t *testing.T) {
-	t.Helper()
-	ctx := context.Background()
-	db := newMemoryDB(t)
-	store := FromDB(db)
-
-	if _, err := db.ExecContext(ctx, `CREATE TABLE global_env (
-		name TEXT PRIMARY KEY,
-		value TEXT NOT NULL,
-		secret INTEGER NOT NULL,
-		updated_at TEXT NOT NULL
-	)`); err != nil {
-		t.Fatalf("create legacy global env: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO global_env(name, value, secret, updated_at)
-		VALUES ('A', 'one', 1, '2026-06-02T09:00:00Z')`); err != nil {
-		t.Fatalf("insert legacy global env: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `CREATE TABLE workspace_config (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		type TEXT NOT NULL,
-		config_json TEXT NOT NULL,
-		comment TEXT NOT NULL,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL
-	)`); err != nil {
-		t.Fatalf("create legacy workspace config: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO workspace_config(id, name, type, config_json, comment, created_at, updated_at)
-		VALUES ('ws-1', 'Workspace', 'file', '{}', 'legacy', '2026-06-02T09:00:00.000Z', '2026-06-02T09:01:00Z')`); err != nil {
-		t.Fatalf("insert legacy workspace config: %v", err)
-	}
-	if err := store.initSchema(ctx); err != nil {
-		t.Fatalf("migrate legacy timestamp schemas: %v", err)
-	}
-	columns, err := sqliteTableColumnTypes(ctx, db, "global_env")
-	if err != nil {
-		t.Fatalf("tableColumnTypes returned error: %v", err)
-	}
-	if !isIntegerColumnType(columns["updated_at"]) {
-		t.Fatalf("updated_at column type = %q, want integer", columns["updated_at"])
-	}
-	items, err := store.ListGlobalEnv(ctx)
-	if err != nil {
-		t.Fatalf("ListGlobalEnv returned error: %v", err)
-	}
-	if len(items) != 1 || items[0].Name != "A" || !items[0].Secret {
-		t.Fatalf("global env items = %#v", items)
-	}
-	workspace, err := store.GetWorkspaceConfig(ctx, "ws-1")
-	if err != nil {
-		t.Fatalf("GetWorkspaceConfig returned error: %v", err)
-	}
-	if workspace.Name != "Workspace" || workspace.Type != "file" || workspace.CreatedAt.IsZero() || workspace.UpdatedAt.IsZero() {
-		t.Fatalf("workspace = %#v", workspace)
-	}
-
-	if !ParseStoredLoaderTriggerTime(int(1000)).Equal(time.Unix(1000, 0).UTC()) {
-		t.Fatalf("ParseStoredLoaderTriggerTime int failed")
-	}
-	if !ParseStoredLoaderTriggerTime(float64(1000)).Equal(time.Unix(1000, 0).UTC()) {
-		t.Fatalf("ParseStoredLoaderTriggerTime float failed")
-	}
-	if !ParseStoredLoaderTriggerTime([]byte("1000")).Equal(time.Unix(1000, 0).UTC()) {
-		t.Fatalf("ParseStoredLoaderTriggerTime bytes failed")
-	}
-	if !ParseStoredLoaderTriggerTime(" ").IsZero() || !ParseStoredLoaderTriggerTime(struct{}{}).IsZero() {
-		t.Fatalf("ParseStoredLoaderTriggerTime empty/default failed")
-	}
-	if !ParseStoredTime("2026-06-02T09:00:00.000Z").Equal(time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC)) {
-		t.Fatalf("ParseStoredTime custom layout failed")
-	}
-	if BoolToInt(true) != 1 || BoolToInt(false) != 0 {
-		t.Fatalf("BoolToInt returned unexpected values")
-	}
-}
-
 func testConfigStoreProjectSchemaMigrationWorkflows(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
@@ -1086,96 +766,6 @@ func testConfigStoreProjectSchemaMigrationWorkflows(t *testing.T) {
 	}
 	assertProjectSchema(t, store)
 
-	existingDB := newMemoryDB(t)
-	configDB := FromDB(existingDB)
-	if err := configDB.initSchema(ctx); err != nil {
-		t.Fatalf("prepare existing schema returned error: %v", err)
-	}
-	if _, err := existingDB.ExecContext(ctx, `DELETE FROM schema_migrations`); err != nil {
-		t.Fatalf("remove migration history from existing fixture: %v", err)
-	}
-
-	agent, err := configDB.CreateAgentDefinition(ctx, domain.AgentDefinition{
-		ID:           "agent-existing",
-		Name:         "Existing Agent",
-		Provider:     "codex",
-		Model:        "gpt-test",
-		Driver:       driverpkg.RuntimeDriverBoxlite,
-		GuestImage:   "guest:latest",
-		SystemPrompt: "keep me",
-		Enabled:      true,
-	})
-	if err != nil {
-		t.Fatalf("CreateAgentDefinition returned error: %v", err)
-	}
-	loader, err := configDB.CreateLoader(ctx, Loader{
-		Summary: domain.LoaderSummary{
-			ID:           "loader-existing",
-			Name:         "Existing Loader",
-			Runtime:      domain.LoaderRuntimeScheduler,
-			Enabled:      true,
-			DefaultAgent: "codex",
-		},
-		Script: `{"steps":[]}`,
-	})
-	if err != nil {
-		t.Fatalf("CreateLoader returned error: %v", err)
-	}
-	if _, err := configDB.db.ExecContext(ctx, `INSERT INTO loader_run(
-		loader_id, run_id, trigger_id, trigger_kind, trigger_source, status, started_at
-	) VALUES(?, ?, ?, ?, ?, ?, ?)`,
-		loader.Summary.ID, "run-existing", "manual", domain.LoaderTriggerKindEvent, "legacy", domain.LoaderRunStatusRunning, time.Now().UTC().UnixMilli()); err != nil {
-		t.Fatalf("insert existing loader run: %v", err)
-	}
-
-	sessionStore, err := sessionstore.NewWithConfig(&appconfig.Config{
-		SandboxRoot:          filepath.Join(t.TempDir(), "sessions"),
-		RuntimeDriver:        driverpkg.RuntimeDriverBoxlite,
-		DefaultImage:         "guest:latest",
-		JupyterProxyBasePath: "/agent-compose/session",
-		JupyterGuestPort:     8888,
-	})
-	if err != nil {
-		t.Fatalf("NewWithConfig returned error: %v", err)
-	}
-	session, err := sessionStore.CreateSandbox(ctx, "Legacy Session", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeManual, nil, nil, []domain.SandboxTag{{Name: "legacy", Value: "true"}})
-	if err != nil {
-		t.Fatalf("CreateSession returned error: %v", err)
-	}
-
-	if err := configDB.initSchema(ctx); err != nil {
-		t.Fatalf("initSchema on existing db returned error: %v", err)
-	}
-	assertProjectSchema(t, configDB)
-
-	loadedAgent, err := configDB.GetAgentDefinition(ctx, agent.ID)
-	if err != nil {
-		t.Fatalf("GetAgentDefinition after migration returned error: %v", err)
-	}
-	if loadedAgent.Name != agent.Name || loadedAgent.Provider != agent.Provider || loadedAgent.Model != agent.Model {
-		t.Fatalf("loaded agent after migration = %#v, want %#v", loadedAgent, agent)
-	}
-	loadedLoader, err := configDB.GetLoader(ctx, loader.Summary.ID)
-	if err != nil {
-		t.Fatalf("GetLoader after migration returned error: %v", err)
-	}
-	if loadedLoader.Summary.Name != loader.Summary.Name || loadedLoader.Summary.RunCount != 1 {
-		t.Fatalf("loaded loader after migration = %#v", loadedLoader)
-	}
-	run, err := configDB.GetLoaderRun(ctx, loader.Summary.ID, "run-existing")
-	if err != nil {
-		t.Fatalf("GetLoaderRun after migration returned error: %v", err)
-	}
-	if run.Status != domain.LoaderRunStatusRunning || run.TriggerSource != "legacy" {
-		t.Fatalf("loader run after migration = %#v", run)
-	}
-	loadedSession, err := sessionStore.GetSandbox(ctx, session.Summary.ID)
-	if err != nil {
-		t.Fatalf("GetSession after config migration returned error: %v", err)
-	}
-	if loadedSession.Summary.Title != "Legacy Session" || len(loadedSession.Summary.Tags) != 1 {
-		t.Fatalf("loaded session after config migration = %#v", loadedSession)
-	}
 }
 
 func assertProjectSchema(t *testing.T, store *ConfigStore) {
@@ -1183,14 +773,15 @@ func assertProjectSchema(t *testing.T, store *ConfigStore) {
 	for table, columns := range map[string][]string{
 		"project":          {"id", "name", "source_path", "source_json", "current_revision", "spec_hash", "created_at", "updated_at", "removed_at"},
 		"project_revision": {"project_id", "revision", "spec_hash", "spec_json", "created_at"},
-		"project_agent":    {"project_id", "agent_name", "managed_agent_id", "revision", "provider", "model", "image", "driver", "scheduler_enabled", "spec_json", "created_at", "updated_at"},
-		"project_scheduler": {"project_id", "scheduler_id", "agent_name", "managed_loader_id", "revision", "enabled", "trigger_count", "spec_json",
+		"project_agent":    {"id", "project_id", "agent_name", "revision", "provider", "model", "image", "driver", "scheduler_enabled", "spec_json", "created_at", "updated_at"},
+		"project_scheduler": {"id", "project_id", "scheduler_id", "agent_name", "revision", "enabled", "trigger_count", "spec_json", "last_error",
 			"created_at", "updated_at"},
-		"project_run": {"run_id", "project_id", "project_name", "project_revision", "agent_name", "managed_agent_id", "source", "scheduler_id", "trigger_id", "status",
+		"project_run": {"run_id", "project_id", "project_name", "project_revision", "agent_name", "agent_id", "source", "scheduler_id", "scheduler_run_id", "trigger_id", "status",
 			"sandbox_id", "exit_code", "error", "prompt", "output", "result_json", "logs_path", "artifacts_dir", "cleanup_error", "driver", "image_ref", "started_at",
 			"completed_at", "duration_ms", "created_at", "updated_at"},
-		"agent_definition": {"skills", "managed_project_id", "managed_project_revision", "managed_agent_name"},
-		"loader":           {"managed_project_id", "managed_project_revision", "managed_agent_name", "managed_scheduler_id"},
+		"scheduler_trigger": {"scheduler_id", "trigger_id", "kind", "spec_json"},
+		"scheduler_run":     {"scheduler_id", "run_id", "status", "started_at"},
+		"scheduler_event":   {"scheduler_id", "scheduler_run_id", "event_id", "type"},
 	} {
 		assertTableColumns(t, store, table, columns...)
 	}
@@ -1198,15 +789,14 @@ func assertProjectSchema(t *testing.T, store *ConfigStore) {
 		"idx_project_name",
 		"idx_project_source_path",
 		"idx_project_revision_hash",
-		"idx_project_agent_managed_agent",
+		"idx_project_agent_project",
 		"idx_project_scheduler_agent",
-		"idx_project_scheduler_managed_loader",
 		"idx_project_run_project_status",
 		"idx_project_run_agent",
 		"idx_project_run_sandbox",
 		"idx_project_run_scheduler",
-		"idx_agent_definition_managed_project",
-		"idx_loader_managed_project",
+		"idx_project_run_scheduler_run",
+		"idx_scheduler_run_started",
 	} {
 		assertSQLiteIndexExists(t, store.db, index)
 	}
@@ -1231,12 +821,11 @@ func assertTableColumns(t *testing.T, store *ConfigStore, table string, columns 
 
 func assertSandboxNamedSQLiteSchema(t *testing.T, store *ConfigStore) {
 	t.Helper()
-	assertTableColumns(t, store, "loader", "sandbox_policy")
-	assertTableMissingColumns(t, store, "loader", "session_policy")
-	assertTableColumns(t, store, "loader_binding", "sandbox_id", "sandbox_config_hash")
-	assertTableMissingColumns(t, store, "loader_binding", "session_id")
-	assertTableColumns(t, store, "loader_event", "linked_sandbox_id", "linked_agent_thread_id")
-	assertTableMissingColumns(t, store, "loader_event", "linked_session_id", "linked_agent_session_id")
+	assertTableColumns(t, store, "scheduler_sandbox_binding", "sandbox_id", "sandbox_config_hash")
+	assertTableColumns(t, store, "scheduler_event", "linked_sandbox_id", "linked_agent_thread_id")
+	assertTableDoesNotExist(t, store, "loader")
+	assertTableDoesNotExist(t, store, "loader_binding")
+	assertTableDoesNotExist(t, store, "loader_event")
 	assertTableColumns(t, store, "event_sandbox_link", "sandbox_id")
 	assertTableDoesNotExist(t, store, "event_session_link")
 	assertTableColumns(t, store, "llm_facade_token", "sandbox_id")

@@ -21,7 +21,7 @@ import (
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -57,10 +57,10 @@ type ExecHandler struct {
 	projects  ExecProjectStore
 	runtime   ExecRuntimeResolver
 	runAttach ExecRunAttachDelegate
-	locks     *sessions.LifecycleLocks
+	locks     *sandboxes.LifecycleLocks
 }
 
-func (h *ExecHandler) WithLifecycleLocks(locks *sessions.LifecycleLocks) *ExecHandler {
+func (h *ExecHandler) WithLifecycleLocks(locks *sandboxes.LifecycleLocks) *ExecHandler {
 	h.locks = locks
 	return h
 }

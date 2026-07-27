@@ -16,7 +16,7 @@ func TestRunAgentStreamStartedProjectionPreservesResponseFields(t *testing.T) {
 		ProjectName:     "Project One",
 		ProjectRevision: 3,
 		AgentName:       "worker",
-		ManagedAgentID:  "agent-1",
+		AgentID:         "agent-1",
 		Source:          domain.ProjectRunSourceAPI,
 		Status:          domain.ProjectRunStatusRunning,
 		SandboxID:       "session-1",

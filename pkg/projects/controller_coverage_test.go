@@ -11,8 +11,8 @@ import (
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 )
 
 func TestControllerValidateApplyDryRunAndResolveWorkflows(t *testing.T) {
@@ -60,9 +60,9 @@ agents:
 		},
 	}
 	controller := NewController(ControllerDependencies{
-		Config:  &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
-		Store:   store,
-		Loaders: controllerCoverageLoaderValidator{},
+		Config:     &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
+		Store:      store,
+		Schedulers: controllerCoverageLoaderValidator{},
 	})
 	normalized := NormalizedProject{Spec: normalizedSpec, SpecHash: hash, SourcePath: "/repo/agent-compose.yaml"}
 	validation, err := controller.ValidateProject(ctx, normalized, nil)
@@ -150,23 +150,23 @@ func TestManagedSchedulerErrorHelpersCoverage(t *testing.T) {
 	}
 
 	var cleaned bool
-	cleanupFailedManagedScheduler(context.Background(), ReconcileSchedulerOptions{
-		CleanupFailedManagedScheduler: func(_ context.Context, scheduler domain.ProjectSchedulerRecord, loaderID string) {
+	cleanupFailedScheduler(context.Background(), ReconcileSchedulerOptions{
+		CleanupFailedScheduler: func(_ context.Context, scheduler domain.ProjectSchedulerRecord, loaderID string) {
 			cleaned = scheduler.SchedulerID == "scheduler-1" && loaderID == "loader-1"
 		},
 	}, domain.ProjectSchedulerRecord{SchedulerID: "scheduler-1"}, "loader-1")
 	if !cleaned {
-		t.Fatal("cleanupFailedManagedScheduler did not invoke callback")
+		t.Fatal("cleanupFailedScheduler did not invoke callback")
 	}
-	cleanupFailedManagedScheduler(context.Background(), ReconcileSchedulerOptions{}, domain.ProjectSchedulerRecord{}, "")
+	cleanupFailedScheduler(context.Background(), ReconcileSchedulerOptions{}, domain.ProjectSchedulerRecord{}, "")
 }
 
 func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	ctx := context.Background()
 	project := domain.ProjectRecord{ID: "project-1", Name: "Down Project"}
 	schedulerStore := &downCoverageStore{items: []domain.ProjectSchedulerRecord{
-		{ProjectID: project.ID, SchedulerID: "scheduler-disabled", AgentName: "idle", ManagedLoaderID: "loader-idle", Enabled: false},
-		{ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ManagedLoaderID: "loader-1", Enabled: true},
+		{ProjectID: project.ID, SchedulerID: "scheduler-disabled", AgentName: "idle", ID: "loader-idle", Enabled: false},
+		{ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Enabled: true},
 	}}
 	sessionStore := downCoverageSessions{sessions: []*domain.Sandbox{
 		nil,
@@ -181,12 +181,6 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	changes, err := DownProject(ctx, project, DownOptions{
 		Store:     schedulerStore,
 		Sandboxes: sessionStore,
-		DisableManagedLoader: func(_ context.Context, loaderID, projectID, schedulerID string) error {
-			if loaderID != "loader-1" || projectID != project.ID || schedulerID != "scheduler-1" {
-				t.Fatalf("DisableManagedLoader args = %q/%q/%q", loaderID, projectID, schedulerID)
-			}
-			return nil
-		},
 		RefreshLoaders: func(context.Context) error {
 			refreshed = true
 			return nil
@@ -221,14 +215,6 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 		t.Fatalf("DisableProjectManagedSchedulers list error returned nil error")
 	}
 	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{
-		Store: &downCoverageStore{items: []domain.ProjectSchedulerRecord{{ProjectID: project.ID, SchedulerID: "scheduler-1", ManagedLoaderID: "loader-1", Enabled: true}}},
-		DisableManagedLoader: func(context.Context, string, string, string) error {
-			return errors.New("disable failed")
-		},
-	}); err == nil {
-		t.Fatalf("DisableProjectManagedSchedulers managed loader error returned nil error")
-	}
-	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{
 		Store: &downCoverageStore{items: []domain.ProjectSchedulerRecord{{ProjectID: project.ID, SchedulerID: "scheduler-1", Enabled: true}}},
 		RefreshLoaders: func(context.Context) error {
 			return errors.New("refresh failed")
@@ -261,8 +247,8 @@ func TestE2EControllerValidateApplyDryRunAndResolveWorkflows(t *testing.T) {
 
 type controllerCoverageLoaderValidator struct{}
 
-func (controllerCoverageLoaderValidator) Validate(context.Context, string, string) (loaders.LoaderValidationResult, error) {
-	return loaders.LoaderValidationResult{Triggers: []domain.LoaderTrigger{{ID: "daily", Kind: domain.LoaderTriggerKindCron, Enabled: true, SpecJSON: `{"expr":"0 0 * * *"}`}}}, nil
+func (controllerCoverageLoaderValidator) Validate(context.Context, string, string) (schedulers.SchedulerValidationResult, error) {
+	return schedulers.SchedulerValidationResult{Triggers: []domain.SchedulerTrigger{{ID: "daily", Kind: domain.SchedulerTriggerKindCron, Enabled: true, SpecJSON: `{"expr":"0 0 * * *"}`}}}, nil
 }
 
 func (controllerCoverageLoaderValidator) Refresh(context.Context) error {
@@ -372,20 +358,12 @@ func (s *controllerCoverageStore) SetProjectSchedulerEnabled(context.Context, st
 	return domain.ProjectSchedulerRecord{}, nil
 }
 
-func (s *controllerCoverageStore) GetLoaderIfExists(context.Context, string) (domain.Loader, bool, error) {
-	return domain.Loader{}, false, nil
+func (s *controllerCoverageStore) GetLoader(context.Context, string) (domain.Scheduler, error) {
+	return domain.Scheduler{}, sql.ErrNoRows
 }
 
-func (s *controllerCoverageStore) UpsertManagedLoader(context.Context, domain.Loader) (domain.Loader, error) {
-	return domain.Loader{}, nil
-}
-
-func (s *controllerCoverageStore) ReplaceLoaderTriggers(context.Context, string, []domain.LoaderTrigger) ([]domain.LoaderTrigger, error) {
+func (s *controllerCoverageStore) ReplaceLoaderTriggers(context.Context, string, []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
 	return nil, nil
-}
-
-func (s *controllerCoverageStore) SetLoaderEnabled(context.Context, string, bool) error {
-	return nil
 }
 
 type controllerCoverageSessionStore struct{}

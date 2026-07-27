@@ -30,25 +30,25 @@ type EventRunsResponse struct {
 }
 
 type EventRunJSON struct {
-	EventID   string `json:"event_id"`
-	LoaderID  string `json:"loader_id"`
-	RunID     string `json:"run_id,omitempty"`
-	TriggerID string `json:"trigger_id"`
-	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	EventID     string `json:"event_id"`
+	SchedulerID string `json:"loader_id"`
+	RunID       string `json:"run_id,omitempty"`
+	TriggerID   string `json:"trigger_id"`
+	Status      string `json:"status"`
+	Error       string `json:"error,omitempty"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 type EventSandboxJSON struct {
-	SandboxID     string `json:"sandbox_id"`
-	Relation      string `json:"relation"`
-	LoaderID      string `json:"loader_id,omitempty"`
-	RunID         string `json:"run_id,omitempty"`
-	TriggerID     string `json:"trigger_id,omitempty"`
-	LoaderEventID string `json:"loader_event_id,omitempty"`
-	EventID       string `json:"event_id"`
-	CreatedAt     string `json:"created_at"`
+	SandboxID        string `json:"sandbox_id"`
+	Relation         string `json:"relation"`
+	SchedulerID      string `json:"loader_id,omitempty"`
+	RunID            string `json:"run_id,omitempty"`
+	TriggerID        string `json:"trigger_id,omitempty"`
+	SchedulerEventID string `json:"loader_event_id,omitempty"`
+	EventID          string `json:"event_id"`
+	CreatedAt        string `json:"created_at"`
 }
 
 type SourceRequest struct {

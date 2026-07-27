@@ -17,29 +17,29 @@ import (
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
-	sessionstream "agent-compose/pkg/sessions"
+	sessionstream "agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/volumes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 func NewProjectController(di do.Injector) (*projects.Controller, error) {
 	imageBackends := do.MustInvoke[*adapters.ImageBackends](di)
-	sessionStore := do.MustInvoke[*sessionstore.Store](di)
+	sessionStore := do.MustInvoke[*sandboxstore.Store](di)
 	sandboxDriver := do.MustInvoke[*adapters.SandboxDriver](di)
 	streams := do.MustInvoke[*sessionstream.StreamBroker](di)
 	return projects.NewController(projects.ControllerDependencies{
-		Config:    do.MustInvoke[*appconfig.Config](di),
-		Store:     do.MustInvoke[*configstore.ConfigStore](di),
-		Sandboxes: sessionStore,
-		Images:    imageBackends.Auto,
-		Loaders:   do.MustInvoke[*loaders.Controller](di),
-		Volumes:   do.MustInvoke[*volumes.Manager](di),
-		Gateway:   do.MustInvoke[*configstore.ConfigStore](di),
+		Config:     do.MustInvoke[*appconfig.Config](di),
+		Store:      do.MustInvoke[*configstore.ConfigStore](di),
+		Sandboxes:  sessionStore,
+		Images:     imageBackends.Auto,
+		Schedulers: do.MustInvoke[*schedulers.Controller](di),
+		Volumes:    do.MustInvoke[*volumes.Manager](di),
+		Gateway:    do.MustInvoke[*configstore.ConfigStore](di),
 		StopSandbox: func(ctx context.Context, session *domain.Sandbox) error {
 			return stopProjectSandbox(ctx, sessionStore, sandboxDriver, streams, session)
 		},

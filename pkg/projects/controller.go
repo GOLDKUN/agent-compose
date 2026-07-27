@@ -12,8 +12,8 @@ import (
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/images"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 )
 
 var (
@@ -52,11 +52,6 @@ type NormalizedProject struct {
 	Spec       *compose.NormalizedProjectSpec
 	SpecHash   string
 	SourcePath string
-
-	// managedLoaderOverrides is populated only by the legacy-v1 compatibility
-	// projection. It lets that boundary adopt an existing loader so identity,
-	// history, runtime overrides, and task-local environment survive migration.
-	managedLoaderOverrides map[string]legacyManagedLoaderOverride
 }
 
 type ControllerStore interface {
@@ -70,7 +65,6 @@ type ControllerStore interface {
 	UpsertProjectAgent(context.Context, domain.ProjectAgentRecord) (domain.ProjectAgentRecord, error)
 	ListProjectAgents(context.Context, string) ([]domain.ProjectAgentRecord, error)
 	ListProjectSchedulers(context.Context, string) ([]domain.ProjectSchedulerRecord, error)
-	ReconcileAgentDefinitionStore
 	ReconcileSchedulerStore
 	DownStore
 }
@@ -79,8 +73,8 @@ type SandboxStore interface {
 	DownSandboxStore
 }
 
-type LoaderValidator interface {
-	Validate(ctx context.Context, runtime, script string) (loaders.LoaderValidationResult, error)
+type SchedulerValidator interface {
+	Validate(ctx context.Context, runtime, script string) (schedulers.SchedulerValidationResult, error)
 	Refresh(ctx context.Context) error
 }
 
@@ -92,15 +86,15 @@ type VolumeManager interface {
 }
 
 type Controller struct {
-	config    *appconfig.Config
-	store     ControllerStore
-	sandboxes SandboxStore
-	images    images.Backend
-	loaders   LoaderValidator
-	volumes   VolumeManager
-	gateway   CapabilityGatewaySource
-	stop      func(context.Context, *domain.Sandbox) error
-	defaultDR string
+	config     *appconfig.Config
+	store      ControllerStore
+	sandboxes  SandboxStore
+	images     images.Backend
+	schedulers SchedulerValidator
+	volumes    VolumeManager
+	gateway    CapabilityGatewaySource
+	stop       func(context.Context, *domain.Sandbox) error
+	defaultDR  string
 }
 
 type ControllerDependencies struct {
@@ -108,7 +102,7 @@ type ControllerDependencies struct {
 	Store       ControllerStore
 	Sandboxes   SandboxStore
 	Images      images.Backend
-	Loaders     LoaderValidator
+	Schedulers  SchedulerValidator
 	Volumes     VolumeManager
 	Gateway     CapabilityGatewaySource
 	StopSandbox func(context.Context, *domain.Sandbox) error
@@ -120,15 +114,15 @@ func NewController(deps ControllerDependencies) *Controller {
 		defaultDriver = deps.Config.RuntimeDriver
 	}
 	return &Controller{
-		config:    deps.Config,
-		store:     deps.Store,
-		sandboxes: deps.Sandboxes,
-		images:    deps.Images,
-		loaders:   deps.Loaders,
-		volumes:   deps.Volumes,
-		gateway:   deps.Gateway,
-		stop:      deps.StopSandbox,
-		defaultDR: defaultDriver,
+		config:     deps.Config,
+		store:      deps.Store,
+		sandboxes:  deps.Sandboxes,
+		images:     deps.Images,
+		schedulers: deps.Schedulers,
+		volumes:    deps.Volumes,
+		gateway:    deps.Gateway,
+		stop:       deps.StopSandbox,
+		defaultDR:  defaultDriver,
 	}
 }
 
@@ -145,10 +139,10 @@ func (c *Controller) ValidateProject(ctx context.Context, normalized NormalizedP
 	if normalized.Spec == nil {
 		return ValidateResult{Valid: false, Issues: []ValidationIssue{{Path: "spec", Message: "project spec is required"}}}, nil
 	}
-	if issues := c.validateManagedAgentDefinitions(normalized); len(issues) > 0 {
+	if issues := c.validateProjectAgentDefinitions(normalized); len(issues) > 0 {
 		return ValidateResult{Valid: false, Issues: issues, SpecHash: normalized.SpecHash}, nil
 	}
-	if issues := c.validateManagedSchedulers(ctx, normalized); len(issues) > 0 {
+	if issues := c.validateSchedulers(ctx, normalized); len(issues) > 0 {
 		return ValidateResult{Valid: false, Issues: issues, SpecHash: normalized.SpecHash}, nil
 	}
 	warnings, err := c.capabilityGatewayWarnings(ctx, normalized.Spec)
@@ -188,14 +182,10 @@ func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyR
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("%w: apply project: %w", ErrInvalidRequest, err)
 	}
-	normalized, err = c.preserveLegacyManagedLoaderIdentities(ctx, project, normalized)
-	if err != nil {
-		return ApplyResult{}, fmt.Errorf("apply project %s: preserve legacy scheduler identities: %w", normalized.Spec.Name, err)
-	}
-	if issues := c.validateManagedAgentDefinitions(normalized); len(issues) > 0 {
+	if issues := c.validateProjectAgentDefinitions(normalized); len(issues) > 0 {
 		return ApplyResult{Issues: issues, RevisionSpec: normalized.Spec}, nil
 	}
-	if issues := c.validateManagedSchedulers(ctx, normalized); len(issues) > 0 {
+	if issues := c.validateSchedulers(ctx, normalized); len(issues) > 0 {
 		return ApplyResult{Issues: issues, RevisionSpec: normalized.Spec}, nil
 	}
 	warnings, err := c.capabilityGatewayWarnings(ctx, normalized.Spec)
@@ -256,6 +246,7 @@ func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyR
 	}
 	changes := applyChanges(project, existingProject, projectFound, revision, revisionCreated)
 	agentsUnchanged := true
+	agentActions := make(map[string]string, len(agentRecords))
 	for _, agent := range agentRecords {
 		existingAgent, found, err := c.getProjectAgentIfExists(ctx, project.ID, agent.AgentName)
 		if err != nil {
@@ -265,28 +256,34 @@ func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyR
 			return ApplyResult{}, fmt.Errorf("apply project %s: upsert agent %s: %w", normalized.Spec.Name, agent.AgentName, err)
 		}
 		action := ProjectAgentChangeAction(existingAgent, found, agent)
+		agentActions[agent.ID] = action
 		if action != ChangeActionUnchanged {
 			agentsUnchanged = false
 		}
 		changes = append(changes, Change{
 			Action:       action,
 			ResourceType: "project_agent",
-			ResourceID:   agent.ManagedAgentID,
+			ResourceID:   agent.ID,
 			Name:         agent.AgentName,
 		})
 	}
-	agentDefinitionChanges, agentDefinitionsUnchanged, err := ReconcileManagedAgentDefinitions(ctx, c.store, project, agentDefinitions)
-	if err != nil {
-		return ApplyResult{}, fmt.Errorf("apply project %s: %w", normalized.Spec.Name, err)
+	// Keep the historical change-report shape while project_agent and the
+	// immutable revision now own identity and runtime configuration.
+	for _, definition := range agentDefinitions {
+		action := agentActions[definition.ID]
+		if action == "" {
+			action = ChangeActionUnchanged
+		}
+		changes = append(changes, Change{
+			Action:       action,
+			ResourceType: "agent_definition",
+			ResourceID:   definition.ID,
+			Name:         definition.Name,
+		})
 	}
-	if !agentDefinitionsUnchanged {
-		agentsUnchanged = false
-	}
-	changes = append(changes, agentDefinitionChanges...)
-	schedulerChanges, schedulersUnchanged, err := ReconcileManagedSchedulers(ctx, c.store, project, schedulerRecords, managedLoaders, ReconcileSchedulerOptions{
-		CleanupFailedManagedScheduler: c.cleanupFailedManagedSchedulerReconcile,
-		DisableManagedLoaderIfOwned:   c.disableManagedLoaderIfOwned,
-		RefreshLoaders:                c.refreshLoaders,
+	schedulerChanges, schedulersUnchanged, err := ReconcileSchedulers(ctx, c.store, project, schedulerRecords, managedLoaders, ReconcileSchedulerOptions{
+		CleanupFailedScheduler: c.cleanupFailedSchedulerReconcile,
+		RefreshLoaders:         c.refreshLoaders,
 	})
 	if err != nil {
 		changes = append(changes, schedulerChanges...)
@@ -393,11 +390,10 @@ func (c *Controller) RemoveProject(ctx context.Context, req RemoveRequest) (Remo
 		return RemoveResult{}, err
 	}
 	downChanges, err := DownProject(ctx, project, DownOptions{
-		Store:                c.store,
-		Sandboxes:            c.sandboxes,
-		DisableManagedLoader: c.disableManagedLoaderIfOwned,
-		RefreshLoaders:       c.refreshLoaders,
-		StopSandbox:          c.stop,
+		Store:          c.store,
+		Sandboxes:      c.sandboxes,
+		RefreshLoaders: c.refreshLoaders,
+		StopSandbox:    c.stop,
 	})
 	changes := downChangesToChanges(downChanges)
 	if err != nil {
@@ -473,7 +469,7 @@ func (c *Controller) resolveProjectRef(ctx context.Context, ref ProjectRef, incl
 	return resolveProjectByExactMatch(ctx, c.store, query, true, selectorName, projectValue)
 }
 
-func (c *Controller) projectArtifacts(ctx context.Context, project domain.ProjectRecord, revision int64, normalized NormalizedProject) ([]domain.ProjectAgentRecord, []domain.AgentDefinition, []domain.ProjectSchedulerRecord, []domain.Loader, error) {
+func (c *Controller) projectArtifacts(ctx context.Context, project domain.ProjectRecord, revision int64, normalized NormalizedProject) ([]domain.ProjectAgentRecord, []domain.AgentDefinition, []domain.ProjectSchedulerRecord, []domain.Scheduler, error) {
 	spec := normalized.Spec
 	agentRecords, err := NewAgentRecordsFromSpec(project.ID, revision, spec)
 	if err != nil {
@@ -483,14 +479,7 @@ func (c *Controller) projectArtifacts(ctx context.Context, project domain.Projec
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	if err := c.bindLegacyFileWorkspaces(ctx, project, spec, agentDefinitions); err != nil {
-		return nil, nil, nil, nil, err
-	}
-	schedulerRecords, managedLoaders, err := c.projectManagedSchedulersFromSpec(ctx, project, revision, spec)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	schedulerRecords, managedLoaders, err = applyManagedLoaderOverrides(project, revision, schedulerRecords, managedLoaders, normalized.managedLoaderOverrides)
+	schedulerRecords, managedLoaders, err := c.projectSchedulersFromSpec(ctx, project, revision, spec)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -498,15 +487,15 @@ func (c *Controller) projectArtifacts(ctx context.Context, project domain.Projec
 	return agentRecords, agentDefinitions, schedulerRecords, managedLoaders, nil
 }
 
-func (c *Controller) projectManagedSchedulersFromSpec(ctx context.Context, project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]domain.ProjectSchedulerRecord, []domain.Loader, error) {
-	builds, err := c.projectManagedSchedulerBuildsFromSpec(ctx, project, revision, spec)
+func (c *Controller) projectSchedulersFromSpec(ctx context.Context, project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]domain.ProjectSchedulerRecord, []domain.Scheduler, error) {
+	builds, err := c.projectSchedulerBuildsFromSpec(ctx, project, revision, spec)
 	if err != nil {
 		return nil, nil, err
 	}
 	return SchedulerRecords(builds), SchedulerLoaders(builds), nil
 }
 
-func (c *Controller) projectManagedSchedulerBuildsFromSpec(ctx context.Context, project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]SchedulerBuild, error) {
+func (c *Controller) projectSchedulerBuildsFromSpec(ctx context.Context, project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]SchedulerBuild, error) {
 	builds, err := NewSchedulerBuildsFromSpec(project, revision, spec)
 	if err != nil {
 		return nil, err
@@ -521,41 +510,37 @@ func (c *Controller) projectManagedSchedulerBuildsFromSpec(ctx context.Context, 
 		}
 	}
 	for i := range builds {
-		script := inlineScripts[builds[i].Scheduler.AgentName]
+		script := inlineScripts[builds[i].Record.AgentName]
 		if strings.TrimSpace(script) == "" {
 			continue
 		}
-		validation, err := c.validateInlineSchedulerScript(ctx, builds[i].Scheduler.AgentName, script)
+		validation, err := c.validateInlineSchedulerScript(ctx, builds[i].Record.AgentName, script)
 		if err != nil {
 			return nil, err
 		}
 		builds[i].ValidationTriggers = validation.Triggers
-		builds[i].Loader.Triggers = validation.Triggers
-		builds[i].Scheduler.TriggerCount = len(validation.Triggers)
+		builds[i].Definition.Triggers = validation.Triggers
+		builds[i].Record.TriggerCount = len(validation.Triggers)
 	}
 	return builds, nil
 }
 
-func (c *Controller) validateManagedSchedulers(ctx context.Context, normalized NormalizedProject) []ValidationIssue {
+func (c *Controller) validateSchedulers(ctx context.Context, normalized NormalizedProject) []ValidationIssue {
 	project, err := NewRecordFromSpec(normalized.Spec, normalized.SourcePath)
 	if err != nil {
 		return []ValidationIssue{{Path: "spec", Message: err.Error()}}
 	}
-	builds, err := c.projectManagedSchedulerBuildsFromSpec(ctx, project, 0, normalized.Spec)
+	builds, err := c.projectSchedulerBuildsFromSpec(ctx, project, 0, normalized.Spec)
 	if err != nil {
 		return []ValidationIssue{managedSchedulerBuildIssue(err)}
 	}
-	builds, err = applyManagedLoaderOverrideBuilds(project, 0, builds, normalized.managedLoaderOverrides)
-	if err != nil {
-		return []ValidationIssue{{Path: "schedulers", Message: err.Error()}}
-	}
 	loaderRecords := SchedulerLoaders(builds)
 	for _, loader := range loaderRecords {
-		if _, err := loaders.NormalizeLoader(loader, false); err != nil {
+		if _, err := schedulers.NormalizeLoader(loader, false); err != nil {
 			return []ValidationIssue{{Path: "schedulers." + loader.Summary.ManagedAgentName, Message: err.Error()}}
 		}
 		for _, trigger := range loader.Triggers {
-			if _, err := loaders.NormalizeLoaderTrigger(loader.Summary.ID, trigger); err != nil {
+			if _, err := schedulers.NormalizeLoaderTrigger(loader.Summary.ID, trigger); err != nil {
 				return []ValidationIssue{{Path: "schedulers." + loader.Summary.ManagedAgentName + ".triggers", Message: err.Error()}}
 			}
 		}
@@ -575,14 +560,14 @@ func (e *managedSchedulerBuildError) Error() string {
 	return e.path + ": " + e.message
 }
 
-func (c *Controller) validateInlineSchedulerScript(ctx context.Context, agentName, script string) (loaders.LoaderValidationResult, error) {
+func (c *Controller) validateInlineSchedulerScript(ctx context.Context, agentName, script string) (schedulers.SchedulerValidationResult, error) {
 	path := "agents." + agentName + ".scheduler.script"
-	if c == nil || c.loaders == nil {
-		return loaders.LoaderValidationResult{}, &managedSchedulerBuildError{path: path, message: "loader manager is required to validate scheduler script"}
+	if c == nil || c.schedulers == nil {
+		return schedulers.SchedulerValidationResult{}, &managedSchedulerBuildError{path: path, message: "scheduler controller is required to validate scheduler script"}
 	}
-	validation, err := c.loaders.Validate(ctx, domain.LoaderRuntimeScheduler, script)
+	validation, err := c.schedulers.Validate(ctx, domain.SchedulerRuntimeScheduler, script)
 	if err != nil {
-		return loaders.LoaderValidationResult{}, &managedSchedulerBuildError{path: path, message: err.Error()}
+		return schedulers.SchedulerValidationResult{}, &managedSchedulerBuildError{path: path, message: err.Error()}
 	}
 	return validation, nil
 }
@@ -595,7 +580,7 @@ func managedSchedulerBuildIssue(err error) ValidationIssue {
 	return ValidationIssue{Path: "schedulers", Message: err.Error()}
 }
 
-func (c *Controller) validateManagedAgentDefinitions(normalized NormalizedProject) []ValidationIssue {
+func (c *Controller) validateProjectAgentDefinitions(normalized NormalizedProject) []ValidationIssue {
 	project, err := NewRecordFromSpec(normalized.Spec, normalized.SourcePath)
 	if err != nil {
 		return []ValidationIssue{{Path: "spec", Message: err.Error()}}
@@ -623,12 +608,9 @@ func (c *Controller) validateManagedAgentDefinitions(normalized NormalizedProjec
 	return issues
 }
 
-func (c *Controller) cleanupFailedManagedSchedulerReconcile(ctx context.Context, scheduler domain.ProjectSchedulerRecord, loaderID string) {
+func (c *Controller) cleanupFailedSchedulerReconcile(ctx context.Context, scheduler domain.ProjectSchedulerRecord, _ string) {
 	if c == nil || c.store == nil {
 		return
-	}
-	if strings.TrimSpace(loaderID) != "" {
-		_ = c.store.SetLoaderEnabled(ctx, loaderID, false)
 	}
 	if strings.TrimSpace(scheduler.ProjectID) != "" && strings.TrimSpace(scheduler.SchedulerID) != "" {
 		_, _ = c.store.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, false)
@@ -636,15 +618,11 @@ func (c *Controller) cleanupFailedManagedSchedulerReconcile(ctx context.Context,
 	_ = c.refreshLoaders(ctx)
 }
 
-func (c *Controller) disableManagedLoaderIfOwned(ctx context.Context, loaderID, projectID, schedulerID string) error {
-	return DisableManagedLoaderIfOwned(ctx, c.store, loaderID, projectID, schedulerID)
-}
-
 func (c *Controller) refreshLoaders(ctx context.Context) error {
-	if c == nil || c.loaders == nil {
+	if c == nil || c.schedulers == nil {
 		return nil
 	}
-	return c.loaders.Refresh(ctx)
+	return c.schedulers.Refresh(ctx)
 }
 
 func (c *Controller) getProjectAgentIfExists(ctx context.Context, projectID, agentName string) (domain.ProjectAgentRecord, bool, error) {
@@ -676,10 +654,10 @@ func applyChanges(project, existing domain.ProjectRecord, found bool, revision d
 	}
 }
 
-func dryRunChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, loaders []domain.Loader) []Change {
+func dryRunChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, loaders []domain.Scheduler) []Change {
 	changes := []Change{{Action: ChangeActionCreated, ResourceType: "project", ResourceID: project.ID, Name: project.Name}}
 	for _, agent := range agents {
-		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "project_agent", ResourceID: agent.ManagedAgentID, Name: agent.AgentName})
+		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "project_agent", ResourceID: agent.ID, Name: agent.AgentName})
 	}
 	for _, agent := range agentDefinitions {
 		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "agent_definition", ResourceID: agent.ID, Name: agent.Name})

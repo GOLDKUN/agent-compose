@@ -319,8 +319,7 @@ func (s *volumeStore) findVolumeSpecReferences(ctx context.Context, volumeName s
 		resourceType string
 		sql          string
 	}{
-		{resourceType: "agent_definition", sql: `SELECT id, name, volumes_json FROM agent_definition WHERE deleted_at = 0`},
-		{resourceType: "loader", sql: `SELECT id, name, volumes_json FROM loader`},
+		{resourceType: "project_agent", sql: `SELECT id, name, COALESCE(json_extract(spec_json, '$.volumes'), '[]') FROM project_agent`},
 	} {
 		rows, err := s.db.QueryContext(ctx, query.sql)
 		if err != nil {

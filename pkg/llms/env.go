@@ -9,7 +9,7 @@ import (
 
 const RuntimeBaseURLEnvName = "AGENT_COMPOSE_RUNTIME_BASE_URL"
 
-func LoaderCommandFacadeAgentModel(env map[string]string) (string, string) {
+func SchedulerCommandFacadeAgentModel(env map[string]string) (string, string) {
 	if env == nil {
 		return domain.DefaultAgentProvider, ""
 	}

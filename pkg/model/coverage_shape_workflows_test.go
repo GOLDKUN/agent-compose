@@ -10,8 +10,8 @@ import (
 	"github.com/samber/do/v2"
 
 	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
 )
 
@@ -88,8 +88,8 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 		t.Fatalf("NormalizeSandboxListBounds = %d/%d", offset, limit)
 	}
 
-	for _, runtime := range []string{"", domain.LoaderRuntimeScheduler} {
-		if got, err := domain.NormalizeLoaderRuntime(runtime); err != nil || got != domain.LoaderRuntimeScheduler {
+	for _, runtime := range []string{"", domain.SchedulerRuntimeScheduler} {
+		if got, err := domain.NormalizeLoaderRuntime(runtime); err != nil || got != domain.SchedulerRuntimeScheduler {
 			t.Fatalf("NormalizeLoaderRuntime(%q) = %q/%v", runtime, got, err)
 		}
 	}
@@ -98,7 +98,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 			t.Fatalf("NormalizeLoaderRuntime(%q) returned nil error", runtime)
 		}
 	}
-	for _, kind := range []string{domain.LoaderTriggerKindInterval, domain.LoaderTriggerKindEvent, domain.LoaderTriggerKindTimeout, domain.LoaderTriggerKindCron} {
+	for _, kind := range []string{domain.SchedulerTriggerKindInterval, domain.SchedulerTriggerKindEvent, domain.SchedulerTriggerKindTimeout, domain.SchedulerTriggerKindCron} {
 		if got, err := domain.NormalizeLoaderTriggerKind(kind); err != nil || got != kind {
 			t.Fatalf("NormalizeLoaderTriggerKind(%q) = %q/%v", kind, got, err)
 		}
@@ -106,36 +106,36 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 	if _, err := domain.NormalizeLoaderTriggerKind("bad"); err == nil {
 		t.Fatalf("NormalizeLoaderTriggerKind bad returned nil error")
 	}
-	if domain.NormalizeLoaderSandboxPolicy("new") != domain.LoaderSandboxPolicyNew || domain.NormalizeLoaderSandboxPolicy("bad") != domain.LoaderSandboxPolicySticky {
+	if domain.NormalizeLoaderSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || domain.NormalizeLoaderSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
 		t.Fatalf("NormalizeLoaderSandboxPolicy returned unexpected values")
 	}
-	if domain.NormalizeLoaderConcurrencyPolicy("allow") != domain.LoaderConcurrencyPolicyParallel || domain.NormalizeLoaderConcurrencyPolicy("bad") != domain.LoaderConcurrencyPolicySkip {
+	if domain.NormalizeLoaderConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || domain.NormalizeLoaderConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
 		t.Fatalf("NormalizeLoaderConcurrencyPolicy returned unexpected values")
 	}
-	for _, status := range []string{domain.LoaderRunStatusRunning, domain.LoaderRunStatusSucceeded, domain.LoaderRunStatusFailed, domain.LoaderRunStatusCanceled, domain.LoaderRunStatusSkipped} {
+	for _, status := range []string{domain.SchedulerRunStatusRunning, domain.SchedulerRunStatusSucceeded, domain.SchedulerRunStatusFailed, domain.SchedulerRunStatusCanceled, domain.SchedulerRunStatusSkipped} {
 		if domain.NormalizeLoaderRunStatus(status) != status {
 			t.Fatalf("NormalizeLoaderRunStatus(%q) changed", status)
 		}
 	}
-	if domain.NormalizeLoaderRunStatus("bad") != domain.LoaderRunStatusRunning {
+	if domain.NormalizeLoaderRunStatus("bad") != domain.SchedulerRunStatusRunning {
 		t.Fatalf("NormalizeLoaderRunStatus bad did not default")
 	}
-	if !domain.LoaderTriggerTopicMatches("agent-compose.session.*", "agent-compose.session.created") || domain.LoaderTriggerTopicMatches("", "agent-compose.session.created") || domain.LoaderTriggerTopicMatches("agent-compose.loader", "") {
-		t.Fatalf("LoaderTriggerTopicMatches returned unexpected values")
+	if !domain.SchedulerTriggerTopicMatches("agent-compose.session.*", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("agent-compose.loader", "") {
+		t.Fatalf("SchedulerTriggerTopicMatches returned unexpected values")
 	}
-	if domain.LoaderTriggerTopicMatches("adp.session.*", "agent-compose.session.created") {
+	if domain.SchedulerTriggerTopicMatches("adp.session.*", "agent-compose.session.created") {
 		t.Fatalf("legacy session wildcard matched agent-compose lifecycle topic")
 	}
-	if !domain.LoaderTriggerUsesSchedule(domain.LoaderTriggerKindCron) || domain.LoaderTriggerUsesSchedule(domain.LoaderTriggerKindEvent) {
-		t.Fatalf("LoaderTriggerUsesSchedule returned unexpected values")
+	if !domain.SchedulerTriggerUsesSchedule(domain.SchedulerTriggerKindCron) || domain.SchedulerTriggerUsesSchedule(domain.SchedulerTriggerKindEvent) {
+		t.Fatalf("SchedulerTriggerUsesSchedule returned unexpected values")
 	}
 	if !domain.TimeIsSet(now) || domain.TimeIsSet(time.Time{}) || domain.NonZeroTimeUnixMilli(time.Time{}) != 0 || domain.NonZeroTimeUnixMilli(now) == 0 {
 		t.Fatalf("time helper returned unexpected values")
 	}
-	if !domain.LoaderTriggerScheduledAt(now, 10).After(now) || !domain.LoaderTriggerScheduledAt(now, 0).IsZero() {
-		t.Fatalf("LoaderTriggerScheduledAt returned unexpected values")
+	if !domain.SchedulerTriggerScheduledAt(now, 10).After(now) || !domain.SchedulerTriggerScheduledAt(now, 0).IsZero() {
+		t.Fatalf("SchedulerTriggerScheduledAt returned unexpected values")
 	}
-	if domain.DefaultLoaderName(now) == "" || !strings.Contains(domain.DefaultLoaderScript(), "scheduler.interval") || domain.LoaderSourceSHA("script") == "" || domain.LoaderTriggerStableID("kind", "topic", 1, "cb", 0) == "" {
+	if domain.DefaultLoaderName(now) == "" || !strings.Contains(domain.DefaultLoaderScript(), "scheduler.interval") || domain.SchedulerSourceSHA("script") == "" || domain.SchedulerTriggerStableID("kind", "topic", 1, "cb", 0) == "" {
 		t.Fatalf("loader default/hash helpers returned empty values")
 	}
 	if err := domain.ValidateTopicEventName("runtime.topic-1"); err != nil {
@@ -211,17 +211,17 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 		}
 	}
 
-	bus, err := loaders.NewBus(do.New())
+	bus, err := schedulers.NewBus(do.New())
 	if err != nil || bus.Events() == nil {
 		t.Fatalf("NewBus = %#v/%v", bus, err)
 	}
-	if (&loaders.Bus{}).Publish(domain.LoaderTopicEvent{Topic: "runtime.test"}) {
+	if (&schedulers.Bus{}).Publish(domain.SchedulerTopicEvent{Topic: "runtime.test"}) {
 		t.Fatalf("Publish on bus without channel succeeded")
 	}
-	if bus.Publish(domain.LoaderTopicEvent{}) {
+	if bus.Publish(domain.SchedulerTopicEvent{}) {
 		t.Fatalf("Publish empty topic succeeded")
 	}
-	if !bus.Publish(domain.LoaderTopicEvent{Topic: "runtime.test", Payload: map[string]any{"ok": true}}) {
+	if !bus.Publish(domain.SchedulerTopicEvent{Topic: "runtime.test", Payload: map[string]any{"ok": true}}) {
 		t.Fatalf("Publish valid event failed")
 	}
 	select {
@@ -232,7 +232,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 	default:
 		t.Fatalf("expected published event")
 	}
-	if (*loaders.Bus)(nil).Events() != nil || (*loaders.Bus)(nil).Publish(domain.LoaderTopicEvent{Topic: "runtime.test"}) {
+	if (*schedulers.Bus)(nil).Events() != nil || (*schedulers.Bus)(nil).Publish(domain.SchedulerTopicEvent{Topic: "runtime.test"}) {
 		t.Fatalf("nil loader bus helpers returned unexpected values")
 	}
 

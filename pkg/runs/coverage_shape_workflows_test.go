@@ -23,10 +23,10 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/images"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/schedulers"
+	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/volumes"
 	"agent-compose/pkg/workspaces"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -37,10 +37,12 @@ func TestRunsCoordinatorAndHelperWorkflows(t *testing.T) {
 	now := time.Date(2026, 7, 3, 8, 0, 0, 0, time.UTC)
 	store := &fakeRunStore{
 		project: domain.ProjectRecord{ID: "project-1", Name: "Project", CurrentRevision: 3},
+		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 3,
+			SpecJSON: `{"name":"project","agents":[{"name":"worker","provider":"codex","image":"guest:latest","driver":{"name":"docker"},"enabled":true}]}`},
 		projectAgent: domain.ProjectAgentRecord{
-			ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Driver: "boxlite", Image: "agent-image:latest",
+			ProjectID: "project-1", AgentName: "worker", ID: "agent-1", Driver: "boxlite", Image: "agent-image:latest",
 		},
-		agent: ManagedAgentDefinition{
+		agent: domain.AgentDefinition{
 			ID: "agent-1", Enabled: true, Driver: "docker", GuestImage: "guest:latest", ManagedProjectID: "project-1", ManagedAgentName: "worker",
 		},
 		runs: map[string]domain.ProjectRunRecord{},
@@ -63,8 +65,8 @@ func TestRunsCoordinatorAndHelperWorkflows(t *testing.T) {
 		t.Fatalf("driver override run=%#v err=%v", override, err)
 	}
 	store.agent.Driver = ""
-	if fallback, err := coord.BeginRun(ctx, StartRequest{ProjectID: "project-1", AgentName: "worker", Source: domain.ProjectRunSourceAPI, ClientRequestID: "request-project-driver"}); err != nil || fallback.Driver != driverpkg.RuntimeDriverBoxlite {
-		t.Fatalf("project driver fallback run=%#v err=%v", fallback, err)
+	if immutable, err := coord.BeginRun(ctx, StartRequest{ProjectID: "project-1", AgentName: "worker", Source: domain.ProjectRunSourceAPI, ClientRequestID: "request-project-driver"}); err != nil || immutable.Driver != driverpkg.RuntimeDriverDocker {
+		t.Fatalf("immutable revision driver run=%#v err=%v", immutable, err)
 	}
 	beforeInvalid := len(store.runs)
 	if _, err := coord.BeginRun(ctx, StartRequest{ProjectID: "project-1", AgentName: "worker", Source: domain.ProjectRunSourceAPI, ClientRequestID: "request-bad-driver", Driver: "bad"}); err == nil {
@@ -91,7 +93,7 @@ func TestRunsCoordinatorAndHelperWorkflows(t *testing.T) {
 	if _, err := NewCoordinator(store, nil).BeginRun(ctx, StartRequest{ProjectID: "project-1", AgentName: "worker"}); err == nil {
 		t.Fatalf("expected missing stable id function error")
 	}
-	store.agent.Enabled = false
+	store.revision.SpecJSON = `{"name":"project","agents":[{"name":"worker","provider":"codex","image":"guest:latest","driver":{"name":"docker"},"enabled":false}]}`
 	if _, err := coord.BeginRun(ctx, StartRequest{ProjectID: "project-1", AgentName: "worker", ClientRequestID: "request-2"}); err == nil {
 		t.Fatalf("expected disabled agent error")
 	}
@@ -145,7 +147,7 @@ func TestRunsPreparationWorkspaceAndStatusWorkflows(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	spec := `{"variables":[{"name":"PROJECT_VAR","value":"project"}],"agents":[{"name":"worker","workspace":{"provider":"file","path":"."}}]}`
+	spec := `{"variables":[{"name":"PROJECT_VAR","value":"project"}],"agents":[{"name":"worker","env":[{"name":"AGENT_VAR","value":"agent"}],"capset_ids":["dev"],"workspace":{"provider":"file","path":"."}}]}`
 	store := &fakePreparationStore{
 		project:  domain.ProjectRecord{ID: "project-1", Name: "Project", SourcePath: sourceDir},
 		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: spec},
@@ -153,7 +155,7 @@ func TestRunsPreparationWorkspaceAndStatusWorkflows(t *testing.T) {
 		global:   []domain.SandboxEnvVar{{Name: "GLOBAL_VAR", Value: "global"}},
 	}
 	controller := &Controller{config: &appconfig.Config{DataRoot: root}}
-	run := domain.ProjectRunRecord{RunID: "run-1", ProjectID: "project-1", ProjectRevision: 1, ProjectName: "Project", AgentName: "worker", ManagedAgentID: "agent-1"}
+	run := domain.ProjectRunRecord{RunID: "run-1", ProjectID: "project-1", ProjectRevision: 1, ProjectName: "Project", AgentName: "worker", AgentID: "agent-1"}
 	prepared, err := PrepareProjectRun(ctx, store, projectRunWorkspaceResolver{controller: controller}, run, []*agentcomposev2.EnvVarSpec{{Name: "REQUEST_VAR", Value: "request"}})
 	if err != nil {
 		t.Fatalf("PrepareProjectRun returned error: %v", err)
@@ -269,16 +271,16 @@ func TestRunsControllerRunProjectAgentSuccessWorkflow(t *testing.T) {
 		DefaultImage:       "guest:latest",
 		DockerDefaultImage: "guest:latest",
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
 	configDB := &fakeControllerStore{
 		project: domain.ProjectRecord{ID: "project-1", Name: "Project", CurrentRevision: 1},
 		projectAgent: domain.ProjectAgentRecord{
-			ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
+			ProjectID: "project-1", AgentName: "worker", ID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
 		},
-		managed: ManagedAgentDefinition{
+		managed: domain.AgentDefinition{
 			ID: "agent-1", Enabled: true, Driver: driverpkg.RuntimeDriverDocker, GuestImage: "guest:latest", ManagedProjectID: "project-1", ManagedAgentName: "worker",
 		},
 		revision: domain.ProjectRevisionRecord{
@@ -388,16 +390,16 @@ func TestRunsControllerRunProjectAgentResolvesJupyterConfig(t *testing.T) {
 		JupyterGuestPort:     8888,
 		JupyterProxyBasePath: "/jupyter",
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
 	configDB := &fakeControllerStore{
 		project: domain.ProjectRecord{ID: "project-1", Name: "Project", CurrentRevision: 1},
 		projectAgent: domain.ProjectAgentRecord{
-			ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
+			ProjectID: "project-1", AgentName: "worker", ID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
 		},
-		managed: ManagedAgentDefinition{
+		managed: domain.AgentDefinition{
 			ID: "agent-1", Enabled: true, Driver: driverpkg.RuntimeDriverDocker, GuestImage: "guest:latest", ManagedProjectID: "project-1", ManagedAgentName: "worker",
 		},
 		revision: domain.ProjectRevisionRecord{
@@ -440,11 +442,7 @@ func TestRunsControllerRunProjectAgentResolvesJupyterConfig(t *testing.T) {
 func TestRunsControllerRunProjectAgentResolvesVolumeMounts(t *testing.T) {
 	fixture := newControllerRunFixture(t)
 	hostPath := t.TempDir()
-	fixture.configDB.agent.Volumes = []domain.VolumeMountSpec{{
-		Type:   domain.VolumeMountTypeVolume,
-		Source: "cache",
-		Target: "/cache",
-	}}
+	fixture.configDB.revision.SpecJSON = `{"agents":[{"name":"worker","volumes":[{"type":"volume","source":"cache","target":"/cache"}]}]}`
 	fixture.configDB.projectVolumes = map[string]domain.VolumeRecord{
 		"cache": {ID: "vol-cache", Name: "project_cache", Driver: domain.VolumeDriverLocal, Path: hostPath},
 	}
@@ -545,19 +543,19 @@ func TestRunsControllerRunProjectAgentCommandWorkflow(t *testing.T) {
 		DefaultImage:       "guest:latest",
 		DockerDefaultImage: "guest:latest",
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
 	configDB := &fakeControllerStore{
 		project: domain.ProjectRecord{ID: "project-1", Name: "Project", CurrentRevision: 1},
 		projectAgent: domain.ProjectAgentRecord{
-			ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
+			ProjectID: "project-1", AgentName: "worker", ID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
 		},
-		managed: ManagedAgentDefinition{
+		managed: domain.AgentDefinition{
 			ID: "agent-1", Enabled: true, Driver: driverpkg.RuntimeDriverDocker, GuestImage: "guest:latest", ManagedProjectID: "project-1", ManagedAgentName: "worker",
 		},
-		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: `{"agents":[{"name":"worker"}]}`},
+		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: `{"agents":[{"name":"worker","provider":"codex"}]}`},
 		agent:    domain.AgentDefinition{ID: "agent-1", Provider: "codex"},
 		runs:     map[string]domain.ProjectRunRecord{},
 	}
@@ -596,14 +594,14 @@ func TestRunsControllerRunProjectAgentCommandWorkflow(t *testing.T) {
 	if err != nil || execErr != nil {
 		t.Fatalf("RunProjectAgent command err=%v execErr=%v run=%#v", err, execErr, run)
 	}
-	if executor.prepareCalls != 1 || executor.preparedAgent.Provider != "codex" || executor.preparedDefinition == nil || executor.preparedDefinition.ID != "agent-1" {
+	if executor.prepareCalls != 1 || executor.preparedAgent.Provider != "codex" || executor.preparedDefinition == nil || executor.preparedDefinition.ManagedProjectID != "project-1" {
 		t.Fatalf("sandbox agent preparation = calls:%d agent:%#v definition:%#v", executor.prepareCalls, executor.preparedAgent, executor.preparedDefinition)
 	}
 	sandbox, err := store.GetSandbox(ctx, run.SandboxID)
 	if err != nil {
 		t.Fatalf("GetSandbox returned error: %v", err)
 	}
-	if execution.SessionTagValue(sandbox.Summary.Tags, domain.AgentSandboxTagID) != "agent-1" || execution.SessionTagValue(sandbox.Summary.Tags, domain.AgentSandboxTagProvider) != "codex" {
+	if execution.SessionTagValue(sandbox.Summary.Tags, domain.AgentSandboxTagID) != executor.preparedDefinition.ID || execution.SessionTagValue(sandbox.Summary.Tags, domain.AgentSandboxTagProvider) != "codex" {
 		t.Fatalf("sandbox agent tags = %#v", sandbox.Summary.Tags)
 	}
 	if run.Status != domain.ProjectRunStatusSucceeded || run.Output != "command output\n" || run.ArtifactsDir == "" || run.LogsPath == "" {
@@ -722,16 +720,16 @@ func TestRunsControllerRunProjectAgentCommandNonZeroExitPreservesOutput(t *testi
 		DefaultImage:       "guest:latest",
 		DockerDefaultImage: "guest:latest",
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
 	configDB := &fakeControllerStore{
 		project: domain.ProjectRecord{ID: "project-1", Name: "Project", CurrentRevision: 1},
 		projectAgent: domain.ProjectAgentRecord{
-			ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
+			ProjectID: "project-1", AgentName: "worker", ID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
 		},
-		managed: ManagedAgentDefinition{
+		managed: domain.AgentDefinition{
 			ID: "agent-1", Enabled: true, Driver: driverpkg.RuntimeDriverDocker, GuestImage: "guest:latest", ManagedProjectID: "project-1", ManagedAgentName: "worker",
 		},
 		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: `{"agents":[{"name":"worker"}]}`},
@@ -876,7 +874,7 @@ func TestRunsControllerRunProjectPromptAttachProjectsAgentFrames(t *testing.T) {
 		{Type: driverpkg.RuntimeOutputStdout, Data: []byte(`{"v":1,"seq":3,"type":"result","provider":"claude","sessionId":"thread-1","stopReason":"eof","finalText":"hello agent\n","finalTextSource":"provider_message","transcript":"hello agent\n"}` + "\n")},
 		{Type: driverpkg.RuntimeOutputResult, Result: &driverpkg.RuntimeResult{OperationID: "run-attach", ExitCode: 0, Success: true}},
 	})
-	configDB.agent.Provider = "claude"
+	configDB.revision.SpecJSON = `{"agents":[{"name":"worker","provider":"claude"}]}`
 	requests := []*agentcomposev2.RunAttachRequest{{
 		Frame: &agentcomposev2.RunAttachRequest_Start{Start: &agentcomposev2.RunAttachStart{
 			Request: &agentcomposev2.RunAgentRequest{ProjectId: "project-1", AgentName: "worker", Prompt: "hello"},
@@ -1286,7 +1284,7 @@ func TestRunsControllerRunProjectPromptAttachUnsupportedProvidersDoNotOpenRuntim
 		t.Run(provider, func(t *testing.T) {
 			ctx := context.Background()
 			controller, configDB, runtime := newTestRunAttachController(t, nil)
-			configDB.agent.Provider = provider
+			configDB.revision.SpecJSON = `{"agents":[{"name":"worker","provider":"` + provider + `"}]}`
 			requests := []*agentcomposev2.RunAttachRequest{{
 				Frame: &agentcomposev2.RunAttachRequest_Start{Start: &agentcomposev2.RunAttachStart{
 					Request: &agentcomposev2.RunAgentRequest{ProjectId: "project-1", AgentName: "worker", Prompt: "hello"},
@@ -1329,7 +1327,7 @@ func TestRunsControllerExecuteProjectRunCommandEdgeBranches(t *testing.T) {
 		DockerDefaultImage: "guest:latest",
 		GuestStateRoot:     "/guest/state",
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -1434,7 +1432,7 @@ func TestE2ERunsControllerRunProjectAgentCommandWorkflow(t *testing.T) {
 type controllerRunFixture struct {
 	ctx        context.Context
 	config     *appconfig.Config
-	store      *sessionstore.Store
+	store      *sandboxstore.Store
 	configDB   *fakeControllerStore
 	driver     *fakeControllerDriver
 	executor   *fakeControllerExecutor
@@ -1453,19 +1451,19 @@ func newControllerRunFixture(t *testing.T) *controllerRunFixture {
 		DefaultImage:       "guest:latest",
 		DockerDefaultImage: "guest:latest",
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
 	configDB := &fakeControllerStore{
 		project: domain.ProjectRecord{ID: "project-1", Name: "Project", CurrentRevision: 1},
 		projectAgent: domain.ProjectAgentRecord{
-			ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
+			ProjectID: "project-1", AgentName: "worker", ID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
 		},
-		managed: ManagedAgentDefinition{
+		managed: domain.AgentDefinition{
 			ID: "agent-1", Enabled: true, Driver: driverpkg.RuntimeDriverDocker, GuestImage: "guest:latest", ManagedProjectID: "project-1", ManagedAgentName: "worker",
 		},
-		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: `{"agents":[{"name":"worker"}]}`},
+		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: `{"agents":[{"name":"worker","provider":"codex"}]}`},
 		agent:    domain.AgentDefinition{ID: "agent-1", Provider: "codex"},
 		runs:     map[string]domain.ProjectRunRecord{},
 	}
@@ -1480,9 +1478,9 @@ func newControllerRunFixture(t *testing.T) *controllerRunFixture {
 		Driver:           driver,
 		Executor:         executor,
 		Images:           fakeControllerImages{},
-		LoaderEngine:     &loaders.QJSLoaderEngine{},
+		SchedulerEngine:  &schedulers.QJSSchedulerEngine{},
 		Dashboard:        dashboard,
-		LifecycleLocks:   sessions.NewLifecycleLocks(),
+		LifecycleLocks:   sandboxes.NewLifecycleLocks(),
 	})
 	return &controllerRunFixture{
 		ctx:        ctx,
@@ -1671,34 +1669,34 @@ func TestE2ERunsControllerRemoveOnCompletionWorkflows(t *testing.T) {
 
 func TestRunsControllerRunProjectAgentManualTriggerResolution(t *testing.T) {
 	fixture := newControllerRunFixture(t)
-	trigger := domain.LoaderTrigger{
-		LoaderID:   "loader-1",
-		ID:         "trigger-1",
-		Kind:       domain.LoaderTriggerKindInterval,
-		IntervalMs: 1000,
-		Enabled:    false,
-		SpecJSON:   `{"kind":"interval","intervalMs":1000}`,
+	trigger := domain.SchedulerTrigger{
+		SchedulerID: "loader-1",
+		ID:          "trigger-1",
+		Kind:        domain.SchedulerTriggerKindInterval,
+		IntervalMs:  1000,
+		Enabled:     false,
+		SpecJSON:    `{"kind":"interval","intervalMs":1000}`,
 	}
 	fixture.configDB.schedulers = []domain.ProjectSchedulerRecord{{
-		ProjectID:       "project-1",
-		SchedulerID:     "scheduler-1",
-		AgentName:       "worker",
-		ManagedLoaderID: "loader-1",
-		Enabled:         true,
-		TriggerCount:    1,
+		ProjectID:    "project-1",
+		SchedulerID:  "scheduler-1",
+		AgentName:    "worker",
+		ID:           "loader-1",
+		Enabled:      true,
+		TriggerCount: 1,
 	}}
-	fixture.configDB.loaders = map[string]domain.Loader{
+	fixture.configDB.loaders = map[string]domain.Scheduler{
 		"loader-1": {
-			Summary: domain.LoaderSummary{
+			Summary: domain.SchedulerSummary{
 				ID:                 "loader-1",
 				Enabled:            true,
-				Runtime:            domain.LoaderRuntimeScheduler,
+				Runtime:            domain.SchedulerRuntimeScheduler,
 				ManagedProjectID:   "project-1",
 				ManagedAgentName:   "worker",
 				ManagedSchedulerID: "scheduler-1",
 			},
 			Script:   `scheduler.interval("trigger-1", async function() { return scheduler.agent("resolved prompt", { sandboxEnv: [{ name: "TRIGGER_ENV", value: "yes" }] }); }, 1000);`,
-			Triggers: []domain.LoaderTrigger{trigger},
+			Triggers: []domain.SchedulerTrigger{trigger},
 		},
 	}
 	run, execErr, err := fixture.controller.RunProjectAgent(fixture.ctx, RunAgentRequest{
@@ -1728,34 +1726,34 @@ func TestRunsControllerRunProjectAgentManualTriggerResolution(t *testing.T) {
 
 func TestRunsControllerRunProjectAgentManualTriggerPayload(t *testing.T) {
 	fixture := newControllerRunFixture(t)
-	trigger := domain.LoaderTrigger{
-		LoaderID:   "loader-1",
-		ID:         "trigger-1",
-		Kind:       domain.LoaderTriggerKindInterval,
-		IntervalMs: 1000,
-		Enabled:    true,
-		SpecJSON:   `{"kind":"interval","intervalMs":1000}`,
+	trigger := domain.SchedulerTrigger{
+		SchedulerID: "loader-1",
+		ID:          "trigger-1",
+		Kind:        domain.SchedulerTriggerKindInterval,
+		IntervalMs:  1000,
+		Enabled:     true,
+		SpecJSON:    `{"kind":"interval","intervalMs":1000}`,
 	}
 	fixture.configDB.schedulers = []domain.ProjectSchedulerRecord{{
-		ProjectID:       "project-1",
-		SchedulerID:     "scheduler-1",
-		AgentName:       "worker",
-		ManagedLoaderID: "loader-1",
-		Enabled:         true,
-		TriggerCount:    1,
+		ProjectID:    "project-1",
+		SchedulerID:  "scheduler-1",
+		AgentName:    "worker",
+		ID:           "loader-1",
+		Enabled:      true,
+		TriggerCount: 1,
 	}}
-	fixture.configDB.loaders = map[string]domain.Loader{
+	fixture.configDB.loaders = map[string]domain.Scheduler{
 		"loader-1": {
-			Summary: domain.LoaderSummary{
+			Summary: domain.SchedulerSummary{
 				ID:                 "loader-1",
 				Enabled:            true,
-				Runtime:            domain.LoaderRuntimeScheduler,
+				Runtime:            domain.SchedulerRuntimeScheduler,
 				ManagedProjectID:   "project-1",
 				ManagedAgentName:   "worker",
 				ManagedSchedulerID: "scheduler-1",
 			},
 			Script:   `scheduler.interval("trigger-1", async function(payload) { return scheduler.agent("review " + payload.topic, { sandboxEnv: [{ name: "TRIGGER_TOPIC", value: payload.topic }] }); }, 1000);`,
-			Triggers: []domain.LoaderTrigger{trigger},
+			Triggers: []domain.SchedulerTrigger{trigger},
 		},
 	}
 	run, execErr, err := fixture.controller.RunProjectAgent(fixture.ctx, RunAgentRequest{
@@ -1780,34 +1778,34 @@ func TestRunsControllerRunProjectAgentManualTriggerPayload(t *testing.T) {
 
 func TestRunsControllerRunProjectAgentManualTriggerPromptOverride(t *testing.T) {
 	fixture := newControllerRunFixture(t)
-	trigger := domain.LoaderTrigger{
-		LoaderID:   "loader-1",
-		ID:         "trigger-1",
-		Kind:       domain.LoaderTriggerKindInterval,
-		IntervalMs: 1000,
-		Enabled:    true,
-		SpecJSON:   `{"kind":"interval","intervalMs":1000}`,
+	trigger := domain.SchedulerTrigger{
+		SchedulerID: "loader-1",
+		ID:          "trigger-1",
+		Kind:        domain.SchedulerTriggerKindInterval,
+		IntervalMs:  1000,
+		Enabled:     true,
+		SpecJSON:    `{"kind":"interval","intervalMs":1000}`,
 	}
 	fixture.configDB.schedulers = []domain.ProjectSchedulerRecord{{
-		ProjectID:       "project-1",
-		SchedulerID:     "scheduler-1",
-		AgentName:       "worker",
-		ManagedLoaderID: "loader-1",
-		Enabled:         true,
-		TriggerCount:    1,
+		ProjectID:    "project-1",
+		SchedulerID:  "scheduler-1",
+		AgentName:    "worker",
+		ID:           "loader-1",
+		Enabled:      true,
+		TriggerCount: 1,
 	}}
-	fixture.configDB.loaders = map[string]domain.Loader{
+	fixture.configDB.loaders = map[string]domain.Scheduler{
 		"loader-1": {
-			Summary: domain.LoaderSummary{
+			Summary: domain.SchedulerSummary{
 				ID:                 "loader-1",
 				Enabled:            true,
-				Runtime:            domain.LoaderRuntimeScheduler,
+				Runtime:            domain.SchedulerRuntimeScheduler,
 				ManagedProjectID:   "project-1",
 				ManagedAgentName:   "worker",
 				ManagedSchedulerID: "scheduler-1",
 			},
 			Script:   `scheduler.interval("trigger-1", async function() { return scheduler.agent("captured prompt", { sandboxEnv: [{ name: "TRIGGER_ENV", value: "yes" }] }); }, 1000);`,
-			Triggers: []domain.LoaderTrigger{trigger},
+			Triggers: []domain.SchedulerTrigger{trigger},
 		},
 	}
 	run, execErr, err := fixture.controller.RunProjectAgent(fixture.ctx, RunAgentRequest{
@@ -1833,24 +1831,24 @@ func TestRunsControllerRunProjectAgentManualTriggerPromptOverride(t *testing.T) 
 func TestRunsControllerRunProjectAgentManualTriggerMissingDoesNotCreateRun(t *testing.T) {
 	fixture := newControllerRunFixture(t)
 	fixture.configDB.schedulers = []domain.ProjectSchedulerRecord{{
-		ProjectID:       "project-1",
-		SchedulerID:     "scheduler-1",
-		AgentName:       "worker",
-		ManagedLoaderID: "loader-1",
-		Enabled:         true,
+		ProjectID:   "project-1",
+		SchedulerID: "scheduler-1",
+		AgentName:   "worker",
+		ID:          "loader-1",
+		Enabled:     true,
 	}}
-	fixture.configDB.loaders = map[string]domain.Loader{
+	fixture.configDB.loaders = map[string]domain.Scheduler{
 		"loader-1": {
-			Summary: domain.LoaderSummary{
+			Summary: domain.SchedulerSummary{
 				ID:                 "loader-1",
 				Enabled:            true,
-				Runtime:            domain.LoaderRuntimeScheduler,
+				Runtime:            domain.SchedulerRuntimeScheduler,
 				ManagedProjectID:   "project-1",
 				ManagedAgentName:   "worker",
 				ManagedSchedulerID: "scheduler-1",
 			},
 			Script:   `scheduler.interval("trigger-1", async function() { return scheduler.agent("resolved prompt"); }, 1000);`,
-			Triggers: []domain.LoaderTrigger{{LoaderID: "loader-1", ID: "trigger-1", Kind: domain.LoaderTriggerKindInterval, IntervalMs: 1000, Enabled: true}},
+			Triggers: []domain.SchedulerTrigger{{SchedulerID: "loader-1", ID: "trigger-1", Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 1000, Enabled: true}},
 		},
 	}
 	run, execErr, err := fixture.controller.RunProjectAgent(fixture.ctx, RunAgentRequest{
@@ -1903,7 +1901,7 @@ func TestRunsControllerStickyBindingsAreScopedByTrigger(t *testing.T) {
 		t.Fatalf("bindings = %#v", fixture.configDB.bindings)
 	}
 
-	fixture.configDB.bindings["loader-1/stale"] = domain.LoaderBinding{LoaderID: "loader-1", TriggerID: "stale", SandboxID: "missing-sandbox"}
+	fixture.configDB.bindings["loader-1/stale"] = domain.SchedulerBinding{SchedulerID: "loader-1", TriggerID: "stale", SandboxID: "missing-sandbox"}
 	replacement := runSticky("stale", "sticky-stale-1")
 	if replacement.SandboxID == "missing-sandbox" || fixture.configDB.bindings["loader-1/stale"].SandboxID != replacement.SandboxID {
 		t.Fatalf("stale replacement run=%#v bindings=%#v", replacement, fixture.configDB.bindings)
@@ -1915,13 +1913,13 @@ func TestRunsControllerStickyBindingsAreScopedByTrigger(t *testing.T) {
 
 func TestRunsControllerStickyLoaderConfigChangeCreatesReplacement(t *testing.T) {
 	fixture := newControllerRunFixture(t)
-	loader := domain.Loader{
-		Summary: domain.LoaderSummary{
+	loader := domain.Scheduler{
+		Summary: domain.SchedulerSummary{
 			ID:                 "loader-1",
-			Name:               "Loader",
-			Runtime:            domain.LoaderRuntimeScheduler,
+			Name:               "Scheduler",
+			Runtime:            domain.SchedulerRuntimeScheduler,
 			DefaultAgent:       "codex",
-			SandboxPolicy:      domain.LoaderSandboxPolicySticky,
+			SandboxPolicy:      domain.SchedulerSandboxPolicySticky,
 			ManagedProjectID:   "project-1",
 			ManagedRevision:    1,
 			ManagedAgentName:   "worker",
@@ -1951,10 +1949,10 @@ func TestRunsControllerStickyLoaderConfigChangeCreatesReplacement(t *testing.T) 
 		return run
 	}
 
-	fixture.configDB.agent.EnvItems = []domain.SandboxEnvVar{{Name: "BUG_VALUE", Value: "A"}}
-	firstHash, err := loaders.LoaderSandboxConfigHash(loader)
+	fixture.configDB.revision.SpecJSON = `{"agents":[{"name":"worker","env":[{"name":"BUG_VALUE","value":"A"}]}]}`
+	firstHash, err := schedulers.SchedulerSandboxConfigHash(loader)
 	if err != nil {
-		t.Fatalf("LoaderSandboxConfigHash(A) returned error: %v", err)
+		t.Fatalf("SchedulerSandboxConfigHash(A) returned error: %v", err)
 	}
 	first := runSticky("sticky-config-a", firstHash)
 	firstBindingHash := fixture.configDB.bindings["loader-1/trigger-a"].SandboxConfigHash
@@ -1964,14 +1962,15 @@ func TestRunsControllerStickyLoaderConfigChangeCreatesReplacement(t *testing.T) 
 
 	loader.EnvItems[0].Value = "B"
 	loader.Summary.ManagedRevision = 2
-	fixture.configDB.agent.EnvItems = []domain.SandboxEnvVar{{Name: "BUG_VALUE", Value: "B"}}
-	secondHash, err := loaders.LoaderSandboxConfigHash(loader)
+	fixture.configDB.revision = domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 2, SpecJSON: `{"agents":[{"name":"worker","env":[{"name":"BUG_VALUE","value":"B"}]}]}`}
+	fixture.configDB.project.CurrentRevision = 2
+	secondHash, err := schedulers.SchedulerSandboxConfigHash(loader)
 	if err != nil {
-		t.Fatalf("LoaderSandboxConfigHash(B) returned error: %v", err)
+		t.Fatalf("SchedulerSandboxConfigHash(B) returned error: %v", err)
 	}
 	second := runSticky("sticky-config-b", secondHash)
 	if second.SandboxID == first.SandboxID {
-		t.Fatalf("updated Loader reused stale sandbox %q", first.SandboxID)
+		t.Fatalf("updated Scheduler reused stale sandbox %q", first.SandboxID)
 	}
 	oldSandbox, err := fixture.store.GetSandbox(fixture.ctx, first.SandboxID)
 	if err != nil {
@@ -2005,8 +2004,8 @@ func TestRunsControllerRejectsUncompiledScheduledSandboxBeforePersistence(t *tes
 				volumeResolver := &fakeVolumeResolver{}
 				fixture.controller.volumes = volumeResolver
 				bindingKey := "loader-uncompiled/trigger-uncompiled"
-				originalBinding := domain.LoaderBinding{LoaderID: "loader-uncompiled", TriggerID: "trigger-uncompiled", SandboxID: "missing-original-sandbox"}
-				fixture.configDB.bindings = map[string]domain.LoaderBinding{bindingKey: originalBinding}
+				originalBinding := domain.SchedulerBinding{SchedulerID: "loader-uncompiled", TriggerID: "trigger-uncompiled", SandboxID: "missing-original-sandbox"}
+				fixture.configDB.bindings = map[string]domain.SchedulerBinding{bindingKey: originalBinding}
 				beforeSandboxes, err := fixture.store.ListSandboxes(fixture.ctx, domain.SandboxListOptions{})
 				if err != nil {
 					t.Fatalf("ListSandboxes before ensure returned error: %v", err)
@@ -2055,8 +2054,8 @@ func TestRunsControllerRejectsUncompiledScheduledSandboxBeforePersistence(t *tes
 					t.Fatalf("SaveProxyState historical returned error: %v", err)
 				}
 				bindingKey := "loader-history/trigger-history"
-				originalBinding := domain.LoaderBinding{LoaderID: "loader-history", TriggerID: "trigger-history", SandboxID: sandbox.Summary.ID}
-				fixture.configDB.bindings = map[string]domain.LoaderBinding{bindingKey: originalBinding}
+				originalBinding := domain.SchedulerBinding{SchedulerID: "loader-history", TriggerID: "trigger-history", SandboxID: sandbox.Summary.ID}
+				fixture.configDB.bindings = map[string]domain.SchedulerBinding{bindingKey: originalBinding}
 				beforeArtifacts := snapshotRunSandboxTree(t, fixture.config.SandboxRoot)
 				beforeEvents, err := fixture.store.ListEvents(fixture.ctx, sandbox.Summary.ID)
 				if err != nil {
@@ -2138,10 +2137,10 @@ func TestManualTriggerCaptureHostUnavailableMethodsAndEnvSpecs(t *testing.T) {
 	if _, err := host.PublishEvent(ctx, "runtime.topic", `{}`); err == nil || !strings.Contains(err.Error(), "scheduler.event.publish") {
 		t.Fatalf("PublishEvent error = %v", err)
 	}
-	if _, err := host.Command(ctx, domain.LoaderCommandRequest{}); err == nil || !strings.Contains(err.Error(), "scheduler.command") {
+	if _, err := host.Command(ctx, domain.SchedulerCommandRequest{}); err == nil || !strings.Contains(err.Error(), "scheduler.command") {
 		t.Fatalf("Command error = %v", err)
 	}
-	if _, err := host.LLM(ctx, "prompt", domain.LoaderLLMRequest{}); err == nil || !strings.Contains(err.Error(), "scheduler.llm") {
+	if _, err := host.LLM(ctx, "prompt", domain.SchedulerLLMRequest{}); err == nil || !strings.Contains(err.Error(), "scheduler.llm") {
 		t.Fatalf("LLM error = %v", err)
 	}
 	if value, ok, err := host.StateGet(ctx, "cursor"); err != nil || ok || value != "" {
@@ -2153,8 +2152,8 @@ func TestManualTriggerCaptureHostUnavailableMethodsAndEnvSpecs(t *testing.T) {
 	if err := host.StateDelete(ctx, "cursor"); err != nil {
 		t.Fatalf("StateDelete returned error: %v", err)
 	}
-	if _, err := host.CallSessionRPC(ctx, "GetSession", `{}`); err == nil || !strings.Contains(err.Error(), "scheduler.session") {
-		t.Fatalf("CallSessionRPC error = %v", err)
+	if _, err := host.CallSandboxRPC(ctx, "GetSandbox", `{}`); err == nil || !strings.Contains(err.Error(), "scheduler.sandbox") {
+		t.Fatalf("CallSandboxRPC error = %v", err)
 	}
 
 	specs := envVarSpecsFromSandboxEnv([]domain.SandboxEnvVar{
@@ -2178,7 +2177,7 @@ func TestRunsControllerApplyJupyterOptionsToSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProxyState before returned error: %v", err)
 	}
-	if err := fixture.controller.applyJupyterOptionsToSandbox(session, sessionstore.CreateSandboxOptions{}); err != nil {
+	if err := fixture.controller.applyJupyterOptionsToSandbox(session, sandboxstore.CreateSandboxOptions{}); err != nil {
 		t.Fatalf("apply empty options returned error: %v", err)
 	}
 	unchanged, err := fixture.store.GetProxyState(session.Summary.ID)
@@ -2188,7 +2187,7 @@ func TestRunsControllerApplyJupyterOptionsToSandbox(t *testing.T) {
 	if unchanged != before {
 		t.Fatalf("empty options changed proxy state before=%#v after=%#v", before, unchanged)
 	}
-	if err := fixture.controller.applyJupyterOptionsToSandbox(session, sessionstore.CreateSandboxOptions{JupyterExpose: true, JupyterGuestPort: 9999}); err != nil {
+	if err := fixture.controller.applyJupyterOptionsToSandbox(session, sandboxstore.CreateSandboxOptions{JupyterExpose: true, JupyterGuestPort: 9999}); err != nil {
 		t.Fatalf("apply jupyter options returned error: %v", err)
 	}
 	enabled, err := fixture.store.GetProxyState(session.Summary.ID)
@@ -2207,7 +2206,7 @@ func TestRunsControllerApplyJupyterOptionsLeavesDockerHostPortForRuntime(t *test
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
-	if err := fixture.controller.applyJupyterOptionsToSandbox(sandbox, sessionstore.CreateSandboxOptions{JupyterEnabled: true}); err != nil {
+	if err := fixture.controller.applyJupyterOptionsToSandbox(sandbox, sandboxstore.CreateSandboxOptions{JupyterEnabled: true}); err != nil {
 		t.Fatalf("applyJupyterOptionsToSandbox returned error: %v", err)
 	}
 	state, err := fixture.store.GetProxyState(sandbox.Summary.ID)
@@ -2247,7 +2246,7 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 		t.Fatalf("stream headers = %#v", headers)
 	}
 
-	baseJupyter := sessionstore.CreateSandboxOptions{JupyterGuestPort: 8888}
+	baseJupyter := sandboxstore.CreateSandboxOptions{JupyterGuestPort: 8888}
 	if options, err := resolveRunJupyterOptions(baseJupyter, nil); err != nil ||
 		options.JupyterEnabled != baseJupyter.JupyterEnabled ||
 		options.JupyterExpose != baseJupyter.JupyterExpose ||
@@ -2262,7 +2261,7 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 	if err != nil || !options.JupyterEnabled || options.JupyterExpose || options.JupyterGuestPort != 9000 {
 		t.Fatalf("enabled jupyter options=%#v err=%v", options, err)
 	}
-	options, err = resolveRunJupyterOptions(sessionstore.CreateSandboxOptions{}, &agentcomposev2.RunJupyterSpec{Expose: true})
+	options, err = resolveRunJupyterOptions(sandboxstore.CreateSandboxOptions{}, &agentcomposev2.RunJupyterSpec{Expose: true})
 	if err != nil || !options.JupyterEnabled || !options.JupyterExpose {
 		t.Fatalf("exposed jupyter options=%#v err=%v", options, err)
 	}
@@ -2344,7 +2343,7 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 		target: "cap-proxy.internal:9000",
 	}
 	guideStore := &fakeGuideSandboxStore{}
-	streams := sessions.NewStreamBrokerForTest()
+	streams := sandboxes.NewStreamBrokerForTest()
 	ch, unsubscribe := streams.Subscribe(session.Summary.ID)
 	defer unsubscribe()
 	writeCapabilityGuide(context.Background(), provider, guideStore, streams, session, capabilities.SandboxCapsets(session))
@@ -2361,7 +2360,7 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 	}
 	select {
 	case event := <-ch:
-		if event.EventType != sessions.WatchEventTypeEventAdded || event.Event.Type != "capability.guide.warning" {
+		if event.EventType != sandboxes.WatchEventTypeEventAdded || event.Event.Type != "capability.guide.warning" {
 			t.Fatalf("stream event = %#v", event)
 		}
 	default:
@@ -2399,8 +2398,9 @@ func envItemValue(items []domain.SandboxEnvVar, name string) string {
 
 type fakeRunStore struct {
 	project      domain.ProjectRecord
+	revision     domain.ProjectRevisionRecord
 	projectAgent domain.ProjectAgentRecord
-	agent        ManagedAgentDefinition
+	agent        domain.AgentDefinition
 	runs         map[string]domain.ProjectRunRecord
 	events       []domain.ProjectRunEventRecord
 }
@@ -2409,11 +2409,15 @@ func (s *fakeRunStore) GetProject(context.Context, string) (domain.ProjectRecord
 	return s.project, nil
 }
 
+func (s *fakeRunStore) GetProjectRevision(context.Context, string, int64) (domain.ProjectRevisionRecord, error) {
+	return s.revision, nil
+}
+
 func (s *fakeRunStore) GetProjectAgent(context.Context, string, string) (domain.ProjectAgentRecord, error) {
 	return s.projectAgent, nil
 }
 
-func (s *fakeRunStore) GetManagedAgentDefinition(context.Context, string) (ManagedAgentDefinition, error) {
+func (s *fakeRunStore) GetAgentDefinitionSnapshot(context.Context, string) (domain.AgentDefinition, error) {
 	return s.agent, nil
 }
 
@@ -2504,15 +2508,15 @@ func (s fakeSandboxStatusStore) GetSandbox(_ context.Context, id string) (*domai
 type fakeControllerStore struct {
 	project        domain.ProjectRecord
 	projectAgent   domain.ProjectAgentRecord
-	managed        ManagedAgentDefinition
+	managed        domain.AgentDefinition
 	revision       domain.ProjectRevisionRecord
 	agent          domain.AgentDefinition
 	global         []domain.SandboxEnvVar
 	projectVolumes map[string]domain.VolumeRecord
 	runs           map[string]domain.ProjectRunRecord
 	schedulers     []domain.ProjectSchedulerRecord
-	loaders        map[string]domain.Loader
-	bindings       map[string]domain.LoaderBinding
+	loaders        map[string]domain.Scheduler
+	bindings       map[string]domain.SchedulerBinding
 	events         []domain.ProjectRunEventRecord
 }
 
@@ -2524,7 +2528,7 @@ func (s *fakeControllerStore) GetProjectAgent(context.Context, string, string) (
 	return s.projectAgent, nil
 }
 
-func (s *fakeControllerStore) GetManagedAgentDefinition(context.Context, string) (ManagedAgentDefinition, error) {
+func (s *fakeControllerStore) GetAgentDefinitionSnapshot(context.Context, string) (domain.AgentDefinition, error) {
 	return s.managed, nil
 }
 
@@ -2597,35 +2601,35 @@ func (s *fakeControllerStore) ListProjectSchedulers(_ context.Context, projectID
 	return items, nil
 }
 
-func (s *fakeControllerStore) GetLoader(_ context.Context, loaderID string) (domain.Loader, error) {
+func (s *fakeControllerStore) GetLoader(_ context.Context, loaderID string) (domain.Scheduler, error) {
 	if s.loaders == nil {
-		return domain.Loader{}, domain.ErrNotFound
+		return domain.Scheduler{}, domain.ErrNotFound
 	}
 	loader, ok := s.loaders[loaderID]
 	if !ok {
-		return domain.Loader{}, domain.ErrNotFound
+		return domain.Scheduler{}, domain.ErrNotFound
 	}
 	return loader, nil
 }
 
-func (s *fakeControllerStore) GetLoaderBinding(_ context.Context, loaderID, triggerID string) (domain.LoaderBinding, bool, error) {
+func (s *fakeControllerStore) GetLoaderBinding(_ context.Context, loaderID, triggerID string) (domain.SchedulerBinding, bool, error) {
 	binding, ok := s.bindings[loaderID+"/"+triggerID]
 	return binding, ok, nil
 }
 
-func (s *fakeControllerStore) UpsertLoaderBinding(_ context.Context, binding domain.LoaderBinding) error {
+func (s *fakeControllerStore) UpsertLoaderBinding(_ context.Context, binding domain.SchedulerBinding) error {
 	if s.bindings == nil {
-		s.bindings = map[string]domain.LoaderBinding{}
+		s.bindings = map[string]domain.SchedulerBinding{}
 	}
-	s.bindings[binding.LoaderID+"/"+binding.TriggerID] = binding
+	s.bindings[binding.SchedulerID+"/"+binding.TriggerID] = binding
 	return nil
 }
 
-func (s *fakeControllerStore) CompareAndSwapLoaderBinding(_ context.Context, expected *domain.LoaderBinding, replacement domain.LoaderBinding) (bool, error) {
+func (s *fakeControllerStore) CompareAndSwapLoaderBinding(_ context.Context, expected *domain.SchedulerBinding, replacement domain.SchedulerBinding) (bool, error) {
 	if s.bindings == nil {
-		s.bindings = map[string]domain.LoaderBinding{}
+		s.bindings = map[string]domain.SchedulerBinding{}
 	}
-	key := replacement.LoaderID + "/" + replacement.TriggerID
+	key := replacement.SchedulerID + "/" + replacement.TriggerID
 	current, found := s.bindings[key]
 	if expected == nil {
 		if found {
@@ -2648,7 +2652,7 @@ type fakeControllerDriver struct {
 	startErr  error
 	stopErr   error
 	removeErr error
-	store     *sessionstore.Store
+	store     *sandboxstore.Store
 	onStart   func(*domain.Sandbox) error
 	onStop    func(*domain.Sandbox) error
 }
@@ -2781,16 +2785,16 @@ func newTestRunAttachController(t *testing.T, frames []driverpkg.RuntimeOutputFr
 		DefaultImage:       "guest:latest",
 		DockerDefaultImage: "guest:latest",
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
 	configDB := &fakeControllerStore{
 		project: domain.ProjectRecord{ID: "project-1", Name: "Project", CurrentRevision: 1},
 		projectAgent: domain.ProjectAgentRecord{
-			ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
+			ProjectID: "project-1", AgentName: "worker", ID: "agent-1", Driver: driverpkg.RuntimeDriverDocker, Image: "guest:latest",
 		},
-		managed: ManagedAgentDefinition{
+		managed: domain.AgentDefinition{
 			ID: "agent-1", Enabled: true, Driver: driverpkg.RuntimeDriverDocker, GuestImage: "guest:latest", ManagedProjectID: "project-1", ManagedAgentName: "worker",
 		},
 		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: `{"agents":[{"name":"worker"}]}`},
@@ -2944,10 +2948,10 @@ func (r *fakeVolumeResolver) ResolveMounts(_ context.Context, specs []domain.Vol
 }
 
 type fakeControllerPublisher struct {
-	events []domain.LoaderTopicEvent
+	events []domain.SchedulerTopicEvent
 }
 
-func (p *fakeControllerPublisher) Publish(event domain.LoaderTopicEvent) bool {
+func (p *fakeControllerPublisher) Publish(event domain.SchedulerTopicEvent) bool {
 	p.events = append(p.events, event)
 	return true
 }
@@ -2996,15 +3000,15 @@ type fakeGuideSandboxStore struct {
 	events []domain.SandboxEvent
 }
 
-func (s *fakeGuideSandboxStore) CreateSandboxWithOptions(context.Context, string, string, string, string, string, string, *sessionstore.SandboxWorkspace, []sessionstore.SandboxEnvVar, []sessionstore.SandboxTag, sessionstore.CreateSandboxOptions) (*sessionstore.Sandbox, error) {
+func (s *fakeGuideSandboxStore) CreateSandboxWithOptions(context.Context, string, string, string, string, string, string, *sandboxstore.SandboxWorkspace, []sandboxstore.SandboxEnvVar, []sandboxstore.SandboxTag, sandboxstore.CreateSandboxOptions) (*sandboxstore.Sandbox, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (s *fakeGuideSandboxStore) GetSandbox(context.Context, string) (*sessionstore.Sandbox, error) {
+func (s *fakeGuideSandboxStore) GetSandbox(context.Context, string) (*sandboxstore.Sandbox, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (s *fakeGuideSandboxStore) UpdateSandbox(context.Context, *sessionstore.Sandbox) error {
+func (s *fakeGuideSandboxStore) UpdateSandbox(context.Context, *sandboxstore.Sandbox) error {
 	return errors.New("not implemented")
 }
 
@@ -3012,20 +3016,20 @@ func (s *fakeGuideSandboxStore) RemoveSandbox(context.Context, string) error {
 	return errors.New("not implemented")
 }
 
-func (s *fakeGuideSandboxStore) AddEvent(_ context.Context, _ string, event sessionstore.SandboxEvent) error {
+func (s *fakeGuideSandboxStore) AddEvent(_ context.Context, _ string, event sandboxstore.SandboxEvent) error {
 	s.events = append(s.events, event)
 	return nil
 }
 
-func (s *fakeGuideSandboxStore) GetVMState(string) (sessionstore.VMState, error) {
-	return sessionstore.VMState{}, errors.New("not implemented")
+func (s *fakeGuideSandboxStore) GetVMState(string) (sandboxstore.VMState, error) {
+	return sandboxstore.VMState{}, errors.New("not implemented")
 }
 
-func (s *fakeGuideSandboxStore) GetProxyState(string) (sessionstore.ProxyState, error) {
-	return sessionstore.ProxyState{}, errors.New("not implemented")
+func (s *fakeGuideSandboxStore) GetProxyState(string) (sandboxstore.ProxyState, error) {
+	return sandboxstore.ProxyState{}, errors.New("not implemented")
 }
 
-func (s *fakeGuideSandboxStore) SaveProxyState(string, sessionstore.ProxyState) error {
+func (s *fakeGuideSandboxStore) SaveProxyState(string, sandboxstore.ProxyState) error {
 	return errors.New("not implemented")
 }
 

@@ -23,10 +23,11 @@ import (
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/images"
 	"agent-compose/pkg/llms"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/projects"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/schedulers"
+	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/volumes"
 	"agent-compose/pkg/workspaces"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -60,7 +61,7 @@ type SandboxDriver interface {
 }
 
 type TopicPublisher interface {
-	Publish(domain.LoaderTopicEvent) bool
+	Publish(domain.SchedulerTopicEvent) bool
 }
 
 type DashboardNotifier interface {
@@ -85,29 +86,29 @@ type ControllerStore interface {
 
 type TriggerResolverStore interface {
 	ListProjectSchedulers(context.Context, string) ([]domain.ProjectSchedulerRecord, error)
-	GetLoader(context.Context, string) (domain.Loader, error)
+	GetLoader(context.Context, string) (domain.Scheduler, error)
 }
 
 type stickyBindingStore interface {
-	GetLoaderBinding(context.Context, string, string) (domain.LoaderBinding, bool, error)
-	CompareAndSwapLoaderBinding(context.Context, *domain.LoaderBinding, domain.LoaderBinding) (bool, error)
+	GetLoaderBinding(context.Context, string, string) (domain.SchedulerBinding, bool, error)
+	CompareAndSwapLoaderBinding(context.Context, *domain.SchedulerBinding, domain.SchedulerBinding) (bool, error)
 }
 
 // SandboxRuntimeStore is the subset of sandbox runtime persistence the run
 // controller needs: sandbox lifecycle plus VM, proxy, and Jupyter-port state.
 // Keeping it narrow decouples the controller from the concrete
-// sessionstore.Store (and its full method set) and lets tests substitute a
+// sandboxstore.Store (and its full method set) and lets tests substitute a
 // fake. It is distinct from SandboxStore in statuses.go, which exposes only
 // domain-typed lookups for status listing.
 type SandboxRuntimeStore interface {
-	CreateSandboxWithOptions(ctx context.Context, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource string, workspace *sessionstore.SandboxWorkspace, envItems []sessionstore.SandboxEnvVar, tags []sessionstore.SandboxTag, options sessionstore.CreateSandboxOptions) (*sessionstore.Sandbox, error)
-	GetSandbox(ctx context.Context, id string) (*sessionstore.Sandbox, error)
-	UpdateSandbox(ctx context.Context, sandbox *sessionstore.Sandbox) error
+	CreateSandboxWithOptions(ctx context.Context, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource string, workspace *sandboxstore.SandboxWorkspace, envItems []sandboxstore.SandboxEnvVar, tags []sandboxstore.SandboxTag, options sandboxstore.CreateSandboxOptions) (*sandboxstore.Sandbox, error)
+	GetSandbox(ctx context.Context, id string) (*sandboxstore.Sandbox, error)
+	UpdateSandbox(ctx context.Context, sandbox *sandboxstore.Sandbox) error
 	RemoveSandbox(ctx context.Context, id string) error
-	AddEvent(ctx context.Context, sandboxID string, event sessionstore.SandboxEvent) error
-	GetVMState(id string) (sessionstore.VMState, error)
-	GetProxyState(id string) (sessionstore.ProxyState, error)
-	SaveProxyState(id string, state sessionstore.ProxyState) error
+	AddEvent(ctx context.Context, sandboxID string, event sandboxstore.SandboxEvent) error
+	GetVMState(id string) (sandboxstore.VMState, error)
+	GetProxyState(id string) (sandboxstore.ProxyState, error)
+	SaveProxyState(id string, state sandboxstore.ProxyState) error
 	AllocateHostPortForJupyter() (int, error)
 }
 
@@ -120,15 +121,15 @@ type Controller struct {
 	executor         AgentExecutor
 	runtime          RuntimeProvider
 	images           images.Backend
-	loaderEngine     loaders.LoaderEngine
+	loaderEngine     schedulers.SchedulerEngine
 	cap              capabilities.Provider
 	volumes          VolumeResolver
-	streams          *sessions.StreamBroker
+	streams          *sandboxes.StreamBroker
 	bus              TopicPublisher
 	dashboard        DashboardNotifier
 	capTokens        CapabilitySandboxIndexer
 	runLogs          *RunLogHub
-	lifecycleLocks   *sessions.LifecycleLocks
+	lifecycleLocks   *sandboxes.LifecycleLocks
 	removal          SandboxRemoval
 }
 
@@ -150,20 +151,20 @@ type ControllerDependencies struct {
 	Executor         AgentExecutor
 	Runtime          RuntimeProvider
 	Images           images.Backend
-	LoaderEngine     loaders.LoaderEngine
+	SchedulerEngine  schedulers.SchedulerEngine
 	Cap              capabilities.Provider
 	Volumes          VolumeResolver
-	Streams          *sessions.StreamBroker
+	Streams          *sandboxes.StreamBroker
 	Bus              TopicPublisher
 	Dashboard        DashboardNotifier
 	CapTokens        CapabilitySandboxIndexer
 	RunLogs          *RunLogHub
-	LifecycleLocks   *sessions.LifecycleLocks
+	LifecycleLocks   *sandboxes.LifecycleLocks
 	Removal          SandboxRemoval
 }
 
 type SandboxRemoval interface {
-	Remove(context.Context, string, bool) (sessions.RemovalResult, error)
+	Remove(context.Context, string, bool) (sandboxes.RemovalResult, error)
 }
 
 func NewController(deps ControllerDependencies) *Controller {
@@ -176,7 +177,7 @@ func NewController(deps ControllerDependencies) *Controller {
 		executor:         deps.Executor,
 		runtime:          deps.Runtime,
 		images:           deps.Images,
-		loaderEngine:     deps.LoaderEngine,
+		loaderEngine:     deps.SchedulerEngine,
 		cap:              deps.Cap,
 		volumes:          deps.Volumes,
 		streams:          deps.Streams,
@@ -196,6 +197,7 @@ type RunAgentRequest struct {
 	Command                 string
 	Source                  string
 	SchedulerID             string
+	SchedulerRunID          string
 	TriggerID               string
 	PayloadJSON             string
 	ClientRequestID         string
@@ -260,6 +262,7 @@ func (c *Controller) StartProjectRun(ctx context.Context, req RunAgentRequest) (
 		AgentName:       req.AgentName,
 		Source:          req.Source,
 		SchedulerID:     req.SchedulerID,
+		SchedulerRunID:  req.SchedulerRunID,
 		TriggerID:       req.TriggerID,
 		Prompt:          req.Prompt,
 		Driver:          req.Driver,
@@ -442,7 +445,7 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 	}
 	cell, _, assistantEvent, execErr := c.executor.ExecuteAgentRequest(ctx, sandboxResult.Sandbox, execution.ExecuteAgentRequest{
 		Agent:             agentConfig.Provider,
-		AgentDefinitionID: run.ManagedAgentID,
+		AgentDefinitionID: run.AgentID,
 		Model:             agentConfig.Model,
 		RunID:             run.RunID,
 		Message:           req.Prompt,
@@ -1034,9 +1037,9 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 }
 
 func (c *Controller) projectRunAgentConfig(ctx context.Context, run domain.ProjectRunRecord) (execution.AgentConfig, error) {
-	agent, err := c.configDB.GetAgentDefinition(ctx, run.ManagedAgentID)
+	agent, err := c.projectRunAgentDefinition(ctx, run)
 	if err != nil {
-		return execution.AgentConfig{}, fmt.Errorf("resolve managed agent definition %s: %w", run.ManagedAgentID, err)
+		return execution.AgentConfig{}, err
 	}
 	config := execution.AgentConfigFromDefinition(agent, domain.DefaultAgentProvider)
 	if config.Provider == "" {
@@ -1046,14 +1049,30 @@ func (c *Controller) projectRunAgentConfig(ctx context.Context, run domain.Proje
 }
 
 func (c *Controller) projectRunAgentSystemPrompt(ctx context.Context, run domain.ProjectRunRecord) (string, error) {
-	if c == nil || c.configDB == nil || strings.TrimSpace(run.ManagedAgentID) == "" {
+	if c == nil || c.configDB == nil || strings.TrimSpace(run.AgentID) == "" {
 		return "", nil
 	}
-	agent, err := c.configDB.GetAgentDefinition(ctx, run.ManagedAgentID)
+	agent, err := c.projectRunAgentDefinition(ctx, run)
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(agent.SystemPrompt), nil
+}
+
+func (c *Controller) projectRunAgentDefinition(ctx context.Context, run domain.ProjectRunRecord) (domain.AgentDefinition, error) {
+	project, err := c.configDB.GetProject(ctx, run.ProjectID)
+	if err != nil {
+		return domain.AgentDefinition{}, fmt.Errorf("resolve project %s: %w", run.ProjectID, err)
+	}
+	revision, err := c.configDB.GetProjectRevision(ctx, run.ProjectID, run.ProjectRevision)
+	if err != nil {
+		return domain.AgentDefinition{}, fmt.Errorf("resolve project revision %s/%d: %w", run.ProjectID, run.ProjectRevision, err)
+	}
+	agent, err := projects.AgentDefinitionFromRevision(project, revision, run.AgentName)
+	if err != nil {
+		return domain.AgentDefinition{}, fmt.Errorf("resolve revision agent %s: %w", run.AgentID, err)
+	}
+	return agent, nil
 }
 
 func (c *Controller) ensurePromptAttachLLMFacadeEnv(ctx context.Context, sandbox *domain.Sandbox, agent execution.AgentConfig, runID string) (map[string]string, error) {
@@ -1913,13 +1932,13 @@ func (c *Controller) prepareProjectRun(ctx context.Context, run domain.ProjectRu
 	return PrepareProjectRun(ctx, c.configDB, projectRunWorkspaceResolver{controller: c}, run, requestEnv)
 }
 
-func resolveRunJupyterOptions(base sessionstore.CreateSandboxOptions, override *agentcomposev2.RunJupyterSpec) (sessionstore.CreateSandboxOptions, error) {
+func resolveRunJupyterOptions(base sandboxstore.CreateSandboxOptions, override *agentcomposev2.RunJupyterSpec) (sandboxstore.CreateSandboxOptions, error) {
 	result := base
 	if override == nil {
 		return result, nil
 	}
 	if override.GetGuestPort() > 65535 {
-		return sessionstore.CreateSandboxOptions{}, fmt.Errorf("%w: jupyter guest_port must be 0 or a valid TCP port between 1 and 65535", ErrInvalidRequest)
+		return sandboxstore.CreateSandboxOptions{}, fmt.Errorf("%w: jupyter guest_port must be 0 or a valid TCP port between 1 and 65535", ErrInvalidRequest)
 	}
 	if override.GetEnabled() || override.GetExpose() {
 		result.JupyterEnabled = true
@@ -1983,7 +2002,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	capabilityVars, capabilityTags := capabilities.BuildGatewaySandboxVars(capabilities.ProxyTarget(c.cap), prepared.CapsetIDs)
 	tags = append(tags, capabilityTags...)
 	bindingStore, hasBindingStore := c.configDB.(stickyBindingStore)
-	var previousStickyBinding *domain.LoaderBinding
+	var previousStickyBinding *domain.SchedulerBinding
 	boundSandbox := false
 	warnings := []string(nil)
 	if stickyLoaderID != "" && strings.TrimSpace(req.SandboxID) == "" {
@@ -2017,7 +2036,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			if err != nil {
 				return SandboxResult{}, fmt.Errorf("revalidate sticky sandbox binding: %w", err)
 			}
-			if !found || !loaders.LoaderBindingsMatch(current, *previousStickyBinding) {
+			if !found || !schedulers.SchedulerBindingsMatch(current, *previousStickyBinding) {
 				return SandboxResult{}, fmt.Errorf("sticky sandbox binding changed concurrently")
 			}
 		}
@@ -2032,7 +2051,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 				}
 				driverValidated = true
 			}
-			retiring := loaders.RetiringLoaderBinding(*previousStickyBinding, stickyConfigHash)
+			retiring := schedulers.RetiringLoaderBinding(*previousStickyBinding, stickyConfigHash)
 			claimed, claimErr := bindingStore.CompareAndSwapLoaderBinding(ctx, previousStickyBinding, retiring)
 			if claimErr != nil {
 				return SandboxResult{}, fmt.Errorf("claim unavailable sticky sandbox %s retirement: %w", sandboxID, claimErr)
@@ -2138,7 +2157,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 		if !hasBindingStore {
 			return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, fmt.Errorf("sticky sandbox binding store is required")
 		}
-		claimed, err := bindingStore.CompareAndSwapLoaderBinding(ctx, previousStickyBinding, domain.LoaderBinding{LoaderID: stickyLoaderID, TriggerID: stickyTriggerID, SandboxID: sandbox.Summary.ID, SandboxConfigHash: stickyConfigHash})
+		claimed, err := bindingStore.CompareAndSwapLoaderBinding(ctx, previousStickyBinding, domain.SchedulerBinding{SchedulerID: stickyLoaderID, TriggerID: stickyTriggerID, SandboxID: sandbox.Summary.ID, SandboxConfigHash: stickyConfigHash})
 		if err != nil {
 			if stopErr := c.stopProjectRunSandbox(ctx, sandbox); stopErr != nil {
 				return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, errors.Join(fmt.Errorf("persist sticky sandbox binding: %w", err), fmt.Errorf("retire unbound sticky sandbox: %w", stopErr))
@@ -2199,7 +2218,7 @@ func (c *Controller) resolveProjectRunVolumeMounts(ctx context.Context, prepared
 	})
 }
 
-func (c *Controller) applyJupyterOptionsToSandbox(sandbox *domain.Sandbox, options sessionstore.CreateSandboxOptions) error {
+func (c *Controller) applyJupyterOptionsToSandbox(sandbox *domain.Sandbox, options sandboxstore.CreateSandboxOptions) error {
 	if sandbox == nil {
 		return fmt.Errorf("sandbox is required")
 	}
@@ -2333,9 +2352,9 @@ func (c *Controller) publishProjectRunSandboxStarted(ctx context.Context, sandbo
 		if eventType == "sandbox.resumed" {
 			topic = "agent-compose.sandbox.resumed"
 		}
-		c.bus.Publish(domain.LoaderTopicEvent{
+		c.bus.Publish(domain.SchedulerTopicEvent{
 			Topic:     topic,
-			Payload:   loaders.SessionTopicPayload(sandbox, "project-run"),
+			Payload:   schedulers.SessionTopicPayload(sandbox, "project-run"),
 			CreatedAt: time.Now().UTC(),
 		})
 	}
@@ -2431,7 +2450,7 @@ func (c *Controller) stopProjectRunSandbox(ctx context.Context, sandbox *domain.
 	return nil
 }
 
-func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, store SandboxRuntimeStore, streams *sessions.StreamBroker, sandbox *domain.Sandbox, capsetIDs []string) {
+func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, store SandboxRuntimeStore, streams *sandboxes.StreamBroker, sandbox *domain.Sandbox, capsetIDs []string) {
 	ids := capabilities.NormalizeCapsetIDs(capsetIDs)
 	if len(ids) == 0 || provider == nil || sandbox == nil {
 		return
@@ -2473,7 +2492,7 @@ func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, s
 	}
 }
 
-func recordCapabilityGuideWarning(ctx context.Context, store SandboxRuntimeStore, streams *sessions.StreamBroker, sandboxID, message string) {
+func recordCapabilityGuideWarning(ctx context.Context, store SandboxRuntimeStore, streams *sandboxes.StreamBroker, sandboxID, message string) {
 	if store == nil || strings.TrimSpace(sandboxID) == "" {
 		return
 	}

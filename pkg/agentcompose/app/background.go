@@ -15,7 +15,7 @@ import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 const stalePendingSandboxLastError = "sandbox startup interrupted before runtime reached running state"
@@ -25,12 +25,12 @@ type runtimeReconciler interface {
 	ReconcileRuntimeState(context.Context, *domain.Sandbox) (*domain.Sandbox, error)
 }
 
-type backgroundLoaderManager interface {
+type backgroundSchedulerController interface {
 	RecoverInterruptedRuns(context.Context, time.Time) error
 	Start()
 }
 
-func startBackgroundManagers(ctx context.Context, sandboxes *sessionstore.Store, configDB *configstore.ConfigStore, bridge runtimeReconciler, loaders backgroundLoaderManager, events *events.Dispatcher, capProxy *capproxy.Server, capTokens *adapters.CapabilitySandboxResolver) error {
+func startBackgroundManagers(ctx context.Context, sandboxes *sandboxstore.Store, configDB *configstore.ConfigStore, bridge runtimeReconciler, schedulers backgroundSchedulerController, events *events.Dispatcher, capProxy *capproxy.Server, capTokens *adapters.CapabilitySandboxResolver) error {
 	startedAt := time.Now().UTC()
 	reconcileCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -42,15 +42,15 @@ func startBackgroundManagers(ctx context.Context, sandboxes *sessionstore.Store,
 			slog.Warn("failed to rebuild capability sandbox token index on startup", "error", err)
 		}
 	}
-	if err := loaders.RecoverInterruptedRuns(reconcileCtx, startedAt); err != nil {
+	if err := schedulers.RecoverInterruptedRuns(reconcileCtx, startedAt); err != nil {
 		slog.Warn("failed to recover interrupted scheduler runs", "error", err)
 	}
-	loaders.Start()
+	schedulers.Start()
 	events.Start()
 	return startCapabilityProxy(ctx, capProxy)
 }
 
-func reconcilePersistedSandboxes(ctx context.Context, store *sessionstore.Store, configDB *configstore.ConfigStore, bridge runtimeReconciler, startedAt time.Time) error {
+func reconcilePersistedSandboxes(ctx context.Context, store *sandboxstore.Store, configDB *configstore.ConfigStore, bridge runtimeReconciler, startedAt time.Time) error {
 	result, err := store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: 1 << 30})
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func reconcilePersistedSandboxes(ctx context.Context, store *sessionstore.Store,
 	return nil
 }
 
-func reconcilePendingSandboxState(ctx context.Context, store *sessionstore.Store, session *domain.Sandbox, startedAt time.Time) (*domain.Sandbox, error) {
+func reconcilePendingSandboxState(ctx context.Context, store *sandboxstore.Store, session *domain.Sandbox, startedAt time.Time) (*domain.Sandbox, error) {
 	if session == nil || session.Summary.VMStatus != domain.VMStatusPending {
 		return session, nil
 	}

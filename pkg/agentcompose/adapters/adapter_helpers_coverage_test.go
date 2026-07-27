@@ -10,40 +10,40 @@ import (
 	"agent-compose/pkg/capabilities"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 )
 
 func TestAdapterHelperCoverage(t *testing.T) {
 	t.Run("loader host unavailable dependencies", func(t *testing.T) {
-		if err := (LoaderHostEvents{}).Add(context.Background(), "", "", "", "", "", "", nil, "", "", ""); err == nil {
-			t.Fatalf("LoaderHostEvents.Add returned nil error")
+		if err := (SchedulerHostEvents{}).Add(context.Background(), "", "", "", "", "", "", nil, "", "", ""); err == nil {
+			t.Fatalf("SchedulerHostEvents.Add returned nil error")
 		}
-		if _, err := (LoaderHostEvents{}).AddRecord(context.Background(), "", "", "", "", "", "", nil, "", "", ""); err == nil {
-			t.Fatalf("LoaderHostEvents.AddRecord returned nil error")
+		if _, err := (SchedulerHostEvents{}).AddRecord(context.Background(), "", "", "", "", "", "", nil, "", "", ""); err == nil {
+			t.Fatalf("SchedulerHostEvents.AddRecord returned nil error")
 		}
-		if _, err := (LoaderHostAgentExecutor{}).ExecuteAgent(context.Background(), nil, loaders.HostAgentExecutionRequest{}); err == nil {
-			t.Fatalf("LoaderHostAgentExecutor.ExecuteAgent returned nil error")
+		if _, err := (SchedulerHostAgentExecutor{}).ExecuteAgent(context.Background(), nil, schedulers.HostAgentExecutionRequest{}); err == nil {
+			t.Fatalf("SchedulerHostAgentExecutor.ExecuteAgent returned nil error")
 		}
-		if _, err := (LoaderHostCommandExecutor{}).ExecuteLoaderCommand(context.Background(), nil, domain.LoaderCommandRequest{}); err == nil {
-			t.Fatalf("LoaderHostCommandExecutor.ExecuteLoaderCommand returned nil error")
+		if _, err := (SchedulerHostCommandExecutor{}).ExecuteLoaderCommand(context.Background(), nil, domain.SchedulerCommandRequest{}); err == nil {
+			t.Fatalf("SchedulerHostCommandExecutor.ExecuteLoaderCommand returned nil error")
 		}
-		if _, err := (LoaderHostLLMRunner{}).Generate(context.Background(), "prompt", "model", ""); err == nil {
-			t.Fatalf("LoaderHostLLMRunner.Generate returned nil error")
+		if _, err := (SchedulerHostLLMRunner{}).Generate(context.Background(), "prompt", "model", ""); err == nil {
+			t.Fatalf("SchedulerHostLLMRunner.Generate returned nil error")
 		}
 	})
 
 	t.Run("loader sandbox rpc linked sandbox id", func(t *testing.T) {
-		if got := LoaderSandboxRPCLinkedSandboxID("CreateSession", `{"sessionId":"request-sandbox"}`, `{"session":{"summary":{"sessionId":"response-sandbox"}}}`); got != "response-sandbox" {
+		if got := SchedulerSandboxRPCLinkedSandboxID("CreateSandbox", `{"sandboxId":"request-sandbox"}`, `{"sandbox":{"summary":{"sandboxId":"response-sandbox"}}}`); got != "response-sandbox" {
 			t.Fatalf("response sandbox id = %q", got)
 		}
-		if got := LoaderSandboxRPCLinkedSandboxID("StopSession", `{"sessionId":" request-sandbox "}`, `{bad`); got != "request-sandbox" {
+		if got := SchedulerSandboxRPCLinkedSandboxID("StopSandbox", `{"sandboxId":" request-sandbox "}`, `{bad`); got != "request-sandbox" {
 			t.Fatalf("request sandbox id = %q", got)
 		}
-		if got := LoaderSandboxRPCLinkedSandboxID("ListSessions", `{"sessionId":"ignored"}`, `{}`); got != "" {
-			t.Fatalf("ListSessions linked id = %q, want empty", got)
+		if got := SchedulerSandboxRPCLinkedSandboxID("ListSandboxes", `{"sandboxId":"ignored"}`, `{}`); got != "" {
+			t.Fatalf("ListSandboxes linked id = %q, want empty", got)
 		}
-		if got := loaderSandboxIDFromJSON(`{"session":{"summary":{"sessionId":" nested "}}}`); got != "nested" {
+		if got := loaderSandboxIDFromJSON(`{"sandbox":{"summary":{"sandboxId":" nested "}}}`); got != "nested" {
 			t.Fatalf("nested sandbox id = %q", got)
 		}
 	})

@@ -197,10 +197,6 @@ enum RunAgentStreamEventType {
 }
 
 enum RunSandboxCleanupPolicy {
-  reserved "RUN_SESSION_CLEANUP_POLICY_UNSPECIFIED";
-  reserved "RUN_SESSION_CLEANUP_POLICY_STOP_ON_COMPLETION";
-  reserved "RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING";
-  reserved "RUN_SESSION_CLEANUP_POLICY_REMOVE_ON_COMPLETION";
 
   RUN_SANDBOX_CLEANUP_POLICY_UNSPECIFIED = 0;
   RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION = 1;
@@ -255,8 +251,6 @@ enum MetricStatus {
 }
 
 enum CacheDomain {
-  reserved 4;
-  reserved "CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE";
 
   CACHE_DOMAIN_UNSPECIFIED = 0;
   CACHE_DOMAIN_OCI_IMAGE_STORE = 1;
@@ -350,7 +344,6 @@ message ListProjectsResponse {
 }
 
 message RemoveProjectRequest {
-  reserved "stop_running_sessions";
 
   ProjectRef project = 1;
   bool remove_history = 2;
@@ -449,8 +442,6 @@ message ProjectAgentLatestRun {
 }
 
 message ProjectScheduler {
-  reserved 4;
-  reserved "managed_loader_id";
 
   string project_id = 1;
   string agent_name = 2;
@@ -721,11 +712,7 @@ message ProjectChange {
 message ProjectSpec {
   string name = 1;
   repeated EnvVarSpec variables = 2;
-  reserved 3;
-  reserved "workspace";
   repeated AgentSpec agents = 4;
-  reserved 5;
-  reserved "network";
   repeated ProjectVolumeSpec volumes = 6;
   repeated NamedWorkspaceSpec workspaces = 7;
   repeated MCPServerSpec mcp_servers = 8;
@@ -873,8 +860,6 @@ message MicrosandboxDriverSpec {
 }
 
 message RunAgentRequest {
-  reserved 5;
-  reserved "session_id";
 
   string project_id = 1;
   string agent_name = 2;
@@ -964,8 +949,6 @@ message GetRunResponse {
 }
 
 message ListRunsRequest {
-  reserved 3;
-  reserved "session_id";
 
   string project_id = 1;
   string agent_name = 2;
@@ -1206,8 +1189,6 @@ message SandboxStats {
 }
 
 message RunSummary {
-  reserved 11;
-  reserved "session_id";
 
   string run_id = 1;
   string project_id = 2;
@@ -1246,7 +1227,6 @@ message RunDetail {
 }
 
 message ExecRequest {
-  reserved "session_id";
 
   oneof target {
     string sandbox_id = 1;
@@ -1276,7 +1256,6 @@ message ExecResponse {
 }
 
 message ExecStreamResponse {
-  reserved "session_id";
 
   ExecStreamEventType event_type = 1;
   string exec_id = 2;
@@ -1401,7 +1380,6 @@ message AttachError {
 }
 
 message ExecResult {
-  reserved "session_id";
 
   string exec_id = 1;
   string sandbox_id = 2;
@@ -1558,8 +1536,6 @@ message RemoveCacheResponse {
 }
 
 message CacheItem {
-  reserved 10;
-  reserved "session_id";
 
   string cache_id = 1;
   CacheDomain domain = 2;

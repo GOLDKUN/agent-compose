@@ -8,10 +8,10 @@ import (
 
 func TestSandboxTagsPersistCapabilityScope(t *testing.T) {
 	tags := SandboxTags(domain.ProjectRunRecord{
-		ProjectID:      " project-1 ",
-		AgentName:      " worker ",
-		ManagedAgentID: " agent-1 ",
-		RunID:          " run-1 ",
+		ProjectID: " project-1 ",
+		AgentName: " worker ",
+		AgentID:   " agent-1 ",
+		RunID:     " run-1 ",
 	})
 
 	values := make(map[string]string, len(tags))

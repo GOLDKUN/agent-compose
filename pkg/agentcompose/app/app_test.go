@@ -19,10 +19,10 @@ import (
 	"agent-compose/pkg/cleanup"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
 	"agent-compose/pkg/runs"
+	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/volumes"
 	"agent-compose/pkg/workspaces"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -107,7 +107,7 @@ func TestStartBackgroundConstructsCleanupBeforeLoader(t *testing.T) {
 		constructionOrder = append(constructionOrder, "cleanup")
 		return NewCleanupRunner(di)
 	})
-	do.Override(di, func(di do.Injector) (*loaders.Controller, error) {
+	do.Override(di, func(di do.Injector) (*schedulers.Controller, error) {
 		constructionOrder = append(constructionOrder, "loader")
 		return NewLoaderController(di)
 	})
@@ -153,8 +153,8 @@ func TestAppWorkspaceProvisionerSingletonAndRequired(t *testing.T) {
 	if bridge := do.MustInvoke[*adapters.SandboxRPCBridge](di); bridge == nil {
 		t.Fatal("SandboxRPCBridge did not resolve with WorkspaceEnsurer")
 	}
-	if runner := do.MustInvoke[*adapters.LoaderSandboxRunner](di); runner == nil {
-		t.Fatal("LoaderSandboxRunner did not resolve with WorkspaceEnsurer")
+	if runner := do.MustInvoke[*adapters.SchedulerSandboxRunner](di); runner == nil {
+		t.Fatal("SchedulerSandboxRunner did not resolve with WorkspaceEnsurer")
 	}
 	if controller := do.MustInvoke[*runs.Controller](di); controller == nil {
 		t.Fatal("runs.Controller did not resolve with WorkspaceEnsurer")
@@ -169,7 +169,7 @@ func TestAppWorkspaceProvisionerSingletonAndRequired(t *testing.T) {
 	}
 }
 
-func TestRegisterUsesLegacySessionsRootAndInitializesConfigStoreSchema(t *testing.T) {
+func TestRegisterUsesSandboxRootAndInitializesConfigStoreSchema(t *testing.T) {
 	root := t.TempDir()
 	legacyRoot := filepath.Join(root, "sessions")
 	if err := os.MkdirAll(legacyRoot, 0o755); err != nil {
@@ -193,8 +193,9 @@ func TestRegisterUsesLegacySessionsRootAndInitializesConfigStoreSchema(t *testin
 	Register(di)
 	cancel()
 	config := do.MustInvoke[*appconfig.Config](di)
-	if config.SandboxRoot != legacyRoot {
-		t.Fatalf("SandboxRoot = %q, want legacy root %q", config.SandboxRoot, legacyRoot)
+	wantRoot := filepath.Join(root, "sandboxes")
+	if config.SandboxRoot != wantRoot {
+		t.Fatalf("SandboxRoot = %q, want %q", config.SandboxRoot, wantRoot)
 	}
 	if info, err := os.Stat(filepath.Join(root, "data.db")); err != nil || info.IsDir() {
 		t.Fatalf("data.db stat = %v/%v, want database file", info, err)

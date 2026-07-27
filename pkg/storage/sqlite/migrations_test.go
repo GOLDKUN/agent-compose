@@ -34,10 +34,10 @@ func TestMigrationBaseline(t *testing.T) {
 	}
 
 	tables := []string{
-		"schema_migrations", "global_env", "workspace_config", "agent_definition",
+		"schema_migrations", "global_env", "workspace_config",
 		"llm_provider", "llm_model", "llm_provider_model", "llm_facade_token",
-		"capability_gateway", "volumes", "project_volumes", "loader", "loader_trigger",
-		"loader_run", "loader_event", "loader_state", "loader_binding", "project",
+		"capability_gateway", "volumes", "project_volumes", "scheduler_trigger",
+		"scheduler_run", "scheduler_event", "scheduler_state", "scheduler_sandbox_binding", "project",
 		"project_revision", "project_agent", "project_scheduler", "project_run",
 		"project_run_event", "event", "webhook_source", "event_delivery", "event_sandbox_link",
 		"sandbox_projection_meta", "sandboxes",
@@ -61,18 +61,17 @@ func TestMigrationBaseline(t *testing.T) {
 		t.Fatalf("application table count = %d, want %d", tableCount, len(tables))
 	}
 	for _, index := range []string{
-		"idx_agent_definition_deleted_enabled", "idx_agent_definition_managed_project", "idx_agent_definition_workspace",
-		"idx_event_correlation", "idx_event_delivery_loader_run", "idx_event_delivery_run", "idx_event_delivery_status",
+		"idx_event_correlation", "idx_event_delivery_scheduler_run", "idx_event_delivery_status",
 		"idx_event_dispatch", "idx_event_dispatch_attempt", "idx_event_idempotency", "idx_event_parent",
-		"idx_event_sandbox_link_loader_run", "idx_event_sandbox_link_run", "idx_event_sandbox_link_sandbox",
-		"idx_event_topic_sequence", "idx_llm_facade_token_sandbox", "idx_loader_event_created",
-		"idx_loader_event_run_created", "idx_loader_event_sandbox_run", "idx_loader_managed_project", "idx_loader_run_prune",
-		"idx_loader_run_started", "idx_loader_run_status_started", "idx_loader_run_trigger_started",
-		"idx_loader_trigger_schedule", "idx_project_agent_id", "idx_project_agent_managed_agent",
+		"idx_event_sandbox_link_scheduler_run", "idx_event_sandbox_link_sandbox",
+		"idx_event_topic_sequence", "idx_llm_facade_token_sandbox", "idx_scheduler_event_created",
+		"idx_scheduler_event_run_created", "idx_scheduler_event_sandbox_run", "idx_scheduler_run_prune",
+		"idx_scheduler_run_started", "idx_scheduler_run_status_started", "idx_scheduler_run_trigger_started",
+		"idx_scheduler_trigger_schedule",
 		"idx_project_name", "idx_project_revision_hash", "idx_project_run_agent",
 		"idx_project_run_event_sequence", "idx_project_run_project_status", "idx_project_run_sandbox",
-		"idx_project_run_scheduler", "idx_project_scheduler_agent", "idx_project_scheduler_id",
-		"idx_project_scheduler_managed_loader", "idx_project_short_id", "idx_project_source_path",
+		"idx_project_run_scheduler", "idx_project_scheduler_agent",
+		"idx_project_run_scheduler_run", "idx_project_short_id", "idx_project_source_path",
 		"idx_project_volumes_volume", "idx_sandboxes_project_updated", "idx_sandboxes_type_updated", "idx_sandboxes_updated",
 		"idx_sandboxes_vm_status_updated", "idx_volumes_driver", "idx_volumes_project",
 		"idx_webhook_source_enabled_topic",
@@ -188,7 +187,7 @@ func TestLoaderBindingConfigHashMigration(t *testing.T) {
 		t.Fatalf("insert pre-migration binding: %v", err)
 	}
 
-	if err := applyMigrations(ctx, db, embeddedMigrations); err != nil {
+	if err := applyMigrationSet(ctx, db, available[:4]); err != nil {
 		t.Fatalf("apply config hash migration: %v", err)
 	}
 	var sandboxID, configHash string
@@ -205,7 +204,7 @@ func TestLoaderBindingConfigHashMigration(t *testing.T) {
 	if versionCount != 1 {
 		t.Fatalf("version 4 history count = %d, want 1", versionCount)
 	}
-	if err := applyMigrations(ctx, db, embeddedMigrations); err != nil {
+	if err := applyMigrationSet(ctx, db, available[:4]); err != nil {
 		t.Fatalf("reapply migrations: %v", err)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version = 4`).Scan(&versionCount); err != nil {
@@ -277,13 +276,13 @@ func TestBaselineIncludesPreviouslyOmittedSchema(t *testing.T) {
 		{name: "idx_sandboxes_vm_status_updated", columns: []string{"vm_status_search", "updated_at", "id"}, descending: []bool{false, true, true}},
 		{name: "idx_sandboxes_project_updated", columns: []string{"project_id_search", "updated_at", "id"}, descending: []bool{false, true, true}},
 		{name: "idx_sandboxes_type_updated", columns: []string{"sandbox_type", "updated_at", "id"}, descending: []bool{false, true, true}},
-		{name: "idx_loader_run_trigger_started", columns: []string{"loader_id", "trigger_id", "started_at", "run_id"}, descending: []bool{false, false, true, true}},
-		{name: "idx_loader_run_status_started", columns: []string{"loader_id", "status", "started_at", "run_id"}, descending: []bool{false, false, true, true}},
-		{name: "idx_loader_run_prune", columns: []string{"loader_id", "status", "completed_at", "started_at", "run_id"}, descending: []bool{false, false, false, false, false}},
-		{name: "idx_loader_event_run_created", columns: []string{"loader_id", "run_id", "created_at", "event_id"}, descending: []bool{false, false, true, true}},
-		{name: "idx_loader_event_sandbox_run", columns: []string{"linked_sandbox_id", "loader_id", "run_id"}, descending: []bool{false, false, false}},
-		{name: "idx_event_sandbox_link_loader_run", columns: []string{"loader_id", "run_id"}, descending: []bool{false, false}},
-		{name: "idx_event_delivery_loader_run", columns: []string{"loader_id", "run_id"}, descending: []bool{false, false}},
+		{name: "idx_scheduler_run_trigger_started", columns: []string{"scheduler_id", "trigger_id", "started_at", "run_id"}, descending: []bool{false, false, true, true}},
+		{name: "idx_scheduler_run_status_started", columns: []string{"scheduler_id", "status", "started_at", "run_id"}, descending: []bool{false, false, true, true}},
+		{name: "idx_scheduler_run_prune", columns: []string{"scheduler_id", "status", "completed_at", "started_at", "run_id"}, descending: []bool{false, false, false, false, false}},
+		{name: "idx_scheduler_event_run_created", columns: []string{"scheduler_id", "scheduler_run_id", "created_at", "event_id"}, descending: []bool{false, false, true, true}},
+		{name: "idx_scheduler_event_sandbox_run", columns: []string{"linked_sandbox_id", "scheduler_id", "scheduler_run_id"}, descending: []bool{false, false, false}},
+		{name: "idx_event_sandbox_link_scheduler_run", columns: []string{"scheduler_run_id"}, descending: []bool{false}},
+		{name: "idx_event_delivery_scheduler_run", columns: []string{"scheduler_run_id"}, descending: []bool{false}},
 	}
 	for _, definition := range indexDefinitions {
 		assertSQLiteIndexColumns(t, db, definition.name, definition.columns, definition.descending)
@@ -516,197 +515,29 @@ func TestOpenSupportsRelativePath(t *testing.T) {
 	}
 }
 
-func TestMigratesEveryLegacyAddedColumn(t *testing.T) {
+func TestRejectsNonEmptyUnversionedDatabaseWithoutModification(t *testing.T) {
 	ctx := context.Background()
 	db := newMemoryDB(t)
-	available, err := loadMigrations(embeddedMigrations)
-	if err != nil {
-		t.Fatalf("load baseline: %v", err)
+	if _, err := db.ExecContext(ctx, `CREATE TABLE agent_definition(id TEXT PRIMARY KEY, name TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create unversioned fixture: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, available[0].statement); err != nil {
-		t.Fatalf("create unversioned baseline fixture: %v", err)
+	if _, err := db.ExecContext(ctx, `INSERT INTO agent_definition VALUES('agent-1', 'preserved')`); err != nil {
+		t.Fatalf("insert unversioned fixture: %v", err)
 	}
-
-	for _, index := range []string{
-		"idx_agent_definition_managed_project", "idx_loader_managed_project",
-		"idx_project_short_id", "idx_project_agent_id", "idx_project_scheduler_id",
-		"idx_project_run_sandbox", "idx_event_dispatch_attempt", "idx_event_parent",
-	} {
-		if _, err := db.ExecContext(ctx, `DROP INDEX `+index); err != nil {
-			t.Fatalf("drop fixture index %s: %v", index, err)
-		}
+	err := applyMigrations(ctx, db, embeddedMigrations)
+	if err == nil || !strings.Contains(err.Error(), legacyMigratorHint) {
+		t.Fatalf("applyMigrations error = %v, want migrator hint", err)
 	}
-
-	legacyColumns := map[string][]string{
-		"agent_definition":  {"capset_ids", "volumes_json", "skills", "managed_project_id", "managed_project_revision", "managed_agent_name"},
-		"llm_provider":      {"use_generic_responses_text_parts"},
-		"loader":            {"agent_id", "capset_ids", "volumes_json", "managed_project_id", "managed_project_revision", "managed_agent_name", "managed_scheduler_id"},
-		"project":           {"short_id"},
-		"project_agent":     {"id", "name", "short_id"},
-		"project_scheduler": {"id", "short_id"},
-		"project_run":       {"sandbox_id"},
-		"event":             {"replay_of_event_id", "claim_id", "claim_until", "attempt_count", "next_attempt_at", "last_error", "dead_letter_at"},
-		"webhook_source":    {"token_header"},
+	var historyCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&historyCount); err != nil {
+		t.Fatalf("inspect migration history: %v", err)
 	}
-	for table, columns := range legacyColumns {
-		for _, column := range columns {
-			if _, err := db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %q DROP COLUMN %q`, table, column)); err != nil {
-				t.Fatalf("drop fixture column %s.%s: %v", table, column, err)
-			}
-		}
+	if historyCount != 0 {
+		t.Fatalf("schema_migrations table count = %d, want 0", historyCount)
 	}
-
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO agent_definition(id, name, created_at, updated_at) VALUES('agent-1', 'preserved', 1, 2)`); err != nil {
-		t.Fatalf("insert legacy agent: %v", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO loader(id, name, script) VALUES('loader-1', 'preserved', 'return 1')`); err != nil {
-		t.Fatalf("insert legacy loader: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO project(id, name) VALUES('project-1', 'preserved')`); err != nil {
-		t.Fatalf("insert legacy project: %v", err)
-	}
-
-	if err := applyMigrations(ctx, db, embeddedMigrations); err != nil {
-		t.Fatalf("migrate legacy columns: %v", err)
-	}
-	for table, columns := range legacyColumns {
-		types, err := sqliteTableColumnTypes(ctx, db, table)
-		if err != nil {
-			t.Fatalf("inspect migrated table %s: %v", table, err)
-		}
-		for _, column := range columns {
-			if _, ok := types[column]; !ok {
-				t.Fatalf("migrated table %s missing column %s", table, column)
-			}
-		}
-	}
-	for _, index := range []string{
-		"idx_agent_definition_managed_project", "idx_loader_managed_project",
-		"idx_project_short_id", "idx_project_agent_id", "idx_project_scheduler_id",
-		"idx_project_run_sandbox", "idx_event_dispatch_attempt", "idx_event_parent",
-		"idx_loader_run_trigger_started", "idx_loader_run_status_started", "idx_loader_run_prune",
-		"idx_loader_event_run_created", "idx_loader_event_sandbox_run", "idx_event_sandbox_link_loader_run", "idx_event_delivery_loader_run",
-		"idx_sandboxes_updated", "idx_sandboxes_vm_status_updated", "idx_sandboxes_project_updated", "idx_sandboxes_type_updated",
-	} {
-		assertSQLiteIndexExists(t, db, index)
-	}
-	for _, table := range []string{"sandbox_projection_meta", "sandboxes"} {
-		var count int
-		if err := db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
-			t.Fatalf("query migrated table %s: %v", table, err)
-		}
-		if count != 1 {
-			t.Fatalf("migrated table %s count = %d, want 1", table, count)
-		}
-	}
-	for table, id := range map[string]string{"agent_definition": "agent-1", "loader": "loader-1", "project": "project-1"} {
-		var name string
-		if err := db.QueryRowContext(ctx, `SELECT name FROM `+table+` WHERE id = ?`, id).Scan(&name); err != nil {
-			t.Fatalf("query preserved %s: %v", table, err)
-		}
-		if name != "preserved" {
-			t.Fatalf("preserved %s name = %q", table, name)
-		}
-	}
-}
-
-func TestMigratesLegacyTimestampTables(t *testing.T) {
-	ctx := context.Background()
-	db := newMemoryDB(t)
-	statements := []string{
-		`CREATE TABLE global_env(name TEXT PRIMARY KEY, value TEXT NOT NULL, secret INTEGER NOT NULL, updated_at TEXT NOT NULL)`,
-		`INSERT INTO global_env VALUES('A', 'one', 1, '2026-06-02T09:00:00Z')`,
-		`CREATE TABLE workspace_config(id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, config_json TEXT NOT NULL, comment TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-		`INSERT INTO workspace_config VALUES('ws-1', 'Workspace', 'file', '{}', 'legacy', '2026-06-02T09:00:00Z', '2026-06-02T09:01:00Z')`,
-	}
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("prepare legacy timestamp fixture: %v", err)
-		}
-	}
-	if err := applyMigrations(ctx, db, embeddedMigrations); err != nil {
-		t.Fatalf("migrate legacy timestamp tables: %v", err)
-	}
-	for table, columns := range map[string][]string{
-		"global_env":       {"updated_at"},
-		"workspace_config": {"created_at", "updated_at"},
-	} {
-		types, err := sqliteTableColumnTypes(ctx, db, table)
-		if err != nil {
-			t.Fatalf("inspect %s: %v", table, err)
-		}
-		for _, column := range columns {
-			if !isIntegerColumnType(types[column]) {
-				t.Fatalf("%s.%s type = %q, want integer", table, column, types[column])
-			}
-		}
-	}
-	var globalName string
-	if err := db.QueryRowContext(ctx, `SELECT name FROM global_env WHERE name = 'A'`).Scan(&globalName); err != nil || globalName != "A" {
-		t.Fatalf("migrated global env name = %q, err=%v", globalName, err)
-	}
-	var workspaceName string
-	if err := db.QueryRowContext(ctx, `SELECT name FROM workspace_config WHERE id = 'ws-1'`).Scan(&workspaceName); err != nil || workspaceName != "Workspace" {
-		t.Fatalf("migrated workspace name = %q, err=%v", workspaceName, err)
-	}
-}
-
-func TestMigratesLegacyLoaderTimestampsOnce(t *testing.T) {
-	ctx := context.Background()
-	db := newMemoryDB(t)
-	available, err := loadMigrations(embeddedMigrations)
-	if err != nil {
-		t.Fatalf("load baseline: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, available[0].statement); err != nil {
-		t.Fatalf("create unversioned baseline fixture: %v", err)
-	}
-	const seconds int64 = 1_720_000_000
-	statements := []string{
-		`INSERT INTO loader(id, name, script) VALUES('loader-1', 'legacy', 'return 1')`,
-		`INSERT INTO loader_trigger(loader_id, trigger_id, kind, next_fire_at, last_fired_at)
-			VALUES('loader-1', 'trigger-1', 'interval', 1720000000, 1720000001)`,
-		`INSERT INTO loader_run(loader_id, run_id, started_at, completed_at)
-			VALUES('loader-1', 'run-1', 1720000002, 1720000003)`,
-		`INSERT INTO loader_event(loader_id, event_id, type, created_at)
-			VALUES('loader-1', 'event-1', 'legacy', 1720000004)`,
-	}
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("prepare legacy loader timestamp fixture: %v", err)
-		}
-	}
-
-	for pass := 1; pass <= 2; pass++ {
-		if err := applyMigrations(ctx, db, embeddedMigrations); err != nil {
-			t.Fatalf("applyMigrations pass %d: %v", pass, err)
-		}
-	}
-	var nextFireAt, lastFiredAt, startedAt, completedAt, eventCreatedAt int64
-	if err := db.QueryRowContext(ctx,
-		`SELECT next_fire_at, last_fired_at FROM loader_trigger WHERE loader_id = 'loader-1' AND trigger_id = 'trigger-1'`).
-		Scan(&nextFireAt, &lastFiredAt); err != nil {
-		t.Fatalf("query migrated loader trigger timestamps: %v", err)
-	}
-	if err := db.QueryRowContext(ctx,
-		`SELECT started_at, completed_at FROM loader_run WHERE loader_id = 'loader-1' AND run_id = 'run-1'`).
-		Scan(&startedAt, &completedAt); err != nil {
-		t.Fatalf("query migrated loader run timestamps: %v", err)
-	}
-	if err := db.QueryRowContext(ctx,
-		`SELECT created_at FROM loader_event WHERE loader_id = 'loader-1' AND event_id = 'event-1'`).
-		Scan(&eventCreatedAt); err != nil {
-		t.Fatalf("query migrated loader event timestamp: %v", err)
-	}
-	want := []int64{seconds * 1000, (seconds + 1) * 1000, (seconds + 2) * 1000, (seconds + 3) * 1000, (seconds + 4) * 1000}
-	got := []int64{nextFireAt, lastFiredAt, startedAt, completedAt, eventCreatedAt}
-	for index := range want {
-		if got[index] != want[index] {
-			t.Fatalf("migrated loader timestamp %d = %d, want %d", index, got[index], want[index])
-		}
+	var name string
+	if err := db.QueryRowContext(ctx, `SELECT name FROM agent_definition WHERE id = 'agent-1'`).Scan(&name); err != nil || name != "preserved" {
+		t.Fatalf("unversioned source changed: name=%q err=%v", name, err)
 	}
 }
 

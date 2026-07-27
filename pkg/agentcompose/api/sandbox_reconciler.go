@@ -6,6 +6,6 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-type SessionRuntimeReconciler interface {
+type SandboxRuntimeReconciler interface {
 	ReconcileRuntimeState(context.Context, *domain.Sandbox) (*domain.Sandbox, error)
 }

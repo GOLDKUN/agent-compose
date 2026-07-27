@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"database/sql"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 	if len(triggers) != 4 {
 		t.Fatalf("triggers = %#v", triggers)
 	}
-	if triggers[0].Kind != domain.LoaderTriggerKindCron || triggers[1].IntervalMs != 2000 || triggers[2].Kind != domain.LoaderTriggerKindTimeout || triggers[3].Topic != "webhook.github.push" {
+	if triggers[0].Kind != domain.SchedulerTriggerKindCron || triggers[1].IntervalMs != 2000 || triggers[2].Kind != domain.SchedulerTriggerKindTimeout || triggers[3].Topic != "webhook.github.push" {
 		t.Fatalf("trigger shapes = %#v", triggers)
 	}
 	for _, want := range []string{"scheduler.cron(", "scheduler.interval(", "scheduler.timeout(", "scheduler.on(", `quote \"prompt\"`} {
@@ -94,7 +95,7 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NormalizeAgentRecord returned error: %v", err)
 	}
-	if agent.ManagedAgentID == "" || agent.SpecJSON != "{}" {
+	if agent.ID == "" || agent.SpecJSON != "{}" {
 		t.Fatalf("normalized agent = %#v", agent)
 	}
 	for _, item := range []domain.ProjectAgentRecord{
@@ -112,7 +113,7 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NormalizeSchedulerRecord returned error: %v", err)
 	}
-	if scheduler.SchedulerID == "" || scheduler.ManagedLoaderID == "" || scheduler.SpecJSON != "{}" {
+	if scheduler.SchedulerID == "" || scheduler.ID == "" || scheduler.SpecJSON != "{}" {
 		t.Fatalf("normalized scheduler = %#v", scheduler)
 	}
 	for _, item := range []domain.ProjectSchedulerRecord{
@@ -159,7 +160,7 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 		t.Fatalf("ScanProject scanned=%#v err=%v", scanned, err)
 	}
 	scannedRun, err := ScanProjectRun(func(dest ...any) error {
-		values := []any{"run-1", "project-1", "Project", int64(1), "worker", "agent-1", "api", "scheduler-1", "trigger-1", "running", "session-1", 0, "", "prompt", "output", "{}", "logs", "artifacts", "", "docker", "image", int64(1_720_000_000_000), "1720000001000", int64(1000), float64(1720000002), time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC).Format(time.RFC3339)}
+		values := []any{"run-1", "project-1", "Project", int64(1), "worker", "agent-1", "api", "scheduler-1", "scheduler-run-1", "trigger-1", "running", "session-1", 0, "", "prompt", "output", "{}", "logs", "artifacts", "", "docker", "image", int64(1_720_000_000_000), "1720000001000", int64(1000), float64(1720000002), time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC).Format(time.RFC3339)}
 		for i, value := range values {
 			switch ptr := dest[i].(type) {
 			case *string:
@@ -168,6 +169,9 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 				*ptr = value.(int)
 			case *int64:
 				*ptr = value.(int64)
+			case *sql.NullString:
+				ptr.String = value.(string)
+				ptr.Valid = true
 			case *any:
 				*ptr = value
 			}

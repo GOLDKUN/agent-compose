@@ -11,9 +11,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
+	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"google.golang.org/protobuf/proto"
@@ -35,22 +35,22 @@ type ProjectStore interface {
 	GetProjectRevision(context.Context, string, int64) (domain.ProjectRevisionRecord, error)
 }
 
-type ProjectLoaderStore interface {
-	GetLoader(context.Context, string) (domain.Loader, error)
-	ListLoaderEvents(context.Context, string, int) ([]domain.LoaderEvent, error)
+type ProjectSchedulerStore interface {
+	GetLoader(context.Context, string) (domain.Scheduler, error)
+	ListLoaderEvents(context.Context, string, int) ([]domain.SchedulerEvent, error)
 }
 
-type ProjectLoaderRuntime interface {
-	SetLoaderEnabled(context.Context, string, bool) (domain.Loader, error)
-	SetLoaderTriggerEnabled(context.Context, string, string, bool) (domain.Loader, error)
+type ProjectSchedulerRuntime interface {
+	SetLoaderEnabled(context.Context, string, bool) (domain.Scheduler, error)
+	SetLoaderTriggerEnabled(context.Context, string, string, bool) (domain.Scheduler, error)
 }
 
 type ProjectSchedulerInvocationRuntime interface {
-	InvokeScheduler(context.Context, string, string) (loaders.InvocationResult, error)
+	InvokeScheduler(context.Context, string, string) (schedulers.InvocationResult, error)
 }
 
 type ProjectSchedulerPruneRuntime interface {
-	PruneSchedulerRuns(context.Context, loaders.SchedulerRunPruneRequest) (loaders.SchedulerRunPruneResult, error)
+	PruneSchedulerRuns(context.Context, schedulers.SchedulerRunPruneRequest) (schedulers.SchedulerRunPruneResult, error)
 }
 
 type ProjectAgentRunStateStore interface {
@@ -66,13 +66,13 @@ type ProjectHandler struct {
 	agentcomposev2connect.UnimplementedProjectServiceHandler
 	delegate       ProjectDelegate
 	store          ProjectStore
-	loaderRuntime  ProjectLoaderRuntime
+	loaderRuntime  ProjectSchedulerRuntime
 	schedulerRuns  ProjectSchedulerRunRuntime
 	invocations    ProjectSchedulerInvocationRuntime
 	schedulerPrune ProjectSchedulerPruneRuntime
 }
 
-func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, loaderRuntime ProjectLoaderRuntime) *ProjectHandler {
+func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, loaderRuntime ProjectSchedulerRuntime) *ProjectHandler {
 	schedulerRuns, _ := loaderRuntime.(ProjectSchedulerRunRuntime)
 	invocations, _ := loaderRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := loaderRuntime.(ProjectSchedulerPruneRuntime)
@@ -151,11 +151,11 @@ func (h *ProjectHandler) ListSchedulers(ctx context.Context, req *connect.Reques
 }
 
 func (h *ProjectHandler) effectiveSchedulerEnabled(ctx context.Context, scheduler domain.ProjectSchedulerRecord) (bool, error) {
-	loaderStore, ok := h.store.(ProjectLoaderStore)
-	if !ok || scheduler.ManagedLoaderID == "" {
+	loaderStore, ok := h.store.(ProjectSchedulerStore)
+	if !ok || scheduler.ID == "" {
 		return scheduler.Enabled, nil
 	}
-	loader, err := loaderStore.GetLoader(ctx, scheduler.ManagedLoaderID)
+	loader, err := loaderStore.GetLoader(ctx, scheduler.ID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, sql.ErrNoRows) {
 			return scheduler.Enabled, nil
@@ -178,7 +178,7 @@ func (h *ProjectHandler) ListSchedulerEvents(ctx context.Context, req *connect.R
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler runtime store is required"))
 	}
-	filter := loaders.LoaderEventPageFilter{LoaderIDs: []string{scheduler.ManagedLoaderID}, Offset: offset, Limit: limit}
+	filter := schedulers.SchedulerEventPageFilter{SchedulerIDs: []string{scheduler.ID}, Offset: offset, Limit: limit}
 	events, err := store.ListLoaderEventsPage(ctx, filter)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -202,7 +202,7 @@ func (h *ProjectHandler) SetSchedulerEnabled(ctx context.Context, req *connect.R
 	if h.loaderRuntime == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler runtime controller is required"))
 	}
-	loader, err := h.loaderRuntime.SetLoaderEnabled(ctx, scheduler.ManagedLoaderID, req.Msg.GetEnabled())
+	loader, err := h.loaderRuntime.SetLoaderEnabled(ctx, scheduler.ID, req.Msg.GetEnabled())
 	if err != nil {
 		return nil, projectConnectError(err)
 	}
@@ -222,7 +222,7 @@ func (h *ProjectHandler) SetSchedulerTriggerEnabled(ctx context.Context, req *co
 	if triggerID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("trigger id is required"))
 	}
-	loader, err := h.loaderRuntime.SetLoaderTriggerEnabled(ctx, scheduler.ManagedLoaderID, triggerID, req.Msg.GetEnabled())
+	loader, err := h.loaderRuntime.SetLoaderTriggerEnabled(ctx, scheduler.ID, triggerID, req.Msg.GetEnabled())
 	if err != nil {
 		return nil, projectConnectError(err)
 	}
@@ -236,7 +236,7 @@ func (h *ProjectHandler) SetSchedulerTriggerEnabled(ctx context.Context, req *co
 	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("trigger %s not found", triggerID))
 }
 
-func resolvedTriggerToProto(trigger domain.LoaderTrigger, declared *agentcomposev2.TriggerSpec) *agentcomposev2.ResolvedTrigger {
+func resolvedTriggerToProto(trigger domain.SchedulerTrigger, declared *agentcomposev2.TriggerSpec) *agentcomposev2.ResolvedTrigger {
 	spec := runtimeTriggerSpec(trigger)
 	if declared != nil {
 		spec = proto.Clone(declared).(*agentcomposev2.TriggerSpec)
@@ -244,22 +244,22 @@ func resolvedTriggerToProto(trigger domain.LoaderTrigger, declared *agentcompose
 	return &agentcomposev2.ResolvedTrigger{Spec: spec, TriggerId: trigger.ID, Enabled: trigger.Enabled, NextFireAt: projectTimestamp(trigger.NextFireAt), LastFiredAt: projectTimestamp(trigger.LastFiredAt)}
 }
 
-func runtimeTriggerSpec(trigger domain.LoaderTrigger) *agentcomposev2.TriggerSpec {
+func runtimeTriggerSpec(trigger domain.SchedulerTrigger) *agentcomposev2.TriggerSpec {
 	spec := &agentcomposev2.TriggerSpec{Name: trigger.ID, Kind: trigger.Kind}
 	duration := time.Duration(trigger.IntervalMs * int64(time.Millisecond)).String()
 	switch trigger.Kind {
-	case domain.LoaderTriggerKindCron:
+	case domain.SchedulerTriggerKindCron:
 		var value struct {
 			Expr string `json:"expr"`
 		}
 		if json.Unmarshal([]byte(trigger.SpecJSON), &value) == nil {
 			spec.Cron = value.Expr
 		}
-	case domain.LoaderTriggerKindInterval:
+	case domain.SchedulerTriggerKindInterval:
 		spec.Interval = duration
-	case domain.LoaderTriggerKindTimeout:
+	case domain.SchedulerTriggerKindTimeout:
 		spec.Timeout = duration
-	case domain.LoaderTriggerKindEvent:
+	case domain.SchedulerTriggerKindEvent:
 		spec.Event = &agentcomposev2.EventTriggerSpec{Topic: trigger.Topic}
 	}
 	return spec
@@ -271,7 +271,7 @@ func declaredTriggerSpec(scheduler domain.ProjectSchedulerRecord, triggerID stri
 		return nil
 	}
 	for index, trigger := range spec.GetTriggers() {
-		id, err := domain.StableManagedTriggerID(scheduler.ProjectID, scheduler.AgentName, "", trigger.GetName(), index)
+		id, err := domain.StableSchedulerTriggerID(scheduler.ProjectID, scheduler.AgentName, "", trigger.GetName(), index)
 		if err == nil && id == triggerID {
 			return trigger
 		}
@@ -305,11 +305,11 @@ func (h *ProjectHandler) schedulerResponse(ctx context.Context, scheduler domain
 	if err := json.Unmarshal([]byte(scheduler.SpecJSON), response.Spec); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode scheduler spec: %w", err))
 	}
-	loaderStore, ok := h.store.(ProjectLoaderStore)
-	if !ok || scheduler.ManagedLoaderID == "" {
+	loaderStore, ok := h.store.(ProjectSchedulerStore)
+	if !ok || scheduler.ID == "" {
 		return response, nil
 	}
-	loader, err := loaderStore.GetLoader(ctx, scheduler.ManagedLoaderID)
+	loader, err := loaderStore.GetLoader(ctx, scheduler.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

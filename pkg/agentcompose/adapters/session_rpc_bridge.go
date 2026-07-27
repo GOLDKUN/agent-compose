@@ -20,31 +20,31 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/llms"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/workspaces"
 )
 
 type SandboxRPCBridge struct {
 	config           *appconfig.Config
-	store            *sessionstore.Store
+	store            *sandboxstore.Store
 	configDB         *configstore.ConfigStore
 	workspaceEnsurer workspaces.WorkspaceEnsurer
-	driver           sessions.SandboxDriver
+	driver           sandboxes.SandboxDriver
 	runtimes         RuntimeProvider
-	bus              *loaders.Bus
-	streams          *sessions.StreamBroker
+	bus              *schedulers.Bus
+	streams          *sandboxes.StreamBroker
 	cap              capabilities.Provider
 	capTokens        *CapabilitySandboxResolver
 	dashboard        *dashboard.Hub
 	agentExecutor    *AgentExecutor
-	lifecycleLocks   *sessions.LifecycleLocks
+	lifecycleLocks   *sandboxes.LifecycleLocks
 }
 
-func NewSandboxRPCBridge(config *appconfig.Config, store *sessionstore.Store, configDB *configstore.ConfigStore, workspaceEnsurer workspaces.WorkspaceEnsurer, driver sessions.SandboxDriver, runtimes RuntimeProvider, bus *loaders.Bus, streams *sessions.StreamBroker, cap capabilities.Provider, capTokens *CapabilitySandboxResolver, dashboard *dashboard.Hub, agentExecutor *AgentExecutor, locks ...*sessions.LifecycleLocks) *SandboxRPCBridge {
+func NewSandboxRPCBridge(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, workspaceEnsurer workspaces.WorkspaceEnsurer, driver sandboxes.SandboxDriver, runtimes RuntimeProvider, bus *schedulers.Bus, streams *sandboxes.StreamBroker, cap capabilities.Provider, capTokens *CapabilitySandboxResolver, dashboard *dashboard.Hub, agentExecutor *AgentExecutor, locks ...*sandboxes.LifecycleLocks) *SandboxRPCBridge {
 	bridge := &SandboxRPCBridge{
 		config:           config,
 		store:            store,
@@ -65,7 +65,7 @@ func NewSandboxRPCBridge(config *appconfig.Config, store *sessionstore.Store, co
 	return bridge
 }
 
-func (b *SandboxRPCBridge) SubscribeSandbox(sandboxID string) (<-chan sessions.WatchEvent, func()) {
+func (b *SandboxRPCBridge) SubscribeSandbox(sandboxID string) (<-chan sandboxes.WatchEvent, func()) {
 	return b.streams.Subscribe(sandboxID)
 }
 
@@ -76,17 +76,17 @@ func (b *SandboxRPCBridge) CallJSON(ctx context.Context, method, requestJSON str
 func (b *SandboxRPCBridge) CallJSONWithSource(ctx context.Context, method, requestJSON, source string) (string, error) {
 	method = strings.TrimSpace(method)
 	switch method {
-	case "CreateSession":
+	case "CreateSandbox":
 		var request sandboxRPCCreateRequest
 		if err := decodeSandboxRPCJSON(requestJSON, &request); err != nil {
 			return "", err
 		}
-		loaded, err := b.createSandboxWithAgent(ctx, request, source, loaders.SandboxCreationContextFromContext(ctx))
+		loaded, err := b.createSandboxWithAgent(ctx, request, source, schedulers.SandboxCreationContextFromContext(ctx))
 		if err != nil {
 			return "", err
 		}
-		return encodeSandboxRPCJSON(sandboxRPCResponse{Session: sandboxRPCDetailFromDomain(loaded)})
-	case "ResumeSession":
+		return encodeSandboxRPCJSON(sandboxRPCResponse{Sandbox: sandboxRPCDetailFromDomain(loaded)})
+	case "ResumeSandbox":
 		var request sandboxRPCIDRequest
 		if err := decodeSandboxRPCJSON(requestJSON, &request); err != nil {
 			return "", err
@@ -95,8 +95,8 @@ func (b *SandboxRPCBridge) CallJSONWithSource(ctx context.Context, method, reque
 		if err != nil {
 			return "", err
 		}
-		return encodeSandboxRPCJSON(sandboxRPCResponse{Session: sandboxRPCDetailFromDomain(sandbox)})
-	case "StopSession":
+		return encodeSandboxRPCJSON(sandboxRPCResponse{Sandbox: sandboxRPCDetailFromDomain(sandbox)})
+	case "StopSandbox":
 		var request sandboxRPCIDRequest
 		if err := decodeSandboxRPCJSON(requestJSON, &request); err != nil {
 			return "", err
@@ -105,8 +105,8 @@ func (b *SandboxRPCBridge) CallJSONWithSource(ctx context.Context, method, reque
 		if err != nil {
 			return "", err
 		}
-		return encodeSandboxRPCJSON(sandboxRPCResponse{Session: sandboxRPCDetailFromDomain(sandbox)})
-	case "GetSession":
+		return encodeSandboxRPCJSON(sandboxRPCResponse{Sandbox: sandboxRPCDetailFromDomain(sandbox)})
+	case "GetSandbox":
 		var request sandboxRPCIDRequest
 		if err := decodeSandboxRPCJSON(requestJSON, &request); err != nil {
 			return "", err
@@ -115,8 +115,8 @@ func (b *SandboxRPCBridge) CallJSONWithSource(ctx context.Context, method, reque
 		if err != nil {
 			return "", err
 		}
-		return encodeSandboxRPCJSON(sandboxRPCResponse{Session: sandboxRPCDetailFromDomain(sandbox)})
-	case "ListSessions":
+		return encodeSandboxRPCJSON(sandboxRPCResponse{Sandbox: sandboxRPCDetailFromDomain(sandbox)})
+	case "ListSandboxes":
 		var request sandboxRPCListRequest
 		if err := decodeSandboxRPCJSON(requestJSON, &request); err != nil {
 			return "", err
@@ -131,10 +131,10 @@ func (b *SandboxRPCBridge) CallJSONWithSource(ctx context.Context, method, reque
 		}
 		response := sandboxRPCListResponse{TotalCount: uint32(result.TotalCount), HasMore: result.HasMore, NextOffset: uint32(result.NextOffset)}
 		for _, sandbox := range result.Sandboxes {
-			response.Sessions = append(response.Sessions, sandboxRPCSummaryFromDomain(&sandbox.Summary))
+			response.Sandboxes = append(response.Sandboxes, sandboxRPCSummaryFromDomain(&sandbox.Summary))
 		}
 		return encodeSandboxRPCJSON(response)
-	case "GetSessionProxy":
+	case "GetSandboxProxy":
 		var request sandboxRPCIDRequest
 		if err := decodeSandboxRPCJSON(requestJSON, &request); err != nil {
 			return "", err
@@ -143,9 +143,9 @@ func (b *SandboxRPCBridge) CallJSONWithSource(ctx context.Context, method, reque
 		if err != nil {
 			return "", err
 		}
-		return encodeSandboxRPCJSON(sandboxRPCProxyResponse{SessionID: sandbox.Summary.ID, ProxyPath: proxy.ProxyPath, NotebookURL: proxy.NotebookURL, Driver: sandbox.Summary.Driver, VMStatus: sandbox.Summary.VMStatus})
+		return encodeSandboxRPCJSON(sandboxRPCProxyResponse{SandboxID: sandbox.Summary.ID, ProxyPath: proxy.ProxyPath, NotebookURL: proxy.NotebookURL, Driver: sandbox.Summary.Driver, VMStatus: sandbox.Summary.VMStatus})
 	default:
-		return "", fmt.Errorf("unsupported session rpc %q", method)
+		return "", fmt.Errorf("unsupported sandbox rpc %q", method)
 	}
 }
 
@@ -153,7 +153,7 @@ func (b *SandboxRPCBridge) publishLoaderTopic(topic string, payload map[string]a
 	if b == nil || b.bus == nil {
 		return
 	}
-	b.bus.Publish(domain.LoaderTopicEvent{
+	b.bus.Publish(domain.SchedulerTopicEvent{
 		Topic:     topic,
 		Payload:   payload,
 		CreatedAt: time.Now().UTC(),
@@ -161,10 +161,10 @@ func (b *SandboxRPCBridge) publishLoaderTopic(topic string, payload map[string]a
 }
 
 func (b *SandboxRPCBridge) createSandbox(ctx context.Context, req sandboxRPCCreateRequest, source string) (*domain.Sandbox, error) {
-	return b.createSandboxWithAgent(ctx, req, source, loaders.SandboxCreationContext{})
+	return b.createSandboxWithAgent(ctx, req, source, schedulers.SandboxCreationContext{})
 }
 
-func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandboxRPCCreateRequest, source string, creation loaders.SandboxCreationContext) (*domain.Sandbox, error) {
+func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandboxRPCCreateRequest, source string, creation schedulers.SandboxCreationContext) (*domain.Sandbox, error) {
 	agentConfig := execution.AgentConfig{Provider: domain.NormalizeAgentKind(creation.Provider)}
 	var agentDefinition *domain.AgentDefinition
 	if agentID := strings.TrimSpace(creation.AgentDefinitionID); agentID != "" {
@@ -269,7 +269,7 @@ func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandb
 	}
 	domain.RestoreSandboxTransientFields(loaded, session)
 	b.indexCapabilitySandbox(loaded)
-	b.publishLoaderTopic("agent-compose.session.created", loaders.SessionTopicPayload(loaded, source))
+	b.publishLoaderTopic("agent-compose.session.created", schedulers.SessionTopicPayload(loaded, source))
 	return loaded, nil
 }
 
@@ -300,7 +300,7 @@ func (b *SandboxRPCBridge) resumeSandbox(ctx context.Context, sandboxID, source 
 		return nil, api.ConnectErrorForDomain(err)
 	}
 	b.indexCapabilitySandbox(loaded)
-	b.publishLoaderTopic("agent-compose.session.resumed", loaders.SessionTopicPayload(loaded, source))
+	b.publishLoaderTopic("agent-compose.session.resumed", schedulers.SessionTopicPayload(loaded, source))
 	return loaded, nil
 }
 
@@ -332,7 +332,7 @@ func (b *SandboxRPCBridge) stopSandbox(ctx context.Context, sandboxID, source st
 	}
 	b.revokeCapabilitySandbox(loaded.Summary.ID)
 	if stopped {
-		b.publishLoaderTopic("agent-compose.session.stopped", loaders.SessionTopicPayload(loaded, source))
+		b.publishLoaderTopic("agent-compose.session.stopped", schedulers.SessionTopicPayload(loaded, source))
 	}
 	return loaded, nil
 }
@@ -405,8 +405,8 @@ func (b *SandboxRPCBridge) GetSandboxProxy(ctx context.Context, sandboxID string
 	return proxy, nil
 }
 
-func (b *SandboxRPCBridge) sessionLifecycle() sessions.Lifecycle {
-	return sessions.Lifecycle{
+func (b *SandboxRPCBridge) sessionLifecycle() sandboxes.Lifecycle {
+	return sandboxes.Lifecycle{
 		Config:           b.config,
 		Store:            b.store,
 		Workspace:        b.configDB,
@@ -449,7 +449,7 @@ func (p sandboxRuntimeLiveness) IsSandboxAlive(ctx context.Context, driver strin
 }
 
 type sandboxLifecycleNotifier struct {
-	streams   *sessions.StreamBroker
+	streams   *sandboxes.StreamBroker
 	dashboard *dashboard.Hub
 }
 
@@ -471,7 +471,7 @@ func (n sandboxLifecycleNotifier) NotifyDashboard(reason string) {
 	}
 }
 
-func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, store *sessionstore.Store, streams *sessions.StreamBroker, session *domain.Sandbox, capsetIDs []string) {
+func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, store *sandboxstore.Store, streams *sandboxes.StreamBroker, session *domain.Sandbox, capsetIDs []string) {
 	ids := capabilities.NormalizeCapsetIDs(capsetIDs)
 	if len(ids) == 0 || provider == nil || session == nil {
 		return
@@ -513,7 +513,7 @@ func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, s
 	}
 }
 
-func recordCapabilityGuideWarning(ctx context.Context, store *sessionstore.Store, streams *sessions.StreamBroker, sessionID, message string) {
+func recordCapabilityGuideWarning(ctx context.Context, store *sandboxstore.Store, streams *sandboxes.StreamBroker, sessionID, message string) {
 	if store == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}

@@ -651,13 +651,13 @@ agents:
     provider: codex
 `)
 	project := testCLIProject("project-inspect", "cli-inspect-demo", composePath)
-	reviewerID, err := domain.StableManagedAgentID(project.GetSummary().GetProjectId(), "reviewer")
+	reviewerID, err := domain.StableProjectAgentID(project.GetSummary().GetProjectId(), "reviewer")
 	if err != nil {
-		t.Fatalf("StableManagedAgentID reviewer returned error: %v", err)
+		t.Fatalf("StableProjectAgentID reviewer returned error: %v", err)
 	}
-	workerID, err := domain.StableManagedAgentID(project.GetSummary().GetProjectId(), "worker")
+	workerID, err := domain.StableProjectAgentID(project.GetSummary().GetProjectId(), "worker")
 	if err != nil {
-		t.Fatalf("StableManagedAgentID worker returned error: %v", err)
+		t.Fatalf("StableProjectAgentID worker returned error: %v", err)
 	}
 	project.Agents[0].ManagedAgentId = reviewerID
 	project.Agents[1].ManagedAgentId = workerID

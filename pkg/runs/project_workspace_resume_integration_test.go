@@ -19,7 +19,7 @@ import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/workspaces"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
@@ -47,10 +47,7 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 		t.Fatalf("create storage: %v", err)
 	}
 
-	const (
-		projectID = "project-local-resume"
-		agentID   = "project-local-resume-worker"
-	)
+	const projectID = "project-local-resume"
 	project, err := configDB.UpsertProject(ctx, domain.ProjectRecord{
 		ID:         projectID,
 		Name:       "Project Local Resume",
@@ -58,6 +55,10 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	})
 	if err != nil {
 		t.Fatalf("create project: %v", err)
+	}
+	agentID, err := domain.StableProjectAgentID(projectID, "worker")
+	if err != nil {
+		t.Fatalf("derive project agent id: %v", err)
 	}
 	revisionV1 := saveProjectWorkspaceRevision(t, ctx, configDB, projectID, "v1")
 	upsertProjectWorkspaceAgent(t, ctx, configDB, project, agentID, revisionV1.Revision)
@@ -276,32 +277,17 @@ func saveProjectWorkspaceRevision(t *testing.T, ctx context.Context, store *conf
 func upsertProjectWorkspaceAgent(t *testing.T, ctx context.Context, store *configstore.ConfigStore, project domain.ProjectRecord, agentID string, revision int64) {
 	t.Helper()
 	if _, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{
-		ID:             agentID,
-		Name:           "worker",
-		ProjectID:      project.ID,
-		AgentName:      "worker",
-		ManagedAgentID: agentID,
-		Revision:       revision,
-		Provider:       "codex",
-		Image:          "guest:latest",
-		Driver:         driverpkg.RuntimeDriverDocker,
-		SpecJSON:       `{"name":"worker"}`,
+		ID:        agentID,
+		Name:      "worker",
+		ProjectID: project.ID,
+		AgentName: "worker",
+		Revision:  revision,
+		Provider:  "codex",
+		Image:     "guest:latest",
+		Driver:    driverpkg.RuntimeDriverDocker,
+		SpecJSON:  `{"name":"worker"}`,
 	}); err != nil {
 		t.Fatalf("upsert project agent revision %d: %v", revision, err)
-	}
-	if _, err := store.UpsertManagedAgentDefinition(ctx, domain.AgentDefinition{
-		ID:                     agentID,
-		Name:                   "worker",
-		Enabled:                true,
-		Provider:               "codex",
-		Driver:                 driverpkg.RuntimeDriverDocker,
-		GuestImage:             "guest:latest",
-		ConfigJSON:             "{}",
-		ManagedProjectID:       project.ID,
-		ManagedProjectRevision: revision,
-		ManagedAgentName:       "worker",
-	}); err != nil {
-		t.Fatalf("upsert managed agent revision %d: %v", revision, err)
 	}
 }
 
@@ -346,7 +332,7 @@ type projectWorkspaceDriverStart struct {
 }
 
 type projectWorkspaceManifestDriver struct {
-	store   *sessionstore.Store
+	store   *sandboxstore.Store
 	starts  []projectWorkspaceDriverStart
 	stopped []string
 	removed []string

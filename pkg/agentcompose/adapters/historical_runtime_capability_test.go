@@ -13,7 +13,7 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestHistoricalUncompiledRuntimeOperationsPreserveState(t *testing.T) {
@@ -73,7 +73,7 @@ func TestHistoricalUncompiledExecPreflightHasNoArtifactsOrRecords(t *testing.T) 
 		assertRuntimeNotCompiledError(t, err)
 	}
 	loader := NewLoaderCommandExecutor(config, store, nil, provider, nil)
-	_, err = loader.ExecuteLoaderCommand(ctx, session, domain.LoaderCommandRequest{Mode: "shell", Script: "echo history"})
+	_, err = loader.ExecuteLoaderCommand(ctx, session, domain.SchedulerCommandRequest{Mode: "shell", Script: "echo history"})
 	assertRuntimeNotCompiledError(t, err)
 
 	cells, err := store.ListCells(ctx, session.Summary.ID)
@@ -95,7 +95,7 @@ func TestHistoricalUncompiledExecPreflightHasNoArtifactsOrRecords(t *testing.T) 
 	}
 }
 
-func newHistoricalUncompiledRuntimeFixture(t *testing.T) (*appconfig.Config, *sessionstore.Store, *domain.Sandbox, RuntimeProvider) {
+func newHistoricalUncompiledRuntimeFixture(t *testing.T) (*appconfig.Config, *sandboxstore.Store, *domain.Sandbox, RuntimeProvider) {
 	t.Helper()
 	uncompiledDriver := firstUncompiledRuntimeDriver()
 	if uncompiledDriver == "" {
@@ -116,7 +116,7 @@ func newHistoricalUncompiledRuntimeFixture(t *testing.T) (*appconfig.Config, *se
 		SandboxStopTimeout:   time.Second,
 		AgentTimeout:         time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -156,7 +156,7 @@ func assertRuntimeNotCompiledError(t *testing.T, err error) {
 	}
 }
 
-func assertHistoricalRuntimeState(t *testing.T, ctx context.Context, store *sessionstore.Store, sandboxID string, summary domain.SandboxSummary, vmState domain.VMState, proxyState domain.ProxyState) {
+func assertHistoricalRuntimeState(t *testing.T, ctx context.Context, store *sandboxstore.Store, sandboxID string, summary domain.SandboxSummary, vmState domain.VMState, proxyState domain.ProxyState) {
 	t.Helper()
 	loaded, err := store.GetSandbox(ctx, sandboxID)
 	if err != nil {

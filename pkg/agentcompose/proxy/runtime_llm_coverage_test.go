@@ -34,20 +34,11 @@ func TestRuntimeLLMFacadeRoutesCoverageWorkflow(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "resp-1") || client.calls != 1 {
 		t.Fatalf("responses proxy status=%d body=%s calls=%d", rec.Code, rec.Body.String(), client.calls)
 	}
-	req = httptest.NewRequest(http.MethodPost, "/api/runtime/sessions/sandbox-1/llm/openai/v1/responses", strings.NewReader(`{"model":"gpt","input":"legacy"}`))
-	req.Header.Set("Authorization", "Bearer raw-token")
-	req.Header.Set("Content-Type", "application/json")
-	rec = httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || client.calls != 2 {
-		t.Fatalf("legacy responses proxy status=%d body=%s calls=%d", rec.Code, rec.Body.String(), client.calls)
-	}
-
 	req = httptest.NewRequest(http.MethodPost, "/api/runtime/sandboxes/sandbox-1/llm/openai/v1/responses", strings.NewReader(`{"model":"other","input":"hi"}`))
 	req.Header.Set("Authorization", "Bearer raw-token")
 	rec = httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || client.calls != 3 || !strings.Contains(client.requestBody, `"model":"other"`) {
+	if rec.Code != http.StatusOK || client.calls != 2 || !strings.Contains(client.requestBody, `"model":"other"`) {
 		t.Fatalf("alternate model status=%d body=%s calls=%d upstream_body=%s", rec.Code, rec.Body.String(), client.calls, client.requestBody)
 	}
 

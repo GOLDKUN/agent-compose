@@ -3,6 +3,7 @@ package runs
 import (
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"context"
 	"database/sql"
 	"errors"
@@ -18,6 +19,7 @@ type StartRequest struct {
 	AgentName       string
 	Source          string
 	SchedulerID     string
+	SchedulerRunID  string
 	TriggerID       string
 	Prompt          string
 	Driver          string
@@ -38,20 +40,10 @@ type TransitionRequest struct {
 	TerminalEvents []domain.ProjectRunEventRecord
 }
 
-type ManagedAgentDefinition struct {
-	ID               string
-	Enabled          bool
-	DeletedAt        time.Time
-	Driver           string
-	GuestImage       string
-	ManagedProjectID string
-	ManagedAgentName string
-}
-
 type Store interface {
 	GetProject(context.Context, string) (domain.ProjectRecord, error)
+	GetProjectRevision(context.Context, string, int64) (domain.ProjectRevisionRecord, error)
 	GetProjectAgent(context.Context, string, string) (domain.ProjectAgentRecord, error)
-	GetManagedAgentDefinition(context.Context, string) (ManagedAgentDefinition, error)
 	CreateProjectRun(context.Context, domain.ProjectRunRecord) (domain.ProjectRunRecord, error)
 	CreateProjectRunWithEvents(context.Context, domain.ProjectRunRecord, []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error)
 	GetProjectRun(context.Context, string) (domain.ProjectRunRecord, error)
@@ -100,6 +92,7 @@ func (c *Coordinator) BeginRun(ctx context.Context, req StartRequest) (domain.Pr
 	req.AgentName = strings.TrimSpace(req.AgentName)
 	req.Source = NormalizeSource(req.Source)
 	req.SchedulerID = strings.TrimSpace(req.SchedulerID)
+	req.SchedulerRunID = strings.TrimSpace(req.SchedulerRunID)
 	req.TriggerID = strings.TrimSpace(req.TriggerID)
 	req.Driver = strings.TrimSpace(req.Driver)
 	req.ClientRequestID = strings.TrimSpace(req.ClientRequestID)
@@ -117,15 +110,16 @@ func (c *Coordinator) BeginRun(ctx context.Context, req StartRequest) (domain.Pr
 	if err != nil {
 		return domain.ProjectRunRecord{}, fmt.Errorf("resolve project agent %s/%s: %w", project.ID, req.AgentName, err)
 	}
-	agent, err := c.store.GetManagedAgentDefinition(ctx, projectAgent.ManagedAgentID)
+	revision, err := c.store.GetProjectRevision(ctx, project.ID, project.CurrentRevision)
 	if err != nil {
-		return domain.ProjectRunRecord{}, fmt.Errorf("resolve managed agent definition %s: %w", projectAgent.ManagedAgentID, err)
+		return domain.ProjectRunRecord{}, fmt.Errorf("resolve project revision %s/%d: %w", project.ID, project.CurrentRevision, err)
 	}
-	if !agent.Enabled || !agent.DeletedAt.IsZero() {
-		return domain.ProjectRunRecord{}, fmt.Errorf("managed agent definition %s is disabled", agent.ID)
+	agent, err := projects.AgentDefinitionFromRevision(project, revision, projectAgent.AgentName)
+	if err != nil {
+		return domain.ProjectRunRecord{}, err
 	}
-	if agent.ManagedProjectID != project.ID || agent.ManagedAgentName != projectAgent.AgentName {
-		return domain.ProjectRunRecord{}, fmt.Errorf("managed agent definition %s does not belong to project agent %s/%s", agent.ID, project.ID, projectAgent.AgentName)
+	if !agent.Enabled {
+		return domain.ProjectRunRecord{}, fmt.Errorf("project agent %s is disabled", agent.ID)
 	}
 	driver := firstNonEmpty(req.Driver, agent.Driver, projectAgent.Driver)
 	if driver != "" {
@@ -144,9 +138,10 @@ func (c *Coordinator) BeginRun(ctx context.Context, req StartRequest) (domain.Pr
 		ProjectName:     project.Name,
 		ProjectRevision: project.CurrentRevision,
 		AgentName:       projectAgent.AgentName,
-		ManagedAgentID:  agent.ID,
+		AgentID:         agent.ID,
 		Source:          req.Source,
 		SchedulerID:     req.SchedulerID,
+		SchedulerRunID:  req.SchedulerRunID,
 		TriggerID:       req.TriggerID,
 		Status:          domain.ProjectRunStatusPending,
 		Prompt:          req.Prompt,

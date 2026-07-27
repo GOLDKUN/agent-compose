@@ -21,26 +21,30 @@ func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {
 		}
 	}
 	for _, scheduler := range []domain.ProjectSchedulerRecord{
-		{ProjectID: "project-a", AgentName: "agent-a", SchedulerID: "scheduler-a", ManagedLoaderID: "loader-a", Enabled: true},
-		{ProjectID: "project-a", AgentName: "agent-b", SchedulerID: "scheduler-b", Enabled: true},
-		{ProjectID: "project-b", AgentName: "agent-c", SchedulerID: "scheduler-c", Enabled: true},
+		{ProjectID: "project-a", AgentName: "agent-a", SchedulerID: "scheduler-a", ID: "scheduler-record-a", Enabled: true},
+		{ProjectID: "project-a", AgentName: "agent-b", SchedulerID: "scheduler-b", ID: "scheduler-record-b", Enabled: true},
+		{ProjectID: "project-b", AgentName: "agent-c", SchedulerID: "scheduler-c", ID: "scheduler-record-c", Enabled: true},
 	} {
-		if _, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{ProjectID: scheduler.ProjectID, AgentName: scheduler.AgentName}); err != nil {
+		agentID, err := domain.StableProjectAgentID(scheduler.ProjectID, scheduler.AgentName)
+		if err != nil {
+			t.Fatalf("derive agent id %s: %v", scheduler.AgentName, err)
+		}
+		if _, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{ID: agentID, ProjectID: scheduler.ProjectID, AgentName: scheduler.AgentName}); err != nil {
 			t.Fatalf("upsert agent %s: %v", scheduler.AgentName, err)
 		}
 		if _, err := store.UpsertProjectScheduler(ctx, scheduler); err != nil {
 			t.Fatalf("upsert scheduler %s: %v", scheduler.SchedulerID, err)
 		}
 	}
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO loader(id, name, script, last_error) VALUES(?, ?, ?, ?)`, "loader-a", "scheduler-a", "return {}", "last failure"); err != nil {
-		t.Fatalf("insert loader: %v", err)
+	if _, err := store.db.ExecContext(ctx, `UPDATE project_scheduler SET last_error = ? WHERE id = ?`, "last failure", "scheduler-record-a"); err != nil {
+		t.Fatalf("update scheduler error: %v", err)
 	}
 	for index, startedAt := range []int64{1700000000, 1700000060} {
-		if _, err := store.db.ExecContext(ctx, `INSERT INTO loader_run(loader_id, run_id, trigger_id, started_at) VALUES(?, ?, ?, ?)`, "loader-a", fmt.Sprintf("run-%d", index), "trigger-1", startedAt); err != nil {
-			t.Fatalf("insert loader run: %v", err)
+		if _, err := store.db.ExecContext(ctx, `INSERT INTO scheduler_run(scheduler_id, run_id, trigger_id, started_at) VALUES(?, ?, ?, ?)`, "scheduler-record-a", fmt.Sprintf("run-%d", index), "trigger-1", startedAt); err != nil {
+			t.Fatalf("insert scheduler run: %v", err)
 		}
 	}
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO loader_run(loader_id, run_id, started_at) VALUES(?, ?, ?)`, "loader-a", "old-invocation", int64(1700000120)); err != nil {
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO scheduler_run(scheduler_id, run_id, started_at) VALUES(?, ?, ?)`, "scheduler-record-a", "old-invocation", int64(1700000120)); err != nil {
 		t.Fatalf("insert old invocation: %v", err)
 	}
 

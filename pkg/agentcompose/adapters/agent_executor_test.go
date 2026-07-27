@@ -13,7 +13,7 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestAgentExecutorExecuteAgentRequestPersistsCellAndEvents(t *testing.T) {
@@ -31,7 +31,7 @@ func TestAgentExecutorExecuteAgentRequestPersistsCellAndEvents(t *testing.T) {
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestAgentExecutorPersistsFailedCellWhenStreamCallbackFails(t *testing.T) {
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}

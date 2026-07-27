@@ -17,6 +17,8 @@ import (
 
 const baselineMigrationVersion int64 = 1
 
+const legacyMigratorHint = "use agent-compose-legacy-migrate with a read-only source and a new target data root"
+
 var migrationFilenamePattern = regexp.MustCompile(`^([0-9]{6})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`)
 
 //go:embed migrations/*.sql
@@ -85,42 +87,47 @@ func applyMigrationSet(ctx context.Context, db *sql.DB, migrations []migration) 
 		}
 	}()
 
-	if _, err := conn.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-		version INTEGER PRIMARY KEY,
-		name TEXT NOT NULL UNIQUE,
-		checksum TEXT NOT NULL,
-		applied_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
-	)`); err != nil {
-		return fmt.Errorf("create SQLite migration history: %w", err)
-	}
-
-	applied, err := loadAppliedMigrations(ctx, conn)
+	hasHistory, err := migrationHistoryExists(ctx, conn)
 	if err != nil {
 		return err
 	}
+	var applied []appliedMigration
+	if hasHistory {
+		applied, err = loadAppliedMigrations(ctx, conn)
+		if err != nil {
+			return err
+		}
+		if len(applied) == 0 {
+			return fmt.Errorf("SQLite migration history is empty in a non-empty database; %s", legacyMigratorHint)
+		}
+	} else {
+		nonEmpty, err := hasApplicationSchema(ctx, conn)
+		if err != nil {
+			return err
+		}
+		if nonEmpty {
+			return fmt.Errorf("unversioned SQLite database is not supported by the daemon; %s", legacyMigratorHint)
+		}
+	}
 	if err := validateAppliedMigrations(migrations, applied); err != nil {
-		return err
+		return fmt.Errorf("%w; %s", err, legacyMigratorHint)
 	}
 
-	unversioned := len(applied) == 0
-	pending := migrations[len(applied):]
-	// CREATE TABLE IF NOT EXISTS cannot reshape tables already created by older
-	// binaries. Prepare those tables first, then let the baseline create every
-	// missing destination before the post-baseline data copies run.
-	if unversioned {
-		if err := prepareLegacySchema(ctx, conn); err != nil {
-			return fmt.Errorf("prepare unversioned SQLite schema: %w", err)
+	if !hasHistory {
+		if _, err := conn.ExecContext(ctx, `CREATE TABLE schema_migrations (
+			version INTEGER PRIMARY KEY,
+			name TEXT NOT NULL UNIQUE,
+			checksum TEXT NOT NULL,
+			applied_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
+		)`); err != nil {
+			return fmt.Errorf("create SQLite migration history: %w", err)
 		}
 	}
 
+	pending := migrations[len(applied):]
 	for _, item := range pending {
 		if _, err := conn.ExecContext(ctx, item.statement); err != nil {
 			return fmt.Errorf("apply SQLite migration %s: %w", item.name, err)
-		}
-		if unversioned && item.version == baselineMigrationVersion {
-			if err := finalizeLegacySchema(ctx, conn); err != nil {
-				return fmt.Errorf("finalize unversioned SQLite schema: %w", err)
-			}
 		}
 		if _, err := conn.ExecContext(ctx,
 			`INSERT INTO schema_migrations(version, name, checksum) VALUES(?, ?, ?)`,
@@ -137,6 +144,24 @@ func applyMigrationSet(ctx context.Context, db *sql.DB, migrations []migration) 
 		slog.Info("SQLite migration applied", "version", item.version, "name", item.name)
 	}
 	return nil
+}
+
+func migrationHistoryExists(ctx context.Context, conn migrationConn) (bool, error) {
+	var count int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&count); err != nil {
+		return false, fmt.Errorf("inspect SQLite migration history: %w", err)
+	}
+	return count == 1, nil
+}
+
+func hasApplicationSchema(ctx context.Context, conn migrationConn) (bool, error) {
+	var count int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master
+		WHERE type IN ('table', 'index', 'trigger', 'view')
+		AND name NOT LIKE 'sqlite_%'`).Scan(&count); err != nil {
+		return false, fmt.Errorf("inspect SQLite schema before migration: %w", err)
+	}
+	return count != 0, nil
 }
 
 func loadMigrations(migrationFS fs.FS) ([]migration, error) {

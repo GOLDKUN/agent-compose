@@ -86,7 +86,7 @@ func ProjectAgentsToProto(agents []domain.ProjectAgentRecord) []*agentcomposev2.
 		enabled, displayName, description, specErr := projectAgentSpecMetadata(agent.SpecJSON)
 		availability := agentcomposev2.ProjectAgentAvailability_PROJECT_AGENT_AVAILABILITY_AVAILABLE
 		health := agentcomposev2.ProjectAgentHealth_PROJECT_AGENT_HEALTH_HEALTHY
-		if specErr != nil || strings.TrimSpace(agent.ManagedAgentID) == "" || strings.TrimSpace(agent.AgentName) == "" || strings.TrimSpace(agent.Provider) == "" {
+		if specErr != nil || strings.TrimSpace(agent.ID) == "" || strings.TrimSpace(agent.AgentName) == "" || strings.TrimSpace(agent.Provider) == "" {
 			availability = agentcomposev2.ProjectAgentAvailability_PROJECT_AGENT_AVAILABILITY_VALIDATION_FAILED
 			health = agentcomposev2.ProjectAgentHealth_PROJECT_AGENT_HEALTH_AT_RISK
 		} else if !enabled {
@@ -97,7 +97,7 @@ func ProjectAgentsToProto(agents []domain.ProjectAgentRecord) []*agentcomposev2.
 			AgentName:        agent.AgentName,
 			DisplayName:      displayName,
 			Description:      description,
-			ManagedAgentId:   agent.ManagedAgentID,
+			ManagedAgentId:   agent.ID,
 			Provider:         agent.Provider,
 			Model:            agent.Model,
 			Image:            agent.Image,
@@ -172,7 +172,7 @@ func ProjectApplyChanges(project domain.ProjectRecord, existing domain.ProjectRe
 	}
 }
 
-func DryRunProjectChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, loaders []domain.Loader) []*agentcomposev2.ProjectChange {
+func DryRunProjectChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, loaders []domain.Scheduler) []*agentcomposev2.ProjectChange {
 	changes := []*agentcomposev2.ProjectChange{{
 		Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
 		ResourceType: "project",
@@ -183,7 +183,7 @@ func DryRunProjectChanges(project domain.ProjectRecord, agents []domain.ProjectA
 		changes = append(changes, &agentcomposev2.ProjectChange{
 			Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
 			ResourceType: "project_agent",
-			ResourceId:   agent.ManagedAgentID,
+			ResourceId:   agent.ID,
 			Name:         agent.AgentName,
 		})
 	}
