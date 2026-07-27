@@ -263,6 +263,38 @@ func TestCLIExecPromptAttachReceiveErrorDoesNotCloseCallerStdin(t *testing.T) {
 	}
 }
 
+func TestCLIRunPromptAttachInterruptCancelsStream(t *testing.T) {
+	stream := newFakeRunAttachStream([]*agentcomposev2.RunAttachResponse{
+		{Frame: &agentcomposev2.RunAttachResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-prompt"}}},
+	})
+	client := &fakeRunAttachClient{stream: stream}
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	cmd.SetIn(promptErrorReader{err: errPromptInterrupted})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+
+	err := runComposeRunPromptAttachCommand(cmd, "cli-run-prompt", client, &agentcomposev2.RunAgentRequest{
+		ProjectId: "project-1",
+		AgentName: "reviewer",
+		Prompt:    "first prompt",
+	})
+	if !errors.Is(err, errPromptInterrupted) {
+		t.Fatalf("run prompt attach error = %v, want errPromptInterrupted", err)
+	}
+	select {
+	case <-client.ctx.Done():
+	default:
+		t.Fatal("run prompt attach context was not canceled after input interruption")
+	}
+	if sent := stream.sentFrames(); len(sent) != 1 || sent[0].GetStart() == nil {
+		t.Fatalf("RunAttach sent frames = %#v, want only start", sent)
+	}
+	if stream.closedRequest() {
+		t.Fatal("input interruption must cancel the stream without sending stdin EOF")
+	}
+}
+
 func TestCLIRunInteractiveCommandUsesRunAttachClient(t *testing.T) {
 	stream := newFakeRunAttachStream([]*agentcomposev2.RunAttachResponse{
 		{Frame: &agentcomposev2.RunAttachResponse_Output{Output: &agentcomposev2.AttachOutput{
@@ -329,13 +361,23 @@ func TestExecAttachResultProjectionWithoutExecResult(t *testing.T) {
 	}
 }
 
+type promptErrorReader struct {
+	err error
+}
+
+func (r promptErrorReader) Read([]byte) (int, error) {
+	return 0, r.err
+}
+
 type fakeRunAttachClient struct {
 	stream *fakeRunAttachStream
 	calls  int
+	ctx    context.Context
 }
 
-func (c *fakeRunAttachClient) RunAttach(context.Context) runAttachStream {
+func (c *fakeRunAttachClient) RunAttach(ctx context.Context) runAttachStream {
 	c.calls++
+	c.ctx = ctx
 	return c.stream
 }
 

@@ -3,7 +3,6 @@ package main
 import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -209,11 +208,15 @@ func runComposeRunAttachCommand(cmd *cobra.Command, projectName string, client r
 	return nil
 }
 
-func runComposeRunPromptAttachCommand(cmd *cobra.Command, projectName string, client runAttachClient, req *agentcomposev2.RunAgentRequest) error {
+func runComposeRunPromptAttachCommand(cmd *cobra.Command, projectName string, client runAttachClient, req *agentcomposev2.RunAgentRequest) (retErr error) {
 	stdin := cmd.InOrStdin()
 	stdout := cmd.OutOrStdout()
 	stderr := cmd.ErrOrStderr()
-	stream := client.RunAttach(cmd.Context())
+	input := newPromptLineReader(stdin, stderr)
+	defer func() { retErr = errors.Join(retErr, input.Close()) }()
+	attachCtx, cancelAttach := context.WithCancel(cmd.Context())
+	defer cancelAttach()
+	stream := client.RunAttach(attachCtx)
 	var sendMu sync.Mutex
 	send := func(frame *agentcomposev2.RunAttachRequest) error {
 		sendMu.Lock()
@@ -235,8 +238,6 @@ func runComposeRunPromptAttachCommand(cmd *cobra.Command, projectName string, cl
 	}); err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("run project %s prompt attach start: %w", projectName, err))
 	}
-	scanner := bufio.NewScanner(stdin)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	lastOutputEndedWithNewline := true
 	inputPrompt := promptAttachInputPrompt{
 		AgentName: req.GetAgentName(),
@@ -244,15 +245,17 @@ func runComposeRunPromptAttachCommand(cmd *cobra.Command, projectName string, cl
 	}
 	promptForInput := func() error {
 		for {
+			prompt := ""
 			if fd, ok := terminalFileDescriptor(stdout); ok && isTerminalFD(fd) {
-				if err := writePromptAttachInputPrompt(stderr, inputPrompt, !lastOutputEndedWithNewline); err != nil {
-					return err
+				if !lastOutputEndedWithNewline {
+					if err := input.StartLine(); err != nil {
+						return err
+					}
 				}
+				prompt = inputPrompt.String()
 			}
-			if !scanner.Scan() {
-				if err := scanner.Err(); err != nil {
-					return err
-				}
+			line, err := input.ReadLine(prompt)
+			if errors.Is(err, io.EOF) {
 				if err := send(&agentcomposev2.RunAttachRequest{
 					Frame: &agentcomposev2.RunAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
 				}); err != nil {
@@ -260,7 +263,10 @@ func runComposeRunPromptAttachCommand(cmd *cobra.Command, projectName string, cl
 				}
 				return closeRequest()
 			}
-			text := strings.TrimSpace(scanner.Text())
+			if err != nil {
+				return err
+			}
+			text := strings.TrimSpace(line)
 			if text == "" {
 				continue
 			}
@@ -513,17 +519,14 @@ func runComposeExecPromptAttachCommand(cmd *cobra.Command, projectName string, c
 	}); err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("exec project %s prompt attach start: %w", projectName, err))
 	}
-	scanner := bufio.NewScanner(stdin)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	stdinIsTerminal := false
-	if fd, ok := terminalFileDescriptor(stdin); ok {
-		stdinIsTerminal = isTerminalFD(fd)
-	}
+	input := newPromptLineReader(stdin, stderr)
+	defer func() { retErr = errors.Join(retErr, input.Close()) }()
+	stdinIsTerminal := input.IsTerminal()
 	var inputErr <-chan error
 	if !stdinIsTerminal {
 		ch := make(chan error, 1)
 		inputErr = ch
-		go func() { ch <- pumpExecPromptMessages(scanner, send, closeRequest) }()
+		go func() { ch <- pumpExecPromptMessages(input, send, closeRequest) }()
 		defer func() {
 			cancelAttach()
 			select {
@@ -541,15 +544,17 @@ func runComposeExecPromptAttachCommand(cmd *cobra.Command, projectName string, c
 	}
 	promptForInput := func() error {
 		for {
+			prompt := ""
 			if fd, ok := terminalFileDescriptor(stdout); ok && isTerminalFD(fd) {
-				if err := writePromptAttachInputPrompt(stderr, inputPrompt, !lastOutputEndedWithNewline); err != nil {
-					return err
+				if !lastOutputEndedWithNewline {
+					if err := input.StartLine(); err != nil {
+						return err
+					}
 				}
+				prompt = inputPrompt.String()
 			}
-			if !scanner.Scan() {
-				if err := scanner.Err(); err != nil {
-					return err
-				}
+			line, err := input.ReadLine(prompt)
+			if errors.Is(err, io.EOF) {
 				if err := send(&agentcomposev2.ExecAttachRequest{
 					Frame: &agentcomposev2.ExecAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}},
 				}); err != nil {
@@ -557,7 +562,10 @@ func runComposeExecPromptAttachCommand(cmd *cobra.Command, projectName string, c
 				}
 				return closeRequest()
 			}
-			text := strings.TrimSpace(scanner.Text())
+			if err != nil {
+				return err
+			}
+			text := strings.TrimSpace(line)
 			if text == "" {
 				continue
 			}
@@ -641,10 +649,17 @@ func runComposeExecPromptAttachCommand(cmd *cobra.Command, projectName string, c
 	return nil
 }
 
-func pumpExecPromptMessages(scanner *bufio.Scanner, send func(*agentcomposev2.ExecAttachRequest) error, closeRequest func() error) (err error) {
+func pumpExecPromptMessages(input *promptLineReader, send func(*agentcomposev2.ExecAttachRequest) error, closeRequest func() error) (err error) {
 	defer func() { err = errors.Join(err, closeRequest()) }()
-	for scanner.Scan() {
-		text := strings.TrimSpace(scanner.Text())
+	for {
+		line, readErr := input.ReadLine("")
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			return readErr
+		}
+		text := strings.TrimSpace(line)
 		if text == "" {
 			continue
 		}
@@ -654,9 +669,6 @@ func pumpExecPromptMessages(scanner *bufio.Scanner, send func(*agentcomposev2.Ex
 		if err := send(&agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_HumanMessage{HumanMessage: &agentcomposev2.AttachHumanMessage{Text: text}}}); err != nil {
 			return err
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
 	}
 	return send(&agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}}})
 }
@@ -697,15 +709,6 @@ func writeExecAttachOutput(output *terminalStreamOutput, attachOutput *agentcomp
 type promptAttachInputPrompt struct {
 	AgentName string
 	SandboxID string
-}
-
-func writePromptAttachInputPrompt(writer io.Writer, prompt promptAttachInputPrompt, leadingNewline bool) error {
-	prefix := prompt.String()
-	if leadingNewline {
-		prefix = "\n" + prefix
-	}
-	_, err := io.WriteString(writer, prefix)
-	return err
 }
 
 func execResultFromAttachResult(result *agentcomposev2.AttachResult) *agentcomposev2.ExecResult {

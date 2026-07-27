@@ -3,8 +3,8 @@ package main
 import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
-	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -101,21 +101,22 @@ func runInteractiveComposeRun(cmd *cobra.Command, options composeRunOptions, pro
 	if strings.TrimSpace(firstInput) != "" {
 		pending = append(pending, firstInput)
 	}
-	scanner := bufio.NewScanner(cmd.InOrStdin())
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	lineReader := newPromptLineReader(cmd.InOrStdin(), cmd.ErrOrStderr())
+	defer func() { err = errors.Join(err, lineReader.Close()) }()
 	for {
 		var line string
 		if len(pending) > 0 {
 			line = pending[0]
 			pending = pending[1:]
 		} else {
-			if !scanner.Scan() {
-				if scanErr := scanner.Err(); scanErr != nil {
-					return scanErr
-				}
+			var readErr error
+			line, readErr = lineReader.ReadLine("")
+			if errors.Is(readErr, io.EOF) {
 				return nil
 			}
-			line = scanner.Text()
+			if readErr != nil {
+				return readErr
+			}
 		}
 		input := strings.TrimSpace(line)
 		if input == "" {
