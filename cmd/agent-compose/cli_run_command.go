@@ -136,7 +136,7 @@ func runComposeDownCommand(cmd *cobra.Command, cli cliOptions) error {
 		return err
 	}
 	resp, err := clients.project.RemoveProject(cmd.Context(), connect.NewRequest(&agentcomposev2.RemoveProjectRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: runtimeProject.id()},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: runtimeProject.id()}},
 	}))
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("down project %s: %w", runtimeProject.name(), err))

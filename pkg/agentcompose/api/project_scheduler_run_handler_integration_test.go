@@ -127,7 +127,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	client := agentcomposev2connect.NewProjectServiceClient(server.Client(), server.URL)
-	projectRef := &agentcomposev2.ProjectRef{ProjectId: project.ID}
+	projectRef := &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: project.ID}}
 
 	page, err := client.ListSchedulerRuns(ctx, connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
 		Project: projectRef,

@@ -225,10 +225,15 @@ func projectRefFromProto(ref *agentcomposev2.ProjectRef) projects.ProjectRef {
 	if ref == nil {
 		return projects.ProjectRef{}
 	}
-	return projects.ProjectRef{
-		ProjectID:  ref.GetProjectId(),
-		Name:       ref.GetName(),
-		SourcePath: ref.GetSourcePath(),
+	switch selector := ref.GetSelector().(type) {
+	case *agentcomposev2.ProjectRef_ProjectId:
+		return projects.ProjectRefByID(selector.ProjectId)
+	case *agentcomposev2.ProjectRef_Name:
+		return projects.ProjectRefByName(selector.Name)
+	case *agentcomposev2.ProjectRef_SourcePath:
+		return projects.ProjectRefBySourcePath(selector.SourcePath)
+	default:
+		return projects.ProjectRef{}
 	}
 }
 

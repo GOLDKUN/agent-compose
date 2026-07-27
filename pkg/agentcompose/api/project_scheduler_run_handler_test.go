@@ -42,7 +42,7 @@ func TestProjectHandlerRunSchedulerSupportsMainAndTerminalStatuses(t *testing.T)
 				PayloadJSON: `{"value":true}`,
 			}
 			response, err := handler.RunScheduler(context.Background(), connect.NewRequest(&agentcomposev2.RunSchedulerRequest{
-				Project:     &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+				Project:     &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 				AgentName:   store.scheduler.AgentName,
 				TriggerId:   test.triggerID,
 				PayloadJson: ` { "value" : true } `,
@@ -63,7 +63,7 @@ func TestProjectHandlerRunSchedulerSupportsMainAndTerminalStatuses(t *testing.T)
 func TestProjectHandlerRunSchedulerValidatesPayloadAndMissingTrigger(t *testing.T) {
 	store, runtime, handler := newSchedulerRunHandlerFixture()
 	request := &agentcomposev2.RunSchedulerRequest{
-		Project:   &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		AgentName: store.scheduler.AgentName,
 	}
 	request.PayloadJson = `{bad`
@@ -86,7 +86,7 @@ func TestProjectHandlerInvokeSchedulerReturnsValueWithoutRunResource(t *testing.
 	store, runtime, handler := newSchedulerRunHandlerFixture()
 	runtime.invokeResult = loaders.InvocationResult{ResultJSON: `{"ok":true}`, DurationMs: 42, Warnings: []string{"warning"}}
 	response, err := handler.InvokeScheduler(context.Background(), connect.NewRequest(&agentcomposev2.InvokeSchedulerRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, AgentName: store.scheduler.AgentName, PayloadJson: ` { "value" : true } `,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, AgentName: store.scheduler.AgentName, PayloadJson: ` { "value" : true } `,
 	}))
 	if err != nil || response.Msg.GetResultJson() != `{"ok":true}` || response.Msg.GetDurationMs() != 42 || len(response.Msg.GetWarnings()) != 1 {
 		t.Fatalf("InvokeScheduler response=%#v err=%v", response, err)
@@ -96,7 +96,7 @@ func TestProjectHandlerInvokeSchedulerReturnsValueWithoutRunResource(t *testing.
 	}
 	store.scheduler.SpecJSON = `{"triggers":[{"name":"nightly"}]}`
 	if _, err := handler.InvokeScheduler(context.Background(), connect.NewRequest(&agentcomposev2.InvokeSchedulerRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, AgentName: store.scheduler.AgentName,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, AgentName: store.scheduler.AgentName,
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("declarative invoke code=%v err=%v", connect.CodeOf(err), err)
 	}
@@ -107,7 +107,7 @@ func TestProjectHandlerSchedulerRunLifecycle(t *testing.T) {
 	startedAt := time.Unix(200, 0).UTC()
 	runtime.startResult = domain.LoaderRunSummary{ID: "run-start", LoaderID: store.scheduler.ManagedLoaderID, TriggerID: "trigger-1", Status: domain.LoaderRunStatusRunning, StartedAt: startedAt}
 	started, err := handler.StartSchedulerRun(context.Background(), connect.NewRequest(&agentcomposev2.StartSchedulerRunRequest{
-		Project:     &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project:     &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		AgentName:   store.scheduler.AgentName,
 		TriggerId:   "trigger-1",
 		PayloadJson: `{"start":true}`,
@@ -120,7 +120,7 @@ func TestProjectHandlerSchedulerRunLifecycle(t *testing.T) {
 	store.runs = []domain.LoaderRunSummary{getRun}
 	runtime.getResult = getRun
 	got, err := handler.GetSchedulerRun(context.Background(), connect.NewRequest(&agentcomposev2.GetSchedulerRunRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		RunId:   getRun.ID,
 	}))
 	if err != nil || got.Msg.GetRun().GetStatus() != agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_CANCELED || got.Msg.GetRun().GetError() != "user stop" {
@@ -132,14 +132,14 @@ func TestProjectHandlerSchedulerRunLifecycle(t *testing.T) {
 	store.runs = []domain.LoaderRunSummary{newer, older}
 	store.sandboxIDs = map[loaders.LoaderRunKey][]string{{LoaderID: newer.LoaderID, RunID: newer.ID}: {"sandbox-1"}}
 	first, err := handler.ListSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		Limit:   1,
 	}))
 	if err != nil || len(first.Msg.GetRuns()) != 1 || first.Msg.GetRuns()[0].GetRunId() != newer.ID || len(first.Msg.GetRuns()[0].GetSandboxIds()) != 1 || first.Msg.GetNextCursor() == "" {
 		t.Fatalf("ListSchedulerRuns first=%#v err=%v", first, err)
 	}
 	second, err := handler.ListSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		Limit:   1,
 		Cursor:  first.Msg.GetNextCursor(),
 	}))
@@ -147,7 +147,7 @@ func TestProjectHandlerSchedulerRunLifecycle(t *testing.T) {
 		t.Fatalf("ListSchedulerRuns second=%#v err=%v", second, err)
 	}
 	if _, err := handler.ListSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, TriggerId: "trigger-1", Status: agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SKIPPED, Limit: 1,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, TriggerId: "trigger-1", Status: agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SKIPPED, Limit: 1,
 	})); err != nil || !store.lastRunFilter.RequireTrigger || store.lastRunFilter.TriggerID != "trigger-1" || store.lastRunFilter.Status != domain.LoaderRunStatusSkipped {
 		t.Fatalf("ListSchedulerRuns filter=%#v err=%v", store.lastRunFilter, err)
 	}
@@ -156,7 +156,7 @@ func TestProjectHandlerSchedulerRunLifecycle(t *testing.T) {
 	runtime.stopResult = getRun
 	runtime.stopRequested = true
 	stopped, err := handler.StopSchedulerRun(context.Background(), connect.NewRequest(&agentcomposev2.StopSchedulerRunRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		RunId:   getRun.ID,
 		Reason:  "user stop",
 	}))
@@ -173,7 +173,7 @@ func TestProjectHandlerBatchGetsLatestSchedulerRuns(t *testing.T) {
 	}
 	store.batchRunsBySandbox = map[string]domain.LoaderRunSummary{"sandbox-a": run}
 	response, err := handler.BatchGetLatestSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.BatchGetLatestSchedulerRunsRequest{
-		Project:    &agentcomposev2.ProjectRef{ProjectId: store.project.ID},
+		Project:    &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		SandboxIds: []string{" sandbox-a ", "sandbox-missing", "sandbox-a", ""},
 	}))
 	if err != nil {
@@ -197,7 +197,7 @@ func TestProjectHandlerRejectsExcessiveSchedulerRunBatch(t *testing.T) {
 		sandboxIDs[index] = fmt.Sprintf("sandbox-%d", index)
 	}
 	_, err := handler.BatchGetLatestSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.BatchGetLatestSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, SandboxIds: sandboxIDs,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, SandboxIds: sandboxIDs,
 	}))
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("excessive batch query code=%v err=%v", connect.CodeOf(err), err)
@@ -212,14 +212,14 @@ func TestProjectHandlerListsProjectSchedulerEventsWithIdentityAndCursor(t *testi
 		{ID: "event-1", LoaderID: store.scheduler.ManagedLoaderID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.run.started", CreatedAt: createdAt.Add(-time.Second)},
 	}
 	first, err := handler.ListProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, Limit: 1,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, Limit: 1,
 	}))
 	if err != nil || len(first.Msg.GetEvents()) != 1 || first.Msg.GetEvents()[0].GetAgentName() != store.scheduler.AgentName ||
 		first.Msg.GetEvents()[0].GetSchedulerId() != store.scheduler.SchedulerID || first.Msg.GetEvents()[0].GetLinkedSandboxId() != "sandbox-1" || first.Msg.GetNextCursor() == "" {
 		t.Fatalf("first event page=%#v err=%v", first, err)
 	}
 	second, err := handler.ListProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, Limit: 1, Cursor: first.Msg.GetNextCursor(),
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, Limit: 1, Cursor: first.Msg.GetNextCursor(),
 	}))
 	if err != nil || len(second.Msg.GetEvents()) != 1 || second.Msg.GetEvents()[0].GetId() != "event-1" || second.Msg.GetNextCursor() != "" {
 		t.Fatalf("second event page=%#v err=%v", second, err)

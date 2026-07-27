@@ -23,7 +23,7 @@ func streamComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, 
 		return err
 	}
 	stream, err := clients.projectStream.StreamSchedulerRuns(ctx, connect.NewRequest(&agentcomposev2.StreamSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, AgentName: agentFilter, TriggerId: triggerID,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agentFilter, TriggerId: triggerID,
 		Status: runStatus, BatchSize: schedulerCLIBatchSize, Limit: limit,
 	}))
 	if err != nil {
@@ -92,7 +92,7 @@ func streamProjectSchedulerLogEvents(ctx context.Context, clients cliServiceClie
 		streamTail = uint32(tail)
 	}
 	stream, err := clients.projectStream.StreamProjectSchedulerEvents(ctx, connect.NewRequest(&agentcomposev2.StreamProjectSchedulerEventsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, AgentName: agentName, TriggerId: triggerID, RunId: runID,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: agentName, TriggerId: triggerID, RunId: runID,
 		BatchSize: schedulerCLIBatchSize, Tail: streamTail,
 	}))
 	if err != nil {

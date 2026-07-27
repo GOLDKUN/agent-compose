@@ -89,7 +89,7 @@ func runComposeSchedulerInvokeCommand(cmd *cobra.Command, cli cliOptions, option
 		}
 	}
 	response, err := clients.project.InvokeScheduler(cmd.Context(), connect.NewRequest(&agentcomposev2.InvokeSchedulerRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, AgentName: scheduler.AgentName, PayloadJson: payloadJSON,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, AgentName: scheduler.AgentName, PayloadJson: payloadJSON,
 	}))
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("invoke scheduler %s in project %s: %w", scheduler.AgentName, runtimeProject.name(), err))
@@ -145,7 +145,7 @@ func runComposeSchedulerTriggerV2Command(cmd *cobra.Command, cli cliOptions, opt
 }
 
 func executeComposeSchedulerRun(cmd *cobra.Command, cli cliOptions, projectName, projectID, agentName, triggerID string, options composeSchedulerTriggerOptions, client agentcomposev2connect.ProjectServiceClient) error {
-	project := &agentcomposev2.ProjectRef{ProjectId: projectID}
+	project := &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}
 	var run *agentcomposev2.SchedulerRun
 	if options.Detach {
 		response, err := client.StartSchedulerRun(cmd.Context(), connect.NewRequest(&agentcomposev2.StartSchedulerRunRequest{
@@ -196,7 +196,7 @@ func runComposeSchedulerStopCommand(cmd *cobra.Command, cli cliOptions, options 
 	}
 	projectID := runtimeProject.id()
 	response, err := clients.project.StopSchedulerRun(cmd.Context(), connect.NewRequest(&agentcomposev2.StopSchedulerRunRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, RunId: runID, Reason: strings.TrimSpace(options.Reason),
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, RunId: runID, Reason: strings.TrimSpace(options.Reason),
 	}))
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("stop scheduler run %s in project %s: %w", runID, runtimeProject.name(), err))
@@ -233,7 +233,7 @@ func inspectComposeRunOutput(ctx context.Context, clients cliServiceClients, pro
 		return nil, commandExitErrorForConnect(fmt.Errorf("inspect run %s in project %s: %w", runID, projectName, err))
 	}
 	schedulerRun, schedulerErr := clients.project.GetSchedulerRun(ctx, connect.NewRequest(&agentcomposev2.GetSchedulerRunRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, RunId: runID,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, RunId: runID,
 	}))
 	if schedulerErr != nil {
 		return nil, commandExitErrorForConnect(fmt.Errorf("inspect run %s in project %s: %w", runID, projectName, schedulerErr))

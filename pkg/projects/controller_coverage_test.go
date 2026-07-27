@@ -85,11 +85,11 @@ agents:
 	if missingSpec, err := controller.ValidateProject(ctx, NormalizedProject{}, nil); err != nil || missingSpec.Valid {
 		t.Fatalf("ValidateProject missing spec=%#v err=%v", missingSpec, err)
 	}
-	if _, err := controller.ResolveProjectRef(ctx, ProjectRef{Name: "coverage-project"}); !errors.Is(err, domain.ErrAmbiguous) {
+	if _, err := controller.ResolveProjectRef(ctx, ProjectRefByName("coverage-project")); !errors.Is(err, domain.ErrAmbiguous) {
 		t.Fatalf("expected ambiguous project error, got %v", err)
 	}
 	store.projects = []domain.ProjectRecord{{ID: "project-1", Name: "coverage-project", SourcePath: "/repo"}}
-	resolved, err := controller.ResolveProjectRef(ctx, ProjectRef{Name: "coverage-project"})
+	resolved, err := controller.ResolveProjectRef(ctx, ProjectRefByName("coverage-project"))
 	if err != nil || resolved.ID != "project-1" {
 		t.Fatalf("ResolveProjectRef resolved=%#v err=%v", resolved, err)
 	}
@@ -109,7 +109,7 @@ func TestControllerRemoveProjectMarksProjectRemovedAndIsIdempotent(t *testing.T)
 		Sandboxes: controllerCoverageSessionStore{},
 		Volumes:   volumeManager,
 	})
-	removed, err := controller.RemoveProject(ctx, RemoveRequest{Project: ProjectRef{ProjectID: "project-1"}})
+	removed, err := controller.RemoveProject(ctx, RemoveRequest{Project: ProjectRefByID("project-1")})
 	if err != nil {
 		t.Fatalf("RemoveProject returned error: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestControllerRemoveProjectMarksProjectRemovedAndIsIdempotent(t *testing.T)
 		t.Fatalf("RemoveProject volume cleanup = %#v", volumeManager.removedProjects)
 	}
 
-	repeated, err := controller.RemoveProject(ctx, RemoveRequest{Project: ProjectRef{ProjectID: "project-1"}})
+	repeated, err := controller.RemoveProject(ctx, RemoveRequest{Project: ProjectRefByID("project-1")})
 	if err != nil {
 		t.Fatalf("repeated RemoveProject returned error: %v", err)
 	}

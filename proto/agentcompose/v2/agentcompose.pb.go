@@ -2026,10 +2026,15 @@ func (x *WatchProjectResponse) GetChanges() []*ProjectChange {
 }
 
 type ProjectRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	SourcePath    string                 `protobuf:"bytes,3,opt,name=source_path,json=sourcePath,proto3" json:"source_path,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Select exactly one stable project identifier.
+	//
+	// Types that are valid to be assigned to Selector:
+	//
+	//	*ProjectRef_ProjectId
+	//	*ProjectRef_Name
+	//	*ProjectRef_SourcePath
+	Selector      isProjectRef_Selector `protobuf_oneof:"selector"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2064,26 +2069,61 @@ func (*ProjectRef) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{12}
 }
 
+func (x *ProjectRef) GetSelector() isProjectRef_Selector {
+	if x != nil {
+		return x.Selector
+	}
+	return nil
+}
+
 func (x *ProjectRef) GetProjectId() string {
 	if x != nil {
-		return x.ProjectId
+		if x, ok := x.Selector.(*ProjectRef_ProjectId); ok {
+			return x.ProjectId
+		}
 	}
 	return ""
 }
 
 func (x *ProjectRef) GetName() string {
 	if x != nil {
-		return x.Name
+		if x, ok := x.Selector.(*ProjectRef_Name); ok {
+			return x.Name
+		}
 	}
 	return ""
 }
 
 func (x *ProjectRef) GetSourcePath() string {
 	if x != nil {
-		return x.SourcePath
+		if x, ok := x.Selector.(*ProjectRef_SourcePath); ok {
+			return x.SourcePath
+		}
 	}
 	return ""
 }
+
+type isProjectRef_Selector interface {
+	isProjectRef_Selector()
+}
+
+type ProjectRef_ProjectId struct {
+	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof"`
+}
+
+type ProjectRef_Name struct {
+	Name string `protobuf:"bytes,2,opt,name=name,proto3,oneof"`
+}
+
+type ProjectRef_SourcePath struct {
+	SourcePath string `protobuf:"bytes,3,opt,name=source_path,json=sourcePath,proto3,oneof"`
+}
+
+func (*ProjectRef_ProjectId) isProjectRef_Selector() {}
+
+func (*ProjectRef_Name) isProjectRef_Selector() {}
+
+func (*ProjectRef_SourcePath) isProjectRef_Selector() {}
 
 type ProjectSource struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -17694,14 +17734,16 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\x0e2&.agentcompose.v2.ProjectWatchEventTypeR\x04type\x122\n" +
 	"\aproject\x18\x02 \x01(\v2\x18.agentcompose.v2.ProjectR\aproject\x12<\n" +
 	"\brevision\x18\x03 \x01(\v2 .agentcompose.v2.ProjectRevisionR\brevision\x128\n" +
-	"\achanges\x18\x04 \x03(\v2\x1e.agentcompose.v2.ProjectChangeR\achanges\"`\n" +
+	"\achanges\x18\x04 \x03(\v2\x1e.agentcompose.v2.ProjectChangeR\achanges\"r\n" +
 	"\n" +
-	"ProjectRef\x12\x1d\n" +
+	"ProjectRef\x12\x1f\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
-	"\vsource_path\x18\x03 \x01(\tR\n" +
-	"sourcePath\"S\n" +
+	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x12\x14\n" +
+	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x12!\n" +
+	"\vsource_path\x18\x03 \x01(\tH\x00R\n" +
+	"sourcePathB\n" +
+	"\n" +
+	"\bselector\"S\n" +
 	"\rProjectSource\x12!\n" +
 	"\fcompose_path\x18\x01 \x01(\tR\vcomposePath\x12\x1f\n" +
 	"\vproject_dir\x18\x02 \x01(\tR\n" +
@@ -20101,6 +20143,11 @@ func init() { file_agentcompose_v2_agentcompose_proto_init() }
 func file_agentcompose_v2_agentcompose_proto_init() {
 	if File_agentcompose_v2_agentcompose_proto != nil {
 		return
+	}
+	file_agentcompose_v2_agentcompose_proto_msgTypes[12].OneofWrappers = []any{
+		(*ProjectRef_ProjectId)(nil),
+		(*ProjectRef_Name)(nil),
+		(*ProjectRef_SourcePath)(nil),
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[57].OneofWrappers = []any{}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[64].OneofWrappers = []any{}

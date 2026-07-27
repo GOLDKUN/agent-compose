@@ -160,7 +160,7 @@ scheduler.on("news.ready", "on-news", function onNews() {});
 	if err != nil {
 		t.Fatalf("load legacy project: %v", err)
 	}
-	resolved, err := controller.ResolveProjectRef(ctx, projects.ProjectRef{Name: result.Project.Name, SourcePath: result.Project.SourcePath})
+	resolved, err := controller.ResolveProjectRef(ctx, projects.ProjectRefByName(result.Project.Name))
 	if err != nil || resolved.ID != project.ID {
 		t.Fatalf("resolve returned legacy project ref = %#v, err = %v", resolved, err)
 	}

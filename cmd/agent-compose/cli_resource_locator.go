@@ -55,13 +55,13 @@ func inspectResolvedTarget(cmd *cobra.Command, cli cliOptions, clients cliServic
 	}
 	switch target.GetKind() {
 	case agentcomposev2.ResourceKind_RESOURCE_KIND_PROJECT:
-		project, err := clients.project.GetProject(cmd.Context(), connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{ProjectId: target.GetId()}, IncludeSpec: true}))
+		project, err := clients.project.GetProject(cmd.Context(), connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: target.GetId()}}, IncludeSpec: true}))
 		if err != nil {
 			return commandExitErrorForConnect(fmt.Errorf("inspect project %s: %w", target.GetId(), err))
 		}
 		return writeComposeInspectOutput(cmd, composeProjectOutputFromProject(project.Msg.GetProject()))
 	case agentcomposev2.ResourceKind_RESOURCE_KIND_AGENT:
-		project, err := clients.project.GetProject(cmd.Context(), connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{ProjectId: target.GetProjectId()}, IncludeSpec: true}))
+		project, err := clients.project.GetProject(cmd.Context(), connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: target.GetProjectId()}}, IncludeSpec: true}))
 		if err != nil {
 			return commandExitErrorForConnect(fmt.Errorf("inspect agent %s: %w", target.GetAgentName(), err))
 		}

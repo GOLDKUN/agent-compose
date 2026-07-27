@@ -30,7 +30,7 @@ func latestSchedulerRunsBySandbox(ctx context.Context, clients cliServiceClients
 	for start := 0; start < len(targetSandboxIDs); start += schedulerRunLookupBatchSize {
 		end := min(start+schedulerRunLookupBatchSize, len(targetSandboxIDs))
 		response, err := clients.project.BatchGetLatestSchedulerRuns(ctx, connect.NewRequest(&agentcomposev2.BatchGetLatestSchedulerRunsRequest{
-			Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, SandboxIds: targetSandboxIDs[start:end],
+			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, SandboxIds: targetSandboxIDs[start:end],
 		}))
 		if err != nil {
 			return nil, commandExitErrorForConnect(err)
