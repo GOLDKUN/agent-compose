@@ -13,8 +13,8 @@ func newCLILogsCommand(cli *cliOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&options.AgentName, "agent", "", "Filter logs by agent name")
-	cmd.Flags().StringVar(&options.RunID, "run", "", "Filter logs by run id")
-	cmd.Flags().StringVar(&options.SandboxID, "sandbox", "", "Filter logs by sandbox id")
+	cmd.Flags().StringVar(&options.RunID, "run", "", "Filter logs by run id; cannot be combined with --sandbox")
+	cmd.Flags().StringVar(&options.SandboxID, "sandbox", "", "Filter logs by sandbox id; cannot be combined with --run")
 	cmd.Flags().BoolVar(&options.Follow, "follow", false, "Follow running run output")
 	cmd.Flags().IntVarP(&options.TailLines, "tail", "n", -1, "Show the last N lines of run output")
 	cmd.Flags().BoolVarP(&options.Timestamp, "timestamp", "t", false, "Prefix text log lines with a run-level timestamp")

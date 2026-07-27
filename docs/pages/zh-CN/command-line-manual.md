@@ -497,6 +497,8 @@ agent-compose logs -t
 | `--run <run-id>` | 按 run 过滤。 |
 | `--sandbox <sandbox>` | 按 sandbox 过滤。 |
 
+`--run` 和 `--sandbox` 是互斥的资源选择器。同时指定二者会返回用法错误，且不会发送日志请求。
+
 示例：
 
 ```bash
