@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -216,7 +217,7 @@ func TestV2ListSandboxesPassesProjectAndStatusFiltersToStore(t *testing.T) {
 	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
 
 	_, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{
-		ProjectId: " project-a ", Status: []string{"running", "stopped"},
+		ProjectId: " project-a ", Status: []string{" running ", "", "STOPPED", "running"},
 	}))
 	if err != nil {
 		t.Fatalf("ListSandboxes() error = %v", err)
@@ -225,8 +226,25 @@ func TestV2ListSandboxesPassesProjectAndStatusFiltersToStore(t *testing.T) {
 		t.Fatalf("list options count = %d, want 1", len(store.listOptions))
 	}
 	options := store.listOptions[0]
-	if options.ProjectID != "project-a" || !slices.Equal(options.VMStatuses, []string{"running", "stopped"}) {
+	if options.ProjectID != "project-a" || !slices.Equal(options.VMStatuses, []string{domain.VMStatusRunning, domain.VMStatusStopped}) {
 		t.Fatalf("list options = %#v", options)
+	}
+}
+
+func TestV2ListSandboxesRejectsInvalidStatusBeforeStore(t *testing.T) {
+	for _, statuses := range [][]string{{"definitely-invalid"}, {"running", "definitely-invalid"}} {
+		t.Run(strings.Join(statuses, ","), func(t *testing.T) {
+			store := &characterizationSandboxStore{}
+			handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+
+			_, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Status: statuses}))
+			if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), `invalid sandbox status "definitely-invalid"`) {
+				t.Fatalf("ListSandboxes() code/error = %v / %v", connect.CodeOf(err), err)
+			}
+			if len(store.listOptions) != 0 {
+				t.Fatalf("invalid status reached store with options %#v", store.listOptions)
+			}
+		})
 	}
 }
 

@@ -138,9 +138,9 @@ agents:
 		}
 	}
 
-	statusMatches := matched(runPrune("--status", "error"))
-	if !reflect.DeepEqual(statusMatches, map[string]bool{"session-error": true}) {
-		t.Fatalf("status error matches = %#v", statusMatches)
+	statusMatches := matched(runPrune("--status", "failed"))
+	if !reflect.DeepEqual(statusMatches, map[string]bool{"session-failed": true}) {
+		t.Fatalf("status failed matches = %#v", statusMatches)
 	}
 
 	agentMatches := matched(runPrune("--agent", "worker"))
@@ -382,14 +382,23 @@ agents:
 }
 
 func TestIntegrationCLISandboxPruneRejectsUnsafeStatuses(t *testing.T) {
-	for _, status := range []string{"running", "pending"} {
-		t.Run(status, func(t *testing.T) {
-			stdout, stderr, _, exitCode := executeCLICommand("sandbox", "prune", "--status", status)
+	tests := []struct {
+		status string
+		want   string
+	}{
+		{status: "running", want: "sandbox prune cannot target running sandboxes"},
+		{status: "pending", want: "sandbox prune cannot target pending sandboxes"},
+		{status: "deleting", want: "sandbox prune cannot target deleting sandboxes"},
+		{status: "definitely-invalid", want: `invalid --status "definitely-invalid": expected stopped or failed`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			stdout, stderr, _, exitCode := executeCLICommand("sandbox", "prune", "--status", tt.status)
 			if exitCode != exitCodeUsage {
-				t.Fatalf("sandbox prune --status %s exit code = %d, want usage; stderr=%q", status, exitCode, stderr)
+				t.Fatalf("sandbox prune --status %s exit code = %d, want usage; stderr=%q", tt.status, exitCode, stderr)
 			}
-			if stdout != "" || !strings.Contains(stderr, "sandbox prune cannot target "+status+" sandboxes") {
-				t.Fatalf("sandbox prune --status %s stdout/stderr = %q / %q", status, stdout, stderr)
+			if stdout != "" || !strings.Contains(stderr, tt.want) {
+				t.Fatalf("sandbox prune --status %s stdout/stderr = %q / %q", tt.status, stdout, stderr)
 			}
 		})
 	}

@@ -466,6 +466,9 @@ func normalizeOptionalRunModeValue(value string) string {
 }
 
 func runComposePSCommand(cmd *cobra.Command, cli cliOptions, options composePSOptions) error {
+	if _, err := composePSStatusFilter(options); err != nil {
+		return commandExitError{Code: exitCodeUsage, Err: err}
+	}
 	clients, err := newCLIServiceClients(cli)
 	if err != nil {
 		return err

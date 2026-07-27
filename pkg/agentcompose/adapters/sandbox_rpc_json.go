@@ -48,6 +48,10 @@ type sandboxRPCListRequest struct {
 }
 
 func (r sandboxRPCListRequest) Options() (domain.SandboxListOptions, error) {
+	vmStatus, err := domain.NormalizeSandboxVMStatus(r.VMStatus)
+	if err != nil {
+		return domain.SandboxListOptions{}, err
+	}
 	createdFrom, err := sandboxRPCOptionalTime(r.CreatedFrom, "createdFrom")
 	if err != nil {
 		return domain.SandboxListOptions{}, err
@@ -66,7 +70,7 @@ func (r sandboxRPCListRequest) Options() (domain.SandboxListOptions, error) {
 	}
 	return domain.SandboxListOptions{
 		SandboxType: r.SessionType, TriggerSourceQuery: r.TriggerSource, TitleQuery: r.Title,
-		WorkspaceQuery: r.Workspace, Driver: r.Driver, VMStatus: r.VMStatus,
+		WorkspaceQuery: r.Workspace, Driver: r.Driver, VMStatus: vmStatus,
 		CreatedFrom: createdFrom, CreatedTo: createdTo, UpdatedFrom: updatedFrom, UpdatedTo: updatedTo,
 		Offset: int(r.Offset), Limit: int(r.Limit),
 	}, nil

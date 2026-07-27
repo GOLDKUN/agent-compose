@@ -1050,6 +1050,7 @@ message RemoveSandboxResponse {
 
 message PruneSandboxesRequest {
   string project_id = 1;
+  // Optional case-insensitive filter. Only stopped and failed are safe to prune.
   repeated string status = 2;
   string agent_name = 3;
   string driver = 4;
@@ -1123,6 +1124,8 @@ message ListSandboxesRequest {
   uint32 limit = 1;
   string cursor = 2;
   string project_id = 3;
+  // Optional case-insensitive filter. Accepted values are pending, running,
+  // stopped, failed, and deleting. Empty entries are ignored.
   repeated string status = 4;
 }
 
