@@ -136,6 +136,7 @@ func testCLIConfigAndOutputWorkflow(t *testing.T) {
 	TestConfigCommandExpandsSchedulerScriptURLs(t)
 	TestConfigCommandQuietOnlyValidates(t)
 	TestConfigCommandQuietRejectsRemovedNetworkField(t)
+	TestConfigCommandQuietRejectsDuplicateSchedulerTriggerNames(t)
 	TestConfigCommandMissingComposeFileWritesStderrAndExitCode(t)
 	TestConfigCommandProjectNameDoesNotOverrideComposeName(t)
 	TestCLIClientConfigPriority(t)
