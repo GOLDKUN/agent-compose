@@ -145,7 +145,7 @@ func TestE2ELegacyMigratorCLIInPlaceWorkflow(t *testing.T) {
 	}
 
 	dryRun := runMigratorCLIJSON(t, "--source", root, "--target", root, "--dry-run", "--json")
-	if dryRun.Stage != "eligible" || !dryRun.InPlace || dryRun.CheckedFiles != 2 || dryRun.CopiedFiles != 0 {
+	if dryRun.Stage != "eligible" || !dryRun.InPlace || dryRun.CheckedFiles != 1 || dryRun.CopiedFiles != 0 {
 		t.Fatalf("in-place dry-run report=%+v", dryRun)
 	}
 	if _, err := os.Stat(filepath.Join(root, "sessions", sandboxID, "state.bin")); err != nil {

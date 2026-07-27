@@ -121,7 +121,7 @@ func rewriteInPlaceSymlinks(root, runtimeRoot string, schedulerIDs map[string]st
 		if rel == inPlaceBackupName && entry.IsDir() {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() && skipInPlaceWorkspaceSubtree(rel) {
+		if entry.IsDir() && skipInPlacePayloadSubtree(rel) {
 			return filepath.SkipDir
 		}
 		if entry.Type()&os.ModeSymlink == 0 {

@@ -36,24 +36,31 @@ func inspectInPlaceAuthoritativeFiles(ctx context.Context, root, runtimeRoot str
 			return nil
 		}
 		if entry.IsDir() {
-			if skipInPlaceWorkspaceSubtree(rel) {
+			if skipInPlacePayloadSubtree(rel) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		files++
-		if files%inPlaceProgressInterval == 0 {
-			writeMigrationProgress(progress, "files", fmt.Sprintf("checked %d files", files))
-		}
 		if entry.Type()&os.ModeSymlink != 0 {
-			return inspectInPlaceSymlink(path, rel, root, runtimeRoot, schedulerIDs)
-		}
-		if entry.Type()&fs.ModeType != 0 {
-			return fmt.Errorf("refuse non-regular source file: %s", rel)
+			if err := inspectInPlaceSymlink(path, rel, root, runtimeRoot, schedulerIDs); err != nil {
+				return err
+			}
+			files++
+			if files%inPlaceProgressInterval == 0 {
+				writeMigrationProgress(progress, "files", fmt.Sprintf("checked %d files", files))
+			}
+			return nil
 		}
 		mappedRel := migratedDataRootPath(rel, schedulerIDs)
 		if !isMigratableJSONPath(mappedRel) {
 			return nil
+		}
+		if entry.Type()&fs.ModeType != 0 {
+			return fmt.Errorf("refuse non-regular source file: %s", rel)
+		}
+		files++
+		if files%inPlaceProgressInterval == 0 {
+			writeMigrationProgress(progress, "files", fmt.Sprintf("checked %d files", files))
 		}
 		_, _, err = rewriteMigratedJSON(path, mappedRel, root, runtimeRoot, schedulerIDs, agentIDs)
 		return err
@@ -65,15 +72,42 @@ func inspectInPlaceAuthoritativeFiles(ctx context.Context, root, runtimeRoot str
 	return files, nil
 }
 
-func skipInPlaceWorkspaceSubtree(rel string) bool {
+func skipInPlacePayloadSubtree(rel string) bool {
 	parts := strings.Split(filepath.ToSlash(filepath.Clean(rel)), "/")
 	if len(parts) >= 4 && parts[0] == "workspaces" && parts[2] == "content" {
 		return true
 	}
-	if len(parts) >= 4 && isSandboxRootName(parts[0]) && parts[2] == "workspace" {
+	if len(parts) < 3 || !isSandboxRootName(parts[0]) || parts[1] == ".lifecycle" {
+		return false
+	}
+	sandboxIndex := 1
+	if len(parts) >= 4 && validSandboxDatePartition(parts[1:4]) {
+		if len(parts) < 6 {
+			return false
+		}
+		sandboxIndex = 4
+	} else if isSandboxDatePartitionPrefix(parts[1:]) {
+		return false
+	}
+	if len(parts) <= sandboxIndex+1 {
+		return false
+	}
+	payload := parts[sandboxIndex+1]
+	if payload != "workspace" && payload != "vm" {
 		return true
 	}
-	return len(parts) >= 7 && isSandboxRootName(parts[0]) && validSandboxDatePartition(parts[1:4]) && parts[5] == "workspace"
+	return len(parts) >= sandboxIndex+3
+}
+
+func isSandboxDatePartitionPrefix(parts []string) bool {
+	if len(parts) == 0 || len(parts) > 2 {
+		return false
+	}
+	probe := append([]string(nil), parts...)
+	for len(probe) < 3 {
+		probe = append(probe, "01")
+	}
+	return validSandboxDatePartition(probe)
 }
 
 func inspectInPlaceSymlink(path, rel, root, runtimeRoot string, schedulerIDs map[string]string) error {

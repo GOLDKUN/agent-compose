@@ -293,7 +293,7 @@ func rewriteInPlaceSandboxJSON(root, runtimeRoot string, schedulerIDs map[string
 			if err != nil {
 				return err
 			}
-			if skipInPlaceWorkspaceSubtree(rel) {
+			if skipInPlacePayloadSubtree(rel) {
 				return filepath.SkipDir
 			}
 			return nil
