@@ -164,6 +164,7 @@ export class OpenCodeRunner {
       const finalText = extractText(event.response) || extractText(event.result) || text;
       if (finalText) {
         result.finalText = finalText;
+        result.finalTextSource = "provider_message";
       }
       result.stopReason = stringField(event, "stopReason", "stop_reason", "finishReason", "finish_reason") || result.stopReason;
     }
@@ -181,6 +182,7 @@ export class OpenCodeRunner {
       threadId: stored?.threadId || "",
       stopReason: "completed",
       finalText: "",
+      finalTextSource: "none",
       transcript: "",
       stderr: "",
     };
@@ -233,6 +235,7 @@ export class OpenCodeRunner {
     result.transcript = this.writer.transcript();
     if (!result.finalText && result.transcript) {
       result.finalText = result.transcript;
+      result.finalTextSource = "transcript_fallback";
     }
     await writeStoredThread(this.options.stateRoot, "opencode", result.threadId);
     return result;

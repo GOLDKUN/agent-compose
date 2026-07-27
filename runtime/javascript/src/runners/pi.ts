@@ -66,6 +66,7 @@ export class PiRunner {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none",
         transcript: "",
         stderr: "",
       };
@@ -98,7 +99,10 @@ export class PiRunner {
         throw new Error("pi completed without emitting a session id");
       }
       result.transcript = this.writer.transcript();
-      if (!result.finalText) result.finalText = lastAssistantTextFromTranscript(result.transcript);
+      if (!result.finalText && result.transcript) {
+        result.finalText = lastAssistantTextFromTranscript(result.transcript);
+        result.finalTextSource = "transcript_fallback";
+      }
       await writeStoredThread(this.options.stateRoot, "pi", result.threadId);
       return result;
     } finally {
@@ -162,7 +166,11 @@ export class PiRunner {
         } else {
           this.latestAssistantError = null;
         }
-        result.finalText = extractText(message?.content) || extractText(event.content) || result.finalText;
+        const finalText = extractText(message?.content) || extractText(event.content);
+        if (finalText) {
+          result.finalText = finalText;
+          result.finalTextSource = "provider_message";
+        }
       }
       return;
     }
@@ -171,7 +179,13 @@ export class PiRunner {
     }
     if (type === "agent_end") {
       result.stopReason = firstString(event, "stopReason", "stop_reason") || "completed";
-      result.finalText ||= lastAssistantMessage(event.messages);
+      if (!result.finalText) {
+        const finalText = lastAssistantMessage(event.messages);
+        if (finalText) {
+          result.finalText = finalText;
+          result.finalTextSource = "provider_message";
+        }
+      }
       this.reportedError ??= this.latestAssistantError
         || (result.stopReason === "error" ? new Error("pi agent ended with an error") : null);
       return;
@@ -254,5 +268,5 @@ function lastAssistantMessage(value: unknown): string {
 }
 
 function lastAssistantTextFromTranscript(transcript: string): string {
-  return transcript.trim();
+	return transcript.trim();
 }

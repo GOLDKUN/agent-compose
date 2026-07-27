@@ -79,6 +79,9 @@ func TestRunsCoordinatorAndHelperWorkflows(t *testing.T) {
 	if succeeded, err := coord.MarkSucceeded(ctx, TransitionRequest{RunID: run.RunID, ExitCode: 0, Output: "ok", ResultJSON: `{"ok":true}`, LogsPath: "/logs", ArtifactsDir: "/artifacts"}); err != nil || succeeded.Status != domain.ProjectRunStatusSucceeded || succeeded.DurationMs < 0 {
 		t.Fatalf("MarkSucceeded run=%#v err=%v", succeeded, err)
 	}
+	if len(store.events) != 2 || store.events[0].Kind != domain.ProjectRunEventKindUserMessage || store.events[1].Kind != domain.ProjectRunEventKindStatus {
+		t.Fatalf("coordinator inferred events from output: %#v", store.events)
+	}
 	if _, err := coord.MarkFailed(ctx, TransitionRequest{RunID: run.RunID, Error: "late"}); err == nil {
 		t.Fatalf("expected terminal transition error")
 	}
@@ -288,7 +291,16 @@ func TestRunsControllerRunProjectAgentSuccessWorkflow(t *testing.T) {
 		runs:   map[string]domain.ProjectRunRecord{},
 	}
 	driver := &fakeControllerDriver{store: store}
-	executor := &fakeControllerExecutor{}
+	executor := &fakeControllerExecutor{
+		cell: domain.NotebookCell{
+			ID:      "cell-1",
+			Type:    execution.CellTypeAgent,
+			Agent:   "codex",
+			Output:  "checking weather\n$ curl https://weather.test\n{\"temperature\":26}\nBeijing is 26°C today.",
+			Success: true,
+		},
+		assistantEvent: domain.SandboxEvent{ID: "assistant", Type: "agent.assistant", Message: "Beijing is 26°C today."},
+	}
 	bus := &fakeControllerPublisher{}
 	dashboard := &fakeControllerDashboard{}
 	controller := NewController(ControllerDependencies{
@@ -329,8 +341,14 @@ func TestRunsControllerRunProjectAgentSuccessWorkflow(t *testing.T) {
 	if err != nil || execErr != nil {
 		t.Fatalf("RunProjectAgent err=%v execErr=%v run=%#v", err, execErr, run)
 	}
-	if run.Status != domain.ProjectRunStatusSucceeded || run.SandboxID == "" || run.Output != "done" {
+	if run.Status != domain.ProjectRunStatusSucceeded || run.SandboxID == "" || !strings.Contains(run.Output, "curl https://weather.test") {
 		t.Fatalf("run = %#v", run)
+	}
+	if len(configDB.events) != 4 ||
+		configDB.events[1].Kind != domain.ProjectRunEventKindAgentActivity || !strings.Contains(configDB.events[1].Text, "curl https://weather.test") ||
+		configDB.events[2].Kind != domain.ProjectRunEventKindAgentMessage || configDB.events[2].Text != "Beijing is 26°C today." ||
+		strings.Contains(configDB.events[2].Text, "curl") || configDB.events[3].Kind != domain.ProjectRunEventKindStatus {
+		t.Fatalf("project run events = %#v", configDB.events)
 	}
 	if !strings.Contains(run.ArtifactsDir, filepath.Join("state", "cells", "cell-1")) || filepath.Base(run.LogsPath) != "output.txt" {
 		t.Fatalf("agent run artifact paths = artifacts:%q logs:%q", run.ArtifactsDir, run.LogsPath)
@@ -592,6 +610,9 @@ func TestRunsControllerRunProjectAgentCommandWorkflow(t *testing.T) {
 	if run.Status != domain.ProjectRunStatusSucceeded || run.Output != "command output\n" || run.ArtifactsDir == "" || run.LogsPath == "" {
 		t.Fatalf("command run = %#v", run)
 	}
+	if len(configDB.events) != 2 || configDB.events[0].Kind != domain.ProjectRunEventKindAgentActivity || configDB.events[0].Name != commandExecutionActivityName || configDB.events[1].Kind != domain.ProjectRunEventKindStatus {
+		t.Fatalf("command run events = %#v", configDB.events)
+	}
 	if !strings.Contains(run.ArtifactsDir, filepath.Join("state", "runs", run.RunID)) || filepath.Base(run.LogsPath) != "transcript.txt" {
 		t.Fatalf("command run artifact paths = artifacts:%q logs:%q", run.ArtifactsDir, run.LogsPath)
 	}
@@ -756,6 +777,9 @@ func TestRunsControllerRunProjectAgentCommandNonZeroExitPreservesOutput(t *testi
 	if run.Status != domain.ProjectRunStatusFailed || run.ExitCode != 7 || run.Output != "partial stdout\nfailure stderr\n" {
 		t.Fatalf("failed command run = %#v", run)
 	}
+	if len(configDB.events) != 2 || configDB.events[0].Kind != domain.ProjectRunEventKindAgentActivity || configDB.events[0].Success || configDB.events[1].Kind != domain.ProjectRunEventKindStatus {
+		t.Fatalf("failed command events = %#v", configDB.events)
+	}
 	if len(chunks) != 2 || domain.NormalizeStdioStream(chunks[0].Stream) != domain.StdioStdout || domain.NormalizeStdioStream(chunks[1].Stream) != domain.StdioStderr {
 		t.Fatalf("stream chunks = %#v", chunks)
 	}
@@ -828,6 +852,9 @@ func TestRunsControllerRunProjectCommandAttachProjectsOutputAndResult(t *testing
 	if err != nil || string(data) != "hello\nwarn\n" {
 		t.Fatalf("attach transcript = %q err=%v", string(data), err)
 	}
+	if len(configDB.events) != 2 || configDB.events[0].Kind != domain.ProjectRunEventKindAgentActivity || configDB.events[0].Name != commandExecutionActivityName || configDB.events[1].Kind != domain.ProjectRunEventKindStatus {
+		t.Fatalf("command attach events = %#v", configDB.events)
+	}
 }
 
 func TestRunsControllerRunProjectCommandAttachValidatesStartFrame(t *testing.T) {
@@ -846,8 +873,8 @@ func TestRunsControllerRunProjectPromptAttachProjectsAgentFrames(t *testing.T) {
 		{Type: driverpkg.RuntimeOutputStarted},
 		{Type: driverpkg.RuntimeOutputStdout, Data: []byte(`{"v":1,"seq":0,"type":"started","provider":"claude","sessionId":"thread-1"}` + "\n")},
 		{Type: driverpkg.RuntimeOutputStdout, Data: []byte(`{"v":1,"seq":1,"type":"agent_event","event":{"type":"output","provider":"claude","text":"hello agent\n"}}` + "\n")},
-		{Type: driverpkg.RuntimeOutputStdout, Data: []byte(`{"v":1,"seq":2,"type":"agent_turn_completed","provider":"claude","sessionId":"thread-1","finalText":"hello agent\n"}` + "\n")},
-		{Type: driverpkg.RuntimeOutputStdout, Data: []byte(`{"v":1,"seq":3,"type":"result","provider":"claude","sessionId":"thread-1","stopReason":"eof","finalText":"hello agent\n","transcript":"hello agent\n"}` + "\n")},
+		{Type: driverpkg.RuntimeOutputStdout, Data: []byte(`{"v":1,"seq":2,"type":"agent_turn_completed","provider":"claude","sessionId":"thread-1","finalText":"hello agent\n","finalTextSource":"provider_message"}` + "\n")},
+		{Type: driverpkg.RuntimeOutputStdout, Data: []byte(`{"v":1,"seq":3,"type":"result","provider":"claude","sessionId":"thread-1","stopReason":"eof","finalText":"hello agent\n","finalTextSource":"provider_message","transcript":"hello agent\n"}` + "\n")},
 		{Type: driverpkg.RuntimeOutputResult, Result: &driverpkg.RuntimeResult{OperationID: "run-attach", ExitCode: 0, Success: true}},
 	})
 	configDB.agent.Provider = "claude"
@@ -912,6 +939,9 @@ func TestRunsControllerRunProjectPromptAttachProjectsAgentFrames(t *testing.T) {
 	if string(transcript) != "hello agent\n" {
 		t.Fatalf("prompt attach transcript = %q", string(transcript))
 	}
+	if len(configDB.events) != 3 || configDB.events[0].Kind != domain.ProjectRunEventKindUserMessage || configDB.events[1].Kind != domain.ProjectRunEventKindAgentMessage || configDB.events[1].Text != "hello agent" || configDB.events[2].Kind != domain.ProjectRunEventKindStatus {
+		t.Fatalf("prompt attach events = %#v", configDB.events)
+	}
 }
 
 func TestRunsControllerRunProjectPromptAttachGatesQueuedTurnsAndOrdersTranscript(t *testing.T) {
@@ -952,18 +982,18 @@ func TestRunsControllerRunProjectPromptAttachGatesQueuedTurnsAndOrdersTranscript
 	interaction.frames <- driverpkg.RuntimeOutputFrame{Type: driverpkg.RuntimeOutputStarted}
 	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":0,"type":"started","provider":"codex","sessionId":"thread-1"}`)
 	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":1,"type":"agent_event","event":{"type":"item.completed","item":{"id":"m1","type":"agent_message","text":"agent-1\n"}}}`)
-	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":2,"type":"agent_turn_completed","provider":"codex","sessionId":"thread-1","finalText":"agent-1\n"}`)
+	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":2,"type":"agent_turn_completed","provider":"codex","sessionId":"thread-1","finalText":"agent-1\n","finalTextSource":"provider_message"}`)
 	assertPromptRuntimeFrame(t, receiveRuntimeInputFrame(t, interaction.sent), "human_message", "human-2")
 	assertNoRuntimeInputFrame(t, interaction.sent)
 
 	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":3,"type":"agent_event","event":{"type":"item.completed","item":{"id":"m2","type":"agent_message","text":"agent-2\n"}}}`)
-	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":4,"type":"agent_turn_completed","provider":"codex","sessionId":"thread-1","finalText":"agent-2\n"}`)
+	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":4,"type":"agent_turn_completed","provider":"codex","sessionId":"thread-1","finalText":"agent-2\n","finalTextSource":"provider_message"}`)
 	assertPromptRuntimeFrame(t, receiveRuntimeInputFrame(t, interaction.sent), "human_message", "human-3")
 	assertPromptRuntimeFrame(t, receiveRuntimeInputFrame(t, interaction.sent), "eof", "")
 
 	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":5,"type":"agent_event","event":{"type":"item.completed","item":{"id":"m3","type":"agent_message","text":"agent-3\n"}}}`)
-	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":6,"type":"agent_turn_completed","provider":"codex","sessionId":"thread-1","finalText":"agent-3\n"}`)
-	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":7,"type":"result","provider":"codex","sessionId":"thread-1","stopReason":"eof","finalText":"agent-3\n","transcript":"agent-1\nagent-2\nagent-3\n"}`)
+	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":6,"type":"agent_turn_completed","provider":"codex","sessionId":"thread-1","finalText":"agent-3\n","finalTextSource":"provider_message"}`)
+	interaction.frames <- promptRuntimeStdoutFrame(`{"v":1,"seq":7,"type":"result","provider":"codex","sessionId":"thread-1","stopReason":"eof","finalText":"agent-3\n","finalTextSource":"provider_message","transcript":"agent-1\nagent-2\nagent-3\n"}`)
 	interaction.frames <- driverpkg.RuntimeOutputFrame{Type: driverpkg.RuntimeOutputResult, Result: &driverpkg.RuntimeResult{OperationID: "run-attach", Success: true}}
 
 	select {
@@ -1005,7 +1035,7 @@ func promptRuntimeStdoutFrame(line string) driverpkg.RuntimeOutputFrame {
 func TestPromptAttachProjectorLogsResultFinalTextWithoutAgentEventText(t *testing.T) {
 	logsPath := filepath.Join(t.TempDir(), "transcript.txt")
 	projector := newPromptAttachProjector(domain.ProjectRunRecord{RunID: "run-final"}, &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-final"}}, logsPath, nil)
-	_, transition, err := projector.Project([]byte(`{"type":"result","finalText":"final only\n","stopReason":"eof"}` + "\n"))
+	_, transition, err := projector.Project([]byte(`{"type":"result","finalText":"final only\n","finalTextSource":"provider_message","stopReason":"eof"}` + "\n"))
 	if err != nil {
 		t.Fatalf("project final text result: %v", err)
 	}
@@ -1033,7 +1063,7 @@ func TestPromptAttachProjectorLogsHumanMessagesAndTurnFinalText(t *testing.T) {
 	if err := projector.AppendHumanMessage("next question"); err != nil {
 		t.Fatalf("append human message: %v", err)
 	}
-	if _, _, err := projector.Project([]byte(`{"type":"agent_turn_completed","finalText":"first answer\n"}` + "\n")); err != nil {
+	if _, _, err := projector.Project([]byte(`{"type":"agent_turn_completed","finalText":"first answer\n","finalTextSource":"provider_message"}` + "\n")); err != nil {
 		t.Fatalf("project first turn completion: %v", err)
 	}
 	transcript, err := os.ReadFile(logsPath)
@@ -1053,7 +1083,7 @@ func TestPromptAttachProjectorLogsHumanMessagesAndTurnFinalText(t *testing.T) {
 func TestPromptAttachProjectorLogsTurnFinalTextWithoutAgentEventText(t *testing.T) {
 	logsPath := filepath.Join(t.TempDir(), "transcript.txt")
 	projector := newPromptAttachProjector(domain.ProjectRunRecord{RunID: "run-turn-final"}, &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-turn-final"}}, logsPath, nil)
-	if _, _, err := projector.Project([]byte(`{"type":"agent_turn_completed","finalText":"turn only\n"}` + "\n")); err != nil {
+	if _, _, err := projector.Project([]byte(`{"type":"agent_turn_completed","finalText":"turn only\n","finalTextSource":"provider_message"}` + "\n")); err != nil {
 		t.Fatalf("project turn final text: %v", err)
 	}
 	transcript, err := os.ReadFile(logsPath)
@@ -1142,39 +1172,46 @@ func TestPromptAttachProjectorPersistsEachFrameIdempotently(t *testing.T) {
 	if err := projector.AppendHumanMessageFrame("question", "client-frame-1"); err != nil {
 		t.Fatalf("retry human frame: %v", err)
 	}
-	turn := []byte(`{"seq":42,"type":"agent_turn_completed","provider":"codex","finalText":"answer","stopReason":"end_turn"}` + "\n")
+	activity := []byte(`{"seq":41,"type":"agent_event","event":{"type":"item.completed","item":{"id":"cmd-1","type":"command_execution","command":"curl https://weather.test","aggregated_output":"{\"temperature\":26}\n"}}}` + "\n")
+	if _, _, err := projector.Project(activity); err != nil {
+		t.Fatalf("project activity: %v", err)
+	}
+	turn := []byte(`{"seq":42,"type":"agent_turn_completed","provider":"codex","finalText":"answer","finalTextSource":"provider_message","stopReason":"end_turn"}` + "\n")
 	if _, _, err := projector.Project(turn); err != nil {
 		t.Fatalf("project assistant turn: %v", err)
 	}
 	if _, _, err := projector.Project(turn); err != nil {
 		t.Fatalf("retry assistant turn: %v", err)
 	}
-	_, transition, err := projector.Project([]byte(`{"seq":43,"type":"result","finalText":"answer","stopReason":"end_turn"}` + "\n"))
-	if err != nil || transition == nil || !transition.SkipTerminalAgentEvent {
+	_, transition, err := projector.Project([]byte(`{"seq":43,"type":"result","finalText":"answer","finalTextSource":"provider_message","stopReason":"end_turn"}` + "\n"))
+	if err != nil || transition == nil || len(transition.TerminalEvents) != 0 {
 		t.Fatalf("result transition = %#v err=%v", transition, err)
 	}
-	if len(store.events) != 2 {
+	if len(store.events) != 3 {
 		t.Fatalf("persisted events = %#v", store.events)
 	}
 	if store.events[0].Kind != domain.ProjectRunEventKindUserMessage || store.events[0].ID != attachedHumanEventID("run-events", "client-frame-1", 1, "question") {
 		t.Fatalf("human event = %#v", store.events[0])
 	}
-	if store.events[1].Kind != domain.ProjectRunEventKindAgentMessage || store.events[1].ID != attachedAgentEventID("run-events", 42, turn) || store.events[1].Text != "answer" {
-		t.Fatalf("assistant event = %#v", store.events[1])
+	if store.events[1].Kind != domain.ProjectRunEventKindAgentActivity || store.events[1].ID != attachedActivityEventID("run-events", 42, turn) || !strings.Contains(store.events[1].Text, "curl https://weather.test") {
+		t.Fatalf("activity event = %#v", store.events[1])
+	}
+	if store.events[2].Kind != domain.ProjectRunEventKindAgentMessage || store.events[2].ID != attachedAgentEventID("run-events", 42, turn) || store.events[2].Text != "answer" {
+		t.Fatalf("assistant event = %#v", store.events[2])
 	}
 }
 
-func TestPromptAttachProjectorDoesNotSkipTerminalAgentEventAfterOnlyHumanMessage(t *testing.T) {
+func TestPromptAttachProjectorProjectsTerminalAgentEventAfterOnlyHumanMessage(t *testing.T) {
 	store := &projectorEventStore{keys: map[string]struct{}{}}
 	projector := newPersistentPromptAttachProjector(context.Background(), domain.ProjectRunRecord{RunID: "run-result-only", AgentName: "worker"}, &domain.Sandbox{}, filepath.Join(t.TempDir(), "transcript.txt"), nil, store)
 	if err := projector.AppendHumanMessageFrame("question", "client-frame-1"); err != nil {
 		t.Fatalf("append human frame: %v", err)
 	}
-	_, transition, err := projector.Project([]byte(`{"seq":43,"type":"result","finalText":"answer","stopReason":"end_turn"}` + "\n"))
+	_, transition, err := projector.Project([]byte(`{"seq":43,"type":"result","finalText":"answer","finalTextSource":"provider_message","stopReason":"end_turn"}` + "\n"))
 	if err != nil {
 		t.Fatalf("project result: %v", err)
 	}
-	if transition == nil || transition.SkipTerminalAgentEvent {
+	if transition == nil || len(transition.TerminalEvents) != 1 || transition.TerminalEvents[0].Kind != domain.ProjectRunEventKindAgentMessage || transition.TerminalEvents[0].Text != "answer" {
 		t.Fatalf("result transition = %#v", transition)
 	}
 	if len(store.events) != 1 || store.events[0].Kind != domain.ProjectRunEventKindUserMessage {
@@ -1188,22 +1225,22 @@ func TestIntegrationPromptAttachProjectorPersistsAssistantTurnBeforeSkippingTerm
 	if err := projector.AppendHumanMessageFrame("question", "client-frame-1"); err != nil {
 		t.Fatalf("append human frame: %v", err)
 	}
-	_, transition, err := projector.Project([]byte(`{"seq":43,"type":"result","finalText":"answer","stopReason":"end_turn"}` + "\n"))
+	_, transition, err := projector.Project([]byte(`{"seq":43,"type":"result","finalText":"answer","finalTextSource":"provider_message","stopReason":"end_turn"}` + "\n"))
 	if err != nil {
 		t.Fatalf("project result without assistant turn: %v", err)
 	}
-	if transition == nil || transition.SkipTerminalAgentEvent {
+	if transition == nil || len(transition.TerminalEvents) != 1 || transition.TerminalEvents[0].Kind != domain.ProjectRunEventKindAgentMessage {
 		t.Fatalf("result-only transition = %#v", transition)
 	}
-	turn := []byte(`{"seq":44,"type":"agent_turn_completed","provider":"codex","finalText":"answer","stopReason":"end_turn"}` + "\n")
+	turn := []byte(`{"seq":44,"type":"agent_turn_completed","provider":"codex","finalText":"answer","finalTextSource":"provider_message","stopReason":"end_turn"}` + "\n")
 	if _, _, err := projector.Project(turn); err != nil {
 		t.Fatalf("project assistant turn: %v", err)
 	}
-	_, transition, err = projector.Project([]byte(`{"seq":45,"type":"result","finalText":"answer","stopReason":"end_turn"}` + "\n"))
+	_, transition, err = projector.Project([]byte(`{"seq":45,"type":"result","finalText":"answer","finalTextSource":"provider_message","stopReason":"end_turn"}` + "\n"))
 	if err != nil {
 		t.Fatalf("project result after assistant turn: %v", err)
 	}
-	if transition == nil || !transition.SkipTerminalAgentEvent {
+	if transition == nil || len(transition.TerminalEvents) != 0 {
 		t.Fatalf("assistant transition = %#v", transition)
 	}
 	if len(store.events) != 2 || store.events[0].Kind != domain.ProjectRunEventKindUserMessage || store.events[1].Kind != domain.ProjectRunEventKindAgentMessage {
@@ -2369,6 +2406,7 @@ type fakeRunStore struct {
 	projectAgent domain.ProjectAgentRecord
 	agent        ManagedAgentDefinition
 	runs         map[string]domain.ProjectRunRecord
+	events       []domain.ProjectRunEventRecord
 }
 
 func (s *fakeRunStore) GetProject(context.Context, string) (domain.ProjectRecord, error) {
@@ -2391,11 +2429,12 @@ func (s *fakeRunStore) CreateProjectRun(_ context.Context, run domain.ProjectRun
 	return run, nil
 }
 
-func (s *fakeRunStore) CreateProjectRunWithEvents(ctx context.Context, run domain.ProjectRunRecord, _ []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error) {
+func (s *fakeRunStore) CreateProjectRunWithEvents(ctx context.Context, run domain.ProjectRunRecord, events []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error) {
 	created, err := s.CreateProjectRun(ctx, run)
 	if err != nil {
 		return s.GetProjectRun(ctx, run.RunID)
 	}
+	s.events = append(s.events, events...)
 	return created, nil
 }
 
@@ -2412,8 +2451,10 @@ func (s *fakeRunStore) UpdateProjectRun(_ context.Context, run domain.ProjectRun
 	return run, nil
 }
 
-func (s *fakeRunStore) UpdateProjectRunWithEvents(ctx context.Context, run domain.ProjectRunRecord, _ []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error) {
-	return s.UpdateProjectRun(ctx, run)
+func (s *fakeRunStore) UpdateProjectRunWithEvents(ctx context.Context, run domain.ProjectRunRecord, events []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error) {
+	updated, err := s.UpdateProjectRun(ctx, run)
+	s.events = append(s.events, events...)
+	return updated, err
 }
 
 type fakePreparationStore struct {
@@ -2476,6 +2517,7 @@ type fakeControllerStore struct {
 	schedulers     []domain.ProjectSchedulerRecord
 	loaders        map[string]domain.Loader
 	bindings       map[string]domain.LoaderBinding
+	events         []domain.ProjectRunEventRecord
 }
 
 func (s *fakeControllerStore) GetProject(context.Context, string) (domain.ProjectRecord, error) {
@@ -2501,11 +2543,12 @@ func (s *fakeControllerStore) CreateProjectRun(_ context.Context, run domain.Pro
 	return run, nil
 }
 
-func (s *fakeControllerStore) CreateProjectRunWithEvents(ctx context.Context, run domain.ProjectRunRecord, _ []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error) {
+func (s *fakeControllerStore) CreateProjectRunWithEvents(ctx context.Context, run domain.ProjectRunRecord, events []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error) {
 	created, err := s.CreateProjectRun(ctx, run)
 	if err != nil {
 		return s.GetProjectRun(ctx, run.RunID)
 	}
+	s.events = append(s.events, events...)
 	return created, nil
 }
 
@@ -2522,8 +2565,10 @@ func (s *fakeControllerStore) UpdateProjectRun(_ context.Context, run domain.Pro
 	return run, nil
 }
 
-func (s *fakeControllerStore) UpdateProjectRunWithEvents(ctx context.Context, run domain.ProjectRunRecord, _ []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error) {
-	return s.UpdateProjectRun(ctx, run)
+func (s *fakeControllerStore) UpdateProjectRunWithEvents(ctx context.Context, run domain.ProjectRunRecord, events []domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error) {
+	updated, err := s.UpdateProjectRun(ctx, run)
+	s.events = append(s.events, events...)
+	return updated, err
 }
 
 func (s *fakeControllerStore) GetProjectRevision(context.Context, string, int64) (domain.ProjectRevisionRecord, error) {
@@ -2649,6 +2694,7 @@ func (d *fakeControllerDriver) RemoveSandboxVM(context.Context, *domain.Sandbox)
 type fakeControllerExecutor struct {
 	request              execution.ExecuteAgentRequest
 	cell                 domain.NotebookCell
+	assistantEvent       domain.SandboxEvent
 	execErr              error
 	prepareCalls         int
 	prepareFromTagsCalls int
@@ -2685,9 +2731,13 @@ func (e *fakeControllerExecutor) ExecuteAgentRequest(_ context.Context, _ *domai
 	if strings.TrimSpace(cell.ID) == "" {
 		cell = domain.NotebookCell{ID: "cell-1", Type: execution.CellTypeAgent, Output: "done", Success: true, ExitCode: 0}
 	}
+	assistantEvent := e.assistantEvent
+	if strings.TrimSpace(assistantEvent.Message) == "" {
+		assistantEvent = domain.SandboxEvent{ID: "assistant", Type: "assistant", Message: "done"}
+	}
 	return cell,
 		domain.SandboxEvent{ID: "user", Type: "user", Message: req.Message},
-		domain.SandboxEvent{ID: "assistant", Type: "assistant", Message: "done"},
+		assistantEvent,
 		e.execErr
 }
 

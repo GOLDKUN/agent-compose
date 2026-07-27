@@ -440,7 +440,7 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 		run = withRunWarnings(run, warnings)
 		return run, err, nil
 	}
-	cell, _, _, execErr := c.executor.ExecuteAgentRequest(ctx, sandboxResult.Sandbox, execution.ExecuteAgentRequest{
+	cell, _, assistantEvent, execErr := c.executor.ExecuteAgentRequest(ctx, sandboxResult.Sandbox, execution.ExecuteAgentRequest{
 		Agent:             agentConfig.Provider,
 		AgentDefinitionID: run.ManagedAgentID,
 		Model:             agentConfig.Model,
@@ -450,6 +450,7 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 		Stream:            projectRunAgentExecutionStream(transitionCtx, coordinator, run, sandboxResult.Sandbox, stream, c.runLogs),
 	})
 	transition := TransitionFromAgentCell(run, sandboxResult.Sandbox, cell, execErr)
+	transition.TerminalEvents = projectAgentTerminalEvents(run, cell, assistantEvent, execErr)
 	if execErr != nil || !cell.Success {
 		run, err = markProjectRunTerminalError(transitionCtx, coordinator, transition, execErr)
 		if err != nil {
@@ -1119,12 +1120,13 @@ func projectRunAgentExecutionStream(ctx context.Context, coordinator *Coordinato
 func transitionFromCommandResult(run domain.ProjectRunRecord, sandbox *domain.Sandbox, commandText string, result domain.ExecResult, execErr error) TransitionRequest {
 	artifactsDir := projectRunCommandArtifactsDir(run, sandbox)
 	req := TransitionRequest{
-		RunID:        run.RunID,
-		SandboxID:    sandbox.Summary.ID,
-		ExitCode:     result.ExitCode,
-		Output:       result.Output,
-		ArtifactsDir: artifactsDir,
-		LogsPath:     filepath.Join(artifactsDir, "output.txt"),
+		RunID:          run.RunID,
+		SandboxID:      sandbox.Summary.ID,
+		ExitCode:       result.ExitCode,
+		Output:         result.Output,
+		ArtifactsDir:   artifactsDir,
+		LogsPath:       filepath.Join(artifactsDir, "output.txt"),
+		TerminalEvents: commandTerminalEvents(run, commandText, result),
 	}
 	resultJSON, err := json.Marshal(map[string]any{
 		"mode":     "command",
@@ -1399,6 +1401,7 @@ type promptAttachProjector struct {
 	buffer                 []byte
 	itemTexts              map[string]string
 	loggedText             string
+	turnText               string
 	hasLoggedText          bool
 	logEndsWithNewline     bool
 	persistedAssistantTurn bool
@@ -1455,15 +1458,16 @@ func (p *promptAttachProjector) Project(data []byte) ([]*agentcomposev2.RunAttac
 
 func (p *promptAttachProjector) projectLine(line []byte) ([]*agentcomposev2.RunAttachResponse, *TransitionRequest, error) {
 	var frame struct {
-		Type       string          `json:"type"`
-		Event      json.RawMessage `json:"event"`
-		FinalText  string          `json:"finalText"`
-		SandboxID  string          `json:"sandboxId"`
-		StopReason string          `json:"stopReason"`
-		Code       string          `json:"code"`
-		Message    string          `json:"message"`
-		Provider   string          `json:"provider"`
-		Seq        uint64          `json:"seq"`
+		Type            string                      `json:"type"`
+		Event           json.RawMessage             `json:"event"`
+		FinalText       string                      `json:"finalText"`
+		FinalTextSource domain.AgentFinalTextSource `json:"finalTextSource"`
+		SandboxID       string                      `json:"sandboxId"`
+		StopReason      string                      `json:"stopReason"`
+		Code            string                      `json:"code"`
+		Message         string                      `json:"message"`
+		Provider        string                      `json:"provider"`
+		Seq             uint64                      `json:"seq"`
 	}
 	if err := json.Unmarshal(line, &frame); err != nil {
 		return nil, nil, err
@@ -1481,7 +1485,7 @@ func (p *promptAttachProjector) projectLine(line []byte) ([]*agentcomposev2.RunA
 		if err := p.appendLogFinalText(frame.FinalText); err != nil {
 			return nil, nil, err
 		}
-		if err := p.appendAssistantEvent(line, frame.Seq, frame.FinalText, frame.Provider, frame.StopReason); err != nil {
+		if err := p.appendAssistantEvent(line, frame.Seq, agentTurnProjection{FinalText: frame.FinalText, FinalTextSource: frame.FinalTextSource, Provider: frame.Provider, StopReason: frame.StopReason}); err != nil {
 			return nil, nil, err
 		}
 		return []*agentcomposev2.RunAttachResponse{runAttachAgentTurnCompletedResponse(p.run, string(line), warningsFromRun(p.run))}, nil, nil
@@ -1490,7 +1494,7 @@ func (p *promptAttachProjector) projectLine(line []byte) ([]*agentcomposev2.RunA
 			return nil, nil, err
 		}
 		transition := transitionFromPromptWrapperResult(p.run, p.sandbox, p.logsPath, line, frame.FinalText, frame.StopReason, "")
-		transition.SkipTerminalAgentEvent = p.persistedAssistantTurn
+		transition.TerminalEvents = p.terminalTurnEvents(agentTurnProjection{FinalText: frame.FinalText, FinalTextSource: frame.FinalTextSource, Provider: frame.Provider, StopReason: frame.StopReason})
 		return nil, &transition, nil
 	case "error":
 		message := firstNonEmpty(frame.Message, "runtime stream error")
@@ -1561,6 +1565,7 @@ func (p *promptAttachProjector) appendLogText(text string) error {
 		return err
 	}
 	p.loggedText += text
+	p.turnText += text
 	return nil
 }
 
@@ -1579,6 +1584,7 @@ func (p *promptAttachProjector) appendLogFinalText(finalText string) error {
 			return err
 		}
 		p.loggedText += text
+		p.turnText += text
 		return nil
 	}
 	if p.loggedText == "" {
@@ -1586,6 +1592,7 @@ func (p *promptAttachProjector) appendLogFinalText(finalText string) error {
 			return err
 		}
 		p.loggedText = finalText
+		p.turnText += finalText
 	}
 	return nil
 }
@@ -1598,6 +1605,7 @@ func (p *promptAttachProjector) AppendHumanMessageFrame(message, clientFrameID s
 	text := promptAttachHumanLogText(message)
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.persistedAssistantTurn = false
 	if text != "" {
 		if p.hasLoggedText && !p.logEndsWithNewline {
 			text = "\n" + text
@@ -1622,22 +1630,44 @@ func (p *promptAttachProjector) AppendStderr(text string) error {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.appendLogChunkLocked(domain.ExecChunk{Text: text, Stream: domain.StdioStderr})
+	if err := p.appendLogChunkLocked(domain.ExecChunk{Text: text, Stream: domain.StdioStderr}); err != nil {
+		return err
+	}
+	p.turnText += text
+	return nil
 }
 
-func (p *promptAttachProjector) appendAssistantEvent(line []byte, seq uint64, text, provider, stopReason string) error {
-	if p.events == nil || strings.TrimSpace(text) == "" {
+func (p *promptAttachProjector) appendAssistantEvent(line []byte, seq uint64, turn agentTurnProjection) error {
+	p.mu.Lock()
+	store := p.events
+	turn.Transcript = p.turnText
+	p.mu.Unlock()
+	if store == nil {
 		return nil
+	}
+	events := attachedAgentTurnEvents(p.run, seq, line, turn)
+	if len(events) > 0 {
+		if _, _, err := store.AppendProjectRunEvents(p.eventContext(), events); err != nil {
+			return err
+		}
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	_, _, err := p.events.AppendProjectRunEvent(p.eventContext(), domain.ProjectRunEventRecord{
-		ID: attachedAgentEventID(p.run.RunID, seq, line), RunID: p.run.RunID, Kind: domain.ProjectRunEventKindAgentMessage, Text: text, Agent: firstNonEmpty(provider, p.run.AgentName), StopReason: stopReason, Success: true,
-	})
-	if err == nil {
-		p.persistedAssistantTurn = true
+	p.turnText = ""
+	p.persistedAssistantTurn = len(events) > 0
+	return nil
+}
+
+func (p *promptAttachProjector) terminalTurnEvents(turn agentTurnProjection) []domain.ProjectRunEventRecord {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.persistedAssistantTurn {
+		return nil
 	}
-	return err
+	turn.Transcript = p.turnText
+	events := terminalPromptTurnEvents(p.run, turn)
+	p.turnText = ""
+	return events
 }
 
 func (p *promptAttachProjector) eventContext() context.Context {

@@ -253,7 +253,7 @@ func (e *AgentExecutor) ExecuteAgentRequest(ctx context.Context, session *domain
 		e.streams.PublishCellCompleted(session.Summary.ID, cellSnapshot)
 	}
 
-	assistantEvent := domain.SandboxEvent{ID: uuid.NewString(), Type: "agent.assistant", Level: "info", CreatedAt: time.Now().UTC(), Message: summarizeAgentResult(result)}
+	assistantEvent := domain.SandboxEvent{ID: uuid.NewString(), Type: "agent.assistant", Level: "info", CreatedAt: time.Now().UTC(), Message: agentAssistantMessage(result)}
 	if !cellSnapshot.Success {
 		assistantEvent.Type = "agent.assistant.failed"
 		assistantEvent.Level = "error"
@@ -287,13 +287,12 @@ func cloneSessionForAgentExecution(session *domain.Sandbox, providerEnvItems []d
 	return &execSession
 }
 
-func summarizeAgentResult(result domain.AgentRunResult) string {
-	body := firstNonEmpty(result.FinalText, result.DisplayOutput, result.Transcript)
-	if strings.TrimSpace(body) == "" {
-		if result.Success {
-			return fmt.Sprintf("%s finished without output", result.Agent)
-		}
+func agentAssistantMessage(result domain.AgentRunResult) string {
+	if finalText := strings.TrimSpace(result.FinalText); finalText != "" && result.FinalTextSource == domain.AgentFinalTextSourceProviderMessage {
+		return finalText
+	}
+	if !result.Success {
 		return fmt.Sprintf("%s failed without output", result.Agent)
 	}
-	return body
+	return ""
 }

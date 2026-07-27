@@ -37,6 +37,7 @@ describe("CodexRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -89,6 +90,7 @@ describe("CodexRunner", () => {
 
       expect(result.threadId).toBe("thread-1");
       expect(result.finalText).toBe("hello!");
+      expect(result.finalTextSource).toBe("provider_message");
       expect(stdio.stderr).toContain("hello");
       expect(stdio.stderr).toContain("$ pwd");
       expect(stdio.stderr).toContain("[file_change]");
@@ -114,6 +116,7 @@ describe("CodexRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -145,6 +148,7 @@ describe("CodexRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -168,6 +172,7 @@ describe("CodexRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -547,6 +552,7 @@ describe("OpenCodeRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       };
@@ -563,6 +569,7 @@ describe("OpenCodeRunner", () => {
 
       expect(result.threadId).toBe("session-1");
       expect(result.finalText).toBe("done");
+      expect(result.finalTextSource).toBe("provider_message");
       expect(stdio.stderr).toContain("hello");
       expect(stdio.stderr).toContain(" from part");
       expect(stdio.stderr).toContain("[tool:bash]");
@@ -578,6 +585,7 @@ describe("OpenCodeRunner", () => {
         threadId: "",
         stopReason: "completed",
         finalText: "",
+        finalTextSource: "none" as const,
         transcript: "",
         stderr: "",
       })).toThrow("bad");

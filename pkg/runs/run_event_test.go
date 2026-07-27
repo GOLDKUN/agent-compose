@@ -9,7 +9,9 @@ func TestRunEventIDsAreStableAndTypeSeparated(t *testing.T) {
 		initialPromptEventID(runID),
 		attachedHumanEventID(runID, "frame-1", 1, "question"),
 		attachedAgentEventID(runID, 1, frame),
+		attachedActivityEventID(runID, 1, frame),
 		terminalAgentEventID(runID),
+		terminalActivityEventID(runID),
 		terminalStatusEventID(runID),
 	}
 	seen := make(map[string]struct{}, len(identities))
@@ -28,6 +30,9 @@ func TestRunEventIDsAreStableAndTypeSeparated(t *testing.T) {
 	if got := attachedAgentEventID(runID, 1, []byte("changed")); got != identities[2] {
 		t.Fatalf("sequenced agent retry id = %q, want %q", got, identities[2])
 	}
+	if got := attachedActivityEventID(runID, 1, []byte("changed")); got != identities[3] {
+		t.Fatalf("sequenced activity retry id = %q, want %q", got, identities[3])
+	}
 }
 
 func TestRunEventFallbackIDsIncludeFrameIdentity(t *testing.T) {
@@ -45,5 +50,12 @@ func TestRunEventFallbackIDsIncludeFrameIdentity(t *testing.T) {
 	}
 	if changedFrame := attachedAgentEventID(runID, 0, []byte("frame-two")); changedFrame == agent {
 		t.Fatal("different agent frame produced the same event id")
+	}
+	activity := attachedActivityEventID(runID, 0, []byte("frame-one"))
+	if repeated := attachedActivityEventID(runID, 0, []byte("frame-one")); repeated != activity {
+		t.Fatalf("activity fallback retry id = %q, want %q", repeated, activity)
+	}
+	if changedFrame := attachedActivityEventID(runID, 0, []byte("frame-two")); changedFrame == activity {
+		t.Fatal("different activity frame produced the same event id")
 	}
 }

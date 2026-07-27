@@ -198,6 +198,7 @@ export class ClaudeRunner {
       threadId: stored?.threadId || "",
       stopReason: "completed",
       finalText: "",
+      finalTextSource: "none",
       transcript: "",
       stderr: "",
     };
@@ -222,6 +223,7 @@ export class ClaudeRunner {
                 : "";
               if (textBlocks) {
                 result.finalText = textBlocks;
+                result.finalTextSource = "provider_message";
               }
             }
             break;
@@ -247,9 +249,13 @@ export class ClaudeRunner {
           case "result":
             result.stopReason = String(message.stop_reason || result.stopReason);
             if (message.subtype === "success") {
-              result.finalText = hasOwn(message, "structured_output")
+              const finalText = hasOwn(message, "structured_output")
                 ? JSON.stringify(message.structured_output)
                 : String(message.result || result.finalText);
+              if (finalText) {
+                result.finalText = finalText;
+                result.finalTextSource = "provider_message";
+              }
               stream.close?.();
               break messages;
             } else {
@@ -273,6 +279,7 @@ export class ClaudeRunner {
     result.transcript = this.writer.transcript();
     if (!result.finalText && result.transcript) {
       result.finalText = result.transcript;
+      result.finalTextSource = "transcript_fallback";
     }
     await writeStoredThread(this.options.stateRoot, "claude", result.threadId);
     return result;

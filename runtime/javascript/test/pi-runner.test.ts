@@ -82,6 +82,7 @@ describe("PiRunner", () => {
           threadId: "pi-session",
           stopReason: "end_turn",
           finalText: "final answer",
+          finalTextSource: "provider_message",
         });
         expect(result.transcript).toContain("hello");
         expect(result.transcript).not.toContain("secret-tool");
@@ -112,6 +113,21 @@ describe("PiRunner", () => {
       await expect(fs.access(systemPath)).rejects.toThrow();
       const stored = JSON.parse(await fs.readFile(path.join(root, "state", "agents", "providers", "pi.json"), "utf8"));
       expect(stored.threadId).toBe("pi-session");
+    });
+  });
+
+  it("marks Pi transcript fallback when no assistant message completes", async () => {
+    const { PiRunner } = await import("../src/runners/pi.js");
+    await withTempSession(async (root) => {
+      processState.lines = [
+        JSON.stringify({ type: "session", id: "pi-session" }),
+        JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "partial output" } }),
+        JSON.stringify({ type: "agent_end", stopReason: "completed" }),
+      ];
+      const result = await new PiRunner(runnerOptions(root, "", "pi")).runPrompt("prompt");
+      expect(result.finalText).toBe("partial output");
+      expect(result.finalTextSource).toBe("transcript_fallback");
+      expect(result.transcript).toBe(result.finalText);
     });
   });
 

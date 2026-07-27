@@ -9,12 +9,13 @@ import { runStreamCommand } from "../src/stream.js";
 import { withTempSession } from "./helpers.js";
 
 const runInputs: string[] = [];
+let codexEventFactory: ((turn: number) => Array<Record<string, unknown>>) | undefined;
 const thread = {
   id: "thread-1",
   async runStreamed(input: string) {
     runInputs.push(input);
     return {
-      events: asyncGenerator([
+      events: asyncGenerator(codexEventFactory?.(runInputs.length) || [
         { type: "thread.started", thread_id: "thread-1" },
         { type: "item.completed", item: { id: `msg-${runInputs.length}`, type: "agent_message", text: `answer ${runInputs.length}` } },
       ]),
@@ -67,6 +68,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 
 afterEach(() => {
   runInputs.length = 0;
+  codexEventFactory = undefined;
   startThread.mockClear();
   resumeThread.mockClear();
   claudeState.queryCalls = [];
@@ -138,9 +140,41 @@ describe("runStreamCommand", () => {
         threadId: "thread-1",
         stopReason: "eof",
         finalText: "answer 2",
+        finalTextSource: "provider_message",
         transcript: "answer 1\nanswer 2",
       });
       expect(parseOutput(stdout.text)).toHaveLength(8);
+    });
+  });
+
+  it("marks Codex interactive transcript fallback in turn and result frames", async () => {
+    await withTempSession(async (root) => {
+      codexEventFactory = () => [
+        { type: "thread.started", thread_id: "thread-1" },
+        { type: "item.completed", item: { id: "cmd", type: "command_execution", command: "pwd", aggregated_output: "/work\n" } },
+      ];
+      const stdout = new MemoryWritable();
+
+      await runStreamCommand({
+        stdin: Readable.from([
+          frame({ seq: 0, type: "start", provider: "codex", stateRoot: `${root}/state`, workspace: `${root}/workspace`, home: `${root}/home` }),
+          frame({ seq: 1, type: "human_message", message: "inspect" }),
+          frame({ seq: 2, type: "eof" }),
+        ]),
+        stdout,
+        stderr: new MemoryWritable(),
+      });
+
+      const frames = parseOutput(stdout.text);
+      const completed = frames.find((entry) => entry.type === "agent_turn_completed");
+      expect(completed).toMatchObject({
+        finalTextSource: "transcript_fallback",
+      });
+      expect(String(completed?.finalText)).toContain("$ pwd");
+      expect(frames.at(-1)).toMatchObject({
+        type: "result",
+        finalTextSource: "transcript_fallback",
+      });
     });
   });
 

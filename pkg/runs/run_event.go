@@ -15,11 +15,13 @@ const (
 	attachedEventDerivedToken     byte = 2
 
 	// These values participate in persisted event IDs. Keep existing values stable.
-	runEventIdentityInitialPrompt  runEventIdentityKind = 1
-	runEventIdentityAttachedHuman  runEventIdentityKind = 2
-	runEventIdentityAttachedAgent  runEventIdentityKind = 3
-	runEventIdentityTerminalAgent  runEventIdentityKind = 4
-	runEventIdentityTerminalStatus runEventIdentityKind = 5
+	runEventIdentityInitialPrompt    runEventIdentityKind = 1
+	runEventIdentityAttachedHuman    runEventIdentityKind = 2
+	runEventIdentityAttachedAgent    runEventIdentityKind = 3
+	runEventIdentityTerminalAgent    runEventIdentityKind = 4
+	runEventIdentityTerminalStatus   runEventIdentityKind = 5
+	runEventIdentityAttachedActivity runEventIdentityKind = 6
+	runEventIdentityTerminalActivity runEventIdentityKind = 7
 )
 
 func initialPromptEventID(runID string) string {
@@ -42,8 +44,20 @@ func attachedAgentEventID(runID string, sequence uint64, frame []byte) string {
 	return stableRunEventID(runID, runEventIdentityAttachedAgent, identityToken(attachedEventDerivedToken, digest[:]))
 }
 
+func attachedActivityEventID(runID string, sequence uint64, frame []byte) string {
+	if sequence != 0 {
+		return stableRunEventID(runID, runEventIdentityAttachedActivity, identityToken(attachedEventExplicitToken, uint64Bytes(sequence)))
+	}
+	digest := sha256.Sum256(frame)
+	return stableRunEventID(runID, runEventIdentityAttachedActivity, identityToken(attachedEventDerivedToken, digest[:]))
+}
+
 func terminalAgentEventID(runID string) string {
 	return stableRunEventID(runID, runEventIdentityTerminalAgent, nil)
+}
+
+func terminalActivityEventID(runID string) string {
+	return stableRunEventID(runID, runEventIdentityTerminalActivity, nil)
 }
 
 func terminalStatusEventID(runID string) string {
