@@ -54,7 +54,7 @@ func TestRunExecutorCancellationWritesCanceledTerminalState(t *testing.T) {
 	if len(store.updated) != 1 || store.updated[0].Status != domain.SchedulerRunStatusCanceled {
 		t.Fatalf("updated runs = %#v", store.updated)
 	}
-	if !slices.Contains(events, "loader.run.canceled") || slices.Contains(events, "loader.run.failed") {
+	if !slices.Contains(events, "scheduler.run.canceled") || slices.Contains(events, "scheduler.run.failed") {
 		t.Fatalf("events = %#v", events)
 	}
 }
@@ -243,7 +243,7 @@ scheduler.interval("pending", async function pending() {
 	}
 	eventMu.Lock()
 	defer eventMu.Unlock()
-	if !slices.Equal(events, []string{"loader.run.started", "loader.run.canceled"}) {
+	if !slices.Equal(events, []string{"scheduler.run.started", "scheduler.run.canceled"}) {
 		t.Fatalf("events = %#v", events)
 	}
 }

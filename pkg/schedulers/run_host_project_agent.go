@@ -63,10 +63,10 @@ func (h *RuntimeHost) ProjectAgent(ctx context.Context, prompt string, request d
 		execErr = jsonErr
 	}
 	level := "info"
-	eventName := "loader.agent.completed"
+	eventName := "scheduler.agent.completed"
 	if execErr != nil || run.Status != domain.ProjectRunStatusSucceeded {
 		level = "error"
-		eventName = "loader.agent.failed"
+		eventName = "scheduler.agent.failed"
 		result.Text = firstHostNonEmpty(result.Text, run.Error, execErrString(execErr))
 	}
 	_ = h.addLinkedSchedulerEvent(ctx, eventName, level, firstHostNonEmpty(result.Text, fmt.Sprintf("%s completed", result.Agent)), result, result.SandboxID, result.CellID, result.AgentThreadID)

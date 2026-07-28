@@ -1298,12 +1298,16 @@ func (SandboxWatchEventType) EnumDescriptor() ([]byte, []int) {
 }
 
 type ValidateProjectRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Spec             *ProjectSpec           `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
-	Source           *ProjectSource         `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
-	ExpectedSpecHash string                 `protobuf:"bytes,3,opt,name=expected_spec_hash,json=expectedSpecHash,proto3" json:"expected_spec_hash,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Spec   *ProjectSpec           `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	Source *ProjectSource         `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	// submitted_spec_hash optionally verifies the submitted spec after the server
+	// normalizes it. It is not compared with the currently stored project and is
+	// not an optimistic-concurrency precondition. An empty value skips this check.
+	// Canonicalization, encoding, and hashing are defined by pkg/compose.
+	SubmittedSpecHash string `protobuf:"bytes,3,opt,name=submitted_spec_hash,json=submittedSpecHash,proto3" json:"submitted_spec_hash,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ValidateProjectRequest) Reset() {
@@ -1350,9 +1354,9 @@ func (x *ValidateProjectRequest) GetSource() *ProjectSource {
 	return nil
 }
 
-func (x *ValidateProjectRequest) GetExpectedSpecHash() string {
+func (x *ValidateProjectRequest) GetSubmittedSpecHash() string {
 	if x != nil {
-		return x.ExpectedSpecHash
+		return x.SubmittedSpecHash
 	}
 	return ""
 }
@@ -1418,13 +1422,17 @@ func (x *ValidateProjectResponse) GetSpecHash() string {
 }
 
 type ApplyProjectRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Spec             *ProjectSpec           `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
-	Source           *ProjectSource         `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
-	ExpectedSpecHash string                 `protobuf:"bytes,3,opt,name=expected_spec_hash,json=expectedSpecHash,proto3" json:"expected_spec_hash,omitempty"`
-	DryRun           bool                   `protobuf:"varint,4,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Spec   *ProjectSpec           `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	Source *ProjectSource         `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	// submitted_spec_hash optionally verifies the submitted spec after the server
+	// normalizes it. It is not compared with the currently stored project and is
+	// not an optimistic-concurrency precondition. An empty value skips this check.
+	// Canonicalization, encoding, and hashing are defined by pkg/compose.
+	SubmittedSpecHash string `protobuf:"bytes,3,opt,name=submitted_spec_hash,json=submittedSpecHash,proto3" json:"submitted_spec_hash,omitempty"`
+	DryRun            bool   `protobuf:"varint,4,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ApplyProjectRequest) Reset() {
@@ -1471,9 +1479,9 @@ func (x *ApplyProjectRequest) GetSource() *ProjectSource {
 	return nil
 }
 
-func (x *ApplyProjectRequest) GetExpectedSpecHash() string {
+func (x *ApplyProjectRequest) GetSubmittedSpecHash() string {
 	if x != nil {
-		return x.ExpectedSpecHash
+		return x.SubmittedSpecHash
 	}
 	return ""
 }
@@ -17911,19 +17919,19 @@ var File_agentcompose_v2_agentcompose_proto protoreflect.FileDescriptor
 
 const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
-	"\"agentcompose/v2/agentcompose.proto\x12\x0fagentcompose.v2\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb0\x01\n" +
+	"\"agentcompose/v2/agentcompose.proto\x12\x0fagentcompose.v2\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb2\x01\n" +
 	"\x16ValidateProjectRequest\x120\n" +
 	"\x04spec\x18\x01 \x01(\v2\x1c.agentcompose.v2.ProjectSpecR\x04spec\x126\n" +
-	"\x06source\x18\x02 \x01(\v2\x1e.agentcompose.v2.ProjectSourceR\x06source\x12,\n" +
-	"\x12expected_spec_hash\x18\x03 \x01(\tR\x10expectedSpecHash\"\x8d\x01\n" +
+	"\x06source\x18\x02 \x01(\v2\x1e.agentcompose.v2.ProjectSourceR\x06source\x12.\n" +
+	"\x13submitted_spec_hash\x18\x03 \x01(\tR\x11submittedSpecHash\"\x8d\x01\n" +
 	"\x17ValidateProjectResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12?\n" +
 	"\x06issues\x18\x02 \x03(\v2'.agentcompose.v2.ProjectValidationIssueR\x06issues\x12\x1b\n" +
-	"\tspec_hash\x18\x03 \x01(\tR\bspecHash\"\xc6\x01\n" +
+	"\tspec_hash\x18\x03 \x01(\tR\bspecHash\"\xc8\x01\n" +
 	"\x13ApplyProjectRequest\x120\n" +
 	"\x04spec\x18\x01 \x01(\v2\x1c.agentcompose.v2.ProjectSpecR\x04spec\x126\n" +
-	"\x06source\x18\x02 \x01(\v2\x1e.agentcompose.v2.ProjectSourceR\x06source\x12,\n" +
-	"\x12expected_spec_hash\x18\x03 \x01(\tR\x10expectedSpecHash\x12\x17\n" +
+	"\x06source\x18\x02 \x01(\v2\x1e.agentcompose.v2.ProjectSourceR\x06source\x12.\n" +
+	"\x13submitted_spec_hash\x18\x03 \x01(\tR\x11submittedSpecHash\x12\x17\n" +
 	"\adry_run\x18\x04 \x01(\bR\x06dryRun\"\xbb\x02\n" +
 	"\x14ApplyProjectResponse\x122\n" +
 	"\aproject\x18\x01 \x01(\v2\x18.agentcompose.v2.ProjectR\aproject\x12<\n" +

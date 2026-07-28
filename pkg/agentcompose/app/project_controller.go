@@ -107,7 +107,7 @@ type projectControllerDelegate struct {
 }
 
 func (d projectControllerDelegate) ValidateProject(ctx context.Context, req *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error) {
-	normalized, issues, err := normalizeProjectRequest(req.Msg.GetSpec(), req.Msg.GetSource(), req.Msg.GetExpectedSpecHash())
+	normalized, issues, err := normalizeProjectRequest(req.Msg.GetSpec(), req.Msg.GetSource(), req.Msg.GetSubmittedSpecHash())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -123,7 +123,7 @@ func (d projectControllerDelegate) ValidateProject(ctx context.Context, req *con
 }
 
 func (d projectControllerDelegate) ApplyProject(ctx context.Context, req *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
-	normalized, issues, err := normalizeProjectRequest(req.Msg.GetSpec(), req.Msg.GetSource(), req.Msg.GetExpectedSpecHash())
+	normalized, issues, err := normalizeProjectRequest(req.Msg.GetSpec(), req.Msg.GetSource(), req.Msg.GetSubmittedSpecHash())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -172,7 +172,7 @@ func (d projectControllerDelegate) WatchProject(ctx context.Context, req *connec
 	return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("project watch is not implemented"))
 }
 
-func normalizeProjectRequest(spec *agentcomposev2.ProjectSpec, source *agentcomposev2.ProjectSource, expectedHash string) (projects.NormalizedProject, []projects.ValidationIssue, error) {
+func normalizeProjectRequest(spec *agentcomposev2.ProjectSpec, source *agentcomposev2.ProjectSource, submittedHash string) (projects.NormalizedProject, []projects.ValidationIssue, error) {
 	if spec == nil {
 		return projects.NormalizedProject{}, []projects.ValidationIssue{{Path: "spec", Message: "project spec is required"}}, nil
 	}
@@ -209,9 +209,9 @@ func normalizeProjectRequest(spec *agentcomposev2.ProjectSpec, source *agentcomp
 		SpecHash:   hash,
 		SourcePath: sourcePath,
 	}
-	expectedHash = strings.TrimSpace(expectedHash)
-	if expectedHash != "" && expectedHash != hash {
-		return result, []projects.ValidationIssue{{Path: "expected_spec_hash", Message: fmt.Sprintf("expected spec hash %s does not match normalized spec hash %s", expectedHash, hash)}}, nil
+	submittedHash = strings.TrimSpace(submittedHash)
+	if submittedHash != "" && submittedHash != hash {
+		return result, []projects.ValidationIssue{{Path: "submitted_spec_hash", Message: fmt.Sprintf("submitted spec hash %s does not match normalized spec hash %s", submittedHash, hash)}}, nil
 	}
 	return result, nil, nil
 }

@@ -54,7 +54,7 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 		t.Fatalf("UpdateSession stopped returned error: %v", err)
 	}
 	resumed, eventType, err = runner.LoadOrResume(ctx, stopped.Summary.ID)
-	if err != nil || resumed.Summary.VMStatus != domain.VMStatusRunning || eventType != "loader.sandbox.resumed" || len(driver.startCalls) != 1 {
+	if err != nil || resumed.Summary.VMStatus != domain.VMStatusRunning || eventType != "scheduler.sandbox.resumed" || len(driver.startCalls) != 1 {
 		t.Fatalf("LoadOrResume stopped resumed=%#v event=%q err=%v starts=%#v", resumed, eventType, err, driver.startCalls)
 	}
 	if token := domain.SandboxEnvMap(driver.startSessions[0].RuntimeEnvItems)["AGENT_COMPOSE_SANDBOX_TOKEN"]; token == "" {
@@ -359,7 +359,7 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ensure returned error: %v", err)
 	}
-	if eventType != "loader.sandbox.created" || len(driver.startCalls) != 1 {
+	if eventType != "scheduler.sandbox.created" || len(driver.startCalls) != 1 {
 		t.Fatalf("eventType=%q startCalls=%#v", eventType, driver.startCalls)
 	}
 	if len(resolver.specs) != 1 || resolver.specs[0].Source != "request-cache" {

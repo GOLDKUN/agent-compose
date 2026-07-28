@@ -69,7 +69,7 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 	if len(store.created) != 1 || len(store.updated) != 1 || store.lastError[loader.Summary.ID] != "" {
 		t.Fatalf("store state = %#v/%#v/%#v", store.created, store.updated, store.lastError)
 	}
-	if !containsString(events, "loader.run.started") || !containsString(events, "loader.run.completed") || !containsString(events, "loader.deprecated_alias.warning") {
+	if !containsString(events, "scheduler.run.started") || !containsString(events, "scheduler.run.completed") || !containsString(events, "scheduler.deprecated_alias.warning") {
 		t.Fatalf("events = %#v", events)
 	}
 	if len(deliveries) != 2 || len(notifications) != 2 || refreshes != 1 || len(leaves) != 1 {

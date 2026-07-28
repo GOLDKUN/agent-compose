@@ -469,7 +469,7 @@ LoaderHost.Command
   -> parseCommandExecResult
   -> preserve guest command-result.json; mirror stdout/stderr/output artifacts
   -> Store.AddCell(completed SHELL)
-  -> loader.command.completed / loader.command.failed
+  -> scheduler.command.completed / scheduler.command.failed
 ```
 
 After parsing succeeds, the guest runtime has already written
@@ -481,7 +481,7 @@ Artifact paths returned to the loader script are host-side paths.
 
 Multiple command/shell calls in the same loader run reuse the loader sandbox for
 that run. After the run ends, the host stops command sandboxes used by that run
-and records `loader.sandbox.stopped`. `scheduler.agent` sandbox stop behavior
+and records `scheduler.sandbox.stopped`. `scheduler.agent` sandbox stop behavior
 still follows the agent path.
 
 ## 8. Resume State Convention
@@ -498,14 +498,31 @@ Content:
 {
   "provider": "codex",
   "threadId": "<provider-thread-id>",
-  "updatedAt": "2026-01-01T00:00:00.000Z"
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "systemContextHash": "<sha256-hex-of-systemContext>",
+  "systemContextHashVersion": 1
 }
 ```
 
-Codex and Claude read this file on the next call and resume:
+`systemContextHash` and `systemContextHashVersion` are written only for Codex.
+Other providers omit these fields.
 
-- Codex: `codex.resumeThread(threadId, ...)`
+Codex and Claude read this file on the next call:
+
+- Codex resumes with `codex.resumeThread(threadId, ...)` only when the stored
+  fingerprint version is supported and the stored SHA-256 hash exactly matches
+  the current composed `systemContext`. Otherwise it starts a new thread.
 - Claude: `resume: threadId`
+
+Codex state created before fingerprint support is intentionally treated as
+incompatible and starts a new thread on the first run after upgrade. This
+safety-first migration prevents a legacy thread from receiving stale
+developer instructions when the previous context cannot be established.
+
+When an existing Codex thread is rejected because its fingerprint is missing,
+unsupported, or different, the runtime writes a warning to stderr. A reset
+preserves instruction correctness but does not preserve the previous provider
+conversation history.
 
 Gemini currently does not write provider state.
 
@@ -609,6 +626,12 @@ If `/data/state/agents/system-prompts/system-prompt.txt` and/or
 composes Agent Identity + MPI into `systemContext` and injects it through Codex
 `config.developer_instructions`.
 
+Before selecting a Codex thread, the runtime hashes the complete composed
+`systemContext`, including the configured skill catalog when present. It resumes
+only when that fingerprint matches the value stored in
+`/data/state/agents/providers/codex.json`; context changes start a new thread so
+the first model turn cannot inherit stale developer instructions.
+
 Codex events are converted into a human-readable transcript, including agent
 messages, reasoning, command execution, file changes, MCP calls, web search, and
 todo lists.
@@ -700,11 +723,11 @@ Loader command error semantics:
 
 - When command/shell exit code is non-zero, `scheduler.exec` /
   `scheduler.shell` does not throw. It returns `success=false` and records an
-  error-level `loader.command.completed`.
+  error-level `scheduler.command.completed`.
 - Runtime driver exec failure, missing parseable command payload from
   `agent-compose-runtime exec`, timeout/context cancellation, or artifact write
   failure makes `scheduler.exec` / `scheduler.shell` throw and records
-  `loader.command.failed`.
+  `scheduler.command.failed`.
 - Command cells use the `SHELL` type. No new proto cell enum is introduced.
 
 ## 12. Guest Runtime SDK

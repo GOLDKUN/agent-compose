@@ -294,7 +294,11 @@ enum ResourceKind {
 message ValidateProjectRequest {
   ProjectSpec spec = 1;
   ProjectSource source = 2;
-  string expected_spec_hash = 3;
+  // submitted_spec_hash optionally verifies the submitted spec after the server
+  // normalizes it. It is not compared with the currently stored project and is
+  // not an optimistic-concurrency precondition. An empty value skips this check.
+  // Canonicalization, encoding, and hashing are defined by pkg/compose.
+  string submitted_spec_hash = 3;
 }
 
 message ValidateProjectResponse {
@@ -306,7 +310,11 @@ message ValidateProjectResponse {
 message ApplyProjectRequest {
   ProjectSpec spec = 1;
   ProjectSource source = 2;
-  string expected_spec_hash = 3;
+  // submitted_spec_hash optionally verifies the submitted spec after the server
+  // normalizes it. It is not compared with the currently stored project and is
+  // not an optimistic-concurrency precondition. An empty value skips this check.
+  // Canonicalization, encoding, and hashing are defined by pkg/compose.
+  string submitted_spec_hash = 3;
   bool dry_run = 4;
 }
 

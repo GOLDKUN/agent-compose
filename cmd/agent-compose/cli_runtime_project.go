@@ -12,9 +12,10 @@ import (
 )
 
 type composeRuntimeProject struct {
-	composePath string
-	project     *agentcomposev2.Project
-	spec        *compose.NormalizedProjectSpec
+	composePath   string
+	project       *agentcomposev2.Project
+	spec          *compose.NormalizedProjectSpec
+	summaryLoaded bool
 }
 
 type composeRuntimeProjectSelection struct {
@@ -70,9 +71,10 @@ func resolveComposeRuntimeProject(ctx context.Context, client agentcomposev2conn
 		return composeRuntimeProject{}, fmt.Errorf("get project %s: response did not include a project", selection.requestedName)
 	}
 	return composeRuntimeProject{
-		composePath: selection.composePath,
-		project:     project,
-		spec:        normalizedRuntimeProjectSpec(project),
+		composePath:   selection.composePath,
+		project:       project,
+		spec:          normalizedRuntimeProjectSpec(project),
+		summaryLoaded: true,
 	}, nil
 }
 

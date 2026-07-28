@@ -258,10 +258,10 @@ func (w *schedulerJSONStreamWriter[T]) start() error {
 }
 
 type schedulerRunsJSONPrefix struct {
-	Project composeUpProjectOutput `json:"project"`
+	Project composeSchedulerProjectOutput `json:"project"`
 }
 
 type schedulerLogsJSONPrefix struct {
-	Project composeUpProjectOutput   `json:"project"`
-	Run     *composeSchedulerRunItem `json:"run,omitempty"`
+	Project composeSchedulerProjectOutput `json:"project"`
+	Run     *composeSchedulerRunItem      `json:"run,omitempty"`
 }

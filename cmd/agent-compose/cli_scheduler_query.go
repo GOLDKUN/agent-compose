@@ -44,11 +44,9 @@ func runComposeSchedulerListCommand(cmd *cobra.Command, cli cliOptions, options 
 	if err != nil {
 		return err
 	}
-	output := composeSchedulerListOutput{
-		Project:  composeUpProjectOutput{ID: displayOpaqueID(projectID), Name: runtimeProject.name()},
-		Triggers: triggers,
-	}
+	output := composeSchedulerListOutput{Triggers: triggers}
 	if cli.JSON {
+		output.Project = schedulerProjectOutput(cmd.Context(), clients.project, runtimeProject)
 		data, err := json.MarshalIndent(output, "", "  ")
 		if err != nil {
 			return err

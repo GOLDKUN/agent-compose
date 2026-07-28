@@ -48,9 +48,9 @@ func TestStreamProjectSchedulerEventsTailsInDisplayOrder(t *testing.T) {
 	store, _, handler := newSchedulerRunHandlerFixture()
 	createdAt := time.Unix(600, 0).UTC()
 	store.events = []domain.SchedulerEvent{
-		{ID: "event-3", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt.Add(2 * time.Second)},
-		{ID: "event-2", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt.Add(time.Second)},
-		{ID: "event-1", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt},
+		{ID: "event-3", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "scheduler.log", CreatedAt: createdAt.Add(2 * time.Second)},
+		{ID: "event-2", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "scheduler.log", CreatedAt: createdAt.Add(time.Second)},
+		{ID: "event-1", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "scheduler.log", CreatedAt: createdAt},
 	}
 	client, closeServer := schedulerStreamTestClient(t, handler)
 	defer closeServer()

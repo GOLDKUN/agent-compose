@@ -61,8 +61,8 @@ agents:
 `)
 	var requests []*agentcomposev2.ListProjectSchedulerEventsRequest
 	events := []*agentcomposev2.SchedulerEvent{
-		{Id: "event-new", RunId: "run-new", AgentName: "reviewer", TriggerId: "trigger-new", Type: "loader.log", Level: "info", Message: "newest", CreatedAt: timestamppb.New(time.Unix(200, 0).UTC())},
-		{Id: "event-old", RunId: "run-old", AgentName: "reviewer", TriggerId: "trigger-old", Type: "loader.log", Level: "info", Message: "oldest", CreatedAt: timestamppb.New(time.Unix(100, 0).UTC())},
+		{Id: "event-new", RunId: "run-new", AgentName: "reviewer", TriggerId: "trigger-new", Type: "scheduler.log", Level: "info", Message: "newest", CreatedAt: timestamppb.New(time.Unix(200, 0).UTC())},
+		{Id: "event-old", RunId: "run-old", AgentName: "reviewer", TriggerId: "trigger-old", Type: "scheduler.log", Level: "info", Message: "oldest", CreatedAt: timestamppb.New(time.Unix(100, 0).UTC())},
 	}
 	server := newComposeServiceStubServer(t, composeServiceStubs{project: projectServiceStub{
 		listProjectSchedulerEvents: func(_ context.Context, req *connect.Request[agentcomposev2.ListProjectSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListProjectSchedulerEventsResponse], error) {

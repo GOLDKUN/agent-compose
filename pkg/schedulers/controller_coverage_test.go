@@ -106,11 +106,11 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 		t.Fatalf("parallel EnterRun should succeed")
 	}
 	controller.LeaveRun(created.Summary.ID)
-	event, err := controller.AddSchedulerEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "loader.test", "", "message", map[string]any{"ok": true}, "session-1", "cell-1", "agent-session")
+	event, err := controller.AddSchedulerEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "scheduler.test", "", "message", map[string]any{"ok": true}, "session-1", "cell-1", "agent-session")
 	if err != nil || event.ID != "event-id" || event.Level != "info" {
 		t.Fatalf("AddSchedulerEventRecord event=%#v err=%v", event, err)
 	}
-	if _, err := controller.AddSchedulerEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "loader.bad", "", "message", func() {}, "", "", ""); err == nil {
+	if _, err := controller.AddSchedulerEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "scheduler.bad", "", "message", func() {}, "", "", ""); err == nil {
 		t.Fatalf("AddSchedulerEventRecord invalid payload returned nil error")
 	}
 	dir := controller.RunArtifactsDir(created.Summary.ID, "run-1")

@@ -84,7 +84,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	}
 	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
 		ID: "event-target", SchedulerID: schedulerID, RunID: targetRunID,
-		TriggerID: "trigger-regression", Type: "loader.agent.completed",
+		TriggerID: "trigger-regression", Type: "scheduler.agent.completed",
 		LinkedSandboxID: targetID, CreatedAt: startedAt,
 	}); err != nil {
 		t.Fatalf("link target scheduler run to sandbox: %v", err)

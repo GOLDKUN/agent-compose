@@ -37,7 +37,7 @@ func (c *Controller) RecoverInterruptedRuns(ctx context.Context, startedAt time.
 		}
 		if _, err := c.AddSchedulerEventRecord(
 			ctx, run.SchedulerID, run.ID, run.TriggerID,
-			"loader.run.failed", "error", interruptedSchedulerRunError,
+			"scheduler.run.failed", "error", interruptedSchedulerRunError,
 			map[string]any{"reason": "daemon_interrupted"}, "", "", "",
 		); err != nil {
 			recoveryErrors = append(recoveryErrors, fmt.Errorf("record interrupted scheduler run event %s/%s: %w", run.SchedulerID, run.ID, err))

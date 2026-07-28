@@ -106,8 +106,8 @@ agents:
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("up stdout=%q stderr=%q exit=%d", stdout, stderr, exitCode)
 	}
-	if captured == nil || captured.GetExpectedSpecHash() != expectedHash {
-		t.Fatalf("Apply request = %#v, want expected hash %q", captured, expectedHash)
+	if captured == nil || captured.GetSubmittedSpecHash() != expectedHash {
+		t.Fatalf("Apply request = %#v, want submitted hash %q", captured, expectedHash)
 	}
 	gotScript := captured.GetSpec().GetAgents()[0].GetScheduler().GetScript()
 	if gotScript != script {
@@ -351,6 +351,7 @@ agents:
 		!strings.Contains(jsonOut, `"trigger_short_id": "`) || strings.Contains(jsonOut, "managed_loader") {
 		t.Fatalf("scheduler ls --json code/stdout/stderr = %d / %q / %q", jsonCode, jsonOut, jsonErr)
 	}
+	assertSchedulerProjectJSONMatchesSummary(t, jsonOut, testCLIProject(projectID, "cli-scheduler-list", composePath).GetSummary())
 }
 
 func TestComposeUpUsesDistinctStableTriggerIDs(t *testing.T) {
@@ -467,8 +468,8 @@ agents:
 			},
 			listProjectSchedulerEvents: func(context.Context, *connect.Request[agentcomposev2.ListProjectSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListProjectSchedulerEventsResponse], error) {
 				return connect.NewResponse(&agentcomposev2.ListProjectSchedulerEventsResponse{Events: []*agentcomposev2.SchedulerEvent{
-					{Id: "event-2", RunId: runID, AgentName: "reviewer", TriggerId: "nightly", Type: "loader.agent.activity", Level: "info", Message: "done", CreatedAt: timestamppb.New(time.Date(2026, 7, 15, 1, 0, 2, 0, time.UTC))},
-					{Id: "event-1", RunId: runID, AgentName: "reviewer", TriggerId: "nightly", Type: "loader.status", Level: "info", Message: "started", CreatedAt: timestamppb.New(time.Date(2026, 7, 15, 1, 0, 0, 0, time.UTC))},
+					{Id: "event-2", RunId: runID, AgentName: "reviewer", TriggerId: "nightly", Type: "scheduler.agent.activity", Level: "info", Message: "done", CreatedAt: timestamppb.New(time.Date(2026, 7, 15, 1, 0, 2, 0, time.UTC))},
+					{Id: "event-1", RunId: runID, AgentName: "reviewer", TriggerId: "nightly", Type: "scheduler.status", Level: "info", Message: "started", CreatedAt: timestamppb.New(time.Date(2026, 7, 15, 1, 0, 0, 0, time.UTC))},
 				}}), nil
 			},
 		},
@@ -484,16 +485,25 @@ agents:
 	if jsonCode != 0 || jsonErr != "" || !strings.Contains(jsonOut, `"sandbox_ids": [`) || !strings.Contains(jsonOut, sandboxID) {
 		t.Fatalf("scheduler runs --json code/stdout/stderr = %d / %q / %q", jsonCode, jsonOut, jsonErr)
 	}
+	projectSummary := testSchedulerProjectSummary(t, "cli-scheduler-observability", composePath)
+	assertSchedulerProjectJSONMatchesSummary(t, jsonOut, projectSummary)
 
 	stdout, stderr, _, exitCode = executeCLICommand("scheduler", "logs", runID[:12], "--host", server.URL, "--file", composePath)
 	if exitCode != 0 || stderr != "" || !strings.Contains(stdout, "scheduler.status") || !strings.Contains(stdout, "scheduler.agent.activity") || strings.Index(stdout, "started") > strings.Index(stdout, "done") {
 		t.Fatalf("scheduler logs code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 	}
 
+	jsonOut, jsonErr, _, jsonCode = executeCLICommand("scheduler", "logs", runID[:12], "--json", "--host", server.URL, "--file", composePath)
+	if jsonCode != 0 || jsonErr != "" || !strings.Contains(jsonOut, `"message": "started"`) || !strings.Contains(jsonOut, `"message": "done"`) {
+		t.Fatalf("scheduler logs --json code/stdout/stderr = %d / %q / %q", jsonCode, jsonOut, jsonErr)
+	}
+	assertSchedulerProjectJSONMatchesSummary(t, jsonOut, projectSummary)
+
 	jsonOut, jsonErr, _, jsonCode = executeCLICommand("scheduler", "inspect", runID[:12], "--json", "--host", server.URL, "--file", composePath)
 	if jsonCode != 0 || jsonErr != "" || !strings.Contains(jsonOut, `"resource": "run"`) || !strings.Contains(jsonOut, sandboxID) {
 		t.Fatalf("scheduler inspect run code/stdout/stderr = %d / %q / %q", jsonCode, jsonOut, jsonErr)
 	}
+	assertSchedulerProjectJSONMatchesSummary(t, jsonOut, projectSummary)
 
 	jsonOut, jsonErr, _, jsonCode = executeCLICommand("scheduler", "inspect", legacyRunID, "--json", "--host", server.URL, "--file", composePath)
 	if jsonCode != 0 || jsonErr != "" || !strings.Contains(jsonOut, legacyRunID) {
@@ -504,8 +514,8 @@ agents:
 	if jsonCode != 0 || jsonErr != "" || !strings.Contains(jsonOut, `"resource": "scheduler"`) || !strings.Contains(jsonOut, `"agent_name": "reviewer"`) {
 		t.Fatalf("scheduler inspect scheduler code/stdout/stderr = %d / %q / %q", jsonCode, jsonOut, jsonErr)
 	}
-	if getSchedulerRunCalls != 3 {
-		t.Fatalf("GetSchedulerRun calls = %d, want 3; scheduler name inspection must not probe runs", getSchedulerRunCalls)
+	if getSchedulerRunCalls != 4 {
+		t.Fatalf("GetSchedulerRun calls = %d, want 4; scheduler name inspection must not probe runs", getSchedulerRunCalls)
 	}
 
 	_, stderr, _, exitCode = executeCLICommand("scheduler", "inspect", errorRunID, "--host", server.URL, "--file", composePath)
@@ -591,6 +601,7 @@ agents:
 	if exitCode != 0 || stderr != "" || !strings.Contains(stdout, historicalRunID) || !strings.Contains(stdout, `"trigger_id": "`+historicalTriggerID+`"`) {
 		t.Fatalf("historical scheduler runs code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 	}
+	assertSchedulerProjectJSONMinimal(t, stdout, testSchedulerProjectSummary(t, "cli-scheduler-historical-triggers", composePath))
 
 	stdout, stderr, _, exitCode = executeCLICommand("scheduler", "logs", "--trigger", historicalTriggerID, "--json", "--host", server.URL, "--file", composePath)
 	if exitCode != 0 || stderr != "" || !strings.Contains(stdout, `"id": "historical-event"`) || !strings.Contains(stdout, `"message": "historical log"`) {

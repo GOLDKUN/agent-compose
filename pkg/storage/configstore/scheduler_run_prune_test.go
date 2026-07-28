@@ -155,7 +155,7 @@ func createPruneTestLoader(t *testing.T, store *ConfigStore, schedulerID string)
 func addPruneTestRelations(t *testing.T, store *ConfigStore, schedulerID, runID, triggerID string) {
 	t.Helper()
 	ctx := context.Background()
-	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "loader-event-" + runID, SchedulerID: schedulerID, RunID: runID, TriggerID: triggerID, Type: "loader.run.completed", CreatedAt: time.Now().UTC()}); err != nil {
+	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "loader-event-" + runID, SchedulerID: schedulerID, RunID: runID, TriggerID: triggerID, Type: "scheduler.run.completed", CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("add loader event: %v", err)
 	}
 	if _, err := store.db.ExecContext(ctx, `INSERT INTO event_delivery(event_id, scheduler_id, trigger_id, scheduler_run_id, status, created_at, updated_at) VALUES(?, ?, ?, ?, 'run_succeeded', 1, 1)`, "event-"+runID, schedulerID, triggerID, runID); err != nil {
