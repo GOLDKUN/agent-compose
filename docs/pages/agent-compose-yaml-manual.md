@@ -428,7 +428,7 @@ agents:
 | `skills` | list | Empty | Skill sources projected into the agent runtime. |
 | `volumes` | list | Empty | Volume and bind mounts. |
 | `workspace` | object | None | Explicitly selects a project `workspaces` entry or defines an inline workspace. |
-| `sandbox` | object | Retain stopped runtime | Sandbox lifecycle configuration. |
+| `sandbox` | object | Remove stopped runtime | Sandbox lifecycle configuration. |
 | `scheduler` | object | None | Automatic trigger configuration. |
 | `jupyter` | object | Disabled | Default Jupyter behavior for agent runs. |
 

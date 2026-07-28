@@ -429,7 +429,7 @@ agents:
 | `skills` | list | 空 | 注入 Agent 的 Skill 来源。 |
 | `volumes` | list | 空 | Volume 或 bind mount 列表。 |
 | `workspace` | object | 无 | 显式引用一个顶层 `workspaces` 条目，或定义 Agent 内联 Workspace。 |
-| `sandbox` | object | 保留已停止 runtime | Sandbox 生命周期配置。 |
+| `sandbox` | object | 删除已停止 runtime | Sandbox 生命周期配置。 |
 | `scheduler` | object | 无 | 自动触发 Agent 的 Scheduler。 |
 | `jupyter` | object | disabled | Agent run 的 Jupyter 默认配置。 |
 
