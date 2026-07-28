@@ -42,7 +42,7 @@ type composeSchedulerPruneResidue struct {
 type composeSchedulerPruneOutput struct {
 	RecordScope string                         `json:"record_scope"`
 	DryRun      bool                           `json:"dry_run"`
-	Project     composeUpProjectOutput         `json:"project"`
+	Project     composeSchedulerProjectOutput  `json:"project"`
 	Scheduler   string                         `json:"scheduler,omitempty"`
 	TriggerID   string                         `json:"trigger_id,omitempty"`
 	Statuses    []string                       `json:"statuses,omitempty"`
@@ -109,7 +109,9 @@ func runComposeSchedulerPruneCommand(cmd interface {
 		return commandExitErrorForConnect(fmt.Errorf("prune scheduler runs: %w", err))
 	}
 	output := composeSchedulerPruneOutputFromResponse(response.Msg)
-	output.Project = composeUpProjectOutput{ID: displayOpaqueID(projectID), Name: runtimeProject.name()}
+	if cli.JSON {
+		output.Project = schedulerProjectOutput(cmd.Context(), clients.project, runtimeProject)
+	}
 	output.Scheduler = agentName
 	output.TriggerID = triggerID
 	output.Statuses = statusNames

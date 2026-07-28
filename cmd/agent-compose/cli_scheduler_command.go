@@ -72,8 +72,8 @@ func runComposeSchedulerRunsCommand(cmd *cobra.Command, cli cliOptions, options 
 		}
 		agentRef = args[0]
 	}
-	project := composeUpProjectOutput{ID: displayOpaqueID(projectID), Name: runtimeProject.name()}
 	if cli.JSON {
+		project := schedulerProjectOutput(cmd.Context(), clients.project, runtimeProject)
 		writer, err := newSchedulerJSONStreamWriter[composeSchedulerRunItem](cmd.OutOrStdout(), schedulerRunsJSONPrefix{Project: project}, "runs")
 		if err != nil {
 			return err
@@ -155,8 +155,8 @@ func runComposeSchedulerLogsCommand(cmd *cobra.Command, cli cliOptions, options 
 		}
 		triggerID = resolvedTriggerID
 	}
-	project := composeUpProjectOutput{ID: displayOpaqueID(projectID), Name: runtimeProject.name()}
 	if cli.JSON {
+		project := schedulerProjectOutput(cmd.Context(), clients.project, runtimeProject)
 		writer, err := newSchedulerJSONStreamWriter[composeSchedulerLogEvent](cmd.OutOrStdout(), schedulerLogsJSONPrefix{Project: project, Run: selected}, "events")
 		if err != nil {
 			return err
@@ -193,7 +193,7 @@ func runComposeSchedulerInspectCommand(cmd *cobra.Command, cli cliOptions, optio
 	}
 	normalized := runtimeProject.spec
 	projectID := runtimeProject.id()
-	output := composeSchedulerInspectOutput{Project: composeUpProjectOutput{ID: displayOpaqueID(projectID), Name: runtimeProject.name()}}
+	output := composeSchedulerInspectOutput{}
 	ref := strings.TrimSpace(rawRef)
 	if schedulerRef := strings.TrimSpace(options.SchedulerRef); schedulerRef != "" {
 		trigger, err := resolveComposeSchedulerTrigger(cmd.Context(), clients, normalized, projectID, schedulerRef, ref)
@@ -243,6 +243,7 @@ func runComposeSchedulerInspectCommand(cmd *cobra.Command, cli cliOptions, optio
 		}
 	}
 	if cli.JSON {
+		output.Project = schedulerProjectOutput(cmd.Context(), clients.project, runtimeProject)
 		data, err := json.MarshalIndent(output, "", "  ")
 		if err != nil {
 			return err
