@@ -71,7 +71,7 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 	if len(publisher.events) != 1 || publisher.events[0].topic != "agent-compose.agent.completed" {
 		t.Fatalf("publisher events = %#v", publisher.events)
 	}
-	if !events.contains("loader.sandbox.created") || !events.contains("loader.agent.completed") || !events.contains("loader.sandbox.stopped") {
+	if !events.contains("scheduler.sandbox.created") || !events.contains("scheduler.agent.completed") || !events.contains("scheduler.sandbox.stopped") {
 		t.Fatalf("agent events = %#v", events.types())
 	}
 
@@ -90,7 +90,7 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 	if len(sandboxes.shutdowns) != 2 || sandboxes.shutdowns[1] != "session-host" {
 		t.Fatalf("shutdowns after cleanup = %#v", sandboxes.shutdowns)
 	}
-	if !events.contains("loader.command.completed") {
+	if !events.contains("scheduler.command.completed") {
 		t.Fatalf("command events = %#v", events.types())
 	}
 
@@ -101,7 +101,7 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 	if llmResult.Text != "llm text" || llm.prompt != "prompt" {
 		t.Fatalf("llm result/prompt = %#v/%q", llmResult, llm.prompt)
 	}
-	if !events.contains("loader.llm.completed") {
+	if !events.contains("scheduler.llm.completed") {
 		t.Fatalf("llm events = %#v", events.types())
 	}
 
@@ -158,7 +158,7 @@ func TestRuntimeHostProjectAgentPath(t *testing.T) {
 	if result.Text != "project output" || projectRunner.request.ProjectID != "project-1" || projectRunner.request.ClientRequestID != run.ID+":agent:1" || projectRunner.request.TriggerID != run.TriggerID || projectRunner.request.SandboxConfigHash != expectedConfigHash {
 		t.Fatalf("project result/request = %#v/%#v", result, projectRunner.request)
 	}
-	if !events.contains("loader.agent.completed") || len(publisher.events) != 1 || publisher.events[0].payload["projectRunId"] != "project-run" {
+	if !events.contains("scheduler.agent.completed") || len(publisher.events) != 1 || publisher.events[0].payload["projectRunId"] != "project-run" {
 		t.Fatalf("events/publisher = %#v/%#v", events.types(), publisher.events)
 	}
 	if publisher.events[0].payload["loaderRunId"] != run.ID {
@@ -230,7 +230,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 		Publisher: &hostPublisherFake{},
 	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
 	agentResult, err := host.Agent(ctx, "prompt", domain.SchedulerAgentRequest{})
-	if err == nil || agentResult.Text != "agent stderr" || !events.contains("loader.agent.failed") || !events.contains("loader.sandbox.stop_failed") {
+	if err == nil || agentResult.Text != "agent stderr" || !events.contains("scheduler.agent.failed") || !events.contains("scheduler.sandbox.stop_failed") {
 		t.Fatalf("agent error result=%#v err=%v events=%#v", agentResult, err, events.types())
 	}
 
@@ -248,7 +248,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 		Publisher: &hostPublisherFake{},
 	}, projectLoader, triggerExecution(run), schedulers.TriggerEventMetadata{})
 	projectResult, err := projectHost.Agent(ctx, "prompt", domain.SchedulerAgentRequest{})
-	if err != nil || projectResult.Text != "project failed" || !projectEvents.contains("loader.agent.failed") {
+	if err != nil || projectResult.Text != "project failed" || !projectEvents.contains("scheduler.agent.failed") {
 		t.Fatalf("project failed result=%#v err=%v events=%#v", projectResult, err, projectEvents.types())
 	}
 	projectHost = schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
@@ -266,7 +266,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 			ensureErr: errors.New("ensure failed"),
 		},
 	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
-	if _, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "echo"}); err == nil || !commandEvents.contains("loader.command.failed") {
+	if _, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "echo"}); err == nil || !commandEvents.contains("scheduler.command.failed") {
 		t.Fatalf("command ensure err=%v events=%#v", err, commandEvents.types())
 	}
 	commandEvents = &hostEventsFake{}
@@ -275,7 +275,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 		Sessions:        &hostSessionsFake{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-command", VMStatus: domain.VMStatusRunning}}},
 		CommandExecutor: &hostCommandExecutorFake{err: errors.New("command failed"), result: domain.SchedulerCommandResult{SandboxID: "session-command", CellID: "cell-command", Output: "partial"}},
 	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
-	if result, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "false"}); err == nil || result.Output != "partial" || !commandEvents.contains("loader.command.failed") {
+	if result, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "false"}); err == nil || result.Output != "partial" || !commandEvents.contains("scheduler.command.failed") {
 		t.Fatalf("command executor result=%#v err=%v events=%#v", result, err, commandEvents.types())
 	}
 	commandEvents = &hostEventsFake{}
@@ -284,7 +284,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 		Sessions:        &hostSessionsFake{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-command", VMStatus: domain.VMStatusRunning}}},
 		CommandExecutor: &hostCommandExecutorFake{result: domain.SchedulerCommandResult{Output: "bad", Success: false, SandboxID: "session-command"}},
 	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
-	if result, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "false"}); err != nil || result.Success || !commandEvents.contains("loader.command.completed") {
+	if result, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "false"}); err != nil || result.Success || !commandEvents.contains("scheduler.command.completed") {
 		t.Fatalf("command nonzero result=%#v err=%v events=%#v", result, err, commandEvents.types())
 	}
 
@@ -296,7 +296,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 		Events: llmEvents,
 		LLM:    &hostLLMFake{err: errors.New("llm failed")},
 	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
-	if _, err := llmHost.LLM(ctx, "prompt", domain.SchedulerLLMRequest{Model: "model-a"}); err == nil || !llmEvents.contains("loader.llm.failed") {
+	if _, err := llmHost.LLM(ctx, "prompt", domain.SchedulerLLMRequest{Model: "model-a"}); err == nil || !llmEvents.contains("scheduler.llm.failed") {
 		t.Fatalf("llm err=%v events=%#v", err, llmEvents.types())
 	}
 
@@ -316,7 +316,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 			return ""
 		},
 	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
-	if _, err := rpcHost.CallSandboxRPC(ctx, "GetSandbox", `{"sandboxId":"sandbox-rpc"}`); err == nil || !rpcEvents.contains("loader.sandbox.rpc.failed") || !rpcStore.containsLink("sandbox-rpc", "sandbox_rpc_failed") {
+	if _, err := rpcHost.CallSandboxRPC(ctx, "GetSandbox", `{"sandboxId":"sandbox-rpc"}`); err == nil || !rpcEvents.contains("scheduler.sandbox.rpc.failed") || !rpcStore.containsLink("sandbox-rpc", "sandbox_rpc_failed") {
 		t.Fatalf("rpc err=%v events=%#v links=%#v", err, rpcEvents.types(), rpcStore.links)
 	}
 }
@@ -338,7 +338,7 @@ func TestRuntimeHostLogPublishEventAndState(t *testing.T) {
 	if err := host.Log(ctx, "hello", map[string]any{"ok": true}); err != nil {
 		t.Fatalf("Log returned error: %v", err)
 	}
-	if !events.contains("loader.log") {
+	if !events.contains("scheduler.log") {
 		t.Fatalf("events after Log = %#v", events.types())
 	}
 
@@ -352,7 +352,7 @@ func TestRuntimeHostLogPublishEventAndState(t *testing.T) {
 	if created.PublisherRunID != run.ID {
 		t.Fatalf("trigger publisher run ID = %q, want %q", created.PublisherRunID, run.ID)
 	}
-	if !events.contains("loader.event.published") {
+	if !events.contains("scheduler.event.published") {
 		t.Fatalf("events after PublishEvent = %#v", events.types())
 	}
 	invocationStore := &hostStoreFake{}
@@ -504,7 +504,7 @@ func (s *hostSessionsFake) Ensure(context.Context, domain.Scheduler, domain.Sche
 	if s.ensureErr != nil {
 		return nil, "", s.ensureErr
 	}
-	return s.session, "loader.sandbox.created", nil
+	return s.session, "scheduler.sandbox.created", nil
 }
 
 func (s *hostSessionsFake) Load(context.Context, string) (*domain.Sandbox, error) {

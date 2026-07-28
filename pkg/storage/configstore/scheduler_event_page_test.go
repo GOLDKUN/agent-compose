@@ -29,11 +29,11 @@ func TestSchedulerEventPageOnlyReturnsEventsJoinedToTriggerRuns(t *testing.T) {
 		}
 	}
 	for _, event := range []domain.SchedulerEvent{
-		{SchedulerID: "loader-a", ID: "event-a2", RunID: "run-a", TriggerID: "wrong-event-trigger", Type: "loader.log", CreatedAt: startedAt.Add(2 * time.Second)},
-		{SchedulerID: "loader-a", ID: "event-a1", RunID: "run-a", TriggerID: "trigger-a", Type: "loader.run.started", CreatedAt: startedAt.Add(time.Second)},
-		{SchedulerID: "loader-a", ID: "event-b", RunID: "run-b", TriggerID: "trigger-b", Type: "loader.log", CreatedAt: startedAt},
-		{SchedulerID: "loader-a", ID: "event-invoke", RunID: "invoke-old", Type: "loader.log", CreatedAt: startedAt.Add(3 * time.Second)},
-		{SchedulerID: "loader-a", ID: "event-orphan", RunID: "missing", TriggerID: "trigger-a", Type: "loader.log", CreatedAt: startedAt.Add(4 * time.Second)},
+		{SchedulerID: "loader-a", ID: "event-a2", RunID: "run-a", TriggerID: "wrong-event-trigger", Type: "scheduler.log", CreatedAt: startedAt.Add(2 * time.Second)},
+		{SchedulerID: "loader-a", ID: "event-a1", RunID: "run-a", TriggerID: "trigger-a", Type: "scheduler.run.started", CreatedAt: startedAt.Add(time.Second)},
+		{SchedulerID: "loader-a", ID: "event-b", RunID: "run-b", TriggerID: "trigger-b", Type: "scheduler.log", CreatedAt: startedAt},
+		{SchedulerID: "loader-a", ID: "event-invoke", RunID: "invoke-old", Type: "scheduler.log", CreatedAt: startedAt.Add(3 * time.Second)},
+		{SchedulerID: "loader-a", ID: "event-orphan", RunID: "missing", TriggerID: "trigger-a", Type: "scheduler.log", CreatedAt: startedAt.Add(4 * time.Second)},
 	} {
 		if err := store.AddSchedulerEvent(ctx, event); err != nil {
 			t.Fatalf("add event %s: %v", event.ID, err)
@@ -70,7 +70,7 @@ func TestSchedulerEventPageSupportsTailBoundaryAndAscendingRange(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 	for index, id := range []string{"event-1", "event-2", "event-3", "event-4"} {
-		if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{SchedulerID: "loader-a", ID: id, RunID: "run-a", TriggerID: "trigger-a", Type: "loader.log", CreatedAt: startedAt.Add(time.Duration(index) * time.Second)}); err != nil {
+		if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{SchedulerID: "loader-a", ID: id, RunID: "run-a", TriggerID: "trigger-a", Type: "scheduler.log", CreatedAt: startedAt.Add(time.Duration(index) * time.Second)}); err != nil {
 			t.Fatalf("add event %s: %v", id, err)
 		}
 	}

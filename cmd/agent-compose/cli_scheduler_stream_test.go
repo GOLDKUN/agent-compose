@@ -49,7 +49,7 @@ agents:
 			args:   []string{"scheduler", "logs"},
 			marker: "first-stream-event",
 			stub: projectServiceStub{streamSchedulerEvents: func(ctx context.Context, _ *connect.Request[agentcomposev2.StreamProjectSchedulerEventsRequest], stream *connect.ServerStream[agentcomposev2.StreamProjectSchedulerEventsResponse]) error {
-				if err := stream.Send(&agentcomposev2.StreamProjectSchedulerEventsResponse{Events: []*agentcomposev2.SchedulerEvent{{Id: "event-first", AgentName: "reviewer", TriggerId: "nightly", Type: "loader.log", Message: "first-stream-event"}}}); err != nil {
+				if err := stream.Send(&agentcomposev2.StreamProjectSchedulerEventsResponse{Events: []*agentcomposev2.SchedulerEvent{{Id: "event-first", AgentName: "reviewer", TriggerId: "nightly", Type: "scheduler.log", Message: "first-stream-event"}}}); err != nil {
 					return err
 				}
 				<-ctx.Done()

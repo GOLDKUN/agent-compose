@@ -469,7 +469,7 @@ LoaderHost.Command
   -> parseCommandExecResult
   -> preserve guest command-result.json; mirror stdout/stderr/output artifacts
   -> Store.AddCell(completed SHELL)
-  -> loader.command.completed / loader.command.failed
+  -> scheduler.command.completed / scheduler.command.failed
 ```
 
 After parsing succeeds, the guest runtime has already written
@@ -481,7 +481,7 @@ Artifact paths returned to the loader script are host-side paths.
 
 Multiple command/shell calls in the same loader run reuse the loader sandbox for
 that run. After the run ends, the host stops command sandboxes used by that run
-and records `loader.sandbox.stopped`. `scheduler.agent` sandbox stop behavior
+and records `scheduler.sandbox.stopped`. `scheduler.agent` sandbox stop behavior
 still follows the agent path.
 
 ## 8. Resume State Convention
@@ -700,11 +700,11 @@ Loader command error semantics:
 
 - When command/shell exit code is non-zero, `scheduler.exec` /
   `scheduler.shell` does not throw. It returns `success=false` and records an
-  error-level `loader.command.completed`.
+  error-level `scheduler.command.completed`.
 - Runtime driver exec failure, missing parseable command payload from
   `agent-compose-runtime exec`, timeout/context cancellation, or artifact write
   failure makes `scheduler.exec` / `scheduler.shell` throw and records
-  `loader.command.failed`.
+  `scheduler.command.failed`.
 - Command cells use the `SHELL` type. No new proto cell enum is introduced.
 
 ## 12. Guest Runtime SDK

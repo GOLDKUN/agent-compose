@@ -208,8 +208,8 @@ func TestProjectHandlerListsProjectSchedulerEventsWithIdentityAndOffset(t *testi
 	store, _, handler := newSchedulerRunHandlerFixture()
 	createdAt := time.Unix(300, 0).UTC()
 	store.events = []domain.SchedulerEvent{
-		{ID: "event-2", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", LinkedSandboxID: "sandbox-1", CreatedAt: createdAt},
-		{ID: "event-1", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.run.started", CreatedAt: createdAt.Add(-time.Second)},
+		{ID: "event-2", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "scheduler.log", LinkedSandboxID: "sandbox-1", CreatedAt: createdAt},
+		{ID: "event-1", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "scheduler.run.started", CreatedAt: createdAt.Add(-time.Second)},
 	}
 	first, err := handler.ListProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
 		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, Limit: 1,

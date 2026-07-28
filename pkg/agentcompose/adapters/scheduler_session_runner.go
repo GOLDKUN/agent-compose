@@ -272,8 +272,8 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 	}
 	domain.RestoreSandboxTransientFields(loaded, session)
 	r.indexCapabilitySandbox(loaded)
-	// This topic payload and returned event type are historical external
-	// contracts; source, loaderId, and loader.sandbox.created stay unchanged.
+	// This topic payload is a historical external contract; source, loaderId,
+	// and the agent-compose.session.created topic stay unchanged.
 	r.publish("agent-compose.session.created", map[string]any{
 		"sandboxId":     loaded.Summary.ID,
 		"title":         loaded.Summary.Title,
@@ -282,7 +282,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		"source":        "loader",
 		"loaderId":      scheduler.Summary.ID,
 	})
-	return loaded, "loader.sandbox.created", nil
+	return loaded, "scheduler.sandbox.created", nil
 }
 
 func (r *SchedulerSandboxRunner) Load(ctx context.Context, sessionID string) (*domain.Sandbox, error) {
@@ -351,7 +351,7 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 		"driver":    loaded.Summary.Driver,
 		"source":    "loader",
 	})
-	return loaded, "loader.sandbox.resumed", nil
+	return loaded, "scheduler.sandbox.resumed", nil
 }
 
 func (r *SchedulerSandboxRunner) indexCapabilitySandbox(session *domain.Sandbox) {

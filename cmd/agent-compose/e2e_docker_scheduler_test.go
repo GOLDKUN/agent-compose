@@ -295,11 +295,11 @@ func waitForScheduledHelloRun(t *testing.T, projectClient agentcomposev2connect.
 			continue
 		}
 		for _, event := range eventsResp.Msg.GetEvents() {
-			if event.GetType() == "loader.run.failed" {
+			if event.GetType() == "scheduler.run.failed" {
 				lastErr = fmt.Errorf("loader run %s failed: %s", event.GetRunId(), event.GetMessage())
 				continue
 			}
-			if event.GetRunId() != "" && event.GetType() == "loader.command.completed" && event.GetLevel() == "info" && strings.Contains(event.GetMessage(), helloText) {
+			if event.GetRunId() != "" && event.GetType() == "scheduler.command.completed" && event.GetLevel() == "info" && strings.Contains(event.GetMessage(), helloText) {
 				return event.GetRunId(), event
 			}
 		}

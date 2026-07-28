@@ -76,8 +76,8 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 	if err != nil {
 		t.Fatalf("first sticky Ensure returned error: %v", err)
 	}
-	if eventType != "loader.sandbox.created" {
-		t.Fatalf("first sticky Ensure event type = %q, want %q", eventType, "loader.sandbox.created")
+	if eventType != "scheduler.sandbox.created" {
+		t.Fatalf("first sticky Ensure event type = %q, want %q", eventType, "scheduler.sandbox.created")
 	}
 	if created.Summary.ID == "" {
 		t.Fatal("first sticky Ensure returned an empty sandbox ID")
@@ -178,8 +178,8 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 	if err != nil {
 		t.Fatalf("second sticky Ensure returned error: %v", err)
 	}
-	if eventType != "loader.sandbox.resumed" {
-		t.Fatalf("second sticky Ensure event type = %q, want %q", eventType, "loader.sandbox.resumed")
+	if eventType != "scheduler.sandbox.resumed" {
+		t.Fatalf("second sticky Ensure event type = %q, want %q", eventType, "scheduler.sandbox.resumed")
 	}
 	if resumed.Summary.ID != sandboxID {
 		t.Fatalf("second sticky Ensure sandbox ID = %q, want original %q", resumed.Summary.ID, sandboxID)

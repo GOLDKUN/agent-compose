@@ -192,7 +192,7 @@ func TestControllerRecoverInterruptedRunsMarksFailedAndRecordsEvent(t *testing.T
 			t.Fatalf("updated run=%#v", run)
 		}
 		event := store.events[index]
-		if event.Type != "loader.run.failed" || event.Level != "error" || event.RunID != run.ID || event.TriggerID != run.TriggerID || !strings.Contains(event.PayloadJSON, "daemon_interrupted") {
+		if event.Type != "scheduler.run.failed" || event.Level != "error" || event.RunID != run.ID || event.TriggerID != run.TriggerID || !strings.Contains(event.PayloadJSON, "daemon_interrupted") {
 			t.Fatalf("recovery event=%#v", event)
 		}
 	}
