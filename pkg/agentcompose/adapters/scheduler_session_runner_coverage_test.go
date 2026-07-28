@@ -98,17 +98,17 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 	}
 }
 
-func TestLoaderSandboxRunnerReleasedRuntimeResumePreparesAgentEnvironment(t *testing.T) {
+func TestSchedulerSandboxRunnerReleasedRuntimeResumePreparesAgentEnvironment(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
 	bridge.config.RuntimeBaseURL = "http://agent-compose.test:7410"
 	bridge.config.LLMAPIEndpoint = "https://llm.example.test/v1"
 	bridge.config.LLMAPIKey = "provider-key"
-	bridge.config.LLMModel = "gpt-loader-retry"
+	bridge.config.LLMModel = "gpt-scheduler-retry"
 	bridge.config.LLMAPIProtocol = "responses"
 	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
 
-	released, err := bridge.store.CreateSandbox(ctx, "released", "", driverpkg.RuntimeDriverBoxlite, "", "", "loader", nil, nil, []domain.SandboxTag{
+	released, err := bridge.store.CreateSandbox(ctx, "released", "", driverpkg.RuntimeDriverBoxlite, "", "", "scheduler", nil, nil, []domain.SandboxTag{
 		{Name: domain.AgentSandboxTagProvider, Value: "codex"},
 	})
 	if err != nil {
@@ -138,7 +138,7 @@ func TestLoaderSandboxRunnerReleasedRuntimeResumePreparesAgentEnvironment(t *tes
 	}
 }
 
-func TestLoaderSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *testing.T) {
+func TestSchedulerSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
 	releaseErr := errors.New("runtime release failed")
@@ -149,7 +149,7 @@ func TestLoaderSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *testi
 	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, publisher, resolver, bridge.agentExecutor)
 
 	const capabilityToken = "capability-token"
-	sandbox, err := bridge.store.CreateSandbox(ctx, "release failure", "", driverpkg.RuntimeDriverBoxlite, "", "", "loader", nil,
+	sandbox, err := bridge.store.CreateSandbox(ctx, "release failure", "", driverpkg.RuntimeDriverBoxlite, "", "", "scheduler", nil,
 		[]domain.SandboxEnvVar{{Name: capabilities.SandboxTokenEnvName, Value: capabilityToken, Secret: true}},
 		[]domain.SandboxTag{{Name: capabilities.CapsetTagName, Value: "dev"}},
 	)

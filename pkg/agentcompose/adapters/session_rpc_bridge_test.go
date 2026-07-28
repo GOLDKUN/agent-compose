@@ -250,7 +250,7 @@ func TestSandboxRPCBridgeCreateSandboxInheritsStoppedRuntimePolicy(t *testing.T)
 		AgentDefinitionID: definition.ID,
 	})
 
-	responseJSON, err := bridge.CallJSONWithSource(ctx, "CreateSandbox", `{"title":"scheduler child"}`, domain.SandboxTypeScript+":loader-1")
+	responseJSON, err := bridge.CallJSONWithSource(ctx, "CreateSandbox", `{"title":"scheduler child"}`, domain.SandboxTypeScript+":scheduler-1")
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
