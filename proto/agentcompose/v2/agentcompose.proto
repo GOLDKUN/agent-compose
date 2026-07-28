@@ -338,13 +338,19 @@ message ValidateProjectResponse {
 }
 
 message ApplyProjectRequest {
+  // Required. The complete desired project specification. All repeated and map
+  // fields in the spec replace the previously persisted collections; an empty
+  // collection explicitly clears that collection.
   ProjectSpec spec = 1;
+  // Optional source metadata used while normalizing the replacement. An absent
+  // source supplies empty compose_path and project_dir values.
   ProjectSource source = 2;
   // submitted_spec_hash optionally verifies the submitted spec after the server
   // normalizes it. It is not compared with the currently stored project and is
   // not an optimistic-concurrency precondition. An empty value skips this check.
   // Canonicalization, encoding, and hashing are defined by pkg/compose.
   string submitted_spec_hash = 3;
+  // Explicit execution mode. False applies the replacement; true only plans it.
   bool dry_run = 4;
 }
 
@@ -712,8 +718,11 @@ message SchedulerRun {
 }
 
 message SetSchedulerEnabledRequest {
+  // Required. Exactly one non-empty project selector must be set.
   ProjectRef project = 1;
+  // Required stable agent name within the selected project.
   string agent_name = 2;
+  // Explicit replacement value. False disables the scheduler; it is not a no-op.
   bool enabled = 3;
 }
 
@@ -723,9 +732,13 @@ message SetSchedulerEnabledResponse {
 }
 
 message SetSchedulerTriggerEnabledRequest {
+  // Required. Exactly one non-empty project selector must be set.
   ProjectRef project = 1;
+  // Required stable agent name within the selected project.
   string agent_name = 2;
+  // Required stable trigger ID within the selected scheduler.
   string trigger_id = 3;
+  // Explicit replacement value. False disables the trigger; it is not a no-op.
   bool enabled = 4;
 }
 
@@ -834,8 +847,14 @@ message EnvVarSpec {
 }
 
 message EnvVarUpdateSpec {
+  // Required replacement key. Duplicate names are normalized with the last
+  // occurrence winning.
   string name = 1;
+  // Presence is meaningful only for secret preservation during
+  // UpdateGlobalEnv: absent preserves the existing secret value; present empty
+  // explicitly clears it. Non-secret entries treat absence as an empty value.
   optional string value = 2;
+  // Explicit replacement value. False changes the entry to non-secret.
   bool secret = 3;
 }
 
@@ -878,10 +897,15 @@ message EventTriggerSpec {
 }
 
 message DriverSpec {
+  // Required. Must match the selected config case.
   string name = 1;
-  BoxliteDriverSpec boxlite = 2;
-  DockerDriverSpec docker = 3;
-  MicrosandboxDriverSpec microsandbox = 4;
+
+  // Required. A project agent has exactly one runtime driver configuration.
+  oneof config {
+    BoxliteDriverSpec boxlite = 2;
+    DockerDriverSpec docker = 3;
+    MicrosandboxDriverSpec microsandbox = 4;
+  }
 }
 
 message BoxliteDriverSpec {
@@ -993,14 +1017,21 @@ message GetRunResponse {
 }
 
 message ListRunsRequest {
-
   string project_id = 1;
   string agent_name = 2;
   string scheduler_id = 3;
   RunStatus status = 4;
   RunSource source = 5;
-  string started_from = 6;
-  string started_to = 7;
+  // Inclusive lower bound for the run start time. Values must use millisecond precision;
+  // timestamps with sub-millisecond precision return INVALID_ARGUMENT.
+  // An unset field applies no lower bound.
+  // Invalid timestamps, or a value later than started_to, return INVALID_ARGUMENT.
+  google.protobuf.Timestamp started_from = 6;
+  // Inclusive upper bound for the run start time. Values must use millisecond precision;
+  // timestamps with sub-millisecond precision return INVALID_ARGUMENT.
+  // An unset field applies no upper bound.
+  // Invalid timestamps, or a value earlier than started_from, return INVALID_ARGUMENT.
+  google.protobuf.Timestamp started_to = 7;
   // Number of matching resources to skip. Values at or above total return an empty page.
   uint32 offset = 8;
   // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
@@ -1285,8 +1316,12 @@ message ExecRequest {
 }
 
 message ExecSandboxSelector {
-  string project_id = 1;
-  string project_name = 2;
+  // Required. Select exactly one project by stable ID or exact name.
+  oneof project {
+    string project_id = 1;
+    string project_name = 2;
+  }
+  // Optional filter. Empty matches sandboxes for every agent in the project.
   string agent_name = 3;
 }
 
@@ -1815,7 +1850,13 @@ message WatchDashboardOverviewResponse {
 
 message GetGlobalEnvRequest {}
 message GetGlobalEnvResponse { repeated EnvVarSpec env = 1; }
-message UpdateGlobalEnvRequest { repeated EnvVarUpdateSpec env = 1; }
+message UpdateGlobalEnvRequest {
+  // Complete replacement keyed by EnvVarUpdateSpec.name. An empty list clears
+  // all global environment variables; omitted existing names are deleted.
+  // For a secret entry only, an absent value preserves the existing secret
+  // value with the same name. An explicitly empty value clears it.
+  repeated EnvVarUpdateSpec env = 1;
+}
 message UpdateGlobalEnvResponse { repeated EnvVarSpec env = 1; }
 
 message GetCapabilityGatewayConfigRequest {}
@@ -1825,7 +1866,9 @@ message CapabilityGatewayConfig {
 }
 message GetCapabilityGatewayConfigResponse { CapabilityGatewayConfig config = 1; }
 message UpdateCapabilityGatewayConfigRequest {
+  // Field patch: absent is no-op; present empty explicitly clears the address.
   optional string addr = 1;
+  // Field patch: absent is no-op; present empty explicitly clears the token.
   optional string token = 2;
 }
 message UpdateCapabilityGatewayConfigResponse { CapabilityGatewayConfig config = 1; }
@@ -1857,10 +1900,16 @@ message CreateWorkspacePresetRequest {
   string comment = 4;
 }
 message UpdateWorkspacePresetRequest {
+  // Required stable preset ID.
   string preset_id = 1;
+  // Required replacement value.
   string name = 2;
+  // Required replacement value.
   string type = 3;
+  // Replacement value. Empty is normalized to the provider default rather than
+  // treated as no-op.
   string config_json = 4;
+  // Replacement value. Empty explicitly clears the comment.
   string comment = 5;
 }
 message DeleteWorkspacePresetRequest { string preset_id = 1; }
