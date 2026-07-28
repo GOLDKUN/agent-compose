@@ -473,7 +473,7 @@ func DriverSpecToProto(driver *compose.NormalizedDriverSpec) *agentcomposev2.Dri
 	if driver == nil {
 		return nil
 	}
-	result := &agentcomposev2.DriverSpec{}
+	result := &agentcomposev2.DriverSpec{Name: driver.Name}
 	switch driver.Name {
 	case compose.DriverBoxlite:
 		config := &agentcomposev2.BoxliteDriverSpec{}
@@ -896,19 +896,32 @@ func DriverYAMLShape(path string, driver *agentcomposev2.DriverSpec) (map[string
 	if driver == nil {
 		return nil, nil
 	}
+	name := strings.ToLower(strings.TrimSpace(driver.GetName()))
+	var configName string
+	var config map[string]any
 	switch driver.GetConfig().(type) {
 	case *agentcomposev2.DriverSpec_Boxlite:
-		return map[string]any{compose.DriverBoxlite: map[string]any{
+		configName = compose.DriverBoxlite
+		config = map[string]any{
 			"kernel": driver.GetBoxlite().GetKernel(),
 			"rootfs": driver.GetBoxlite().GetRootfs(),
-		}}, nil
+		}
 	case *agentcomposev2.DriverSpec_Docker:
-		return map[string]any{compose.DriverDocker: map[string]any{"host": driver.GetDocker().GetHost()}}, nil
+		configName = compose.DriverDocker
+		config = map[string]any{"host": driver.GetDocker().GetHost()}
 	case *agentcomposev2.DriverSpec_Microsandbox:
-		return map[string]any{compose.DriverMicrosandbox: map[string]any{"profile": driver.GetMicrosandbox().GetProfile()}}, nil
+		configName = compose.DriverMicrosandbox
+		config = map[string]any{"profile": driver.GetMicrosandbox().GetProfile()}
 	default:
 		return nil, []*agentcomposev2.ProjectValidationIssue{ProjectValidationIssue(path, "driver requires exactly one runtime config")}
 	}
+	if name == "" {
+		return nil, []*agentcomposev2.ProjectValidationIssue{ProjectValidationIssue(path+".name", "driver name is required")}
+	}
+	if name != configName {
+		return nil, []*agentcomposev2.ProjectValidationIssue{ProjectValidationIssue(path, fmt.Sprintf("driver name %q conflicts with %q runtime config", name, configName))}
+	}
+	return map[string]any{configName: config}, nil
 }
 
 func SchedulerYAMLShape(scheduler *agentcomposev2.SchedulerSpec) map[string]any {

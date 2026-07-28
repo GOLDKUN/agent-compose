@@ -27,11 +27,13 @@ is `InvalidArgument`.
 ## Driver model
 
 `DriverSpec` is a single-config model. Exactly one of `boxlite`, `docker`, or
-`microsandbox` is selected in `config`; that case is also the driver name.
-There is no separate `name` field and no persistence of inactive driver
-configurations. A missing config is invalid. This matches compose
-normalization, which has always required exactly one runtime configuration,
-and prevents name/config mismatch and silent ignored configuration.
+`microsandbox` is selected in `config`, and the required `name` field must
+match that case. `name` remains in the wire and JSON representation for
+compatibility with existing project output; the server always emits both.
+There is no persistence of inactive driver configurations. A missing config,
+missing name, or mismatch is invalid. This matches compose normalization,
+which has always required exactly one runtime configuration, and prevents
+silent ignored configuration.
 
 ## Mutation semantics
 
@@ -42,7 +44,7 @@ and prevents name/config mismatch and silent ignored configuration.
 | `SetSchedulerTriggerEnabled` | `project`, `agent_name`, and `trigger_id` are required. `enabled` is an explicit value; `false` disables and is never a no-op. |
 | `UpdateGlobalEnv` | `env` is a complete replacement keyed by name. Empty clears all entries and omitted names are deleted. For an entry marked secret, absent `value` retains the stored secret with that name; present empty clears it. `secret` is an explicit replacement value. Duplicate names normalize with the last occurrence winning. |
 | `UpdateCapabilityGatewayConfig` | Field-level patch. Absent `addr`/`token` is no-op; present empty explicitly clears that field. |
-| `UpdateWorkspacePreset` | `preset_id` identifies the resource. All other fields are complete replacement values; empty `comment` clears it, while empty required name/type/config is rejected. |
+| `UpdateWorkspacePreset` | `preset_id` identifies the resource. All other fields are complete replacement values. Empty `comment` clears it; empty name/type is rejected; empty `config_json` is normalized to the provider default rather than treated as no-op. |
 
 Create requests provide complete initial values. Delete, remove, prune, stop,
 and other action requests are commands rather than patches: their ordinary

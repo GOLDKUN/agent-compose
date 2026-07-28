@@ -6433,8 +6433,9 @@ func (x *EventTriggerSpec) GetTopic() string {
 
 type DriverSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Required. A project agent has exactly one runtime driver configuration;
-	// the selected oneof case is the driver name.
+	// Required. Must match the selected config case.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Required. A project agent has exactly one runtime driver configuration.
 	//
 	// Types that are valid to be assigned to Config:
 	//
@@ -6474,6 +6475,13 @@ func (x *DriverSpec) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DriverSpec.ProtoReflect.Descriptor instead.
 func (*DriverSpec) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *DriverSpec) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
 }
 
 func (x *DriverSpec) GetConfig() isDriverSpec_Config {
@@ -16025,7 +16033,8 @@ type UpdateWorkspacePresetRequest struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Required replacement value.
 	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	// Required replacement value. Empty is rejected rather than treated as no-op.
+	// Replacement value. Empty is normalized to the provider default rather than
+	// treated as no-op.
 	ConfigJson string `protobuf:"bytes,4,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
 	// Replacement value. Empty explicitly clears the comment.
 	Comment       string `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
@@ -18420,13 +18429,14 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x06prompt\x18\a \x01(\tR\x06prompt\x12%\n" +
 	"\x0esandbox_policy\x18\b \x01(\tR\rsandboxPolicy\"(\n" +
 	"\x10EventTriggerSpec\x12\x14\n" +
-	"\x05topic\x18\x01 \x01(\tR\x05topic\"\xee\x01\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\"\xf6\x01\n" +
 	"\n" +
-	"DriverSpec\x12>\n" +
+	"DriverSpec\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
 	"\aboxlite\x18\x02 \x01(\v2\".agentcompose.v2.BoxliteDriverSpecH\x00R\aboxlite\x12;\n" +
 	"\x06docker\x18\x03 \x01(\v2!.agentcompose.v2.DockerDriverSpecH\x00R\x06docker\x12M\n" +
 	"\fmicrosandbox\x18\x04 \x01(\v2'.agentcompose.v2.MicrosandboxDriverSpecH\x00R\fmicrosandboxB\b\n" +
-	"\x06configJ\x04\b\x01\x10\x02R\x04name\"C\n" +
+	"\x06config\"C\n" +
 	"\x11BoxliteDriverSpec\x12\x16\n" +
 	"\x06kernel\x18\x01 \x01(\tR\x06kernel\x12\x16\n" +
 	"\x06rootfs\x18\x02 \x01(\tR\x06rootfs\"&\n" +

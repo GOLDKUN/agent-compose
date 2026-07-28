@@ -867,11 +867,10 @@ message EventTriggerSpec {
 }
 
 message DriverSpec {
-  reserved 1;
-  reserved "name";
+  // Required. Must match the selected config case.
+  string name = 1;
 
-  // Required. A project agent has exactly one runtime driver configuration;
-  // the selected oneof case is the driver name.
+  // Required. A project agent has exactly one runtime driver configuration.
   oneof config {
     BoxliteDriverSpec boxlite = 2;
     DockerDriverSpec docker = 3;
@@ -1868,7 +1867,8 @@ message UpdateWorkspacePresetRequest {
   string name = 2;
   // Required replacement value.
   string type = 3;
-  // Required replacement value. Empty is rejected rather than treated as no-op.
+  // Replacement value. Empty is normalized to the provider default rather than
+  // treated as no-op.
   string config_json = 4;
   // Replacement value. Empty explicitly clears the comment.
   string comment = 5;

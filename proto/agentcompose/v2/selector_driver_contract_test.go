@@ -31,7 +31,7 @@ func TestDriverSpecUsesSingleConfigOneof(t *testing.T) {
 			t.Fatalf("DriverSpec.%s is not part of config", fieldName)
 		}
 	}
-	if field := message.Fields().ByName("name"); field != nil {
-		t.Fatal("DriverSpec.name must not duplicate the selected config case")
+	if field := message.Fields().ByName("name"); field == nil || field.ContainingOneof() != nil {
+		t.Fatal("DriverSpec.name must remain an independent compatibility field")
 	}
 }

@@ -138,6 +138,7 @@ func TestE2EImageDockerSandboxLifecycle(t *testing.T) {
 				Provider: "codex",
 				Image:    guestImage,
 				Driver: &agentcomposev2.DriverSpec{
+					Name:   "docker",
 					Config: &agentcomposev2.DriverSpec_Docker{Docker: &agentcomposev2.DockerDriverSpec{}},
 				},
 			}},
