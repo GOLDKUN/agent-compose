@@ -524,6 +524,7 @@ Inspect project resources, daemon images, or runtime cache items.
 
 ```bash
 agent-compose inspect project
+agent-compose inspect project <project-name|project-id|short-id>
 agent-compose inspect <project|agent|run|sandbox|image|cache-id>
 agent-compose inspect agent <agent>
 agent-compose inspect run <run-id>
@@ -533,6 +534,8 @@ agent-compose inspect cache <cache-id>
 ```
 
 When a full ID or hexadecimal short ID is passed as the only argument, `inspect` resolves its resource type through the daemon. Names still require the explicit typed form. Ambiguous short IDs are rejected with the matching resource types.
+
+For `inspect project <project-ref>`, the positional project reference takes precedence over both `--project-name` and `--file`. It is resolved as an exact project name first, then as a full ID or unique short ID. If the explicit reference is missing or ambiguous, the command fails instead of falling back to the project selected by flags or the current Compose file. Without a positional project reference, `inspect project` keeps using the normal deployed-project selection rules.
 
 Details:
 
