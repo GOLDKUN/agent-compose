@@ -87,6 +87,7 @@ func RegisterDependencies(di do.Injector) {
 	do.Provide(di, NewRunController)
 	do.Provide(di, NewSandboxRunTargetResolver)
 	do.Provide(di, NewSandboxRemovalCoordinator)
+	do.Provide(di, NewDeletionRecovery)
 	do.Provide(di, NewCleanupRunner)
 	do.Provide(di, NewRunSupervisor)
 	do.Provide(di, NewProjectController)
@@ -200,6 +201,13 @@ func NewSandboxRemovalCoordinator(di do.Injector) (*sandboxes.RemovalCoordinator
 	}, nil
 }
 
+func NewDeletionRecovery(di do.Injector) (*sandboxes.DeletionRecovery, error) {
+	return sandboxes.NewDeletionRecovery(
+		do.MustInvoke[*sandboxes.RemovalCoordinator](di),
+		do.MustInvoke[*slog.Logger](di),
+	), nil
+}
+
 func NewCleanupRunner(di do.Injector) (*cleanup.Runner, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
 	store := do.MustInvoke[*sandboxstore.Store](di)
@@ -225,9 +233,6 @@ func StartBackground(di do.Injector) error {
 	// sandbox store. Do this before resolving or starting any component that can
 	// create a sandbox, so the initial cleanup pass cannot race registration.
 	runner := do.MustInvoke[*cleanup.Runner](di)
-	for _, warning := range do.MustInvoke[*sandboxes.RemovalCoordinator](di).Recover(do.MustInvoke[context.Context](di)) {
-		slog.Warn("failed to recover sandbox deletion", "warning", warning)
-	}
 	ctx := do.MustInvoke[context.Context](di)
 	if err := startBackgroundManagers(
 		ctx,
@@ -241,16 +246,30 @@ func StartBackground(di do.Injector) error {
 	); err != nil {
 		return err
 	}
+	if err := do.MustInvoke[*sandboxes.DeletionRecovery](di).Start(ctx); err != nil {
+		return fmt.Errorf("start sandbox deletion recovery: %w", err)
+	}
 	runner.Start(ctx)
 	return nil
 }
 
 func StopBackground(ctx context.Context, di do.Injector) error {
-	runner, err := do.Invoke[*cleanup.Runner](di)
-	if err != nil {
-		return err
+	components := make([]backgroundComponent, 0, 2)
+	var setupErrors []error
+
+	recovery, recoveryErr := do.Invoke[*sandboxes.DeletionRecovery](di)
+	if recoveryErr != nil {
+		setupErrors = append(setupErrors, fmt.Errorf("resolve sandbox deletion recovery: %w", recoveryErr))
+	} else {
+		components = append(components, backgroundComponent{name: "sandbox deletion recovery", shutdown: recovery.Shutdown})
 	}
-	return runner.Shutdown(ctx)
+	runner, runnerErr := do.Invoke[*cleanup.Runner](di)
+	if runnerErr != nil {
+		setupErrors = append(setupErrors, fmt.Errorf("resolve cleanup runner: %w", runnerErr))
+	} else {
+		components = append(components, backgroundComponent{name: "cleanup runner", shutdown: runner.Shutdown})
+	}
+	return stopBackgroundComponents(ctx, components, setupErrors...)
 }
 
 func NewCapProxyServer(di do.Injector) (*capproxy.Server, error) {

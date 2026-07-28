@@ -22,6 +22,7 @@ import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
 	"agent-compose/pkg/runs"
+	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/volumes"
 	"agent-compose/pkg/workspaces"
@@ -111,13 +112,17 @@ func TestStartBackgroundConstructsCleanupBeforeLoader(t *testing.T) {
 		constructionOrder = append(constructionOrder, "loader")
 		return NewSchedulerController(di)
 	})
+	do.Override(di, func(di do.Injector) (*sandboxes.DeletionRecovery, error) {
+		constructionOrder = append(constructionOrder, "recovery")
+		return NewDeletionRecovery(di)
+	})
 
 	if err := StartBackground(di); err != nil {
 		t.Fatalf("StartBackground returned error: %v", err)
 	}
 	cancel()
-	if len(constructionOrder) < 2 || constructionOrder[0] != "cleanup" || constructionOrder[1] != "loader" {
-		t.Fatalf("background construction order = %v, want cleanup before loader", constructionOrder)
+	if len(constructionOrder) < 3 || constructionOrder[0] != "cleanup" || constructionOrder[1] != "loader" || constructionOrder[2] != "recovery" {
+		t.Fatalf("background construction order = %v, want cleanup before loader before recovery", constructionOrder)
 	}
 }
 

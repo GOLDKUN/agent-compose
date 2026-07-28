@@ -681,7 +681,8 @@ Default columns:
 - `UPTIME`: daemon-reported timestamp rendered in the daemon timezone when available.
 - `VERSION`: daemon build version.
 
-Use `--json` to print the raw daemon status response for automation.
+Status requests have a five-second timeout. Use `--json` to print the raw daemon
+status response for automation.
 
 ## Other Commands
 

@@ -686,7 +686,8 @@ agent-compose status --json
 - `UPTIME`：daemon 返回的时间戳；如果 daemon 返回了时区信息，则按 daemon 时区展示。
 - `VERSION`：daemon 构建版本。
 
-自动化场景使用 `--json` 输出 daemon 原始 status 响应。
+status 请求的超时时间为五秒。自动化场景使用 `--json` 输出 daemon 原始
+status 响应。
 
 ## 其他命令
 
