@@ -441,14 +441,14 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 	}
 
 	if _, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
-		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{Project: &agentcomposev2.ExecSandboxSelector_ProjectId{ProjectId: "project-1"}, AgentName: "worker"}},
 		Command: &agentcomposev2.ExecCommand{Command: "echo"},
 	}, "exec-ambiguous", nil); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("expected multiple running selector error, got %v", err)
 	}
 	projects.runs = projects.runs[:1]
 	selectorResp, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
-		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{Project: &agentcomposev2.ExecSandboxSelector_ProjectId{ProjectId: "project-1"}, AgentName: "worker"}},
 		Command: &agentcomposev2.ExecCommand{Command: "echo"},
 	}, "exec-selector", nil)
 	if err != nil {
@@ -459,7 +459,7 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 	}
 	projects.runs = nil
 	if _, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
-		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", AgentName: "worker"}},
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{Project: &agentcomposev2.ExecSandboxSelector_ProjectId{ProjectId: "project-1"}, AgentName: "worker"}},
 		Command: &agentcomposev2.ExecCommand{Command: "echo"},
 	}, "exec-missing", nil); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("expected no running sandbox selector error, got %v", err)
@@ -496,9 +496,9 @@ func TestExecHandlerSelectorErrors(t *testing.T) {
 		t.Fatalf("expected run not found, got %v", err)
 	}
 	if _, err := handler.Exec(context.Background(), connect.NewRequest(&agentcomposev2.ExecRequest{
-		Target: &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", ProjectName: "Project"}},
+		Target: &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{Project: &agentcomposev2.ExecSandboxSelector_ProjectId{}}},
 	})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("expected conflicting project selector error, got %v", err)
+		t.Fatalf("expected empty project selector error, got %v", err)
 	}
 }
 

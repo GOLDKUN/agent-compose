@@ -1422,17 +1422,23 @@ func (x *ValidateProjectResponse) GetSpecHash() string {
 }
 
 type ApplyProjectRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Spec   *ProjectSpec           `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
-	Source *ProjectSource         `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required. The complete desired project specification. All repeated and map
+	// fields in the spec replace the previously persisted collections; an empty
+	// collection explicitly clears that collection.
+	Spec *ProjectSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	// Optional source metadata used while normalizing the replacement. An absent
+	// source supplies empty compose_path and project_dir values.
+	Source *ProjectSource `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
 	// submitted_spec_hash optionally verifies the submitted spec after the server
 	// normalizes it. It is not compared with the currently stored project and is
 	// not an optimistic-concurrency precondition. An empty value skips this check.
 	// Canonicalization, encoding, and hashing are defined by pkg/compose.
 	SubmittedSpecHash string `protobuf:"bytes,3,opt,name=submitted_spec_hash,json=submittedSpecHash,proto3" json:"submitted_spec_hash,omitempty"`
-	DryRun            bool   `protobuf:"varint,4,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Explicit execution mode. False applies the replacement; true only plans it.
+	DryRun        bool `protobuf:"varint,4,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ApplyProjectRequest) Reset() {
@@ -4845,10 +4851,13 @@ func (x *SchedulerRun) GetSandboxIds() []string {
 }
 
 type SetSchedulerEnabledRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Project       *ProjectRef            `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
-	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required. Exactly one non-empty project selector must be set.
+	Project *ProjectRef `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	// Required stable agent name within the selected project.
+	AgentName string `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	// Explicit replacement value. False disables the scheduler; it is not a no-op.
+	Enabled       bool `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4957,11 +4966,15 @@ func (x *SetSchedulerEnabledResponse) GetOverridden() bool {
 }
 
 type SetSchedulerTriggerEnabledRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Project       *ProjectRef            `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
-	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	TriggerId     string                 `protobuf:"bytes,3,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
-	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required. Exactly one non-empty project selector must be set.
+	Project *ProjectRef `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	// Required stable agent name within the selected project.
+	AgentName string `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	// Required stable trigger ID within the selected scheduler.
+	TriggerId string `protobuf:"bytes,3,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
+	// Explicit replacement value. False disables the trigger; it is not a no-op.
+	Enabled       bool `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6001,10 +6014,16 @@ func (x *EnvVarSpec) GetSecret() bool {
 }
 
 type EnvVarUpdateSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Value         *string                `protobuf:"bytes,2,opt,name=value,proto3,oneof" json:"value,omitempty"`
-	Secret        bool                   `protobuf:"varint,3,opt,name=secret,proto3" json:"secret,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required replacement key. Duplicate names are normalized with the last
+	// occurrence winning.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Presence is meaningful only for secret preservation during
+	// UpdateGlobalEnv: absent preserves the existing secret value; present empty
+	// explicitly clears it. Non-secret entries treat absence as an empty value.
+	Value *string `protobuf:"bytes,2,opt,name=value,proto3,oneof" json:"value,omitempty"`
+	// Explicit replacement value. False changes the entry to non-secret.
+	Secret        bool `protobuf:"varint,3,opt,name=secret,proto3" json:"secret,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6413,11 +6432,17 @@ func (x *EventTriggerSpec) GetTopic() string {
 }
 
 type DriverSpec struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Name          string                  `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Boxlite       *BoxliteDriverSpec      `protobuf:"bytes,2,opt,name=boxlite,proto3" json:"boxlite,omitempty"`
-	Docker        *DockerDriverSpec       `protobuf:"bytes,3,opt,name=docker,proto3" json:"docker,omitempty"`
-	Microsandbox  *MicrosandboxDriverSpec `protobuf:"bytes,4,opt,name=microsandbox,proto3" json:"microsandbox,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required. Must match the selected config case.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Required. A project agent has exactly one runtime driver configuration.
+	//
+	// Types that are valid to be assigned to Config:
+	//
+	//	*DriverSpec_Boxlite
+	//	*DriverSpec_Docker
+	//	*DriverSpec_Microsandbox
+	Config        isDriverSpec_Config `protobuf_oneof:"config"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6459,26 +6484,61 @@ func (x *DriverSpec) GetName() string {
 	return ""
 }
 
+func (x *DriverSpec) GetConfig() isDriverSpec_Config {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
 func (x *DriverSpec) GetBoxlite() *BoxliteDriverSpec {
 	if x != nil {
-		return x.Boxlite
+		if x, ok := x.Config.(*DriverSpec_Boxlite); ok {
+			return x.Boxlite
+		}
 	}
 	return nil
 }
 
 func (x *DriverSpec) GetDocker() *DockerDriverSpec {
 	if x != nil {
-		return x.Docker
+		if x, ok := x.Config.(*DriverSpec_Docker); ok {
+			return x.Docker
+		}
 	}
 	return nil
 }
 
 func (x *DriverSpec) GetMicrosandbox() *MicrosandboxDriverSpec {
 	if x != nil {
-		return x.Microsandbox
+		if x, ok := x.Config.(*DriverSpec_Microsandbox); ok {
+			return x.Microsandbox
+		}
 	}
 	return nil
 }
+
+type isDriverSpec_Config interface {
+	isDriverSpec_Config()
+}
+
+type DriverSpec_Boxlite struct {
+	Boxlite *BoxliteDriverSpec `protobuf:"bytes,2,opt,name=boxlite,proto3,oneof"`
+}
+
+type DriverSpec_Docker struct {
+	Docker *DockerDriverSpec `protobuf:"bytes,3,opt,name=docker,proto3,oneof"`
+}
+
+type DriverSpec_Microsandbox struct {
+	Microsandbox *MicrosandboxDriverSpec `protobuf:"bytes,4,opt,name=microsandbox,proto3,oneof"`
+}
+
+func (*DriverSpec_Boxlite) isDriverSpec_Config() {}
+
+func (*DriverSpec_Docker) isDriverSpec_Config() {}
+
+func (*DriverSpec_Microsandbox) isDriverSpec_Config() {}
 
 type BoxliteDriverSpec struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -10139,10 +10199,16 @@ func (*ExecRequest_RunId) isExecRequest_Target() {}
 func (*ExecRequest_Selector) isExecRequest_Target() {}
 
 type ExecSandboxSelector struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	ProjectName   string                 `protobuf:"bytes,2,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
-	AgentName     string                 `protobuf:"bytes,3,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required. Select exactly one project by stable ID or exact name.
+	//
+	// Types that are valid to be assigned to Project:
+	//
+	//	*ExecSandboxSelector_ProjectId
+	//	*ExecSandboxSelector_ProjectName
+	Project isExecSandboxSelector_Project `protobuf_oneof:"project"`
+	// Optional filter. Empty matches sandboxes for every agent in the project.
+	AgentName     string `protobuf:"bytes,3,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10177,16 +10243,27 @@ func (*ExecSandboxSelector) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{115}
 }
 
+func (x *ExecSandboxSelector) GetProject() isExecSandboxSelector_Project {
+	if x != nil {
+		return x.Project
+	}
+	return nil
+}
+
 func (x *ExecSandboxSelector) GetProjectId() string {
 	if x != nil {
-		return x.ProjectId
+		if x, ok := x.Project.(*ExecSandboxSelector_ProjectId); ok {
+			return x.ProjectId
+		}
 	}
 	return ""
 }
 
 func (x *ExecSandboxSelector) GetProjectName() string {
 	if x != nil {
-		return x.ProjectName
+		if x, ok := x.Project.(*ExecSandboxSelector_ProjectName); ok {
+			return x.ProjectName
+		}
 	}
 	return ""
 }
@@ -10197,6 +10274,22 @@ func (x *ExecSandboxSelector) GetAgentName() string {
 	}
 	return ""
 }
+
+type isExecSandboxSelector_Project interface {
+	isExecSandboxSelector_Project()
+}
+
+type ExecSandboxSelector_ProjectId struct {
+	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof"`
+}
+
+type ExecSandboxSelector_ProjectName struct {
+	ProjectName string `protobuf:"bytes,2,opt,name=project_name,json=projectName,proto3,oneof"`
+}
+
+func (*ExecSandboxSelector_ProjectId) isExecSandboxSelector_Project() {}
+
+func (*ExecSandboxSelector_ProjectName) isExecSandboxSelector_Project() {}
 
 type ExecCommand struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -15344,8 +15437,12 @@ func (x *GetGlobalEnvResponse) GetEnv() []*EnvVarSpec {
 }
 
 type UpdateGlobalEnvRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Env           []*EnvVarUpdateSpec    `protobuf:"bytes,1,rep,name=env,proto3" json:"env,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Complete replacement keyed by EnvVarUpdateSpec.name. An empty list clears
+	// all global environment variables; omitted existing names are deleted.
+	// For a secret entry only, an absent value preserves the existing secret
+	// value with the same name. An explicitly empty value clears it.
+	Env           []*EnvVarUpdateSpec `protobuf:"bytes,1,rep,name=env,proto3" json:"env,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -15564,9 +15661,11 @@ func (x *GetCapabilityGatewayConfigResponse) GetConfig() *CapabilityGatewayConfi
 }
 
 type UpdateCapabilityGatewayConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Addr          *string                `protobuf:"bytes,1,opt,name=addr,proto3,oneof" json:"addr,omitempty"`
-	Token         *string                `protobuf:"bytes,2,opt,name=token,proto3,oneof" json:"token,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Field patch: absent is no-op; present empty explicitly clears the address.
+	Addr *string `protobuf:"bytes,1,opt,name=addr,proto3,oneof" json:"addr,omitempty"`
+	// Field patch: absent is no-op; present empty explicitly clears the token.
+	Token         *string `protobuf:"bytes,2,opt,name=token,proto3,oneof" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -15927,12 +16026,18 @@ func (x *CreateWorkspacePresetRequest) GetComment() string {
 }
 
 type UpdateWorkspacePresetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PresetId      string                 `protobuf:"bytes,1,opt,name=preset_id,json=presetId,proto3" json:"preset_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	ConfigJson    string                 `protobuf:"bytes,4,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
-	Comment       string                 `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required stable preset ID.
+	PresetId string `protobuf:"bytes,1,opt,name=preset_id,json=presetId,proto3" json:"preset_id,omitempty"`
+	// Required replacement value.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Required replacement value.
+	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// Replacement value. Empty is normalized to the provider default rather than
+	// treated as no-op.
+	ConfigJson string `protobuf:"bytes,4,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
+	// Replacement value. Empty explicitly clears the comment.
+	Comment       string `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -18324,13 +18429,14 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x06prompt\x18\a \x01(\tR\x06prompt\x12%\n" +
 	"\x0esandbox_policy\x18\b \x01(\tR\rsandboxPolicy\"(\n" +
 	"\x10EventTriggerSpec\x12\x14\n" +
-	"\x05topic\x18\x01 \x01(\tR\x05topic\"\xe6\x01\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\"\xf6\x01\n" +
 	"\n" +
 	"DriverSpec\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
-	"\aboxlite\x18\x02 \x01(\v2\".agentcompose.v2.BoxliteDriverSpecR\aboxlite\x129\n" +
-	"\x06docker\x18\x03 \x01(\v2!.agentcompose.v2.DockerDriverSpecR\x06docker\x12K\n" +
-	"\fmicrosandbox\x18\x04 \x01(\v2'.agentcompose.v2.MicrosandboxDriverSpecR\fmicrosandbox\"C\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
+	"\aboxlite\x18\x02 \x01(\v2\".agentcompose.v2.BoxliteDriverSpecH\x00R\aboxlite\x12;\n" +
+	"\x06docker\x18\x03 \x01(\v2!.agentcompose.v2.DockerDriverSpecH\x00R\x06docker\x12M\n" +
+	"\fmicrosandbox\x18\x04 \x01(\v2'.agentcompose.v2.MicrosandboxDriverSpecH\x00R\fmicrosandboxB\b\n" +
+	"\x06config\"C\n" +
 	"\x11BoxliteDriverSpec\x12\x16\n" +
 	"\x06kernel\x18\x01 \x01(\tR\x06kernel\x12\x16\n" +
 	"\x06rootfs\x18\x02 \x01(\tR\x06rootfs\"&\n" +
@@ -18680,13 +18786,14 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"timeout_ms\x18\a \x01(\rR\ttimeoutMs\x12(\n" +
 	"\x10max_output_bytes\x18\b \x01(\rR\x0emaxOutputBytesB\b\n" +
-	"\x06target\"v\n" +
-	"\x13ExecSandboxSelector\x12\x1d\n" +
+	"\x06target\"\x85\x01\n" +
+	"\x13ExecSandboxSelector\x12\x1f\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12!\n" +
-	"\fproject_name\x18\x02 \x01(\tR\vprojectName\x12\x1d\n" +
+	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x12#\n" +
+	"\fproject_name\x18\x02 \x01(\tH\x00R\vprojectName\x12\x1d\n" +
 	"\n" +
-	"agent_name\x18\x03 \x01(\tR\tagentName\";\n" +
+	"agent_name\x18\x03 \x01(\tR\tagentNameB\t\n" +
+	"\aproject\";\n" +
 	"\vExecCommand\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
 	"\x04args\x18\x02 \x03(\tR\x04args\"C\n" +
@@ -20305,6 +20412,11 @@ func file_agentcompose_v2_agentcompose_proto_init() {
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[57].OneofWrappers = []any{}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[64].OneofWrappers = []any{}
+	file_agentcompose_v2_agentcompose_proto_msgTypes[69].OneofWrappers = []any{
+		(*DriverSpec_Boxlite)(nil),
+		(*DriverSpec_Docker)(nil),
+		(*DriverSpec_Microsandbox)(nil),
+	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[76].OneofWrappers = []any{
 		(*RunAttachRequest_Start)(nil),
 		(*RunAttachRequest_Stdin)(nil),
@@ -20327,6 +20439,10 @@ func file_agentcompose_v2_agentcompose_proto_init() {
 		(*ExecRequest_SandboxId)(nil),
 		(*ExecRequest_RunId)(nil),
 		(*ExecRequest_Selector)(nil),
+	}
+	file_agentcompose_v2_agentcompose_proto_msgTypes[115].OneofWrappers = []any{
+		(*ExecSandboxSelector_ProjectId)(nil),
+		(*ExecSandboxSelector_ProjectName)(nil),
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[119].OneofWrappers = []any{
 		(*ExecAttachRequest_Start)(nil),

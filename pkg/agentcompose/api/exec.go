@@ -678,16 +678,12 @@ func (h *ExecHandler) resolveExecTargetSandbox(ctx context.Context, req *agentco
 	if selector == nil {
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("exec target is required"))
 	}
-	projectID := strings.TrimSpace(selector.GetProjectId())
-	projectName := strings.TrimSpace(selector.GetProjectName())
-	if projectID != "" && projectName != "" {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id and project_name are mutually exclusive"))
-	}
 	projectRef := &agentcomposev2.ProjectRef{}
-	if projectID != "" {
-		projectRef.Selector = &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}
-	} else if projectName != "" {
-		projectRef.Selector = &agentcomposev2.ProjectRef_Name{Name: projectName}
+	switch project := selector.GetProject().(type) {
+	case *agentcomposev2.ExecSandboxSelector_ProjectId:
+		projectRef.Selector = &agentcomposev2.ProjectRef_ProjectId{ProjectId: strings.TrimSpace(project.ProjectId)}
+	case *agentcomposev2.ExecSandboxSelector_ProjectName:
+		projectRef.Selector = &agentcomposev2.ProjectRef_Name{Name: strings.TrimSpace(project.ProjectName)}
 	}
 	project, err := h.resolveProjectRef(ctx, projectRef)
 	if err != nil {
