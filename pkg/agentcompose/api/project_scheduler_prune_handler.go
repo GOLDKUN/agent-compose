@@ -7,8 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -16,7 +16,7 @@ func (h *ProjectHandler) PruneSchedulerRuns(ctx context.Context, req *connect.Re
 	if h.schedulerPrune == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("scheduler run prune controller is unavailable"))
 	}
-	_, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
+	_, schedulerRecords, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -28,18 +28,18 @@ func (h *ProjectHandler) PruneSchedulerRuns(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	loaderIDs := make([]string, 0, len(schedulers))
-	for _, scheduler := range schedulers {
-		if loaderID := strings.TrimSpace(scheduler.ManagedLoaderID); loaderID != "" {
-			loaderIDs = append(loaderIDs, loaderID)
+	schedulerIDs := make([]string, 0, len(schedulerRecords))
+	for _, scheduler := range schedulerRecords {
+		if schedulerID := strings.TrimSpace(scheduler.ID); schedulerID != "" {
+			schedulerIDs = append(schedulerIDs, schedulerID)
 		}
 	}
-	result, err := h.schedulerPrune.PruneSchedulerRuns(ctx, loaders.SchedulerRunPruneRequest{
-		LoaderIDs: loaderIDs,
-		TriggerID: strings.TrimSpace(req.Msg.GetTriggerId()),
-		Statuses:  statuses,
-		OlderThan: olderThan,
-		Force:     req.Msg.GetForce(),
+	result, err := h.schedulerPrune.PruneSchedulerRuns(ctx, schedulers.SchedulerRunPruneRequest{
+		SchedulerIDs: schedulerIDs,
+		TriggerID:    strings.TrimSpace(req.Msg.GetTriggerId()),
+		Statuses:     statuses,
+		OlderThan:    olderThan,
+		Force:        req.Msg.GetForce(),
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
@@ -52,13 +52,13 @@ func schedulerRunPruneStatuses(values []agentcomposev2.SchedulerRunStatus) ([]st
 	for _, value := range values {
 		switch value {
 		case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SUCCEEDED:
-			result = append(result, domain.LoaderRunStatusSucceeded)
+			result = append(result, domain.SchedulerRunStatusSucceeded)
 		case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_FAILED:
-			result = append(result, domain.LoaderRunStatusFailed)
+			result = append(result, domain.SchedulerRunStatusFailed)
 		case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_CANCELED:
-			result = append(result, domain.LoaderRunStatusCanceled)
+			result = append(result, domain.SchedulerRunStatusCanceled)
 		case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SKIPPED:
-			result = append(result, domain.LoaderRunStatusSkipped)
+			result = append(result, domain.SchedulerRunStatusSkipped)
 		default:
 			return nil, fmt.Errorf("scheduler run prune only accepts terminal statuses")
 		}
@@ -66,7 +66,7 @@ func schedulerRunPruneStatuses(values []agentcomposev2.SchedulerRunStatus) ([]st
 	return result, nil
 }
 
-func schedulerRunPruneResultToProto(result loaders.SchedulerRunPruneResult) *agentcomposev2.PruneSchedulerRunsResponse {
+func schedulerRunPruneResultToProto(result schedulers.SchedulerRunPruneResult) *agentcomposev2.PruneSchedulerRunsResponse {
 	response := &agentcomposev2.PruneSchedulerRunsResponse{
 		DryRun:      result.DryRun,
 		Matched:     schedulerRunPruneStatsToProto(result.Matched),
@@ -77,7 +77,7 @@ func schedulerRunPruneResultToProto(result loaders.SchedulerRunPruneResult) *age
 	}
 	for _, residue := range result.Residues {
 		response.Residues = append(response.Residues, &agentcomposev2.SchedulerRunPruneResidue{
-			LoaderId: residue.LoaderID,
+			LoaderId: residue.SchedulerID,
 			RunId:    residue.RunID,
 			Path:     residue.Path,
 			Error:    residue.Error,
@@ -86,10 +86,10 @@ func schedulerRunPruneResultToProto(result loaders.SchedulerRunPruneResult) *age
 	return response
 }
 
-func schedulerRunPruneStatsToProto(stats loaders.SchedulerRunPruneStats) *agentcomposev2.SchedulerRunPruneStats {
+func schedulerRunPruneStatsToProto(stats schedulers.SchedulerRunPruneStats) *agentcomposev2.SchedulerRunPruneStats {
 	return &agentcomposev2.SchedulerRunPruneStats{
 		Runs:              stats.Runs,
-		LoaderEvents:      stats.LoaderEvents,
+		LoaderEvents:      stats.SchedulerEvents,
 		EventDeliveries:   stats.EventDeliveries,
 		EventSandboxLinks: stats.EventSandboxLinks,
 		ArtifactDirs:      stats.ArtifactDirs,

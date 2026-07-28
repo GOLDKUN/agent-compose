@@ -9,19 +9,19 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 type SandboxDriver struct {
 	Config   *appconfig.Config
-	Store    *sessionstore.Store
+	Store    *sandboxstore.Store
 	ConfigDB *configstore.ConfigStore
 	Runtimes RuntimeProvider
 }
 
-func NewSandboxDriver(config *appconfig.Config, store *sessionstore.Store, configDB *configstore.ConfigStore, runtimes RuntimeProvider) *SandboxDriver {
+func NewSandboxDriver(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, runtimes RuntimeProvider) *SandboxDriver {
 	return &SandboxDriver{Config: config, Store: store, ConfigDB: configDB, Runtimes: runtimes}
 }
 
@@ -103,7 +103,7 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 }
 
 func (d *SandboxDriver) saveSandboxStartInfo(session *domain.Sandbox, vmState domain.VMState, proxyState domain.ProxyState, info domain.SandboxVMInfo) error {
-	vmState, proxyState = sessions.ApplySessionStartInfo(vmState, proxyState, info, time.Now())
+	vmState, proxyState = sandboxes.ApplySessionStartInfo(vmState, proxyState, info, time.Now())
 	if err := d.Store.SaveVMState(session.Summary.ID, vmState); err != nil {
 		return err
 	}

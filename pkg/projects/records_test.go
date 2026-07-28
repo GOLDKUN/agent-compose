@@ -60,7 +60,7 @@ func TestNewAgentDefinitionFromSpecKeepsStableNameWithPresentationMetadata(t *te
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
-	if definition.Name != agent.Name || definition.Description != "处理日常通用任务" || definition.ManagedAgentName != agent.Name {
+	if definition.Name != agent.Name || definition.Description != "处理日常通用任务" || definition.AgentName != agent.Name {
 		t.Fatalf("managed agent definition = %#v", definition)
 	}
 }
@@ -89,9 +89,9 @@ func TestProjectRecordsCarryVolumeMountSpecs(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("NewSchedulerRecordFromSpec = %#v/%v/%v", scheduler, ok, err)
 	}
-	loader, err := NewManagedLoaderFromScheduler(project, scheduler, agent)
+	loader, err := NewSchedulerDefinition(project, scheduler, agent)
 	if err != nil {
-		t.Fatalf("NewManagedLoaderFromScheduler returned error: %v", err)
+		t.Fatalf("NewSchedulerDefinition returned error: %v", err)
 	}
 	if len(loader.Volumes) != 2 || loader.Volumes[0].Source != "cache" {
 		t.Fatalf("loader volumes = %#v", loader.Volumes)
@@ -110,12 +110,12 @@ func TestSchedulerConcurrencyPolicyFlowsIntoManagedLoader(t *testing.T) {
 		{
 			name: "default skip",
 			raw:  "name: default-policy\nagents:\n  reviewer:\n    scheduler:\n      triggers:\n        - interval: 1m\n",
-			want: domain.LoaderConcurrencyPolicySkip,
+			want: domain.SchedulerConcurrencyPolicySkip,
 		},
 		{
 			name: "parallel",
 			raw:  "name: parallel-policy\nagents:\n  reviewer:\n    scheduler:\n      concurrency_policy: parallel\n      triggers:\n        - interval: 1m\n",
-			want: domain.LoaderConcurrencyPolicyParallel,
+			want: domain.SchedulerConcurrencyPolicyParallel,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -134,7 +134,7 @@ func TestSchedulerConcurrencyPolicyFlowsIntoManagedLoader(t *testing.T) {
 			if len(builds) != 1 {
 				t.Fatalf("scheduler builds = %d, want 1", len(builds))
 			}
-			if got := builds[0].Loader.Summary.ConcurrencyPolicy; got != test.want {
+			if got := builds[0].Definition.Summary.ConcurrencyPolicy; got != test.want {
 				t.Fatalf("loader concurrency policy = %q, want %q", got, test.want)
 			}
 		})
@@ -170,9 +170,9 @@ func TestDisabledAgentDisablesManagedAgentAndSchedulerRecords(t *testing.T) {
 	if scheduler.Enabled {
 		t.Fatalf("scheduler enabled = true, want false")
 	}
-	loader, err := NewManagedLoaderFromScheduler(project, scheduler, agent)
+	loader, err := NewSchedulerDefinition(project, scheduler, agent)
 	if err != nil {
-		t.Fatalf("NewManagedLoaderFromScheduler returned error: %v", err)
+		t.Fatalf("NewSchedulerDefinition returned error: %v", err)
 	}
 	if loader.Summary.Enabled {
 		t.Fatalf("loader enabled = true, want false")
@@ -274,17 +274,17 @@ func TestNewAgentDefinitionFromSpecCarriesSkills(t *testing.T) {
 	}
 }
 
-func TestManagedAgentDefinitionUnchangedComparesSkills(t *testing.T) {
+func TestAgentDefinitionUnchangedComparesSkills(t *testing.T) {
 	existing := domain.AgentDefinition{
 		ID: "agent-1", Name: "Agent", Enabled: true, Provider: "codex", ConfigJSON: "{}",
 		Skills: []domain.AgentSkill{{Name: "pdf", Provider: "git", URL: "https://github.com/anthropics/skills.git", Path: "skills/pdf"}},
 	}
 	current := existing
-	if !ManagedAgentDefinitionUnchanged(existing, current) {
+	if !AgentDefinitionUnchanged(existing, current) {
 		t.Fatalf("matching skills should be unchanged")
 	}
 	current.Skills = []domain.AgentSkill{{Name: "docx", Provider: "git", URL: "https://github.com/anthropics/skills.git", Path: "skills/docx"}}
-	if ManagedAgentDefinitionUnchanged(existing, current) {
+	if AgentDefinitionUnchanged(existing, current) {
 		t.Fatalf("different skills should mark managed agent changed")
 	}
 }

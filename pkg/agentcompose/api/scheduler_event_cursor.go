@@ -16,11 +16,11 @@ type projectSchedulerEventCursor struct {
 	TriggerID       string    `json:"trigger_id,omitempty"`
 	RunID           string    `json:"run_id,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
-	LoaderID        string    `json:"loader_id"`
+	SchedulerID     string    `json:"loader_id"`
 	EventID         string    `json:"event_id"`
 }
 
-func encodeProjectSchedulerEventCursor(projectID string, projectRevision int64, agentName, triggerID, runID string, event domain.LoaderEvent) string {
+func encodeProjectSchedulerEventCursor(projectID string, projectRevision int64, agentName, triggerID, runID string, event domain.SchedulerEvent) string {
 	payload, _ := json.Marshal(projectSchedulerEventCursor{
 		ProjectID:       strings.TrimSpace(projectID),
 		ProjectRevision: projectRevision,
@@ -28,7 +28,7 @@ func encodeProjectSchedulerEventCursor(projectID string, projectRevision int64, 
 		TriggerID:       strings.TrimSpace(triggerID),
 		RunID:           strings.TrimSpace(runID),
 		CreatedAt:       event.CreatedAt.UTC(),
-		LoaderID:        strings.TrimSpace(event.LoaderID),
+		SchedulerID:     strings.TrimSpace(event.SchedulerID),
 		EventID:         strings.TrimSpace(event.ID),
 	})
 	return base64.RawURLEncoding.EncodeToString(payload)

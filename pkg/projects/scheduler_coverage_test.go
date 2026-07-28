@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"database/sql"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
-	triggers, script, err := ManagedLoaderTriggersAndScript("project-1", "worker", "nightly", &compose.NormalizedSchedulerSpec{
+	triggers, script, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "nightly", &compose.NormalizedSchedulerSpec{
 		Triggers: []compose.NormalizedTriggerSpec{
 			{Name: "cron-main", Kind: "cron", Cron: "*/5 * * * *", Prompt: "Run cron"},
 			{Name: "interval-main", Kind: "interval", Interval: "2s"},
@@ -19,12 +20,12 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("ManagedLoaderTriggersAndScript returned error: %v", err)
+		t.Fatalf("ProjectSchedulerTriggersAndScript returned error: %v", err)
 	}
 	if len(triggers) != 4 {
 		t.Fatalf("triggers = %#v", triggers)
 	}
-	if triggers[0].Kind != domain.LoaderTriggerKindCron || triggers[1].IntervalMs != 2000 || triggers[2].Kind != domain.LoaderTriggerKindTimeout || triggers[3].Topic != "webhook.github.push" {
+	if triggers[0].Kind != domain.SchedulerTriggerKindCron || triggers[1].IntervalMs != 2000 || triggers[2].Kind != domain.SchedulerTriggerKindTimeout || triggers[3].Topic != "webhook.github.push" {
 		t.Fatalf("trigger shapes = %#v", triggers)
 	}
 	for _, want := range []string{"scheduler.cron(", "scheduler.interval(", "scheduler.timeout(", "scheduler.on(", `quote \"prompt\"`} {
@@ -32,23 +33,23 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 			t.Fatalf("script missing %q: %s", want, script)
 		}
 	}
-	_, policyRegistration, err := ManagedLoaderTriggerAndRegistration("sticky-trigger", "worker", compose.NormalizedTriggerSpec{Kind: "interval", Interval: "1s", SandboxPolicy: "sticky"})
+	_, policyRegistration, err := ProjectSchedulerTriggerAndRegistration("sticky-trigger", "worker", compose.NormalizedTriggerSpec{Kind: "interval", Interval: "1s", SandboxPolicy: "sticky"})
 	if err != nil || !strings.Contains(policyRegistration, `sandboxPolicy: "sticky"`) {
 		t.Fatalf("sticky registration = %q, err=%v", policyRegistration, err)
 	}
 
-	emptyTriggers, idleScript, err := ManagedLoaderTriggersAndScript("project-1", "worker", "", &compose.NormalizedSchedulerSpec{})
+	emptyTriggers, idleScript, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "", &compose.NormalizedSchedulerSpec{})
 	if err != nil {
-		t.Fatalf("empty ManagedLoaderTriggersAndScript returned error: %v", err)
+		t.Fatalf("empty ProjectSchedulerTriggersAndScript returned error: %v", err)
 	}
 	if len(emptyTriggers) != 0 || !strings.Contains(idleScript, `status: "idle"`) {
 		t.Fatalf("empty triggers/script = %#v/%s", emptyTriggers, idleScript)
 	}
 
-	if _, _, err := ManagedLoaderTriggersAndScript("project-1", "worker", "", nil); err == nil {
+	if _, _, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "", nil); err == nil {
 		t.Fatalf("nil scheduler returned nil error")
 	}
-	if _, _, err := ManagedLoaderTriggersAndScript("project-1", "worker", "", &compose.NormalizedSchedulerSpec{Triggers: []compose.NormalizedTriggerSpec{
+	if _, _, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "", &compose.NormalizedSchedulerSpec{Triggers: []compose.NormalizedTriggerSpec{
 		{Name: "dup", Kind: "interval", Interval: "1s"},
 		{Name: "dup", Kind: "interval", Interval: "2s"},
 	}}); err == nil {
@@ -62,8 +63,8 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 		{Kind: "event"},
 		{Kind: "unsupported"},
 	} {
-		if _, _, err := ManagedLoaderTriggerAndRegistration("trigger-id", "worker", item); err == nil {
-			t.Fatalf("ManagedLoaderTriggerAndRegistration(%#v) returned nil error", item)
+		if _, _, err := ProjectSchedulerTriggerAndRegistration("trigger-id", "worker", item); err == nil {
+			t.Fatalf("ProjectSchedulerTriggerAndRegistration(%#v) returned nil error", item)
 		}
 	}
 	if got := JSStringLiteral("line\nquote\""); !strings.Contains(got, `\n`) || !strings.Contains(got, `\"`) {
@@ -94,7 +95,7 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NormalizeAgentRecord returned error: %v", err)
 	}
-	if agent.ManagedAgentID == "" || agent.SpecJSON != "{}" {
+	if agent.ID == "" || agent.SpecJSON != "{}" {
 		t.Fatalf("normalized agent = %#v", agent)
 	}
 	for _, item := range []domain.ProjectAgentRecord{
@@ -112,8 +113,15 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NormalizeSchedulerRecord returned error: %v", err)
 	}
-	if scheduler.SchedulerID == "" || scheduler.ManagedLoaderID == "" || scheduler.SpecJSON != "{}" {
+	if scheduler.SchedulerID == "" || scheduler.ID == "" || scheduler.SpecJSON != "{}" {
 		t.Fatalf("normalized scheduler = %#v", scheduler)
+	}
+	canonical, err := NormalizeSchedulerRecord(domain.ProjectSchedulerRecord{ID: "native-scheduler", SchedulerID: "legacy-alias", ProjectID: "project-1", AgentName: "worker"})
+	if err != nil {
+		t.Fatalf("NormalizeSchedulerRecord canonical identity returned error: %v", err)
+	}
+	if canonical.ID != "native-scheduler" || canonical.SchedulerID != canonical.ID {
+		t.Fatalf("normalized canonical scheduler = %#v", canonical)
 	}
 	for _, item := range []domain.ProjectSchedulerRecord{
 		{AgentName: "worker"},
@@ -159,7 +167,7 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 		t.Fatalf("ScanProject scanned=%#v err=%v", scanned, err)
 	}
 	scannedRun, err := ScanProjectRun(func(dest ...any) error {
-		values := []any{"run-1", "project-1", "Project", int64(1), "worker", "agent-1", "api", "scheduler-1", "trigger-1", "running", "session-1", 0, "", "prompt", "output", "{}", "logs", "artifacts", "", "docker", "image", int64(1_720_000_000_000), "1720000001000", int64(1000), float64(1720000002), time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC).Format(time.RFC3339)}
+		values := []any{"run-1", "project-1", "Project", int64(1), "worker", "agent-1", "api", "scheduler-1", "scheduler-run-1", "trigger-1", "running", "session-1", 0, "", "prompt", "output", "{}", "logs", "artifacts", "", "docker", "image", int64(1_720_000_000_000), "1720000001000", int64(1000), float64(1720000002), time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC).Format(time.RFC3339)}
 		for i, value := range values {
 			switch ptr := dest[i].(type) {
 			case *string:
@@ -168,6 +176,9 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 				*ptr = value.(int)
 			case *int64:
 				*ptr = value.(int64)
+			case *sql.NullString:
+				ptr.String = value.(string)
+				ptr.Valid = true
 			case *any:
 				*ptr = value
 			}

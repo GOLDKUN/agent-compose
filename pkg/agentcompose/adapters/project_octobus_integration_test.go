@@ -99,10 +99,10 @@ func TestProjectOctoBusProxyRoutesLegacyAndQualifiedCapsets(t *testing.T) {
 		"public":   {publicAddr, "public-token"},
 	}))
 	binding := capproxy.SandboxBinding{
-		SandboxID:        "sandbox-1",
-		ManagedProjectID: "project-1",
-		ManagedAgentID:   "agent-1",
-		CapsetIDs:        []string{"legacy-capset", "internal/dev", "public/web-search"},
+		SandboxID: "sandbox-1",
+		ProjectID: "project-1",
+		AgentID:   "agent-1",
+		CapsetIDs: []string{"legacy-capset", "internal/dev", "public/web-search"},
 	}
 	proxyAddr := startProjectOctoBusProxy(t, legacyAddr, "legacy-token", store, map[string]capproxy.SandboxBinding{"sandbox-token": binding})
 
@@ -121,7 +121,7 @@ func TestProjectOctoBusProxyUsesUpdatedDefinitionWithoutRebuildingSandbox(t *tes
 	secondAddr, secondCalls := startObservedOctoBus(t)
 	store := &integrationAgentStore{definitions: map[string]domain.AgentDefinition{}}
 	store.set(projectOctoBusDefinition("agent-1", "project-1", map[string][2]string{"internal": {firstAddr, "first-token"}}))
-	binding := capproxy.SandboxBinding{SandboxID: "sandbox-1", ManagedProjectID: "project-1", ManagedAgentID: "agent-1", CapsetIDs: []string{"internal/dev"}}
+	binding := capproxy.SandboxBinding{SandboxID: "sandbox-1", ProjectID: "project-1", AgentID: "agent-1", CapsetIDs: []string{"internal/dev"}}
 	proxyAddr := startProjectOctoBusProxy(t, "127.0.0.1:1", "", store, map[string]capproxy.SandboxBinding{"sandbox-token": binding})
 
 	invokeProjectOctoBus(t, proxyAddr, "sandbox-token", "internal/dev", "instance-1")
@@ -138,8 +138,8 @@ func TestProjectOctoBusProxyDoesNotCrossProjectCredentials(t *testing.T) {
 	store.set(projectOctoBusDefinition("agent-1", "project-1", map[string][2]string{"internal": {firstAddr, "project-1-token"}}))
 	store.set(projectOctoBusDefinition("agent-2", "project-2", map[string][2]string{"internal": {secondAddr, "project-2-token"}}))
 	proxyAddr := startProjectOctoBusProxy(t, "127.0.0.1:1", "", store, map[string]capproxy.SandboxBinding{
-		"token-1": {SandboxID: "sandbox-1", ManagedProjectID: "project-1", ManagedAgentID: "agent-1", CapsetIDs: []string{"internal/dev"}},
-		"token-2": {SandboxID: "sandbox-2", ManagedProjectID: "project-2", ManagedAgentID: "agent-2", CapsetIDs: []string{"internal/dev"}},
+		"token-1": {SandboxID: "sandbox-1", ProjectID: "project-1", AgentID: "agent-1", CapsetIDs: []string{"internal/dev"}},
+		"token-2": {SandboxID: "sandbox-2", ProjectID: "project-2", AgentID: "agent-2", CapsetIDs: []string{"internal/dev"}},
 	})
 
 	var wg sync.WaitGroup
@@ -179,7 +179,7 @@ func TestCapabilitySandboxResolverRebuildRestoresProjectScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binding.ManagedProjectID != "project-1" || binding.ManagedAgentID != "agent-1" || strings.Join(binding.CapsetIDs, ",") != "legacy-capset,internal/dev" {
+	if binding.ProjectID != "project-1" || binding.AgentID != "agent-1" || strings.Join(binding.CapsetIDs, ",") != "legacy-capset,internal/dev" {
 		t.Fatalf("rebuilt binding = %#v", binding)
 	}
 }
@@ -195,7 +195,7 @@ func projectOctoBusDefinition(agentID, projectID string, servers map[string][2]s
 	for name, target := range servers {
 		parts = append(parts, fmt.Sprintf("%q:{\"url\":%q,\"token\":%q}", name, target[0], target[1]))
 	}
-	return domain.AgentDefinition{ID: agentID, ManagedProjectID: projectID, ConfigJSON: `{"octobus_servers":{` + strings.Join(parts, ",") + `}}`}
+	return domain.AgentDefinition{ID: agentID, ProjectID: projectID, ConfigJSON: `{"octobus_servers":{` + strings.Join(parts, ",") + `}}`}
 }
 
 func startObservedOctoBus(t *testing.T) (string, <-chan observedOctoBusCall) {

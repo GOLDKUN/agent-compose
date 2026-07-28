@@ -24,11 +24,16 @@ func TestRunSupervisorStopActiveRunRemovesActiveBeforeMarkCanceled(t *testing.T)
 	}); err != nil {
 		t.Fatalf("UpsertProject returned error: %v", err)
 	}
+	agent, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{ProjectID: "project-1", AgentName: "worker"})
+	if err != nil {
+		t.Fatalf("UpsertProjectAgent returned error: %v", err)
+	}
 	if _, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{
 		RunID:       "run-1",
 		ProjectID:   "project-1",
 		ProjectName: "Project",
 		AgentName:   "worker",
+		AgentID:     agent.ID,
 		Source:      domain.ProjectRunSourceManual,
 		Status:      domain.ProjectRunStatusRunning,
 		ResultJSON:  "{}",

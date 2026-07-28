@@ -14,20 +14,20 @@ func NormalizeSandboxTriggerSource(value string, tags []SandboxTag) string {
 			return value
 		}
 	}
-	loaderID := ""
-	hasLoaderOrigin := false
+	schedulerID := ""
+	hasSchedulerOrigin := false
 	for _, tag := range tags {
 		name := strings.ToLower(strings.TrimSpace(tag.Name))
 		value := strings.TrimSpace(tag.Value)
 		switch name {
 		case "origin":
-			hasLoaderOrigin = strings.EqualFold(value, "loader")
+			hasSchedulerOrigin = strings.EqualFold(value, "loader")
 		case "loader_id":
-			loaderID = value
+			schedulerID = value
 		}
 	}
-	if hasLoaderOrigin && loaderID != "" {
-		return SandboxTypeScript + ":" + loaderID
+	if hasSchedulerOrigin && schedulerID != "" {
+		return SandboxTypeScript + ":" + schedulerID
 	}
 	return SandboxTypeManual
 }

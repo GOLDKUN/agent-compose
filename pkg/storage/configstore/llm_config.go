@@ -169,7 +169,7 @@ func (s *llmStore) GetLLMFacadeToken(ctx context.Context, rawToken string) (llms
 
 // llmFacadeTokenRetention is how long a revoked facade token row is kept before
 // it is physically pruned. The grace window keeps recently-revoked tokens around
-// for debugging while bounding table growth from completed sessions.
+// for debugging while bounding table growth from completed sandboxes.
 const llmFacadeTokenRetention = time.Hour
 
 const LLMFacadeTokenRetention = llmFacadeTokenRetention
@@ -180,7 +180,7 @@ func (s *llmStore) RevokeLLMFacadeTokensForSandbox(ctx context.Context, sandboxI
 		return fmt.Errorf("revoke llm facade tokens for sandbox: %w", err)
 	}
 	// Opportunistically prune long-dead rows (revoked beyond the retention grace,
-	// or expired) so the table stays bounded across sessions. Both states already
+	// or expired) so the table stays bounded across sandboxes. Both states already
 	// fail closed at the handler, so deleting them changes nothing observable.
 	cutoff := now.Add(-llmFacadeTokenRetention).Unix()
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM llm_facade_token WHERE (revoked_at != 0 AND revoked_at < ?) OR (expires_at != 0 AND expires_at < ?)`, cutoff, now.Unix()); err != nil {

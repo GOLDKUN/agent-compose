@@ -138,7 +138,7 @@ func normalizeQueueRule(raw queueRuleConfig) (queueRule, error) {
 	}, nil
 }
 
-func (q *RunQueue) Reserve(event domain.LoaderTopicEvent) (*Reservation, bool) {
+func (q *RunQueue) Reserve(event domain.SchedulerTopicEvent) (*Reservation, bool) {
 	if q == nil {
 		return &Reservation{}, true
 	}
@@ -155,7 +155,7 @@ func (q *RunQueue) Reserve(event domain.LoaderTopicEvent) (*Reservation, bool) {
 	return &Reservation{queue: q, name: name}, true
 }
 
-func (q *RunQueue) Match(event domain.LoaderTopicEvent) (string, int) {
+func (q *RunQueue) Match(event domain.SchedulerTopicEvent) (string, int) {
 	if q == nil {
 		return DefaultQueueName, 0
 	}
@@ -167,8 +167,8 @@ func (q *RunQueue) Match(event domain.LoaderTopicEvent) (string, int) {
 	return DefaultQueueName, q.defaultWorkers
 }
 
-func (r queueRule) matches(event domain.LoaderTopicEvent) bool {
-	if r.Match.Topic != "" && !domain.LoaderTriggerTopicMatches(r.Match.Topic, event.Topic) {
+func (r queueRule) matches(event domain.SchedulerTopicEvent) bool {
+	if r.Match.Topic != "" && !domain.SchedulerTriggerTopicMatches(r.Match.Topic, event.Topic) {
 		return false
 	}
 	if r.Match.Provider != "" && r.Match.Provider != event.Provider {

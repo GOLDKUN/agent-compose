@@ -10,7 +10,7 @@ import (
 	"agent-compose/pkg/cleanup"
 	"agent-compose/pkg/imagecache"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 )
 
 type cleanupSandboxStore interface {
@@ -44,7 +44,7 @@ func (c *ImageCacheCleaner) protectedIdentities(ctx context.Context) ([]string, 
 	for _, sandbox := range listed.Sandboxes {
 		byID[sandbox.Summary.ID] = sandbox
 	}
-	records, warnings := sessions.ListOwnershipRecords(c.SandboxRoot)
+	records, warnings := sandboxes.ListOwnershipRecords(c.SandboxRoot)
 	if len(warnings) > 0 {
 		return nil, fmt.Errorf("sandbox ownership inventory is incomplete: %s", strings.Join(warnings, "; "))
 	}

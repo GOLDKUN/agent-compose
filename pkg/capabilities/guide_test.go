@@ -21,7 +21,7 @@ func TestGuideScopeFromSandboxUsesCanonicalTagPrecedence(t *testing.T) {
 		{Name: domain.AgentSandboxTagID, Value: "agent-1"},
 		{Name: "project", Value: "project-1"},
 	}}}
-	if scope := GuideScopeFromSandbox(sandbox); scope != (GuideScope{ManagedProjectID: "project-1", ManagedAgentID: "agent-1"}) {
+	if scope := GuideScopeFromSandbox(sandbox); scope != (GuideScope{ProjectID: "project-1", AgentID: "agent-1"}) {
 		t.Fatalf("scope = %#v", scope)
 	}
 }
@@ -44,7 +44,7 @@ func (p *guideTestProvider) CapabilityGuideForScope(_ context.Context, scope Gui
 
 func TestCapabilityGuideForScopePreservesLegacyAndRoutesQualifiedDeclarations(t *testing.T) {
 	provider := &guideTestProvider{}
-	scope := GuideScope{ManagedProjectID: "project-1", ManagedAgentID: "agent-1"}
+	scope := GuideScope{ProjectID: "project-1", AgentID: "agent-1"}
 	if _, err := CapabilityGuideForScope(context.Background(), provider, scope, "legacy"); err != nil {
 		t.Fatal(err)
 	}

@@ -84,36 +84,36 @@ type WebhookSource struct {
 }
 
 type EventDelivery struct {
-	EventID   string    `json:"event_id"`
-	LoaderID  string    `json:"loader_id"`
-	TriggerID string    `json:"trigger_id"`
-	RunID     string    `json:"run_id,omitempty"`
-	Status    string    `json:"status"`
-	Error     string    `json:"error,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	EventID     string    `json:"event_id"`
+	SchedulerID string    `json:"loader_id"`
+	TriggerID   string    `json:"trigger_id"`
+	RunID       string    `json:"run_id,omitempty"`
+	Status      string    `json:"status"`
+	Error       string    `json:"error,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type EventSandboxLink struct {
-	EventID       string    `json:"event_id"`
-	SandboxID     string    `json:"sandbox_id"`
-	Relation      string    `json:"relation"`
-	LoaderID      string    `json:"loader_id,omitempty"`
-	RunID         string    `json:"run_id,omitempty"`
-	TriggerID     string    `json:"trigger_id,omitempty"`
-	LoaderEventID string    `json:"loader_event_id,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
+	EventID          string    `json:"event_id"`
+	SandboxID        string    `json:"sandbox_id"`
+	Relation         string    `json:"relation"`
+	SchedulerID      string    `json:"loader_id,omitempty"`
+	RunID            string    `json:"run_id,omitempty"`
+	TriggerID        string    `json:"trigger_id,omitempty"`
+	SchedulerEventID string    `json:"loader_event_id,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type EventSandboxTraceItem struct {
-	SandboxID     string    `json:"sandbox_id"`
-	Relation      string    `json:"relation"`
-	LoaderID      string    `json:"loader_id,omitempty"`
-	RunID         string    `json:"run_id,omitempty"`
-	TriggerID     string    `json:"trigger_id,omitempty"`
-	LoaderEventID string    `json:"loader_event_id,omitempty"`
-	EventID       string    `json:"event_id"`
-	CreatedAt     time.Time `json:"created_at"`
+	SandboxID        string    `json:"sandbox_id"`
+	Relation         string    `json:"relation"`
+	SchedulerID      string    `json:"loader_id,omitempty"`
+	RunID            string    `json:"run_id,omitempty"`
+	TriggerID        string    `json:"trigger_id,omitempty"`
+	SchedulerEventID string    `json:"loader_event_id,omitempty"`
+	EventID          string    `json:"event_id"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 func ValidateTopicEventName(topic string) error {

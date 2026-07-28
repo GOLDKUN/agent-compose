@@ -7,18 +7,18 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 type ProjectSchedulerEventStore interface {
-	ListLoaderEventsPage(context.Context, loaders.LoaderEventPageFilter) ([]domain.LoaderEvent, error)
-	CountLoaderEventsPage(context.Context, loaders.LoaderEventPageFilter) (int, error)
+	ListSchedulerEventsPage(context.Context, schedulers.SchedulerEventPageFilter) ([]domain.SchedulerEvent, error)
+	CountSchedulerEventsPage(context.Context, schedulers.SchedulerEventPageFilter) (int, error)
 }
 
 func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *connect.Request[agentcomposev2.ListProjectSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListProjectSchedulerEventsResponse], error) {
-	_, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
+	_, schedulerRecords, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -38,28 +38,28 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 		}
 		triggerID = run.TriggerID
 		runID = run.ID
-		schedulers = []domain.ProjectSchedulerRecord{runScheduler}
+		schedulerRecords = []domain.ProjectSchedulerRecord{runScheduler}
 	}
 	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
 	if err != nil {
 		return nil, err
 	}
-	loaderIDs := make([]string, 0, len(schedulers))
-	byLoaderID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
-	for _, scheduler := range schedulers {
-		loaderID := strings.TrimSpace(scheduler.ManagedLoaderID)
-		if loaderID == "" {
+	schedulerIDs := make([]string, 0, len(schedulerRecords))
+	bySchedulerID := make(map[string]domain.ProjectSchedulerRecord, len(schedulerRecords))
+	for _, scheduler := range schedulerRecords {
+		schedulerID := strings.TrimSpace(scheduler.ID)
+		if schedulerID == "" {
 			continue
 		}
-		loaderIDs = append(loaderIDs, loaderID)
-		byLoaderID[loaderID] = scheduler
+		schedulerIDs = append(schedulerIDs, schedulerID)
+		bySchedulerID[schedulerID] = scheduler
 	}
 	store, ok := h.store.(ProjectSchedulerEventStore)
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler event store is required"))
 	}
-	events, err := store.ListLoaderEventsPage(ctx, loaders.LoaderEventPageFilter{
-		LoaderIDs:      loaderIDs,
+	events, err := store.ListSchedulerEventsPage(ctx, schedulers.SchedulerEventPageFilter{
+		SchedulerIDs:   schedulerIDs,
 		RequireTrigger: true,
 		TriggerID:      triggerID,
 		RunID:          runID,
@@ -69,15 +69,15 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	total, err := store.CountLoaderEventsPage(ctx, loaders.LoaderEventPageFilter{
-		LoaderIDs: loaderIDs, RequireTrigger: true, TriggerID: triggerID, RunID: runID,
+	total, err := store.CountSchedulerEventsPage(ctx, schedulers.SchedulerEventPageFilter{
+		SchedulerIDs: schedulerIDs, RequireTrigger: true, TriggerID: triggerID, RunID: runID,
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
 	response := &agentcomposev2.ListProjectSchedulerEventsResponse{Events: make([]*agentcomposev2.SchedulerEvent, 0, len(events)), Total: uint32(total)}
 	for _, event := range events {
-		scheduler, ok := byLoaderID[event.LoaderID]
+		scheduler, ok := bySchedulerID[event.SchedulerID]
 		if !ok {
 			continue
 		}
@@ -86,7 +86,7 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 	return connect.NewResponse(response), nil
 }
 
-func schedulerEventToProto(event domain.LoaderEvent, scheduler domain.ProjectSchedulerRecord) *agentcomposev2.SchedulerEvent {
+func schedulerEventToProto(event domain.SchedulerEvent, scheduler domain.ProjectSchedulerRecord) *agentcomposev2.SchedulerEvent {
 	return &agentcomposev2.SchedulerEvent{
 		Id:                  event.ID,
 		Type:                event.Type,

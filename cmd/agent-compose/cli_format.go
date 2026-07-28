@@ -43,7 +43,7 @@ func resolveComposeAgentNameFromSpec(normalized *compose.NormalizedProjectSpec, 
 		if name == "" {
 			continue
 		}
-		id, err := domain.StableManagedAgentID(projectID, name)
+		id, err := domain.StableProjectAgentID(projectID, name)
 		if err != nil {
 			return "", commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("resolve agent %q id: %w", name, err)}
 		}

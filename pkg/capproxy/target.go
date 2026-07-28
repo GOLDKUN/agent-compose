@@ -19,7 +19,7 @@ type Target struct {
 }
 
 // TargetResolver resolves a qualified capset declaration for an authenticated
-// sandbox. Implementations may use the binding's managed project and agent
+// sandbox. Implementations may use the binding's project and agent
 // identity to select project-scoped configuration. The declaration has already
 // been checked against binding.CapsetIDs before this method is called.
 type TargetResolver interface {

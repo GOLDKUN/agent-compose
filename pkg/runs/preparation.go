@@ -12,14 +12,14 @@ import (
 	"agent-compose/pkg/compose"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/projects"
+	"agent-compose/pkg/storage/sandboxstore"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 type PreparationStore interface {
 	GetProject(ctx context.Context, projectID string) (domain.ProjectRecord, error)
 	GetProjectRevision(ctx context.Context, projectID string, revision int64) (domain.ProjectRevisionRecord, error)
-	GetAgentDefinition(ctx context.Context, id string) (domain.AgentDefinition, error)
 	ListGlobalEnv(ctx context.Context) ([]domain.SandboxEnvVar, error)
 	ListProjectVolumes(ctx context.Context, projectID string) (map[string]domain.VolumeRecord, error)
 }
@@ -38,7 +38,7 @@ type Preparation struct {
 	Volumes          []domain.VolumeMountSpec
 	ProjectRoot      string
 	ProjectVolumes   map[string]domain.VolumeRecord
-	Jupyter          sessionstore.CreateSandboxOptions
+	Jupyter          sandboxstore.CreateSandboxOptions
 }
 
 func PrepareProjectRun(ctx context.Context, store PreparationStore, resolver WorkspaceResolver, run domain.ProjectRunRecord, requestEnv []*agentcomposev2.EnvVarSpec) (Preparation, error) {
@@ -61,9 +61,9 @@ func PrepareProjectRun(ctx context.Context, store PreparationStore, resolver Wor
 	if !ok {
 		return Preparation{}, fmt.Errorf("project revision %s/%d missing agent %s", run.ProjectID, run.ProjectRevision, run.AgentName)
 	}
-	agent, err := store.GetAgentDefinition(ctx, run.ManagedAgentID)
+	agent, err := projects.AgentDefinitionFromRevision(project, revision, run.AgentName)
 	if err != nil {
-		return Preparation{}, fmt.Errorf("resolve managed agent definition %s: %w", run.ManagedAgentID, err)
+		return Preparation{}, fmt.Errorf("resolve revision agent %s: %w", run.AgentID, err)
 	}
 	globalEnv, err := store.ListGlobalEnv(ctx)
 	if err != nil {
@@ -90,15 +90,6 @@ func PrepareProjectRun(ctx context.Context, store PreparationStore, resolver Wor
 		return Preparation{}, fmt.Errorf("list project volumes %s: %w", project.ID, err)
 	}
 	prepared.ProjectVolumes = projectVolumes
-	legacyWorkspaceConfig, legacyWorkspace, bound, err := prepareLegacyFileWorkspace(ctx, store, project, spec, agentSpec, agent)
-	if err != nil {
-		return Preparation{}, err
-	}
-	if bound {
-		prepared.WorkspaceConfig = legacyWorkspaceConfig
-		prepared.Workspace = legacyWorkspace
-		return prepared, nil
-	}
 	if resolver == nil {
 		return prepared, nil
 	}
@@ -129,12 +120,12 @@ func ProjectRoot(project domain.ProjectRecord) string {
 	return filepath.Dir(sourcePath)
 }
 
-func jupyterOptionsFromAgentSpec(agent *agentcomposev2.AgentSpec) sessionstore.CreateSandboxOptions {
+func jupyterOptionsFromAgentSpec(agent *agentcomposev2.AgentSpec) sandboxstore.CreateSandboxOptions {
 	if agent == nil || agent.GetJupyter() == nil {
-		return sessionstore.CreateSandboxOptions{}
+		return sandboxstore.CreateSandboxOptions{}
 	}
 	jupyter := agent.GetJupyter()
-	return sessionstore.CreateSandboxOptions{
+	return sandboxstore.CreateSandboxOptions{
 		JupyterEnabled:   jupyter.GetEnabled(),
 		JupyterGuestPort: int(jupyter.GetGuestPort()),
 	}

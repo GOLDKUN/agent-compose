@@ -42,6 +42,10 @@ type dockerRuntime struct {
 	config *appconfig.Config
 }
 
+type dockerContainerRemover interface {
+	ContainerRemove(context.Context, string, containerapi.RemoveOptions) error
+}
+
 type dockerDaemonTopology struct {
 	networkMode   containerapi.NetworkMode
 	containerized bool
@@ -208,7 +212,25 @@ func (r *dockerRuntime) IsSandboxAlive(ctx context.Context, sandbox *Sandbox, vm
 	if err != nil || !ok {
 		return false, err
 	}
+	expectedMounts, err := r.dockerRuntimeMounts(ctx, dockerClient, sandbox)
+	if err != nil {
+		return false, err
+	}
+	if !dockerContainerMountsMatch(containerInfo, expectedMounts) {
+		slog.Warn("docker sandbox mounts no longer match the active data root; retiring stale runtime for safe recreation", "sandbox_id", sandbox.Summary.ID, "container_id", containerInfo.ID)
+		if err := removeDockerContainerWithStaleMounts(ctx, dockerClient, containerInfo.ID); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
 	return containerInfo.State != nil && containerInfo.State.Running, nil
+}
+
+func removeDockerContainerWithStaleMounts(ctx context.Context, remover dockerContainerRemover, containerID string) error {
+	if err := remover.ContainerRemove(ctx, containerID, containerapi.RemoveOptions{Force: true}); err != nil && !isDockerNotFound(err) {
+		return fmt.Errorf("remove docker container with stale mounts %s: %w", containerID, err)
+	}
+	return nil
 }
 
 func (r *dockerRuntime) StopSandbox(ctx context.Context, sandbox *Sandbox, vmState VMState) (bool, error) {
@@ -712,12 +734,27 @@ func (r *dockerRuntime) newClient() (*client.Client, error) {
 
 func (r *dockerRuntime) getOrCreateContainer(ctx context.Context, dockerClient *client.Client, sandbox *Sandbox, vmState VMState, proxyState ProxyState, networkMode containerapi.NetworkMode) (containerapi.InspectResponse, bool, error) {
 	appconfig.ApplyDefaultGuestPaths(r.config)
+	mounts, err := r.dockerRuntimeMounts(ctx, dockerClient, sandbox)
+	if err != nil {
+		return containerapi.InspectResponse{}, false, err
+	}
+	replacingStaleMounts := false
 	if containerInfo, ok, err := r.findContainer(ctx, dockerClient, sandbox, vmState); err != nil {
 		return containerapi.InspectResponse{}, false, err
 	} else if ok {
-		return containerInfo, false, nil
+		if dockerContainerMountsMatch(containerInfo, mounts) {
+			return containerInfo, false, nil
+		}
+		slog.Warn("recreating docker sandbox whose bind mounts reference an earlier data root", "sandbox_id", sandbox.Summary.ID, "container_id", containerInfo.ID)
+		if err := removeDockerContainerWithStaleMounts(ctx, dockerClient, containerInfo.ID); err != nil {
+			return containerapi.InspectResponse{}, false, err
+		}
+		replacingStaleMounts = true
 	}
-	if !vmState.StoppedAt.IsZero() {
+	// Missing stopped runtimes retain the existing conservative UUID-only
+	// recovery rule. A container removed above is different: its ownership was
+	// just resolved from this sandbox and only its stale bind sources changed.
+	if !vmState.StoppedAt.IsZero() && !replacingStaleMounts {
 		if err := r.validateLegacyDockerRecreate(sandbox, vmState); err != nil {
 			return containerapi.InspectResponse{}, false, fmt.Errorf("docker runtime state for stopped sandbox %s is missing; refusing to recreate it during resume: %w", sandbox.Summary.ID, err)
 		}
@@ -725,10 +762,6 @@ func (r *dockerRuntime) getOrCreateContainer(ctx context.Context, dockerClient *
 	}
 
 	name := r.containerName(sandbox, vmState)
-	mounts, err := r.dockerRuntimeMounts(ctx, dockerClient, sandbox)
-	if err != nil {
-		return containerapi.InspectResponse{}, false, err
-	}
 	var exposedPorts nat.PortSet
 	var portBindings nat.PortMap
 	cmdText := "tail -f /dev/null"
@@ -758,6 +791,32 @@ func (r *dockerRuntime) getOrCreateContainer(ctx context.Context, dockerClient *
 		return containerapi.InspectResponse{}, false, fmt.Errorf("inspect docker container %s: %w", createResp.ID, err)
 	}
 	return containerInfo, true, nil
+}
+
+func dockerContainerMountsMatch(containerInfo containerapi.InspectResponse, expected []mountapi.Mount) bool {
+	type mountIdentity struct {
+		source   string
+		readOnly bool
+	}
+	actual := make(map[string]mountIdentity, len(containerInfo.Mounts))
+	for _, item := range containerInfo.Mounts {
+		if item.Type != mountapi.TypeBind {
+			continue
+		}
+		actual[filepath.Clean(item.Destination)] = mountIdentity{
+			source: filepath.Clean(item.Source), readOnly: !item.RW,
+		}
+	}
+	for _, item := range expected {
+		if item.Type != mountapi.TypeBind {
+			continue
+		}
+		identity, ok := actual[filepath.Clean(item.Target)]
+		if !ok || identity.source != filepath.Clean(item.Source) || identity.readOnly != item.ReadOnly {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *dockerRuntime) validateLegacyDockerRecreate(sandbox *Sandbox, vmState VMState) error {

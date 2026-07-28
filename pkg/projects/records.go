@@ -42,7 +42,7 @@ func NewRecordFromSpec(spec *compose.NormalizedProjectSpec, sourcePath string) (
 }
 
 func NewAgentRecordFromSpec(projectID string, revision int64, agent compose.NormalizedAgentSpec) (domain.ProjectAgentRecord, error) {
-	managedAgentID, err := domain.StableManagedAgentID(projectID, agent.Name)
+	projectAgentID, err := domain.StableProjectAgentID(projectID, agent.Name)
 	if err != nil {
 		return domain.ProjectAgentRecord{}, err
 	}
@@ -55,12 +55,11 @@ func NewAgentRecordFromSpec(projectID string, revision int64, agent compose.Norm
 		driver = agent.Driver.Name
 	}
 	return domain.ProjectAgentRecord{
-		ID:               managedAgentID,
+		ID:               projectAgentID,
 		Name:             strings.TrimSpace(agent.Name),
-		ShortID:          identity.ShortID(managedAgentID),
+		ShortID:          identity.ShortID(projectAgentID),
 		ProjectID:        strings.TrimSpace(projectID),
 		AgentName:        strings.TrimSpace(agent.Name),
-		ManagedAgentID:   managedAgentID,
 		Revision:         revision,
 		Provider:         strings.TrimSpace(agent.Provider),
 		Model:            strings.TrimSpace(agent.Model),
@@ -96,7 +95,7 @@ func NewAgentDefinitionsFromSpec(project domain.ProjectRecord, revision int64, s
 }
 
 func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, agent compose.NormalizedAgentSpec, projectMCPServers map[string]compose.NormalizedMCPServerSpec, projectOctoBusServers map[string]compose.NormalizedOctoBusServerSpec) (domain.AgentDefinition, error) {
-	managedAgentID, err := domain.StableManagedAgentID(project.ID, agent.Name)
+	projectAgentID, err := domain.StableProjectAgentID(project.ID, agent.Name)
 	if err != nil {
 		return domain.AgentDefinition{}, err
 	}
@@ -108,32 +107,30 @@ func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, ag
 	if agent.Driver != nil {
 		driver = agent.Driver.Name
 	}
-	return domain.AgentDefinition{
-		ID:                     managedAgentID,
-		Name:                   agent.Name,
-		Description:            agent.Description,
-		Enabled:                agent.Enabled,
-		Provider:               agent.Provider,
-		Model:                  agent.Model,
-		SystemPrompt:           agent.SystemPrompt,
-		Driver:                 driver,
-		GuestImage:             agent.Image,
-		EnvItems:               SandboxEnvItemsFromCompose(agent.Env),
-		Volumes:                VolumeMountSpecsFromCompose(agent.Volumes),
-		ConfigJSON:             configJSON,
-		CapsetIDs:              capabilities.NormalizeCapsetIDs(agent.CapsetIDs),
-		Skills:                 AgentSkillsFromCompose(agent.Skills, project.SourcePath),
-		ManagedProjectID:       project.ID,
-		ManagedProjectRevision: revision,
-		ManagedAgentName:       agent.Name,
-	}, nil
-}
-
-func projectAgentDisplayName(agent compose.NormalizedAgentSpec) string {
-	if displayName := strings.TrimSpace(agent.DisplayName); displayName != "" {
-		return displayName
+	workspaceID := ""
+	if agent.Workspace != nil {
+		workspaceID = strings.TrimSpace(agent.Workspace.Name)
 	}
-	return strings.TrimSpace(agent.Name)
+	return domain.AgentDefinition{
+		ID:              projectAgentID,
+		Name:            agent.Name,
+		Description:     agent.Description,
+		Enabled:         agent.Enabled,
+		Provider:        agent.Provider,
+		Model:           agent.Model,
+		SystemPrompt:    agent.SystemPrompt,
+		Driver:          driver,
+		GuestImage:      agent.Image,
+		WorkspaceID:     workspaceID,
+		EnvItems:        SandboxEnvItemsFromCompose(agent.Env),
+		Volumes:         VolumeMountSpecsFromCompose(agent.Volumes),
+		ConfigJSON:      configJSON,
+		CapsetIDs:       capabilities.NormalizeCapsetIDs(agent.CapsetIDs),
+		Skills:          AgentSkillsFromCompose(agent.Skills, project.SourcePath),
+		ProjectID:       project.ID,
+		ProjectRevision: revision,
+		AgentName:       agent.Name,
+	}, nil
 }
 
 type agentDefinitionConfig struct {
@@ -188,42 +185,47 @@ func selectedAgentMCPServers(agent compose.NormalizedAgentSpec, projectMCPServer
 	return nil
 }
 
-func NewManagedLoaderFromScheduler(project domain.ProjectRecord, scheduler domain.ProjectSchedulerRecord, agent compose.NormalizedAgentSpec) (domain.Loader, error) {
-	managedAgentID, err := domain.StableManagedAgentID(project.ID, agent.Name)
+func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.ProjectSchedulerRecord, agent compose.NormalizedAgentSpec) (domain.Scheduler, error) {
+	projectAgentID, err := domain.StableProjectAgentID(project.ID, agent.Name)
 	if err != nil {
-		return domain.Loader{}, err
+		return domain.Scheduler{}, err
 	}
 	driver := ""
 	if agent.Driver != nil {
 		driver = agent.Driver.Name
 	}
-	var triggers []domain.LoaderTrigger
+	workspaceID := ""
+	if agent.Workspace != nil {
+		workspaceID = strings.TrimSpace(agent.Workspace.Name)
+	}
+	var triggers []domain.SchedulerTrigger
 	script := agent.Scheduler.Script
 	if strings.TrimSpace(script) == "" {
 		var err error
-		triggers, script, err = ManagedLoaderTriggersAndScript(project.ID, agent.Name, "", agent.Scheduler)
+		triggers, script, err = ProjectSchedulerTriggersAndScript(project.ID, agent.Name, "", agent.Scheduler)
 		if err != nil {
-			return domain.Loader{}, err
+			return domain.Scheduler{}, err
 		}
 	}
-	return domain.Loader{
-		Summary: domain.LoaderSummary{
-			ID:                 scheduler.ManagedLoaderID,
-			Name:               managedSchedulerDisplayName(project.Name, agent),
+	return domain.Scheduler{
+		Summary: domain.SchedulerSummary{
+			ID:                 scheduler.ID,
+			Name:               projectSchedulerDisplayName(project.Name, agent),
 			Description:        strings.TrimSpace(agent.Scheduler.Description),
 			Enabled:            scheduler.Enabled,
-			Runtime:            domain.LoaderRuntimeScheduler,
-			AgentID:            managedAgentID,
+			Runtime:            domain.SchedulerRuntimeScheduler,
+			AgentID:            projectAgentID,
 			Driver:             driver,
 			GuestImage:         agent.Image,
+			WorkspaceID:        workspaceID,
 			DefaultAgent:       agent.Provider,
 			SandboxPolicy:      agent.Scheduler.SandboxPolicy,
-			ConcurrencyPolicy:  domain.NormalizeLoaderConcurrencyPolicy(agent.Scheduler.ConcurrencyPolicy),
+			ConcurrencyPolicy:  domain.NormalizeSchedulerConcurrencyPolicy(agent.Scheduler.ConcurrencyPolicy),
 			CapsetIDs:          capabilities.NormalizeCapsetIDs(agent.CapsetIDs),
-			ManagedProjectID:   project.ID,
-			ManagedRevision:    scheduler.Revision,
-			ManagedAgentName:   agent.Name,
-			ManagedSchedulerID: scheduler.SchedulerID,
+			ProjectID:          project.ID,
+			ProjectRevision:    scheduler.Revision,
+			AgentName:          agent.Name,
+			ProjectSchedulerID: scheduler.SchedulerID,
 		},
 		Script:   script,
 		Triggers: triggers,
@@ -232,7 +234,7 @@ func NewManagedLoaderFromScheduler(project domain.ProjectRecord, scheduler domai
 	}, nil
 }
 
-func managedSchedulerDisplayName(projectName string, agent compose.NormalizedAgentSpec) string {
+func projectSchedulerDisplayName(projectName string, agent compose.NormalizedAgentSpec) string {
 	if displayName := strings.TrimSpace(agent.Scheduler.DisplayName); displayName != "" {
 		return displayName
 	}
@@ -294,25 +296,37 @@ func composeSourceRoot(sourcePath string) string {
 }
 
 type SchedulerBuild struct {
-	Scheduler          domain.ProjectSchedulerRecord
-	Loader             domain.Loader
-	ValidationTriggers []domain.LoaderTrigger
+	Record             domain.ProjectSchedulerRecord
+	Definition         domain.Scheduler
+	ValidationTriggers []domain.SchedulerTrigger
 }
 
 func SchedulerRecords(builds []SchedulerBuild) []domain.ProjectSchedulerRecord {
 	schedulers := make([]domain.ProjectSchedulerRecord, 0, len(builds))
 	for _, build := range builds {
-		schedulers = append(schedulers, build.Scheduler)
+		schedulers = append(schedulers, build.Record)
 	}
 	return schedulers
 }
 
-func SchedulerLoaders(builds []SchedulerBuild) []domain.Loader {
-	loaders := make([]domain.Loader, 0, len(builds))
-	for _, build := range builds {
-		loaders = append(loaders, build.Loader)
+func syncProjectAgentSchedulerState(agents []domain.ProjectAgentRecord, schedulers []domain.ProjectSchedulerRecord) {
+	enabledByAgent := make(map[string]bool, len(schedulers))
+	for _, scheduler := range schedulers {
+		enabledByAgent[scheduler.AgentName] = scheduler.Enabled
 	}
-	return loaders
+	for index := range agents {
+		if enabled, ok := enabledByAgent[agents[index].AgentName]; ok {
+			agents[index].SchedulerEnabled = enabled
+		}
+	}
+}
+
+func SchedulerDefinitions(builds []SchedulerBuild) []domain.Scheduler {
+	definitions := make([]domain.Scheduler, 0, len(builds))
+	for _, build := range builds {
+		definitions = append(definitions, build.Definition)
+	}
+	return definitions
 }
 
 func NewSchedulerBuildsFromSpec(project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]SchedulerBuild, error) {
@@ -325,14 +339,14 @@ func NewSchedulerBuildsFromSpec(project domain.ProjectRecord, revision int64, sp
 		if !ok {
 			continue
 		}
-		loader, err := NewManagedLoaderFromScheduler(project, record, agent)
+		definition, err := NewSchedulerDefinition(project, record, agent)
 		if err != nil {
 			return nil, err
 		}
 		builds = append(builds, SchedulerBuild{
-			Scheduler:          record,
-			Loader:             loader,
-			ValidationTriggers: loader.Triggers,
+			Record:             record,
+			Definition:         definition,
+			ValidationTriggers: definition.Triggers,
 		})
 	}
 	return builds, nil
@@ -346,25 +360,20 @@ func NewSchedulerRecordFromSpec(projectID string, revision int64, agent compose.
 	if err != nil {
 		return domain.ProjectSchedulerRecord{}, false, err
 	}
-	loaderID, err := domain.StableManagedLoaderID(projectID, agent.Name, "")
-	if err != nil {
-		return domain.ProjectSchedulerRecord{}, false, err
-	}
 	specJSON, err := MarshalCanonicalJSON(agent.Scheduler)
 	if err != nil {
 		return domain.ProjectSchedulerRecord{}, false, fmt.Errorf("marshal project scheduler %s spec: %w", agent.Name, err)
 	}
 	return domain.ProjectSchedulerRecord{
-		ID:              schedulerID,
-		ShortID:         identity.ShortID(schedulerID),
-		ProjectID:       strings.TrimSpace(projectID),
-		SchedulerID:     schedulerID,
-		AgentName:       strings.TrimSpace(agent.Name),
-		ManagedLoaderID: loaderID,
-		Revision:        revision,
-		Enabled:         agent.Enabled && agent.Scheduler.Enabled,
-		TriggerCount:    len(agent.Scheduler.Triggers),
-		SpecJSON:        string(specJSON),
+		ID:           schedulerID,
+		ShortID:      identity.ShortID(schedulerID),
+		ProjectID:    strings.TrimSpace(projectID),
+		SchedulerID:  schedulerID,
+		AgentName:    strings.TrimSpace(agent.Name),
+		Revision:     revision,
+		Enabled:      agent.Enabled && agent.Scheduler.Enabled,
+		TriggerCount: len(agent.Scheduler.Triggers),
+		SpecJSON:     string(specJSON),
 	}, true, nil
 }
 

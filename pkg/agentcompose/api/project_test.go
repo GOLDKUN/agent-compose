@@ -32,7 +32,7 @@ func TestProjectToProtoOnlyIncludesCurrentRevisionArtifacts(t *testing.T) {
 
 func TestResolvedTriggerPreservesDeclaredSpec(t *testing.T) {
 	declared := &agentcomposev2.TriggerSpec{Name: "later", Kind: "timeout", Timeout: "2s", Prompt: "continue", SandboxPolicy: "sticky"}
-	trigger := domain.LoaderTrigger{ID: "trigger-id", Kind: domain.LoaderTriggerKindTimeout, IntervalMs: 2000, Enabled: true, NextFireAt: time.Unix(10, 0)}
+	trigger := domain.SchedulerTrigger{ID: "trigger-id", Kind: domain.SchedulerTriggerKindTimeout, IntervalMs: 2000, Enabled: true, NextFireAt: time.Unix(10, 0)}
 	resolved := resolvedTriggerToProto(trigger, declared)
 	if resolved.GetTriggerId() != "trigger-id" || resolved.GetSpec().GetName() != "later" || resolved.GetSpec().GetTimeout() != "2s" || resolved.GetSpec().GetPrompt() != "continue" || resolved.GetSpec().GetInterval() != "" {
 		t.Fatalf("resolved = %#v", resolved)
@@ -295,7 +295,7 @@ agents:
 	if err != nil {
 		t.Fatalf("normalize authoring YAML: %v", err)
 	}
-	if len(normalized.Agents) != 1 || normalized.Agents[0].Scheduler == nil || normalized.Agents[0].Scheduler.ConcurrencyPolicy != domain.LoaderConcurrencyPolicyParallel {
+	if len(normalized.Agents) != 1 || normalized.Agents[0].Scheduler == nil || normalized.Agents[0].Scheduler.ConcurrencyPolicy != domain.SchedulerConcurrencyPolicyParallel {
 		t.Fatalf("normalized scheduler = %#v", normalized.Agents)
 	}
 
@@ -303,7 +303,7 @@ agents:
 	if err != nil {
 		t.Fatalf("convert normalized project to protobuf: %v", err)
 	}
-	if got := wireSpec.GetAgents()[0].GetScheduler().GetConcurrencyPolicy(); got != domain.LoaderConcurrencyPolicyParallel {
+	if got := wireSpec.GetAgents()[0].GetScheduler().GetConcurrencyPolicy(); got != domain.SchedulerConcurrencyPolicyParallel {
 		t.Fatalf("protobuf concurrency policy = %q, want parallel", got)
 	}
 	shape, issues := ProjectSpecYAMLShape(wireSpec)
@@ -330,7 +330,7 @@ agents:
 		t.Fatalf("round-tripped agents = %#v", roundTripped.Agents)
 	}
 	scheduler := roundTripped.Agents[0].Scheduler
-	if scheduler.ConcurrencyPolicy != domain.LoaderConcurrencyPolicyParallel || scheduler.SandboxPolicy != domain.LoaderSandboxPolicySticky || len(scheduler.Triggers) != 4 {
+	if scheduler.ConcurrencyPolicy != domain.SchedulerConcurrencyPolicyParallel || scheduler.SandboxPolicy != domain.SchedulerSandboxPolicySticky || len(scheduler.Triggers) != 4 {
 		t.Fatalf("round-tripped scheduler = %#v", scheduler)
 	}
 	for index, kind := range []string{"cron", "interval", "timeout", "event"} {
@@ -507,7 +507,7 @@ agents:
 	if agent.Jupyter == nil || !agent.Jupyter.Enabled || agent.Jupyter.GuestPort != 8888 {
 		t.Fatalf("round-tripped jupyter = %#v", agent.Jupyter)
 	}
-	if agent.Scheduler == nil || agent.Scheduler.ConcurrencyPolicy != domain.LoaderConcurrencyPolicyParallel {
+	if agent.Scheduler == nil || agent.Scheduler.ConcurrencyPolicy != domain.SchedulerConcurrencyPolicyParallel {
 		t.Fatalf("round-tripped scheduler = %#v", agent.Scheduler)
 	}
 }

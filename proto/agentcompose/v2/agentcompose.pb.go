@@ -17860,11 +17860,11 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\rR\x05limit\"i\n" +
 	"\x14ListProjectsResponse\x12;\n" +
 	"\bprojects\x18\x01 \x03(\v2\x1f.agentcompose.v2.ProjectSummaryR\bprojects\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\rR\x05total\"\xc1\x01\n" +
+	"\x05total\x18\x02 \x01(\rR\x05total\"\xaa\x01\n" +
 	"\x14RemoveProjectRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12%\n" +
 	"\x0eremove_history\x18\x02 \x01(\bR\rremoveHistory\x124\n" +
-	"\x16stop_running_sandboxes\x18\x03 \x01(\bR\x14stopRunningSandboxesR\x15stop_running_sessions\"\x85\x01\n" +
+	"\x16stop_running_sandboxes\x18\x03 \x01(\bR\x14stopRunningSandboxes\"\x85\x01\n" +
 	"\x15RemoveProjectResponse\x122\n" +
 	"\aproject\x18\x01 \x01(\v2\x18.agentcompose.v2.ProjectR\aproject\x128\n" +
 	"\achanges\x18\x02 \x03(\v2\x1e.agentcompose.v2.ProjectChangeR\achanges\"L\n" +
@@ -17952,7 +17952,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x122\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1a.agentcompose.v2.RunStatusR\x06status\x122\n" +
 	"\x06source\x18\x03 \x01(\x0e2\x1a.agentcompose.v2.RunSourceR\x06source\x12*\n" +
-	"\x02at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"\x90\x02\n" +
+	"\x02at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"\xf7\x01\n" +
 	"\x10ProjectScheduler\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
@@ -17962,7 +17962,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\x12#\n" +
 	"\rtrigger_count\x18\x06 \x01(\rR\ftriggerCount\x12!\n" +
 	"\fdisplay_name\x18\a \x01(\tR\vdisplayName\x12 \n" +
-	"\vdescription\x18\b \x01(\tR\vdescriptionJ\x04\b\x04\x10\x05R\x11managed_loader_id\"k\n" +
+	"\vdescription\x18\b \x01(\tR\vdescription\"k\n" +
 	"\x13GetSchedulerRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12\x1d\n" +
 	"\n" +
@@ -18184,7 +18184,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\vresource_id\x18\x03 \x01(\tR\n" +
 	"resourceId\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12\x18\n" +
-	"\amessage\x18\x05 \x01(\tR\amessage\"\xc1\x03\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\"\xa1\x03\n" +
 	"\vProjectSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
 	"\tvariables\x18\x02 \x03(\v2\x1b.agentcompose.v2.EnvVarSpecR\tvariables\x122\n" +
@@ -18195,7 +18195,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"workspaces\x12?\n" +
 	"\vmcp_servers\x18\b \x03(\v2\x1e.agentcompose.v2.MCPServerSpecR\n" +
 	"mcpServers\x12K\n" +
-	"\x0foctobus_servers\x18\t \x03(\v2\".agentcompose.v2.OctoBusServerSpecR\x0eoctobusServersJ\x04\b\x03\x10\x04J\x04\b\x05\x10\x06R\tworkspaceR\anetwork\"f\n" +
+	"\x0foctobus_servers\x18\t \x03(\v2\".agentcompose.v2.OctoBusServerSpecR\x0eoctobusServers\"f\n" +
 	"\x12NamedWorkspaceSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
 	"\tworkspace\x18\x02 \x01(\v2\x1e.agentcompose.v2.WorkspaceSpecR\tworkspace\"\x96\x06\n" +
@@ -18321,7 +18321,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x10DockerDriverSpec\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\"2\n" +
 	"\x16MicrosandboxDriverSpec\x12\x18\n" +
-	"\aprofile\x18\x01 \x01(\tR\aprofile\"\xb4\x05\n" +
+	"\aprofile\x18\x01 \x01(\tR\aprofile\"\xa2\x05\n" +
 	"\x0fRunAgentRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
@@ -18343,8 +18343,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"sandbox_id\x18\x0f \x01(\tR\tsandboxId\x12:\n" +
 	"\avolumes\x18\x10 \x03(\v2 .agentcompose.v2.VolumeMountSpecR\avolumes\x12!\n" +
-	"\fpayload_json\x18\x11 \x01(\tR\vpayloadJsonJ\x04\b\x05\x10\x06R\n" +
-	"session_id\"\\\n" +
+	"\fpayload_json\x18\x11 \x01(\tR\vpayloadJson\"\\\n" +
 	"\x10RunAgentResponse\x12,\n" +
 	"\x03run\x18\x01 \x01(\v2\x1a.agentcompose.v2.RunDetailR\x03run\x12\x1a\n" +
 	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"\x8c\x03\n" +
@@ -18401,7 +18400,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\">\n" +
 	"\x0eGetRunResponse\x12,\n" +
-	"\x03run\x18\x01 \x01(\v2\x1a.agentcompose.v2.RunDetailR\x03run\"\xfb\x02\n" +
+	"\x03run\x18\x01 \x01(\v2\x1a.agentcompose.v2.RunDetailR\x03run\"\xe9\x02\n" +
 	"\x0fListRunsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
@@ -18417,8 +18416,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x05limit\x18\n" +
 	" \x01(\rR\x05limit\x12\x1d\n" +
 	"\n" +
-	"sandbox_id\x18\v \x01(\tR\tsandboxIdJ\x04\b\x03\x10\x04R\n" +
-	"session_id\"Y\n" +
+	"sandbox_id\x18\v \x01(\tR\tsandboxId\"Y\n" +
 	"\x10ListRunsResponse\x12/\n" +
 	"\x04runs\x18\x01 \x03(\v2\x1b.agentcompose.v2.RunSummaryR\x04runs\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\rR\x05total\"\xec\x01\n" +
@@ -18608,7 +18606,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x10block_read_bytes\x18\n" +
 	" \x01(\v2\x1c.agentcompose.v2.MetricValueR\x0eblockReadBytes\x12H\n" +
 	"\x11block_write_bytes\x18\v \x01(\v2\x1c.agentcompose.v2.MetricValueR\x0fblockWriteBytes\x12C\n" +
-	"\x0euptime_seconds\x18\f \x01(\v2\x1c.agentcompose.v2.MetricValueR\ruptimeSeconds\"\xd1\x06\n" +
+	"\x0euptime_seconds\x18\f \x01(\v2\x1c.agentcompose.v2.MetricValueR\ruptimeSeconds\"\xbf\x06\n" +
 	"\n" +
 	"RunSummary\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1d\n" +
@@ -18641,8 +18639,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"sandbox_id\x18\x14 \x01(\tR\tsandboxId\x12 \n" +
 	"\frun_short_id\x18\x15 \x01(\tR\n" +
 	"runShortId\x12(\n" +
-	"\x10sandbox_short_id\x18\x16 \x01(\tR\x0esandboxShortIdJ\x04\b\v\x10\fR\n" +
-	"session_id\"\xcb\x02\n" +
+	"\x10sandbox_short_id\x18\x16 \x01(\tR\x0esandboxShortId\"\xcb\x02\n" +
 	"\tRunDetail\x125\n" +
 	"\asummary\x18\x01 \x01(\v2\x1b.agentcompose.v2.RunSummaryR\asummary\x12\x16\n" +
 	"\x06prompt\x18\x02 \x01(\tR\x06prompt\x12\x16\n" +
@@ -18655,7 +18652,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x06driver\x18\b \x01(\tR\x06driver\x12\x1b\n" +
 	"\timage_ref\x18\t \x01(\tR\bimageRef\x12\x1a\n" +
 	"\bwarnings\x18\n" +
-	" \x03(\tR\bwarnings\"\xe3\x02\n" +
+	" \x03(\tR\bwarnings\"\xd7\x02\n" +
 	"\vExecRequest\x12\x1f\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tH\x00R\tsandboxId\x12\x17\n" +
@@ -18667,8 +18664,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"timeout_ms\x18\a \x01(\rR\ttimeoutMs\x12(\n" +
 	"\x10max_output_bytes\x18\b \x01(\rR\x0emaxOutputBytesB\b\n" +
-	"\x06targetR\n" +
-	"session_id\"v\n" +
+	"\x06target\"v\n" +
 	"\x13ExecSandboxSelector\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12!\n" +
@@ -18679,7 +18675,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
 	"\x04args\x18\x02 \x03(\tR\x04args\"C\n" +
 	"\fExecResponse\x123\n" +
-	"\x06result\x18\x01 \x01(\v2\x1b.agentcompose.v2.ExecResultR\x06result\"\xf7\x02\n" +
+	"\x06result\x18\x01 \x01(\v2\x1b.agentcompose.v2.ExecResultR\x06result\"\xeb\x02\n" +
 	"\x12ExecStreamResponse\x12C\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2$.agentcompose.v2.ExecStreamEventTypeR\teventType\x12\x17\n" +
@@ -18692,8 +18688,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x06result\x18\a \x01(\v2\x1b.agentcompose.v2.ExecResultR\x06result\x12@\n" +
 	"\n" +
 	"transcript\x18\b \x01(\v2 .agentcompose.v2.TranscriptEventR\n" +
-	"transcriptR\n" +
-	"session_id\"\xeb\x03\n" +
+	"transcript\"\xeb\x03\n" +
 	"\x11ExecAttachRequest\x12&\n" +
 	"\x0fclient_frame_id\x18\x0f \x01(\tR\rclientFrameId\x128\n" +
 	"\x05start\x18\x01 \x01(\v2 .agentcompose.v2.ExecAttachStartH\x00R\x05start\x124\n" +
@@ -18784,7 +18779,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\adetails\x18\x04 \x03(\v2).agentcompose.v2.AttachError.DetailsEntryR\adetails\x1a:\n" +
 	"\fDetailsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc7\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbb\x03\n" +
 	"\n" +
 	"ExecResult\x12\x17\n" +
 	"\aexec_id\x18\x01 \x01(\tR\x06execId\x12\x1d\n" +
@@ -18802,8 +18797,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x10stdout_truncated\x18\v \x01(\bR\x0fstdoutTruncated\x12)\n" +
 	"\x10stderr_truncated\x18\f \x01(\bR\x0fstderrTruncated\x12)\n" +
 	"\x10output_truncated\x18\r \x01(\bR\x0foutputTruncated\x12\x14\n" +
-	"\x05error\x18\x0e \x01(\tR\x05errorR\n" +
-	"session_id\"\xd2\x01\n" +
+	"\x05error\x18\x0e \x01(\tR\x05error\"\xd2\x01\n" +
 	"\x11ListImagesRequest\x125\n" +
 	"\x05store\x18\x01 \x01(\x0e2\x1f.agentcompose.v2.ImageStoreKindR\x05store\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x10\n" +
@@ -18905,7 +18899,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\amatched\x18\x02 \x03(\v2\x1a.agentcompose.v2.CacheItemR\amatched\x12\x18\n" +
 	"\aremoved\x18\x03 \x03(\tR\aremoved\x124\n" +
 	"\askipped\x18\x04 \x03(\v2\x1a.agentcompose.v2.CacheItemR\askipped\x12\x1a\n" +
-	"\bwarnings\x18\x05 \x03(\tR\bwarnings\"\xea\x04\n" +
+	"\bwarnings\x18\x05 \x03(\tR\bwarnings\"\xd8\x04\n" +
 	"\tCacheItem\x12\x19\n" +
 	"\bcache_id\x18\x01 \x01(\tR\acacheId\x124\n" +
 	"\x06domain\x18\x02 \x01(\x0e2\x1c.agentcompose.v2.CacheDomainR\x06domain\x12\x16\n" +
@@ -18926,9 +18920,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"references\x18\x11 \x03(\v2\x1f.agentcompose.v2.CacheReferenceR\n" +
 	"references\x12\x1a\n" +
-	"\bwarnings\x18\x12 \x03(\tR\bwarningsJ\x04\b\n" +
-	"\x10\vR\n" +
-	"session_id\"\xd5\x01\n" +
+	"\bwarnings\x18\x12 \x03(\tR\bwarnings\"\xd5\x01\n" +
 	"\x0eCacheReference\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
@@ -19375,12 +19367,12 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"#RUN_AGENT_STREAM_EVENT_TYPE_STARTED\x10\x01\x12&\n" +
 	"\"RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT\x10\x02\x12&\n" +
 	"\"RUN_AGENT_STREAM_EVENT_TYPE_STATUS\x10\x03\x12)\n" +
-	"%RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED\x10\x04*\x8b\x03\n" +
+	"%RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED\x10\x04*\xda\x01\n" +
 	"\x17RunSandboxCleanupPolicy\x12*\n" +
 	"&RUN_SANDBOX_CLEANUP_POLICY_UNSPECIFIED\x10\x00\x121\n" +
 	"-RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION\x10\x01\x12+\n" +
 	"'RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING\x10\x02\x123\n" +
-	"/RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION\x10\x03*&RUN_SESSION_CLEANUP_POLICY_UNSPECIFIED*-RUN_SESSION_CLEANUP_POLICY_STOP_ON_COMPLETION*'RUN_SESSION_CLEANUP_POLICY_KEEP_RUNNING*/RUN_SESSION_CLEANUP_POLICY_REMOVE_ON_COMPLETION*\xaa\x01\n" +
+	"/RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION\x10\x03*\xaa\x01\n" +
 	"\x13ExecStreamEventType\x12&\n" +
 	"\"EXEC_STREAM_EVENT_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eEXEC_STREAM_EVENT_TYPE_STARTED\x10\x01\x12!\n" +
@@ -19412,13 +19404,13 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x19METRIC_STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10METRIC_STATUS_OK\x10\x01\x12\x19\n" +
 	"\x15METRIC_STATUS_UNKNOWN\x10\x02\x12\x1d\n" +
-	"\x19METRIC_STATUS_UNAVAILABLE\x10\x03*\xf3\x01\n" +
+	"\x19METRIC_STATUS_UNAVAILABLE\x10\x03*\xc7\x01\n" +
 	"\vCacheDomain\x12\x1c\n" +
 	"\x18CACHE_DOMAIN_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cCACHE_DOMAIN_OCI_IMAGE_STORE\x10\x01\x12)\n" +
 	"%CACHE_DOMAIN_MATERIALIZED_IMAGE_CACHE\x10\x02\x12&\n" +
 	"\"CACHE_DOMAIN_RUNTIME_DERIVED_CACHE\x10\x03\x12%\n" +
-	"!CACHE_DOMAIN_SKILL_ARTIFACT_CACHE\x10\x05\"\x04\b\x04\x10\x04*$CACHE_DOMAIN_SANDBOX_EPHEMERAL_STATE*\x88\x01\n" +
+	"!CACHE_DOMAIN_SKILL_ARTIFACT_CACHE\x10\x05*\x88\x01\n" +
 	"\x14CacheReferencePolicy\x12&\n" +
 	"\"CACHE_REFERENCE_POLICY_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCACHE_REFERENCE_POLICY_REQUIRED\x10\x01\x12#\n" +

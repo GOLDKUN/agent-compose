@@ -41,7 +41,3 @@ func sqliteTableColumnTypes(ctx context.Context, db *sql.DB, table string) (map[
 	}
 	return columns, nil
 }
-
-func isIntegerColumnType(columnType string) bool {
-	return strings.Contains(strings.ToUpper(strings.TrimSpace(columnType)), "INT")
-}

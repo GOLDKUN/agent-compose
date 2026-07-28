@@ -16,17 +16,17 @@ type SandboxStore interface {
 	ListSandboxes(context.Context, domain.SandboxListOptions) (domain.SandboxListResult, error)
 }
 
-type LoaderRunStore interface {
-	ListRecentLoaderRuns(context.Context, int) ([]domain.LoaderRunSummary, error)
+type SchedulerRunStore interface {
+	ListRecentSchedulerRuns(context.Context, int) ([]domain.SchedulerRunSummary, error)
 }
 
 type Aggregator struct {
 	store    SandboxStore
-	configDB LoaderRunStore
+	configDB SchedulerRunStore
 	clock    func() time.Time
 }
 
-func NewAggregator(store SandboxStore, configDB LoaderRunStore) *Aggregator {
+func NewAggregator(store SandboxStore, configDB SchedulerRunStore) *Aggregator {
 	return &Aggregator{
 		store:    store,
 		configDB: configDB,
@@ -53,11 +53,11 @@ type Overview struct {
 }
 
 func (a *Aggregator) Build(ctx context.Context) (*Overview, error) {
-	sessions, err := a.store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: OverviewPageSize})
+	sandboxes, err := a.store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: OverviewPageSize})
 	if err != nil {
 		return nil, err
 	}
-	runs, err := a.configDB.ListRecentLoaderRuns(ctx, OverviewPageSize)
+	runs, err := a.configDB.ListRecentSchedulerRuns(ctx, OverviewPageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +67,8 @@ func (a *Aggregator) Build(ctx context.Context) (*Overview, error) {
 		now = a.clock
 	}
 	overview := &Overview{UpdatedAt: now()}
-	overview.Runs.RecentCount = uint32(len(sessions.Sandboxes) + len(runs))
-	for _, session := range sessions.Sandboxes {
+	overview.Runs.RecentCount = uint32(len(sandboxes.Sandboxes) + len(runs))
+	for _, session := range sandboxes.Sandboxes {
 		status := ""
 		if session != nil {
 			status = session.Summary.VMStatus

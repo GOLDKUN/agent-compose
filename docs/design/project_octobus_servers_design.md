@@ -259,10 +259,10 @@ capsets 不复制全局 gateway 配置；全局配置仍由现有 `GatewaySource
 `internal/dev` 和 `public/search`，则该 agent definition 只保存 `internal` 和
 `public`。
 
-这使 server 更新自然进入现有 managed agent definition reconcile：
+这使 server 更新自然进入现有 project revision reconcile：
 
-- re-apply 会更新同一个 stable managed agent definition；
-- server URL/token 变化会被判断为 agent definition 变化；
+- re-apply 保留 stable project agent ID，并创建或复用 immutable revision；
+- server URL/token 变化会被判断为 project spec 变化；
 - 删除仍被 agent 引用的 server 会在 normalize 阶段失败；
 - 不需要新增 project OctoBus server 数据表或独立 reconcile controller。
 
@@ -291,7 +291,7 @@ capsets 不复制全局 gateway 配置；全局配置仍由现有 `GatewaySource
 本设计采用与当前 MCP server 最接近的更新语义：
 
 1. sandbox 创建时的 allowed `capset_ids` 固定，不因 re-apply 增删；
-2. OctoBus URL/token 属于 managed agent definition 的可更新配置；
+2. OctoBus URL/token 属于 project revision 中 agent definition 的可更新配置；
 3. project re-apply 更新 agent definition 后，后续 capability 调用使用最新的
    URL/token；
 4. 已运行 sandbox 不需要停止或重建；
@@ -310,20 +310,20 @@ capsets 不复制全局 gateway 配置；全局配置仍由现有 `GatewaySource
 
 ```go
 type SandboxBinding struct {
-    SandboxID        string
-    ManagedProjectID string
-    ManagedAgentID   string
-    CapsetIDs        []string
+    SandboxID string
+    ProjectID string
+    AgentID   string
+    CapsetIDs []string
 }
 ```
 
 优先复用 sandbox 已有 project/run/agent tags。若现有 sandbox 创建路径不能稳定
-恢复 managed agent ID，应增加一个内部 identity tag，而不是把 URL/token 写入
-sandbox。手工创建、legacy loader 或没有 managed agent identity 的 sandbox 只能
+恢复 project agent ID，应增加一个内部 identity tag，而不是把 URL/token 写入
+sandbox。手工创建或没有 project agent identity 的 sandbox 只能
 使用 unqualified capsets；qualified capsets 必须有明确的 project/agent scope。
 
 daemon 重启时，resolver 继续从持久化 sandbox 重建 token index。重建后的
-binding 通过 managed agent ID 获取当前 AgentDefinition.ConfigJSON，因此重启前后
+binding 通过 project agent ID 获取当前 AgentDefinition.ConfigJSON，因此重启前后
 具有相同的动态更新语义。
 
 ## 7. Control plane：status、list、catalog 和 guide
@@ -347,7 +347,7 @@ type ProviderResolver interface {
 - `serverName == ""`：返回现有全局 provider；
 - 非空：从 scope 对应的当前 AgentDefinition.ConfigJSON 读取具名 server；
 - 缺少 scope、server 不存在或不属于该 agent 时返回明确错误；
-- 缓存 key 至少包含 managed agent identity、server name 和当前配置内容或
+- 缓存 key 至少包含 project agent identity、server name 和当前配置内容或
   revision，不能只按 URL 缓存。
 
 URL 不是隔离身份。相同 URL 可以被不同 project 配置不同 token，因此不能用
@@ -392,7 +392,7 @@ daemon 内部流程：
 1. CAP_TOKEN -> SandboxBinding
 2. 验证完整值 internal/dev 在 binding.CapsetIDs 中
 3. 解析 serverName=internal, actualCapsetID=dev
-4. binding.ManagedAgentID -> 当前 AgentDefinition.ConfigJSON
+4. binding.AgentID -> 当前 AgentDefinition.ConfigJSON
 5. 读取 internal 的 URL/token
 6. 构造原有 outgoing metadata，将 x-octobus-capset 设置为 dev
 7. 非 reflection method 继续要求 x-octobus-instance
@@ -494,7 +494,7 @@ capset declaration 解析 target 的小接口，而不是让 capproxy 直接依�
 - revision round trip 保存 servers；
 - proto/YAML mapping round trip；
 - AgentDefinition.ConfigJSON 只包含 agent 引用的 servers；
-- URL/token 改变触发 managed agent definition update；
+- URL/token 改变触发 project revision update；
 - 未使用 server 改变只影响 project revision，不错误注入 agent config；
 - 旧 revision 解码为空 server map；
 - API、dry-run 和 inspect 输出不泄漏 token。
@@ -580,7 +580,7 @@ capset declaration 解析 target 的小接口，而不是让 capproxy 直接依�
   OctoBus capset ID；
 - agent-compose 在转发前去除 server qualifier，上游 header 契约不变；
 - server 配置进入 project revision 和选中它的 AgentDefinition.ConfigJSON；
-- sandbox 固定 allowed capsets，但 URL/token 在后续调用时读取最新 managed agent
+- sandbox 固定 allowed capsets，但 URL/token 在后续调用时读取最新 project agent
   definition，re-apply 不要求重建 sandbox；
 - URL/token 不进入 guest 或 sandbox metadata；
 - 全局 Settings/API 和旧 project 行为保持兼容；

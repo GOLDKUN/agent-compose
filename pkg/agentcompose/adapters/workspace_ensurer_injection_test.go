@@ -21,7 +21,7 @@ func TestWorkspaceEnsurerConstructorDependencies(t *testing.T) {
 
 	ensurer := &constructorWorkspaceEnsurer{}
 	bridge := NewSandboxRPCBridge(nil, nil, nil, ensurer, nil, nil, nil, nil, nil, nil, nil, nil)
-	runner := NewLoaderSandboxRunner(nil, nil, nil, ensurer, nil, nil, nil, nil, nil, nil, nil)
+	runner := NewSchedulerSandboxRunner(nil, nil, nil, ensurer, nil, nil, nil, nil, nil, nil, nil)
 
 	if bridge.workspaceEnsurer != ensurer {
 		t.Fatalf("SandboxRPCBridge workspace ensurer = %p, want %p", bridge.workspaceEnsurer, ensurer)
@@ -30,6 +30,6 @@ func TestWorkspaceEnsurerConstructorDependencies(t *testing.T) {
 		t.Fatalf("Lifecycle workspace ensurer = %p, want %p", got, ensurer)
 	}
 	if runner.workspaceEnsurer != ensurer {
-		t.Fatalf("LoaderSandboxRunner workspace ensurer = %p, want %p", runner.workspaceEnsurer, ensurer)
+		t.Fatalf("SchedulerSandboxRunner workspace ensurer = %p, want %p", runner.workspaceEnsurer, ensurer)
 	}
 }

@@ -88,7 +88,7 @@ func listComposeSchedulerTriggers(ctx context.Context, clients cliServiceClients
 			continue
 		}
 		for index, trigger := range agent.Scheduler.Triggers {
-			id, err := domain.StableManagedTriggerID(projectID, agent.Name, "", trigger.Name, index)
+			id, err := domain.StableSchedulerTriggerID(projectID, agent.Name, "", trigger.Name, index)
 			if err != nil {
 				return nil, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("resolve trigger for agent %q: %w", agent.Name, err)}
 			}
@@ -291,7 +291,7 @@ func resolveSchedulerRuntimeRun(ctx context.Context, client agentcomposev2connec
 	}))
 	if err == nil && response != nil && response.Msg.GetRun() != nil {
 		run := response.Msg.GetRun()
-		loaderID, idErr := domain.StableManagedLoaderID(projectID, run.GetAgentName(), "")
+		loaderID, idErr := domain.StableProjectSchedulerID(projectID, run.GetAgentName(), "")
 		if idErr != nil {
 			return nil, idErr
 		}
@@ -367,7 +367,7 @@ func resolveComposeScheduler(normalized *compose.NormalizedProjectSpec, projectI
 		if err != nil {
 			return nil, err
 		}
-		loaderID, err := domain.StableManagedLoaderID(projectID, agent.Name, "")
+		loaderID, err := domain.StableProjectSchedulerID(projectID, agent.Name, "")
 		if err != nil {
 			return nil, err
 		}

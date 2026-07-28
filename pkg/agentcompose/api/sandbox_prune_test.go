@@ -8,20 +8,20 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 func TestPruneSandboxesMapsRequestAndCandidates(t *testing.T) {
 	updatedAt := time.Date(2026, 7, 14, 8, 0, 0, 0, time.UTC)
-	coordinator := &sandboxPruneCoordinatorFake{result: sessions.PruneResult{
+	coordinator := &sandboxPruneCoordinatorFake{result: sandboxes.PruneResult{
 		DryRun: true,
-		Matched: []sessions.PruneCandidate{
-			{Kind: sessions.PruneCandidateSandboxRecord, SandboxID: "sandbox-record", ProjectID: "project-1", AgentName: "worker", Driver: "docker", Status: "STOPPED", RuntimeID: "container-1", UpdatedAt: updatedAt, Removable: true},
-			{Kind: sessions.PruneCandidateRuntimeResidue, SandboxID: "sandbox-orphan", Driver: "microsandbox", RuntimeID: "msb-1", UpdatedAt: updatedAt, Removable: false, BlockedReasons: []string{"ownership incomplete"}},
+		Matched: []sandboxes.PruneCandidate{
+			{Kind: sandboxes.PruneCandidateSandboxRecord, SandboxID: "sandbox-record", ProjectID: "project-1", AgentName: "worker", Driver: "docker", Status: "STOPPED", RuntimeID: "container-1", UpdatedAt: updatedAt, Removable: true},
+			{Kind: sandboxes.PruneCandidateRuntimeResidue, SandboxID: "sandbox-orphan", Driver: "microsandbox", RuntimeID: "msb-1", UpdatedAt: updatedAt, Removable: false, BlockedReasons: []string{"ownership incomplete"}},
 		},
 		Removed:  []string{"sandbox-record"},
-		Skipped:  []sessions.PruneCandidate{{Kind: sessions.PruneCandidateRuntimeResidue, SandboxID: "sandbox-orphan", Driver: "microsandbox", RuntimeID: "msb-1", Removable: false, BlockedReasons: []string{"ownership incomplete"}}},
+		Skipped:  []sandboxes.PruneCandidate{{Kind: sandboxes.PruneCandidateRuntimeResidue, SandboxID: "sandbox-orphan", Driver: "microsandbox", RuntimeID: "msb-1", Removable: false, BlockedReasons: []string{"ownership incomplete"}}},
 		Warnings: []string{"inventory partial"},
 	}}
 	handler := NewSandboxHandler(nil, nil, nil, nil).WithRemovalCoordinator(coordinator)
@@ -57,16 +57,16 @@ func TestPruneSandboxesValidatesDurationAndCoordinatorErrors(t *testing.T) {
 }
 
 type sandboxPruneCoordinatorFake struct {
-	request sessions.PruneRequest
-	result  sessions.PruneResult
+	request sandboxes.PruneRequest
+	result  sandboxes.PruneResult
 	err     error
 }
 
-func (f *sandboxPruneCoordinatorFake) Remove(context.Context, string, bool) (sessions.RemovalResult, error) {
-	return sessions.RemovalResult{}, nil
+func (f *sandboxPruneCoordinatorFake) Remove(context.Context, string, bool) (sandboxes.RemovalResult, error) {
+	return sandboxes.RemovalResult{}, nil
 }
 
-func (f *sandboxPruneCoordinatorFake) Prune(_ context.Context, request sessions.PruneRequest) (sessions.PruneResult, error) {
+func (f *sandboxPruneCoordinatorFake) Prune(_ context.Context, request sandboxes.PruneRequest) (sandboxes.PruneResult, error) {
 	f.request = request
 	return f.result, f.err
 }

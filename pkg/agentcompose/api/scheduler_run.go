@@ -7,7 +7,7 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
-func schedulerRunToProto(run domain.LoaderRunSummary, scheduler domain.ProjectSchedulerRecord) *agentcomposev2.SchedulerRun {
+func schedulerRunToProto(run domain.SchedulerRunSummary, scheduler domain.ProjectSchedulerRecord) *agentcomposev2.SchedulerRun {
 	return &agentcomposev2.SchedulerRun{
 		RunId:              run.ID,
 		ProjectId:          scheduler.ProjectID,
@@ -30,15 +30,15 @@ func schedulerRunToProto(run domain.LoaderRunSummary, scheduler domain.ProjectSc
 
 func schedulerRunStatusToProto(status string) agentcomposev2.SchedulerRunStatus {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case domain.LoaderRunStatusRunning:
+	case domain.SchedulerRunStatusRunning:
 		return agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_RUNNING
-	case domain.LoaderRunStatusSucceeded:
+	case domain.SchedulerRunStatusSucceeded:
 		return agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SUCCEEDED
-	case domain.LoaderRunStatusFailed:
+	case domain.SchedulerRunStatusFailed:
 		return agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_FAILED
-	case domain.LoaderRunStatusCanceled:
+	case domain.SchedulerRunStatusCanceled:
 		return agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_CANCELED
-	case domain.LoaderRunStatusSkipped:
+	case domain.SchedulerRunStatusSkipped:
 		return agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SKIPPED
 	default:
 		return agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_UNSPECIFIED

@@ -511,6 +511,72 @@ func TestDockerRuntimeMountsConsumeManifestAndRebaseEachSource(t *testing.T) {
 	}
 }
 
+func TestDockerContainerMountsMatchActiveDataRoot(t *testing.T) {
+	expected := []mountapi.Mount{
+		{Type: mountapi.TypeBind, Source: "/new/sandboxes/sandbox-1/workspace", Target: "/workspace"},
+		{Type: mountapi.TypeBind, Source: "/new/sandboxes/sandbox-1/state", Target: "/data/state", ReadOnly: true},
+	}
+	matching := containerapi.InspectResponse{Mounts: []containerapi.MountPoint{
+		{Type: mountapi.TypeBind, Source: "/new/sandboxes/sandbox-1/workspace", Destination: "/workspace", RW: true},
+		{Type: mountapi.TypeBind, Source: "/new/sandboxes/sandbox-1/state", Destination: "/data/state", RW: false},
+	}}
+	if !dockerContainerMountsMatch(matching, expected) {
+		t.Fatal("matching container mounts were rejected")
+	}
+	stale := matching
+	stale.Mounts = append([]containerapi.MountPoint(nil), matching.Mounts...)
+	stale.Mounts[0].Source = "/old/sessions/sandbox-1/workspace"
+	if dockerContainerMountsMatch(stale, expected) {
+		t.Fatal("container mounts from an earlier data root were accepted")
+	}
+	wrongMode := matching
+	wrongMode.Mounts = append([]containerapi.MountPoint(nil), matching.Mounts...)
+	wrongMode.Mounts[1].RW = true
+	if dockerContainerMountsMatch(wrongMode, expected) {
+		t.Fatal("container mount with changed read-only mode was accepted")
+	}
+}
+
+func TestRemoveDockerContainerWithStaleMountsRequiresSuccessfulRetirement(t *testing.T) {
+	t.Run("removed", func(t *testing.T) {
+		remover := &recordingDockerContainerRemover{}
+		if err := removeDockerContainerWithStaleMounts(context.Background(), remover, "container-1"); err != nil {
+			t.Fatalf("remove stale container: %v", err)
+		}
+		if remover.containerID != "container-1" || !remover.options.Force {
+			t.Fatalf("remove request id=%q options=%+v", remover.containerID, remover.options)
+		}
+	})
+
+	t.Run("already absent", func(t *testing.T) {
+		remover := &recordingDockerContainerRemover{err: errors.New("Error response from daemon: 404 No such container")}
+		if err := removeDockerContainerWithStaleMounts(context.Background(), remover, "container-2"); err != nil {
+			t.Fatalf("missing stale container was not accepted: %v", err)
+		}
+	})
+
+	t.Run("retirement failed", func(t *testing.T) {
+		removeErr := errors.New("docker daemon rejected removal")
+		remover := &recordingDockerContainerRemover{err: removeErr}
+		err := removeDockerContainerWithStaleMounts(context.Background(), remover, "container-3")
+		if !errors.Is(err, removeErr) || !strings.Contains(err.Error(), "stale mounts container-3") {
+			t.Fatalf("remove failure = %v", err)
+		}
+	})
+}
+
+type recordingDockerContainerRemover struct {
+	containerID string
+	options     containerapi.RemoveOptions
+	err         error
+}
+
+func (r *recordingDockerContainerRemover) ContainerRemove(_ context.Context, containerID string, options containerapi.RemoveOptions) error {
+	r.containerID = containerID
+	r.options = options
+	return r.err
+}
+
 func TestSelectDockerNetworkNamePrefersUserDefinedNetwork(t *testing.T) {
 	got, ok := selectDockerNetworkName(containerapi.InspectResponse{
 		NetworkSettings: &containerapi.NetworkSettings{

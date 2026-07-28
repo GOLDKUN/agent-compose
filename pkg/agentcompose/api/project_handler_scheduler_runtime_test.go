@@ -20,15 +20,15 @@ func TestProjectHandlerSchedulerUpdatesUseLoaderRuntime(t *testing.T) {
 	store := schedulerRuntimeProjectStore{
 		project: domain.ProjectRecord{ID: projectID, Name: "migration"},
 		scheduler: domain.ProjectSchedulerRecord{
-			ProjectID:       projectID,
-			AgentName:       agentName,
-			SchedulerID:     "scheduler-1",
-			ManagedLoaderID: loaderID,
+			ProjectID:   projectID,
+			AgentName:   agentName,
+			SchedulerID: "scheduler-1",
+			ID:          loaderID,
 		},
 	}
-	runtime := &schedulerRuntimeFake{loader: domain.Loader{
-		Summary:  domain.LoaderSummary{ID: loaderID},
-		Triggers: []domain.LoaderTrigger{{ID: triggerID, Kind: domain.LoaderTriggerKindInterval, IntervalMs: 3000}},
+	runtime := &schedulerRuntimeFake{loader: domain.Scheduler{
+		Summary:  domain.SchedulerSummary{ID: loaderID},
+		Triggers: []domain.SchedulerTrigger{{ID: triggerID, Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 3000}},
 	}}
 	handler := NewProjectHandler(nil, store, runtime)
 
@@ -84,21 +84,21 @@ func (s schedulerRuntimeProjectStore) GetProjectRevision(context.Context, string
 }
 
 type schedulerRuntimeFake struct {
-	loader       domain.Loader
+	loader       domain.Scheduler
 	loaderID     string
 	triggerID    string
 	enabledCalls int
 	triggerCalls int
 }
 
-func (f *schedulerRuntimeFake) SetLoaderEnabled(_ context.Context, loaderID string, enabled bool) (domain.Loader, error) {
+func (f *schedulerRuntimeFake) SetSchedulerEnabled(_ context.Context, loaderID string, enabled bool) (domain.Scheduler, error) {
 	f.enabledCalls++
 	f.loaderID = loaderID
 	f.loader.Summary.Enabled = enabled
 	return f.loader, nil
 }
 
-func (f *schedulerRuntimeFake) SetLoaderTriggerEnabled(_ context.Context, loaderID, triggerID string, enabled bool) (domain.Loader, error) {
+func (f *schedulerRuntimeFake) SetSchedulerTriggerEnabled(_ context.Context, loaderID, triggerID string, enabled bool) (domain.Scheduler, error) {
 	f.triggerCalls++
 	f.loaderID = loaderID
 	f.triggerID = triggerID

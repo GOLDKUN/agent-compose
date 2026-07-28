@@ -100,6 +100,88 @@ agent-compose down                                # 停止 sandbox、禁用 sche
 
 更多可运行示例（cron、timeout、scheduler 脚本）见 [examples/agent-compose/](examples/agent-compose/)。
 
+## 一次性 V2 存储迁移
+
+`agent-compose-v2-storage-migrator` 是用于旧存储布局 data root 的一次性过渡工具。它不会进入 daemon 镜像，也不属于默认的 `task build`。
+
+具有合法 versioned migration prefix、且只包含 project-managed agent 和 scheduler 的数据库，可由新 daemon 正常升级。legacy 或 unversioned data root（包括 standalone 或 mixed agent/loader 布局）需要使用 migrator。
+
+### 停止运行态 sandbox
+
+迁移切换期间不要使用 `agent-compose down`。在旧版本中，`down` 还会将 project
+标记为 removed、禁用其 scheduler，并移除 volume 关联。如果原始 compose 文件
+已经丢失，迁移后无法安全恢复这些变更。
+
+保持旧 daemon 运行，并通过完整 ID 停止所有运行态 sandbox：
+
+```bash
+agent-compose stop <sandbox-id> [<sandbox-id>...]
+```
+
+使用完整 ID 不需要 compose 文件或 project 选择，也适用于 legacy standalone
+sandbox。下面的 dry-run 会报告持久化 metadata 仍为 `running` 的全部 sandbox
+ID。
+
+dry-run 只检查 source，并使用临时数据库副本；它不会修改任一 data root、创建
+target、复制 sandbox workspace，也不会创建原地迁移备份。
+
+最后一个 `stop` 命令完成后，应立即停止旧 daemon 并保持停止。scheduler 可能
+在最后一次 stop 与 daemon 停止之间短暂创建新的 sandbox，因此应以停机后的
+dry-run 为准：如果仍报告运行态 ID，应重新启动旧 daemon，停止所有已报告的
+ID，再次停止 daemon，然后重新执行 dry-run。不要使用 `docker stop` 停止
+sandbox；必须由旧 daemon 持久化其 stopped 状态。
+
+### 从源码构建并运行
+
+在仓库根目录显式构建 migrator，然后选择生成的二进制：
+
+```bash
+task build:migrator
+MIGRATOR=./build/agent-compose-migrate
+```
+
+migrator 不会由默认的 `task build` 构建。
+
+### 使用发布的 Binary
+
+下载 `SHASUMS256.txt` 和手动发布的对应 Linux 架构产物：
+
+- `agent-compose-v2-storage-migrator-linux-amd64`
+- `agent-compose-v2-storage-migrator-linux-arm64`
+
+校验并赋予执行权限，然后选择该二进制。例如 amd64：
+
+```bash
+grep '  agent-compose-v2-storage-migrator-linux-amd64$' SHASUMS256.txt | sha256sum -c -
+chmod +x agent-compose-v2-storage-migrator-linux-amd64
+MIGRATOR=./agent-compose-v2-storage-migrator-linux-amd64
+```
+
+### 执行迁移
+
+将 `DATA_ROOT` 设为部署的数据目录。`RUNTIME_ROOT` 应设为新 daemon 看到的
+路径：标准容器部署使用 `/data`，native daemon 使用与 `DATA_ROOT` 相同的
+路径。旧 daemon 仍可用时，可以先运行只读 dry-run 获取所有运行态 sandbox
+ID，再按上面的说明使用旧 CLI 停止这些 ID。停止旧 daemon 后，迁移前必须再次
+运行相同的 dry-run：
+
+```bash
+DATA_ROOT=/opt/agent-compose/data
+RUNTIME_ROOT=/data
+"$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
+  --runtime-root "$RUNTIME_ROOT" --dry-run
+```
+
+停机后的 dry-run 必须成功。备份完整 data root，然后移除 `--dry-run` 正式
+执行迁移：
+
+```bash
+"$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
+  --runtime-root "$RUNTIME_ROOT" --json
+```
+
+完成迁移和验证前保持旧 daemon 停止。如需保留独立回滚副本，可为 `--source` 和 `--target` 指定不同目录，并将 `--runtime-root` 设为新 daemon 能看到的 target 路径。
+
 ## Compose 配置
 
 **顶层字段：** `name`、`env_file`、`variables`、`workspaces`、`agents`、`mcp_servers`、`volumes`。

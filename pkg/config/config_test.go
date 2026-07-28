@@ -276,6 +276,27 @@ func TestNewConfigAcceptsLegacySessionEnvironment(t *testing.T) {
 	}
 }
 
+func TestNewConfigTrimsSandboxRootEnvironment(t *testing.T) {
+	for _, name := range []string{"SANDBOX_ROOT", "SESSION_ROOT"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			want := filepath.Join(root, "sandboxes")
+			t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
+			t.Setenv(name, "  "+want+" \t")
+			di := do.New()
+			do.ProvideValue(di, slog.Default())
+
+			config, err := NewConfig(di)
+			if err != nil {
+				t.Fatalf("NewConfig returned error: %v", err)
+			}
+			if config.SandboxRoot != want || !config.SandboxRootExplicit {
+				t.Fatalf("SandboxRoot = %q, explicit=%t; want %q, true", config.SandboxRoot, config.SandboxRootExplicit, want)
+			}
+		})
+	}
+}
+
 func TestNewConfigUsesNonEmptyLegacySessionsRootByDefault(t *testing.T) {
 	dataRoot := filepath.Join(t.TempDir(), "data")
 	legacyRoot := filepath.Join(dataRoot, "sessions")

@@ -9,9 +9,9 @@ import (
 
 func TestProjectAgentAvailabilityReflectsValidationAndDeclaration(t *testing.T) {
 	items := ProjectAgentsToProto([]domain.ProjectAgentRecord{
-		{ProjectID: "p", AgentName: "valid", ManagedAgentID: "managed-valid", Provider: "codex", SpecJSON: `{}`},
-		{ProjectID: "p", AgentName: "disabled", ManagedAgentID: "managed-disabled", Provider: "codex", SpecJSON: `{"enabled":false}`},
-		{ProjectID: "p", AgentName: "invalid", ManagedAgentID: "managed-invalid", Provider: "codex", SpecJSON: `{bad`},
+		{ProjectID: "p", AgentName: "valid", ID: "managed-valid", Provider: "codex", SpecJSON: `{}`},
+		{ProjectID: "p", AgentName: "disabled", ID: "managed-disabled", Provider: "codex", SpecJSON: `{"enabled":false}`},
+		{ProjectID: "p", AgentName: "invalid", ID: "managed-invalid", Provider: "codex", SpecJSON: `{bad`},
 	})
 	if items[0].GetAvailability() != agentcomposev2.ProjectAgentAvailability_PROJECT_AGENT_AVAILABILITY_AVAILABLE || items[0].GetHealth() != agentcomposev2.ProjectAgentHealth_PROJECT_AGENT_HEALTH_HEALTHY {
 		t.Fatalf("enabled agent availability = %#v", items[0])
@@ -26,7 +26,7 @@ func TestProjectAgentAvailabilityReflectsValidationAndDeclaration(t *testing.T) 
 
 func TestIntegrationProjectAgentAvailabilityReflectsCanonicalDisabledEnablement(t *testing.T) {
 	items := ProjectAgentsToProto([]domain.ProjectAgentRecord{
-		{ProjectID: "p", AgentName: "disabled", ManagedAgentID: "managed-disabled", Provider: "codex", SpecJSON: `{"enabled":false}`},
+		{ProjectID: "p", AgentName: "disabled", ID: "managed-disabled", Provider: "codex", SpecJSON: `{"enabled":false}`},
 	})
 	if len(items) != 1 {
 		t.Fatalf("items = %#v", items)
@@ -38,11 +38,11 @@ func TestIntegrationProjectAgentAvailabilityReflectsCanonicalDisabledEnablement(
 
 func TestProjectAgentIncludesPresentationMetadataFromCanonicalSpec(t *testing.T) {
 	items := ProjectAgentsToProto([]domain.ProjectAgentRecord{{
-		ProjectID:      "p",
-		AgentName:      "legacy-agent-bfe5286dc77f",
-		ManagedAgentID: "managed-agent",
-		Provider:       "codex",
-		SpecJSON:       `{"name":"legacy-agent-bfe5286dc77f","display_name":"通用助手","description":"处理日常通用任务","enabled":true}`,
+		ProjectID: "p",
+		AgentName: "legacy-agent-bfe5286dc77f",
+		ID:        "managed-agent",
+		Provider:  "codex",
+		SpecJSON:  `{"name":"legacy-agent-bfe5286dc77f","display_name":"通用助手","description":"处理日常通用任务","enabled":true}`,
 	}})
 	if len(items) != 1 || items[0].GetDisplayName() != "通用助手" || items[0].GetDescription() != "处理日常通用任务" {
 		t.Fatalf("project agent metadata = %#v", items)

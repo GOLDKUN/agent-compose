@@ -263,12 +263,12 @@ func (s *eventStore) MarkEventNoSubscriber(ctx context.Context, eventID, claimID
 
 func (s *eventStore) UpsertEventDelivery(ctx context.Context, delivery domain.EventDelivery) error {
 	delivery.EventID = strings.TrimSpace(delivery.EventID)
-	delivery.LoaderID = strings.TrimSpace(delivery.LoaderID)
+	delivery.SchedulerID = strings.TrimSpace(delivery.SchedulerID)
 	delivery.TriggerID = strings.TrimSpace(delivery.TriggerID)
 	delivery.RunID = strings.TrimSpace(delivery.RunID)
 	delivery.Status = domain.NormalizeEventDeliveryStatus(delivery.Status)
 	delivery.Error = strings.TrimSpace(delivery.Error)
-	if delivery.EventID == "" || delivery.LoaderID == "" || delivery.TriggerID == "" || delivery.Status == "" {
+	if delivery.EventID == "" || delivery.SchedulerID == "" || delivery.TriggerID == "" || delivery.Status == "" {
 		return fmt.Errorf("event delivery requires event, loader, trigger, and status")
 	}
 	now := time.Now().UTC()
@@ -278,21 +278,21 @@ func (s *eventStore) UpsertEventDelivery(ctx context.Context, delivery domain.Ev
 	if delivery.UpdatedAt.IsZero() {
 		delivery.UpdatedAt = now
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO event_delivery(event_id, loader_id, trigger_id, run_id, status, error, created_at, updated_at)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO event_delivery(event_id, scheduler_id, trigger_id, scheduler_run_id, status, error, created_at, updated_at)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(event_id, loader_id, trigger_id) DO UPDATE SET
-			run_id = CASE WHEN excluded.run_id != '' THEN excluded.run_id ELSE event_delivery.run_id END,
+		ON CONFLICT(event_id, scheduler_id, trigger_id) DO UPDATE SET
+			scheduler_run_id = CASE WHEN excluded.scheduler_run_id != '' THEN excluded.scheduler_run_id ELSE event_delivery.scheduler_run_id END,
 			status = CASE
-				WHEN excluded.status = ? AND excluded.run_id = '' AND event_delivery.run_id != '' THEN event_delivery.status
+				WHEN excluded.status = ? AND excluded.scheduler_run_id = '' AND event_delivery.scheduler_run_id != '' THEN event_delivery.status
 				ELSE excluded.status
 			END,
 			error = CASE
-				WHEN excluded.status = ? AND excluded.run_id = '' AND event_delivery.run_id != '' THEN event_delivery.error
+				WHEN excluded.status = ? AND excluded.scheduler_run_id = '' AND event_delivery.scheduler_run_id != '' THEN event_delivery.error
 				ELSE excluded.error
 			END,
 			updated_at = excluded.updated_at`,
 		delivery.EventID,
-		delivery.LoaderID,
+		delivery.SchedulerID,
 		delivery.TriggerID,
 		delivery.RunID,
 		delivery.Status,
@@ -312,25 +312,25 @@ func (s *eventStore) AddEventSandboxLink(ctx context.Context, link domain.EventS
 	link.EventID = strings.TrimSpace(link.EventID)
 	link.SandboxID = strings.TrimSpace(link.SandboxID)
 	link.Relation = strings.TrimSpace(link.Relation)
-	link.LoaderID = strings.TrimSpace(link.LoaderID)
+	link.SchedulerID = strings.TrimSpace(link.SchedulerID)
 	link.RunID = strings.TrimSpace(link.RunID)
 	link.TriggerID = strings.TrimSpace(link.TriggerID)
-	link.LoaderEventID = strings.TrimSpace(link.LoaderEventID)
+	link.SchedulerEventID = strings.TrimSpace(link.SchedulerEventID)
 	if link.EventID == "" || link.SandboxID == "" || link.Relation == "" {
 		return fmt.Errorf("event sandbox link requires event, sandbox, and relation")
 	}
 	if link.CreatedAt.IsZero() {
 		link.CreatedAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO event_sandbox_link(event_id, sandbox_id, relation, loader_id, run_id, trigger_id, loader_event_id, created_at)
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO event_sandbox_link(event_id, sandbox_id, relation, scheduler_id, scheduler_run_id, trigger_id, scheduler_event_id, created_at)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
 		link.EventID,
 		link.SandboxID,
 		link.Relation,
-		link.LoaderID,
+		link.SchedulerID,
 		link.RunID,
 		link.TriggerID,
-		link.LoaderEventID,
+		link.SchedulerEventID,
 		link.CreatedAt.UTC().UnixMilli(),
 	)
 	if err != nil {
@@ -362,8 +362,8 @@ func (s *eventStore) ListEventDeliveries(ctx context.Context, eventIDs []string)
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT event_id, loader_id, trigger_id, run_id, status, error, created_at, updated_at
-		FROM event_delivery WHERE event_id IN (`+strings.Join(placeholders, ",")+`) ORDER BY updated_at ASC, loader_id ASC, trigger_id ASC`, args...)
+	rows, err := s.db.QueryContext(ctx, `SELECT event_id, scheduler_id, trigger_id, scheduler_run_id, status, error, created_at, updated_at
+		FROM event_delivery WHERE event_id IN (`+strings.Join(placeholders, ",")+`) ORDER BY updated_at ASC, scheduler_id ASC, trigger_id ASC`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query event deliveries: %w", err)
 	}
@@ -373,7 +373,7 @@ func (s *eventStore) ListEventDeliveries(ctx context.Context, eventIDs []string)
 		var item domain.EventDelivery
 		var createdAtRaw int64
 		var updatedAtRaw int64
-		if err := rows.Scan(&item.EventID, &item.LoaderID, &item.TriggerID, &item.RunID, &item.Status, &item.Error, &createdAtRaw, &updatedAtRaw); err != nil {
+		if err := rows.Scan(&item.EventID, &item.SchedulerID, &item.TriggerID, &item.RunID, &item.Status, &item.Error, &createdAtRaw, &updatedAtRaw); err != nil {
 			return nil, fmt.Errorf("scan event delivery: %w", err)
 		}
 		item.CreatedAt = storeutil.ParseStoredUnixTimeAuto(createdAtRaw)
@@ -409,7 +409,7 @@ func (s *eventStore) ListEventSandboxLinks(ctx context.Context, eventIDs []strin
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT event_id, sandbox_id, relation, loader_id, run_id, trigger_id, loader_event_id, created_at
+	rows, err := s.db.QueryContext(ctx, `SELECT event_id, sandbox_id, relation, scheduler_id, scheduler_run_id, trigger_id, scheduler_event_id, created_at
 		FROM event_sandbox_link WHERE event_id IN (`+strings.Join(placeholders, ",")+`) ORDER BY created_at ASC, sandbox_id ASC`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query event sandbox links: %w", err)
@@ -419,7 +419,7 @@ func (s *eventStore) ListEventSandboxLinks(ctx context.Context, eventIDs []strin
 	for rows.Next() {
 		var item domain.EventSandboxTraceItem
 		var createdAtRaw int64
-		if err := rows.Scan(&item.EventID, &item.SandboxID, &item.Relation, &item.LoaderID, &item.RunID, &item.TriggerID, &item.LoaderEventID, &createdAtRaw); err != nil {
+		if err := rows.Scan(&item.EventID, &item.SandboxID, &item.Relation, &item.SchedulerID, &item.RunID, &item.TriggerID, &item.SchedulerEventID, &createdAtRaw); err != nil {
 			return nil, fmt.Errorf("scan event sandbox link: %w", err)
 		}
 		item.CreatedAt = storeutil.ParseStoredUnixTimeAuto(createdAtRaw)

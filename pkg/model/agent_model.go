@@ -20,27 +20,29 @@ const (
 )
 
 type AgentDefinition struct {
-	ID                     string            `json:"id"`
-	Name                   string            `json:"name"`
-	Description            string            `json:"description,omitempty"`
-	Enabled                bool              `json:"enabled"`
-	DeletedAt              time.Time         `json:"deleted_at,omitempty"`
-	Provider               string            `json:"provider"`
-	Model                  string            `json:"model,omitempty"`
-	SystemPrompt           string            `json:"system_prompt,omitempty"`
-	Driver                 string            `json:"driver,omitempty"`
-	GuestImage             string            `json:"guest_image,omitempty"`
-	WorkspaceID            string            `json:"workspace_id,omitempty"`
-	EnvItems               []SandboxEnvVar   `json:"env_items,omitempty"`
-	Volumes                []VolumeMountSpec `json:"volumes,omitempty"`
-	ConfigJSON             string            `json:"config_json"`
-	CapsetIDs              []string          `json:"capset_ids,omitempty"`
-	Skills                 []AgentSkill      `json:"skills,omitempty"`
-	ManagedProjectID       string            `json:"managed_project_id,omitempty"`
-	ManagedProjectRevision int64             `json:"managed_project_revision,omitempty"`
-	ManagedAgentName       string            `json:"managed_agent_name,omitempty"`
-	CreatedAt              time.Time         `json:"created_at"`
-	UpdatedAt              time.Time         `json:"updated_at"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Description  string            `json:"description,omitempty"`
+	Enabled      bool              `json:"enabled"`
+	DeletedAt    time.Time         `json:"deleted_at,omitempty"`
+	Provider     string            `json:"provider"`
+	Model        string            `json:"model,omitempty"`
+	SystemPrompt string            `json:"system_prompt,omitempty"`
+	Driver       string            `json:"driver,omitempty"`
+	GuestImage   string            `json:"guest_image,omitempty"`
+	WorkspaceID  string            `json:"workspace_id,omitempty"`
+	EnvItems     []SandboxEnvVar   `json:"env_items,omitempty"`
+	Volumes      []VolumeMountSpec `json:"volumes,omitempty"`
+	ConfigJSON   string            `json:"config_json"`
+	CapsetIDs    []string          `json:"capset_ids,omitempty"`
+	Skills       []AgentSkill      `json:"skills,omitempty"`
+	// Project ownership uses native v2 names internally. The JSON tags retain
+	// their historical names for existing event and runtime consumers.
+	ProjectID       string    `json:"managed_project_id,omitempty"`
+	ProjectRevision int64     `json:"managed_project_revision,omitempty"`
+	AgentName       string    `json:"managed_agent_name,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type AgentSkill struct {
@@ -118,8 +120,8 @@ func NormalizeAgentDefinition(item AgentDefinition, assignDefaults bool) (AgentD
 	item.GuestImage = strings.TrimSpace(item.GuestImage)
 	item.WorkspaceID = strings.TrimSpace(item.WorkspaceID)
 	item.CapsetIDs = normalizeCapsetIDs(item.CapsetIDs)
-	item.ManagedProjectID = strings.TrimSpace(item.ManagedProjectID)
-	item.ManagedAgentName = strings.TrimSpace(item.ManagedAgentName)
+	item.ProjectID = strings.TrimSpace(item.ProjectID)
+	item.AgentName = strings.TrimSpace(item.AgentName)
 	item.ConfigJSON = strings.TrimSpace(item.ConfigJSON)
 	if item.ConfigJSON == "" {
 		item.ConfigJSON = "{}"
@@ -140,14 +142,14 @@ func NormalizeAgentDefinition(item AgentDefinition, assignDefaults bool) (AgentD
 	if !isJSONObject(item.ConfigJSON) {
 		return AgentDefinition{}, fmt.Errorf("agent definition config_json must be a JSON object")
 	}
-	if item.ManagedProjectID == "" {
-		item.ManagedProjectRevision = 0
-		item.ManagedAgentName = ""
+	if item.ProjectID == "" {
+		item.ProjectRevision = 0
+		item.AgentName = ""
 	} else {
-		if item.ManagedAgentName == "" {
+		if item.AgentName == "" {
 			return AgentDefinition{}, fmt.Errorf("managed agent name is required")
 		}
-		if item.ManagedProjectRevision < 0 {
+		if item.ProjectRevision < 0 {
 			return AgentDefinition{}, fmt.Errorf("managed project revision cannot be negative")
 		}
 	}

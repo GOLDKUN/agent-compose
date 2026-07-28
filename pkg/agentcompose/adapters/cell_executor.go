@@ -14,18 +14,18 @@ import (
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 type CellExecutor struct {
 	config   *appconfig.Config
-	store    *sessionstore.Store
+	store    *sandboxstore.Store
 	runtimes RuntimeProvider
-	streams  *sessions.StreamBroker
+	streams  *sandboxes.StreamBroker
 }
 
-func NewCellExecutor(config *appconfig.Config, store *sessionstore.Store, runtimes RuntimeProvider, streams *sessions.StreamBroker) *CellExecutor {
+func NewCellExecutor(config *appconfig.Config, store *sandboxstore.Store, runtimes RuntimeProvider, streams *sandboxes.StreamBroker) *CellExecutor {
 	return &CellExecutor{config: config, store: store, runtimes: runtimes, streams: streams}
 }
 
