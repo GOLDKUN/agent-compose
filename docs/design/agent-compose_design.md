@@ -119,13 +119,13 @@ Current main commands:
   scheduler/loader and stop running sandboxes for the project; preserves project,
   run, and sandbox history by default.
 - `ps`: query project, agent, latest run, and running sandbox state.
-- `run <agent>`: call `RunService.RunAgentStream` for a manual agent run;
+- `run <agent>`: call `RunService.StreamAgentRun` for a manual agent run;
   creates a new sandbox by default, supports reusing an existing sandbox with
   `--sandbox`, stops the runtime after completion by default, and can keep it
   running with `--keep-running`.
 - `logs`: inspect run output by project, agent, run id, or sandbox id; supports
   `--follow`.
-- `exec`: call `ExecService.ExecStream` inside a running sandbox; target the
+- `exec`: call `ExecService.StreamExec` inside a running sandbox; target the
   sandbox with positional `<sandbox>`.
 - `images`, `image ls`, `pull`, `image pull`, `rmi`, `image rm`,
   `image inspect`: call `ImageService` to manage the daemon image store. The
@@ -294,13 +294,13 @@ The v2 API is for project/run/image/exec workflows:
   - `WatchProject` is currently covered only by an unimplemented handler.
 - `RunService`
   - `RunAgent`
-  - `RunAgentStream`
+  - `StreamAgentRun`
   - `GetRun`
   - `ListRuns`
   - `StopRun`
 - `ExecService`
   - `Exec`
-  - `ExecStream`
+  - `StreamExec`
 - `ImageService`
   - `ListImages`
   - `PullImage`
@@ -415,7 +415,7 @@ enabled scheduler whose trigger/script state is inconsistent.
 A run is a single agent execution record. It can come from CLI manual run,
 scheduler trigger, or future API clients.
 
-`RunService.RunAgent` and `RunAgentStream` share the same coordinator path:
+`RunService.RunAgent` and `StreamAgentRun` share the same coordinator path:
 
 1. Resolve project agent and managed agent definition by project id + agent
    name.

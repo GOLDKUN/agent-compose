@@ -14,7 +14,7 @@ func schedulerRunToProto(run domain.SchedulerRunSummary, scheduler domain.Projec
 		AgentName:          scheduler.AgentName,
 		SchedulerId:        scheduler.SchedulerID,
 		TriggerId:          run.TriggerID,
-		TriggerKind:        run.TriggerKind,
+		TriggerKind:        triggerKindToProto(run.TriggerKind),
 		TriggerSource:      run.TriggerSource,
 		Status:             schedulerRunStatusToProto(run.Status),
 		StartedAt:          projectTimestamp(run.StartedAt),

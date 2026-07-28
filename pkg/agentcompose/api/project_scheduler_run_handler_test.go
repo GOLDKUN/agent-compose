@@ -242,6 +242,32 @@ func TestSchedulerRunStatusToProto(t *testing.T) {
 	}
 }
 
+func TestSchedulerRunTriggerKindToProto(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]agentcomposev2.TriggerKind{
+		domain.SchedulerTriggerKindCron:     agentcomposev2.TriggerKind_TRIGGER_KIND_CRON,
+		domain.SchedulerTriggerKindInterval: agentcomposev2.TriggerKind_TRIGGER_KIND_INTERVAL,
+		domain.SchedulerTriggerKindTimeout:  agentcomposev2.TriggerKind_TRIGGER_KIND_TIMEOUT,
+		domain.SchedulerTriggerKindEvent:    agentcomposev2.TriggerKind_TRIGGER_KIND_EVENT,
+		"unknown":                           agentcomposev2.TriggerKind_TRIGGER_KIND_UNSPECIFIED,
+	}
+
+	for input, want := range tests {
+		input, want := input, want
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+			got := schedulerRunToProto(
+				domain.SchedulerRunSummary{TriggerKind: input},
+				domain.ProjectSchedulerRecord{},
+			).GetTriggerKind()
+			if got != want {
+				t.Fatalf("trigger kind = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
 func newSchedulerRunHandlerFixture() (*schedulerRunProjectStoreFake, *schedulerRunRuntimeFake, *ProjectHandler) {
 	store := &schedulerRunProjectStoreFake{
 		project: domain.ProjectRecord{ID: "project-1", Name: "Project", CurrentRevision: 1},

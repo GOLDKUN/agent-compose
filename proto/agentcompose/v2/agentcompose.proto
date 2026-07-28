@@ -744,7 +744,9 @@ message SchedulerRun {
   string agent_name = 3;
   string scheduler_id = 4;
   string trigger_id = 5;
-  string trigger_kind = 6;
+  // Daemon-owned trigger kind used to create this run. Historical or unknown
+  // persisted values are projected as TRIGGER_KIND_UNSPECIFIED.
+  TriggerKind trigger_kind = 6;
   string trigger_source = 7;
   SchedulerRunStatus status = 8;
   google.protobuf.Timestamp started_at = 9;
