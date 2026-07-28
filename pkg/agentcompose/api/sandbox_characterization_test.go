@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -26,16 +27,16 @@ func TestV2SandboxLifecycleActions(t *testing.T) {
 	handler := NewSandboxHandler(delegate, store, &characterizationSandboxRemover{}, nil)
 
 	got, err := handler.GetSandbox(context.Background(), connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
-	if err != nil || got.Msg.GetSandbox().GetStatus() != domain.VMStatusRunning || got.Msg.GetSandbox().GetProxyPath() == "" || delegate.proxyCalls != 0 {
+	if err != nil || got.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING || got.Msg.GetSandbox().GetProxyPath() == "" || delegate.proxyCalls != 0 {
 		t.Fatalf("GetSandbox() = %#v, proxy calls=%d, err=%v", got, delegate.proxyCalls, err)
 	}
 	stopped, err := handler.StopSandbox(context.Background(), connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID}))
-	if err != nil || stopped.Msg.GetSandbox().GetStatus() != domain.VMStatusStopped || len(delegate.stopSessionIDs) != 1 {
+	if err != nil || stopped.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED || len(delegate.stopSessionIDs) != 1 {
 		t.Fatalf("StopSandbox() = %#v, calls=%v, err=%v", stopped, delegate.stopSessionIDs, err)
 	}
 	store.session.Summary.VMStatus = domain.VMStatusStopped
 	resumed, err := handler.ResumeSandbox(context.Background(), connect.NewRequest(&agentcomposev2.ResumeSandboxRequest{SandboxId: sandboxID}))
-	if err != nil || resumed.Msg.GetSandbox().GetStatus() != domain.VMStatusRunning || len(delegate.resumeSessionIDs) != 1 {
+	if err != nil || resumed.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING || len(delegate.resumeSessionIDs) != 1 {
 		t.Fatalf("ResumeSandbox() = %#v, calls=%v, err=%v", resumed, delegate.resumeSessionIDs, err)
 	}
 }
@@ -95,7 +96,7 @@ func TestGetSandboxDoesNotPrepareProxyForStoppedSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSandbox returned error: %v", err)
 	}
-	if response.Msg.GetSandbox().GetStatus() != domain.VMStatusStopped || response.Msg.GetSandbox().GetProxyPath() == "" {
+	if response.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED || response.Msg.GetSandbox().GetProxyPath() == "" {
 		t.Fatalf("GetSandbox response = %#v", response.Msg.GetSandbox())
 	}
 	if response.Msg.GetSandbox().GetNotebookUrl() != "" {
@@ -214,7 +215,7 @@ func TestV2ListSandboxesPassesProjectAndStatusFiltersToStore(t *testing.T) {
 	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
 
 	_, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{
-		ProjectId: " project-a ", Status: []string{" running ", "", "STOPPED", "running"},
+		ProjectId: " project-a ", Status: []agentcomposev2.SandboxStatus{agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED, agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING},
 	}))
 	if err != nil {
 		t.Fatalf("ListSandboxes() error = %v", err)
@@ -228,14 +229,14 @@ func TestV2ListSandboxesPassesProjectAndStatusFiltersToStore(t *testing.T) {
 	}
 }
 
-func TestV2ListSandboxesRejectsInvalidStatusBeforeStore(t *testing.T) {
-	for _, statuses := range [][]string{{"definitely-invalid"}, {"running", "definitely-invalid"}} {
-		t.Run(strings.Join(statuses, ","), func(t *testing.T) {
+func TestV2ListSandboxesRejectsUnknownStatusBeforeStore(t *testing.T) {
+	for _, statuses := range [][]agentcomposev2.SandboxStatus{{agentcomposev2.SandboxStatus_SANDBOX_STATUS_UNSPECIFIED}, {agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, agentcomposev2.SandboxStatus(99)}} {
+		t.Run(fmt.Sprint(statuses), func(t *testing.T) {
 			store := &characterizationSandboxStore{}
 			handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
 
 			_, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Status: statuses}))
-			if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), `invalid sandbox status "definitely-invalid"`) {
+			if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "unsupported sandbox status") {
 				t.Fatalf("ListSandboxes() code/error = %v / %v", connect.CodeOf(err), err)
 			}
 			if len(store.listOptions) != 0 {

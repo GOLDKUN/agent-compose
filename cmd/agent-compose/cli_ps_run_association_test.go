@@ -117,7 +117,7 @@ agents:
 		sandbox: sandboxServiceStub{listSandboxes: func(context.Context, *connect.Request[agentcomposev2.ListSandboxesRequest]) (*connect.Response[agentcomposev2.ListSandboxesResponse], error) {
 			return connect.NewResponse(&agentcomposev2.ListSandboxesResponse{Sandboxes: []*agentcomposev2.Sandbox{{
 				SandboxId: sandboxID,
-				Status:    "running",
+				Status:    agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING,
 				Tags: []*agentcomposev2.SandboxTag{
 					{Name: "origin", Value: "scheduler"},
 					{Name: "project_id", Value: projectID},

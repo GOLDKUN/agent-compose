@@ -5,6 +5,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 func TestSandboxToV2IncludesWorkspaceReclamation(t *testing.T) {
@@ -16,7 +17,7 @@ func TestSandboxToV2IncludesWorkspaceReclamation(t *testing.T) {
 			State: domain.SandboxWorkspaceReclamationStateReclaimed, StartedAt: started, CompletedAt: completed,
 		},
 	})
-	if got.GetWorkspaceReclamationState() != domain.SandboxWorkspaceReclamationStateReclaimed ||
+	if got.GetWorkspaceReclamationState() != agentcomposev2.WorkspaceReclamationState_WORKSPACE_RECLAMATION_STATE_RECLAIMED ||
 		!got.GetWorkspaceReclamationStartedAt().AsTime().Equal(started) ||
 		!got.GetWorkspaceReclamationCompletedAt().AsTime().Equal(completed) {
 		t.Fatalf("workspace reclamation = %#v", got)

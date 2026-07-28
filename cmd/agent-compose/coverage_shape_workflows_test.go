@@ -988,7 +988,7 @@ func testComposeImageStatsAndSessionHelpers(t *testing.T) {
 		SandboxId:     "session-1",
 		Title:         "title",
 		Driver:        "docker",
-		Status:        " RUNNING ",
+		Status:        agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING,
 		WorkspacePath: "/repo",
 		ProxyPath:     "/proxy",
 		Image:         "guest",

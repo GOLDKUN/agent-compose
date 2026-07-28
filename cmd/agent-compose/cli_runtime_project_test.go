@@ -17,7 +17,7 @@ func TestNormalizedRuntimeAgentSpecPreservesSchedulerConcurrencyPolicy(t *testin
 		Enabled:  &enabled,
 		Scheduler: &agentcomposev2.SchedulerSpec{
 			Enabled:           true,
-			ConcurrencyPolicy: "parallel",
+			ConcurrencyPolicy: agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_PARALLEL,
 		},
 	})
 
@@ -33,7 +33,7 @@ func TestIntegrationCLIRuntimeCommandsSelectStoredProjectByName(t *testing.T) {
 		Summary: &agentcomposev2.ProjectSummary{ProjectId: "project-stored", Name: "stored-project"},
 		Spec: &agentcomposev2.ProjectSpec{Name: "stored-project", Agents: []*agentcomposev2.AgentSpec{{
 			Name: "worker", Provider: "codex", Enabled: &enabled,
-			Scheduler: &agentcomposev2.SchedulerSpec{Enabled: true, ConcurrencyPolicy: "parallel", Triggers: []*agentcomposev2.TriggerSpec{{Name: "manual", Kind: "manual"}}},
+			Scheduler: &agentcomposev2.SchedulerSpec{Enabled: true, ConcurrencyPolicy: agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_PARALLEL, Triggers: []*agentcomposev2.TriggerSpec{{Name: "timeout", Kind: agentcomposev2.TriggerKind_TRIGGER_KIND_TIMEOUT, Timeout: "1s"}}},
 		}}},
 		Agents:     []*agentcomposev2.ProjectAgent{{ProjectId: "project-stored", AgentName: "worker", ManagedAgentId: "agent-stored", Provider: "codex", Enabled: true}},
 		Schedulers: []*agentcomposev2.ProjectScheduler{{ProjectId: "project-stored", AgentName: "worker", SchedulerId: "scheduler-stored", Enabled: true, TriggerCount: 1}},

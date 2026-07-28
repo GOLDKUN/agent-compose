@@ -474,10 +474,7 @@ func composePSOutputFromProject(ctx context.Context, clients cliServiceClients, 
 		if !composePSSessionBelongsToProject(session, project, runBySandbox) {
 			continue
 		}
-		status := strings.ToLower(strings.TrimSpace(session.GetStatus()))
-		if status == "" {
-			status = "unknown"
-		}
+		status := sandboxStatusText(session.GetStatus())
 		if statusFilter != nil && !statusFilter[status] {
 			continue
 		}

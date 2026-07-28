@@ -402,7 +402,7 @@ func VolumeMountSpecsToProto(volumes []compose.NormalizedVolumeMountSpec) []*age
 	items := make([]*agentcomposev2.VolumeMountSpec, 0, len(volumes))
 	for _, volume := range volumes {
 		items = append(items, &agentcomposev2.VolumeMountSpec{
-			Type:     volume.Type,
+			Type:     volumeMountTypeToProto(volume.Type),
 			Source:   volume.Source,
 			Target:   volume.Target,
 			ReadOnly: volume.ReadOnly,
@@ -513,19 +513,19 @@ func SchedulerSpecToProto(scheduler *compose.NormalizedSchedulerSpec) *agentcomp
 		Enabled:           scheduler.Enabled,
 		Triggers:          triggers,
 		Script:            scheduler.Script,
-		SandboxPolicy:     scheduler.SandboxPolicy,
+		SandboxPolicy:     schedulerSandboxPolicyToProto(scheduler.SandboxPolicy),
 		DisplayName:       scheduler.DisplayName,
 		Description:       scheduler.Description,
-		ConcurrencyPolicy: scheduler.ConcurrencyPolicy,
+		ConcurrencyPolicy: schedulerConcurrencyPolicyToProto(scheduler.ConcurrencyPolicy),
 	}
 }
 
 func TriggerSpecToProto(trigger compose.NormalizedTriggerSpec) *agentcomposev2.TriggerSpec {
 	result := &agentcomposev2.TriggerSpec{
 		Name:          trigger.Name,
-		Kind:          trigger.Kind,
+		Kind:          triggerKindToProto(trigger.Kind),
 		Prompt:        trigger.Prompt,
-		SandboxPolicy: trigger.SandboxPolicy,
+		SandboxPolicy: schedulerSandboxPolicyToProto(trigger.SandboxPolicy),
 	}
 	switch trigger.Kind {
 	case "cron":
@@ -816,8 +816,8 @@ func VolumeMountYAMLList(volumes []*agentcomposev2.VolumeMountSpec) []map[string
 	items := make([]map[string]any, 0, len(volumes))
 	for _, volume := range volumes {
 		raw := map[string]any{}
-		if strings.TrimSpace(volume.GetType()) != "" {
-			raw["type"] = volume.GetType()
+		if mountType := VolumeMountTypeText(volume.GetType()); mountType != "" {
+			raw["type"] = mountType
 		}
 		if strings.TrimSpace(volume.GetSource()) != "" {
 			raw["source"] = volume.GetSource()
@@ -935,11 +935,11 @@ func SchedulerYAMLShape(scheduler *agentcomposev2.SchedulerSpec) map[string]any 
 	if strings.TrimSpace(scheduler.GetDescription()) != "" {
 		raw["description"] = scheduler.GetDescription()
 	}
-	if scheduler.GetSandboxPolicy() != "" {
-		raw["sandbox_policy"] = scheduler.GetSandboxPolicy()
+	if policy := schedulerSandboxPolicyText(scheduler.GetSandboxPolicy()); policy != "" {
+		raw["sandbox_policy"] = policy
 	}
-	if scheduler.GetConcurrencyPolicy() != "" {
-		raw["concurrency_policy"] = scheduler.GetConcurrencyPolicy()
+	if policy := schedulerConcurrencyPolicyText(scheduler.GetConcurrencyPolicy()); policy != "" {
+		raw["concurrency_policy"] = policy
 	}
 	triggers := make([]map[string]any, 0, len(scheduler.GetTriggers()))
 	for _, trigger := range scheduler.GetTriggers() {
@@ -962,10 +962,10 @@ func TriggerYAMLShape(trigger *agentcomposev2.TriggerSpec) map[string]any {
 	if trigger.GetPrompt() != "" {
 		raw["prompt"] = trigger.GetPrompt()
 	}
-	if trigger.GetSandboxPolicy() != "" {
-		raw["sandbox_policy"] = trigger.GetSandboxPolicy()
+	if policy := schedulerSandboxPolicyText(trigger.GetSandboxPolicy()); policy != "" {
+		raw["sandbox_policy"] = policy
 	}
-	kind := strings.ToLower(strings.TrimSpace(trigger.GetKind()))
+	kind := triggerKindText(trigger.GetKind())
 	if kind == "" || kind == "cron" {
 		if kind == "cron" || strings.TrimSpace(trigger.GetCron()) != "" {
 			raw["cron"] = trigger.GetCron()

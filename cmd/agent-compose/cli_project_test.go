@@ -688,9 +688,9 @@ func TestComposePSAllIncludesEveryStatusOnlyForCurrentProject(t *testing.T) {
 		sandbox: sandboxServiceStub{listSandboxes: func(_ context.Context, req *connect.Request[agentcomposev2.ListSandboxesRequest]) (*connect.Response[agentcomposev2.ListSandboxesResponse], error) {
 			sandboxRequests = append(sandboxRequests, proto.Clone(req.Msg).(*agentcomposev2.ListSandboxesRequest))
 			return connect.NewResponse(&agentcomposev2.ListSandboxesResponse{Sandboxes: []*agentcomposev2.Sandbox{
-				{SandboxId: "sandbox-project-running", Status: "running", Tags: []*agentcomposev2.SandboxTag{{Name: "project_id", Value: "project-1"}}},
-				{SandboxId: "sandbox-project-stopped", Status: "stopped", Tags: []*agentcomposev2.SandboxTag{{Name: "project_id", Value: "project-1"}}},
-				{SandboxId: "sandbox-other-running", Status: "running", Tags: []*agentcomposev2.SandboxTag{{Name: "project_id", Value: "project-2"}}},
+				{SandboxId: "sandbox-project-running", Status: agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, Tags: []*agentcomposev2.SandboxTag{{Name: "project_id", Value: "project-1"}}},
+				{SandboxId: "sandbox-project-stopped", Status: agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED, Tags: []*agentcomposev2.SandboxTag{{Name: "project_id", Value: "project-1"}}},
+				{SandboxId: "sandbox-other-running", Status: agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, Tags: []*agentcomposev2.SandboxTag{{Name: "project_id", Value: "project-2"}}},
 			}}), nil
 		}},
 	}
@@ -724,13 +724,13 @@ func TestComposePSAllIncludesEveryStatusOnlyForCurrentProject(t *testing.T) {
 	if len(sandboxRequests) != 3 {
 		t.Fatalf("sandbox requests = %d, want 3", len(sandboxRequests))
 	}
-	if sandboxRequests[0].GetProjectId() != "project-1" || !slices.Equal(sandboxRequests[0].GetStatus(), []string{"running"}) {
+	if sandboxRequests[0].GetProjectId() != "project-1" || !slices.Equal(sandboxRequests[0].GetStatus(), []agentcomposev2.SandboxStatus{agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING}) {
 		t.Fatalf("default sandbox request = %#v", sandboxRequests[0])
 	}
 	if sandboxRequests[1].GetProjectId() != "project-1" || len(sandboxRequests[1].GetStatus()) != 0 {
 		t.Fatalf("all sandbox request = %#v", sandboxRequests[1])
 	}
-	if !slices.Equal(sandboxRequests[2].GetStatus(), []string{"running", "stopped"}) {
+	if !slices.Equal(sandboxRequests[2].GetStatus(), []agentcomposev2.SandboxStatus{agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED}) {
 		t.Fatalf("multi-status sandbox request = %#v", sandboxRequests[2])
 	}
 }
