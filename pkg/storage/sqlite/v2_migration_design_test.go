@@ -115,7 +115,7 @@ func TestV2MigrationDesignRejectsStandaloneAgentWithoutModification(t *testing.T
 
 	err := applyMigrationSet(ctx, db, chain)
 	if err == nil || !strings.Contains(err.Error(), "agent-compose-migrate") {
-		t.Fatalf("migration error = %v, want copy migrator hint", err)
+		t.Fatalf("migration error = %v, want storage migrator hint", err)
 	}
 	assertV4RollbackState(t, db, "agent_definition", "standalone-agent")
 }
@@ -134,7 +134,7 @@ func TestV2MigrationDesignRejectsStandaloneSchedulerAndRollsBackAgentMigration(t
 
 	err := applyMigrationSet(ctx, db, chain)
 	if err == nil || !strings.Contains(err.Error(), "agent-compose-migrate") {
-		t.Fatalf("migration error = %v, want copy migrator hint", err)
+		t.Fatalf("migration error = %v, want storage migrator hint", err)
 	}
 	assertV4RollbackState(t, db, "loader", "standalone-loader")
 }
@@ -153,7 +153,7 @@ func TestV2MigrationDesignRejectsAgentProjectionRevisionMismatchWithoutModificat
 
 	err := applyMigrationSet(ctx, db, chain)
 	if err == nil || !strings.Contains(err.Error(), "agent-compose-migrate") {
-		t.Fatalf("migration error = %v, want copy migrator hint", err)
+		t.Fatalf("migration error = %v, want storage migrator hint", err)
 	}
 	assertV4RollbackState(t, db, "agent_definition", "agent-1")
 	var revision int64
@@ -177,7 +177,7 @@ func TestV2MigrationDesignRejectsLegacySchedulerArtifactPathWithoutModification(
 
 	err := applyMigrationSet(ctx, db, chain)
 	if err == nil || !strings.Contains(err.Error(), "agent-compose-migrate") {
-		t.Fatalf("migration error = %v, want copy migrator hint", err)
+		t.Fatalf("migration error = %v, want storage migrator hint", err)
 	}
 	assertV4RollbackState(t, db, "loader", "loader-1")
 	var artifactsDir string

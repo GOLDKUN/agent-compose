@@ -17,7 +17,7 @@ import (
 
 const baselineMigrationVersion int64 = 1
 
-const legacyMigratorHint = "use agent-compose-migrate with a read-only source and a new target data root"
+const legacyMigratorHint = "stop the legacy daemon and use agent-compose-migrate to migrate the data root before starting this daemon"
 
 var migrationFilenamePattern = regexp.MustCompile(`^([0-9]{6})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`)
 
