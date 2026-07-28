@@ -710,6 +710,40 @@ func TestRunsControllerFailedFreshSandboxRetryPreparesAgentEnvironment(t *testin
 	}
 }
 
+func TestRunsControllerReleasedRuntimeResumePreparesAgentEnvironment(t *testing.T) {
+	fixture := newControllerRunFixture(t)
+	sandbox, err := fixture.store.CreateSandbox(fixture.ctx, "released runtime", "", driverpkg.RuntimeDriverDocker, "guest:latest", "", domain.SandboxTypeManual, nil, nil, []domain.SandboxTag{
+		{Name: domain.AgentSandboxTagProvider, Value: "codex"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	sandbox.Summary.VMStatus = domain.VMStatusStopped
+	sandbox.StoppedRuntime = &domain.StoppedRuntime{State: domain.StoppedRuntimeStateReleased, ReleasedAt: time.Now().UTC()}
+	if err := fixture.store.UpdateSandbox(fixture.ctx, sandbox); err != nil {
+		t.Fatalf("UpdateSandbox returned error: %v", err)
+	}
+	if err := fixture.store.SaveVMState(sandbox.Summary.ID, domain.VMState{
+		Driver:    driverpkg.RuntimeDriverDocker,
+		StartedAt: time.Now().Add(-time.Minute).UTC(),
+	}); err != nil {
+		t.Fatalf("SaveVMState returned error: %v", err)
+	}
+
+	result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, domain.ProjectRunRecord{
+		RunID: "run-released", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", Driver: driverpkg.RuntimeDriverDocker, ImageRef: "guest:latest",
+	}, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID})
+	if err != nil {
+		t.Fatalf("ensureProjectRunSandbox returned error: %v", err)
+	}
+	if result.Sandbox == nil || result.Sandbox.Summary.VMStatus != domain.VMStatusRunning {
+		t.Fatalf("resumed sandbox = %#v", result.Sandbox)
+	}
+	if fixture.executor.prepareFromTagsCalls != 1 {
+		t.Fatalf("tag-based agent preparation calls = %d, want 1", fixture.executor.prepareFromTagsCalls)
+	}
+}
+
 func TestRunsControllerRunProjectAgentCommandNonZeroExitPreservesOutput(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -2687,6 +2721,11 @@ func (d *fakeControllerDriver) StopSandboxVM(_ context.Context, sandbox *domain.
 }
 
 func (d *fakeControllerDriver) RemoveSandboxVM(context.Context, *domain.Sandbox) error {
+	d.removed = true
+	return d.removeErr
+}
+
+func (d *fakeControllerDriver) ReleaseSandboxRuntime(context.Context, *domain.Sandbox) error {
 	d.removed = true
 	return d.removeErr
 }

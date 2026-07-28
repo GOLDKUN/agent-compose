@@ -220,7 +220,9 @@ func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandb
 		return nil, api.ConnectErrorForDomain(classifyRuntimeProviderError(err))
 	}
 	guestImage := driverpkg.ResolveSandboxGuestImage(req.GuestImage, driverpkg.DefaultGuestImageForDriver(b.config, driver))
-	session, err := b.store.CreateSandbox(ctx, req.Title, req.BaseWorkspace, driver, guestImage, workspaceID, source, workspaceSnapshot, envItems, tags)
+	session, err := b.store.CreateSandboxWithOptions(ctx, req.Title, req.BaseWorkspace, driver, guestImage, workspaceID, source, workspaceSnapshot, envItems, tags, sandboxstore.CreateSandboxOptions{
+		StoppedRuntimePolicy: stoppedRuntimePolicyFromAgentDefinition(agentDefinition),
+	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -330,13 +332,15 @@ func (b *SandboxRPCBridge) stopSandbox(ctx context.Context, sandboxID, source st
 	} else {
 		session = reconciled
 	}
-	loaded, stopped, err := b.sessionLifecycle().StopLoaded(ctx, session)
-	if err != nil {
-		return nil, api.ConnectErrorForDomain(err)
+	loaded, stopped, stopErr := b.sessionLifecycle().StopLoaded(ctx, session)
+	if loaded != nil && loaded.Summary.VMStatus == domain.VMStatusStopped {
+		b.revokeCapabilitySandbox(loaded.Summary.ID)
 	}
-	b.revokeCapabilitySandbox(loaded.Summary.ID)
-	if stopped {
+	if stopped && loaded != nil {
 		b.publishSchedulerTopic("agent-compose.session.stopped", schedulers.SessionTopicPayload(loaded, source))
+	}
+	if stopErr != nil {
+		return nil, api.ConnectErrorForDomain(stopErr)
 	}
 	return loaded, nil
 }

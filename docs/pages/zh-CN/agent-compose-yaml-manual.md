@@ -755,7 +755,13 @@ sandbox:
 - `retain` 保留已停止的 runtime 和私有可写层。Resume 必须使用同一个 runtime；runtime 意外丢失时不会静默重建。
 - `remove` 显式删除已停止的 Docker 容器、BoxLite box/私有磁盘，或 Microsandbox sandbox/私有 qcow2 overlay。Sandbox 元数据、事件、日志、workspace 和声明的持久挂载仍会保留。Resume 会创建新 runtime，因此只存在于私有可写层中的数据会丢失。
 
-有效策略会在 sandbox 创建时生成快照；之后修改项目配置只影响新 sandbox。Daemon 会重试被中断的 release，`sandbox inspect` 会显示有效策略、release 状态和最近一次 release 错误。
+有效策略会在 sandbox 创建时生成快照；之后修改项目配置只影响新 sandbox。`agent-compose inspect sandbox <sandbox> --json` 通过 `stopped_runtime_policy`、`stopped_runtime_state`、`stopped_runtime_last_error` 和 `stopped_runtime_released_at` 展示生命周期记录。状态含义如下：
+
+- `retained`：当前没有主动释放 runtime；已停止 sandbox 应继续使用保留的 runtime 恢复。
+- `release_pending`：释放意图已经持久化，但 stop、runtime 删除或 ownership 更新尚未全部确认完成。Daemon 会在中断后重试该状态；resume 也会先完成待处理的释放，再创建新 runtime。
+- `released`：runtime 删除和 ownership 更新都已完成；resume 会创建新 runtime。
+
+对于 `remove`，daemon 会先持久化 `release_pending`。如果生命周期记录中存在晚于最近一次确认 stop 的启动或启动尝试，即使粗粒度 VM 状态是 `failed` 而不是 `running`，也会先确认 driver stop；之后才删除 runtime 并把记录标记为 `released`。这个顺序可避免部分启动的 runtime 被跳过 stop，或未经确认便被破坏性释放。磁盘上的 ownership record 格式属于内部恢复状态，不是稳定的运维接口。
 
 ### `scheduler`
 

@@ -50,6 +50,7 @@ type projectSandboxStore interface {
 	GetSandbox(context.Context, string) (*domain.Sandbox, error)
 	UpdateSandbox(context.Context, *domain.Sandbox) error
 	AddEvent(context.Context, string, domain.SandboxEvent) error
+	GetVMState(string) (domain.VMState, error)
 }
 
 type projectSandboxDriver interface {
@@ -76,32 +77,29 @@ func stopProjectSandbox(ctx context.Context, sandboxRoot string, locks *sessions
 	if err != nil {
 		return err
 	}
-	stopRequired := loaded.Summary.VMStatus == domain.VMStatusRunning
-	if !stopRequired && domain.EffectiveStoppedRuntimePolicy(loaded) == domain.StoppedRuntimePolicyRetain {
-		return nil
-	}
-	if driver == nil {
-		return fmt.Errorf("sandbox driver is required")
-	}
-	result, err := sessionstream.StopSandboxRuntime(ctx, sandboxRoot, store, driver, loaded, stopRequired)
-	if err != nil {
-		return err
+	result, stopErr := sessionstream.StopSandboxRuntime(ctx, sandboxRoot, store, driver, loaded)
+	if streams != nil {
+		if result.Stopped || result.Released {
+			streams.PublishSandboxUpdated(&loaded.Summary)
+		}
+		for _, event := range result.RuntimeEvents {
+			streams.PublishEventAdded(loaded.Summary.ID, event)
+		}
 	}
 	if result.Stopped {
 		event := domain.SandboxEvent{
 			ID:        uuid.NewString(),
 			Type:      "sandbox.stopped",
 			Level:     "info",
-			Message:   sessionstream.SandboxStoppedEventMessage(result),
+			Message:   sessionstream.SandboxStoppedEventMessage(loaded, result),
 			CreatedAt: time.Now().UTC(),
 		}
 		_ = store.AddEvent(ctx, loaded.Summary.ID, event)
 		if streams != nil {
-			streams.PublishSandboxUpdated(&loaded.Summary)
 			streams.PublishEventAdded(loaded.Summary.ID, event)
 		}
 	}
-	return nil
+	return stopErr
 }
 
 type projectControllerDelegate struct {

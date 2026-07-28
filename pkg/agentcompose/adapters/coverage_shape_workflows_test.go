@@ -14,7 +14,7 @@ func TestIntegrationAdapterRuntimeWorkflows(t *testing.T) {
 	t.Run("agent runner mcp", TestAgentRunnerPrepareManagedMCPConfigForProviders)
 	t.Run("cell executor", TestCellExecutorExecuteCellPersistsCellAndEvent)
 	t.Run("sandbox driver", TestSandboxDriverStartSandboxVMSavesRuntimeState)
-	t.Run("sandbox stop and remove lifecycle", TestSandboxDriverStopPreservesFacadeTokensUntilRemove)
+	t.Run("sandbox stop and remove lifecycle", TestSandboxDriverStopPreservesFacadeTokensUntilRuntimeRelease)
 	t.Run("sandbox resume reuses runtime", TestSandboxDriverResumeReusesRuntimeWithoutRefreshingStartupEnv)
 	t.Run("sandbox rpc", TestSandboxRPCBridgeCallJSONSupportsSandboxRPCs)
 	t.Run("sandbox rpc unsupported history", TestSandboxRPCBridgeHistoricalUnsupportedRuntimeIsUnimplementedAndPreservesSummary)

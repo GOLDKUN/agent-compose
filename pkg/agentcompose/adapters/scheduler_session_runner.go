@@ -64,25 +64,34 @@ func (r *SchedulerSandboxRunner) Shutdown(ctx context.Context, sessionID string)
 	if err != nil {
 		return err
 	}
-	stopRequired := session.Summary.VMStatus == domain.VMStatusRunning
-	if !stopRequired && domain.EffectiveStoppedRuntimePolicy(session) == domain.StoppedRuntimePolicyRetain {
-		return nil
-	}
-	result, err := sandboxes.StopSandboxRuntime(stopCtx, r.Config.SandboxRoot, r.Store, r.Driver, session, stopRequired)
-	if err != nil {
-		return err
-	}
-	if r.Streams != nil {
+	result, stopErr := sandboxes.StopSandboxRuntime(stopCtx, r.Config.SandboxRoot, r.Store, r.Driver, session)
+	if r.Streams != nil && (result.Stopped || result.Released) {
 		r.Streams.PublishSandboxUpdated(&session.Summary)
 	}
+	if r.Streams != nil {
+		for _, event := range result.RuntimeEvents {
+			r.Streams.PublishEventAdded(session.Summary.ID, event)
+		}
+	}
 	if result.Stopped {
-		event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: sandboxes.SandboxStoppedEventMessage(result), CreatedAt: time.Now().UTC()}
+		event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: sandboxes.SandboxStoppedEventMessage(session, result), CreatedAt: time.Now().UTC()}
 		_ = r.Store.AddEvent(stopCtx, session.Summary.ID, event)
 		if r.Streams != nil {
 			r.Streams.PublishEventAdded(session.Summary.ID, event)
 		}
 	}
-	r.revokeCapabilitySandbox(session.Summary.ID)
+	if session.Summary.VMStatus == domain.VMStatusStopped {
+		r.revokeCapabilitySandbox(session.Summary.ID)
+	}
+	if stopErr != nil {
+		if result.Stopped {
+			r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(session, "loader"))
+		}
+		return stopErr
+	}
+	if !result.Stopped && !result.Released {
+		return nil
+	}
 	loaded, err := r.Store.GetSandbox(stopCtx, session.Summary.ID)
 	if err != nil {
 		return err
@@ -319,7 +328,7 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 	if err != nil {
 		return nil, "", err
 	}
-	if vmState.StartedAt.IsZero() {
+	if vmState.StartedAt.IsZero() || domain.SandboxRuntimeReleaseIntentional(session) {
 		if err := r.AgentExecutor.PrepareSandboxAgentEnvironmentFromTags(ctx, session); err != nil {
 			return nil, "", err
 		}

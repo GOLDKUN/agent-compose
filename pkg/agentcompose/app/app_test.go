@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -369,6 +370,37 @@ func TestStopProjectSandboxUsesInternalStopSemantics(t *testing.T) {
 	}
 }
 
+func TestStopProjectSandboxRuntimeReleaseFailureFinalizesConfirmedStop(t *testing.T) {
+	releaseErr := errors.New("runtime release failed")
+	store := &projectStopSandboxStore{
+		session: &domain.Sandbox{
+			Summary:              domain.SandboxSummary{ID: "sandbox-release-failure", VMStatus: domain.VMStatusRunning},
+			StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove,
+		},
+	}
+	driver := &projectStopSandboxDriver{releaseErr: releaseErr}
+	streams := &projectStopSandboxStreams{}
+
+	if err := stopProjectSandbox(context.Background(), t.TempDir(), nil, store, driver, streams, store.session); !errors.Is(err, releaseErr) {
+		t.Fatalf("stopProjectSandbox error = %v, want %v", err, releaseErr)
+	}
+	if driver.stopCount != 1 || driver.releaseCount != 1 {
+		t.Fatalf("stop/release calls = %d/%d, want 1/1", driver.stopCount, driver.releaseCount)
+	}
+	if store.updated == nil || store.updated.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(store.updated) != domain.StoppedRuntimeStateReleasePending {
+		t.Fatalf("updated sandbox = %#v", store.updated)
+	}
+	if len(store.events) != 2 || store.events[0].Type != "sandbox.runtime_release_failed" || store.events[1].Type != "sandbox.stopped" {
+		t.Fatalf("events = %#v, want release failure followed by stopped", store.events)
+	}
+	if store.events[1].Message != "sandbox stopped; runtime release pending" {
+		t.Fatalf("stopped event message = %q", store.events[1].Message)
+	}
+	if streams.updatedCount != 1 || streams.eventCount != 2 {
+		t.Fatalf("stream notifications updated=%d events=%d, want 1/2", streams.updatedCount, streams.eventCount)
+	}
+}
+
 type projectStopSandboxStore struct {
 	session *domain.Sandbox
 	updated *domain.Sandbox
@@ -391,13 +423,24 @@ func (s *projectStopSandboxStore) AddEvent(_ context.Context, _ string, event do
 	return nil
 }
 
+func (s *projectStopSandboxStore) GetVMState(string) (domain.VMState, error) {
+	return domain.VMState{}, nil
+}
+
 type projectStopSandboxDriver struct {
-	stopCount int
+	stopCount    int
+	releaseCount int
+	releaseErr   error
 }
 
 func (d *projectStopSandboxDriver) StopSandboxVM(context.Context, *domain.Sandbox) error {
 	d.stopCount++
 	return nil
+}
+
+func (d *projectStopSandboxDriver) ReleaseSandboxRuntime(context.Context, *domain.Sandbox) error {
+	d.releaseCount++
+	return d.releaseErr
 }
 
 type projectStopSandboxStreams struct {

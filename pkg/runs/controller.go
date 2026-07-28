@@ -2294,7 +2294,7 @@ func (c *Controller) prepareFreshStartAgentEnvironment(ctx context.Context, sand
 	if err != nil {
 		return err
 	}
-	if !vmState.StartedAt.IsZero() {
+	if !vmState.StartedAt.IsZero() && !domain.SandboxRuntimeReleaseIntentional(sandbox) {
 		return nil
 	}
 	if c.executor == nil {
@@ -2434,32 +2434,26 @@ func (c *Controller) stopProjectRunSandboxLocked(ctx context.Context, sandbox *d
 	if err != nil {
 		return err
 	}
-	stopRequired := loaded.Summary.VMStatus == domain.VMStatusRunning
-	if !stopRequired && domain.EffectiveStoppedRuntimePolicy(loaded) == domain.StoppedRuntimePolicyRetain {
-		if c.capTokens != nil {
-			c.capTokens.RevokeSandbox(loaded.Summary.ID)
-		}
-		return nil
-	}
-	if c.driver == nil {
-		return fmt.Errorf("sandbox driver is required")
-	}
-	result, err := sandboxes.StopSandboxRuntime(ctx, c.config.SandboxRoot, c.store, c.driver, loaded, stopRequired)
-	if err != nil {
-		return err
-	}
-	if c.capTokens != nil {
+	result, stopErr := sandboxes.StopSandboxRuntime(ctx, c.config.SandboxRoot, c.store, c.driver, loaded)
+	if c.capTokens != nil && loaded.Summary.VMStatus == domain.VMStatusStopped {
 		c.capTokens.RevokeSandbox(loaded.Summary.ID)
 	}
-	if result.Stopped {
-		event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: sandboxes.SandboxStoppedEventMessage(result), CreatedAt: time.Now().UTC()}
-		_ = c.store.AddEvent(ctx, loaded.Summary.ID, event)
-		if c.streams != nil {
+	if c.streams != nil {
+		if result.Stopped || result.Released {
 			c.streams.PublishSandboxUpdated(&loaded.Summary)
+		}
+		for _, event := range result.RuntimeEvents {
 			c.streams.PublishEventAdded(loaded.Summary.ID, event)
 		}
 	}
-	return nil
+	if result.Stopped {
+		event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: sandboxes.SandboxStoppedEventMessage(loaded, result), CreatedAt: time.Now().UTC()}
+		_ = c.store.AddEvent(ctx, loaded.Summary.ID, event)
+		if c.streams != nil {
+			c.streams.PublishEventAdded(loaded.Summary.ID, event)
+		}
+	}
+	return stopErr
 }
 
 func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, store SandboxRuntimeStore, streams *sandboxes.StreamBroker, sandbox *domain.Sandbox, capsetIDs []string) {

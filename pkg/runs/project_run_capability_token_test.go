@@ -108,6 +108,40 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("runtime release failure finalizes confirmed stop", func(t *testing.T) {
+		fixture := newControllerRunFixture(t)
+		indexer := &recordingCapabilitySandboxIndexer{}
+		fixture.controller.capTokens = indexer
+		releaseErr := errors.New("runtime release failed")
+		fixture.driver.removeErr = releaseErr
+		sandbox := newProjectRunCapabilitySandbox(t, fixture, domain.VMStatusRunning)
+		sandbox.StoppedRuntimePolicy = domain.StoppedRuntimePolicyRemove
+		if err := fixture.store.UpdateSandbox(fixture.ctx, sandbox); err != nil {
+			t.Fatalf("UpdateSandbox: %v", err)
+		}
+
+		if err := fixture.controller.stopProjectRunSandbox(fixture.ctx, sandbox); !errors.Is(err, releaseErr) {
+			t.Fatalf("stopProjectRunSandbox error = %v, want %v", err, releaseErr)
+		}
+		loaded, err := fixture.store.GetSandbox(fixture.ctx, sandbox.Summary.ID)
+		if err != nil {
+			t.Fatalf("GetSandbox: %v", err)
+		}
+		if loaded.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
+			t.Fatalf("stopped sandbox = %#v release=%#v", loaded.Summary, loaded.StoppedRuntime)
+		}
+		if len(indexer.revoked) != 1 || indexer.revoked[0] != sandbox.Summary.ID {
+			t.Fatalf("revoked = %v, want [%s]", indexer.revoked, sandbox.Summary.ID)
+		}
+		events, err := fixture.store.ListEvents(fixture.ctx, sandbox.Summary.ID)
+		if err != nil {
+			t.Fatalf("ListEvents: %v", err)
+		}
+		if !sandboxEventTypeExists(events, "sandbox.runtime_release_failed") || !sandboxEventTypeExists(events, "sandbox.stopped") {
+			t.Fatalf("events = %#v, want release failure and stopped", events)
+		}
+	})
+
 	t.Run("remove revokes only after confirmed removal", func(t *testing.T) {
 		for _, tc := range []struct {
 			name    string
@@ -155,6 +189,15 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 			t.Fatal("removed sandbox is still present")
 		}
 	})
+}
+
+func sandboxEventTypeExists(events []domain.SandboxEvent, eventType string) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
 }
 
 func newProjectRunCapabilitySandbox(t *testing.T, fixture *controllerRunFixture, status string) *domain.Sandbox {

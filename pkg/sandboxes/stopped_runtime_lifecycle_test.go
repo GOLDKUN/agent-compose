@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	domain "agent-compose/pkg/model"
 )
@@ -14,6 +15,8 @@ type stoppedRuntimeTestStore struct {
 	sandbox *domain.Sandbox
 	updates []string
 	events  []domain.SandboxEvent
+	vmState domain.VMState
+	vmErr   error
 }
 
 func (s *stoppedRuntimeTestStore) UpdateSandbox(_ context.Context, sandbox *domain.Sandbox) error {
@@ -25,6 +28,10 @@ func (s *stoppedRuntimeTestStore) UpdateSandbox(_ context.Context, sandbox *doma
 func (s *stoppedRuntimeTestStore) AddEvent(_ context.Context, _ string, event domain.SandboxEvent) error {
 	s.events = append(s.events, event)
 	return nil
+}
+
+func (s *stoppedRuntimeTestStore) GetVMState(string) (domain.VMState, error) {
+	return s.vmState, s.vmErr
 }
 
 type stoppedRuntimeTestDriver struct {
@@ -52,14 +59,14 @@ func TestStopSandboxRuntimeRetainsByDefault(t *testing.T) {
 	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox", VMStatus: domain.VMStatusRunning}}
 	store := &stoppedRuntimeTestStore{sandbox: sandbox}
 	driver := &stoppedRuntimeTestDriver{}
-	result, err := StopSandboxRuntime(context.Background(), "", store, driver, sandbox, true)
+	result, err := StopSandboxRuntime(context.Background(), "", store, driver, sandbox)
 	if err != nil || !result.Stopped || result.Released || driver.stopCalls != 1 || driver.releaseCalls != 0 {
 		t.Fatalf("result=%#v stop/release=%d/%d err=%v", result, driver.stopCalls, driver.releaseCalls, err)
 	}
 	if domain.EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateRetained {
 		t.Fatalf("runtime state = %#v, want retained", sandbox.StoppedRuntime)
 	}
-	if message := SandboxStoppedEventMessage(result); message != "sandbox stopped and runtime retained" {
+	if message := SandboxStoppedEventMessage(sandbox, result); message != "sandbox stopped and runtime retained" {
 		t.Fatalf("stopped event message = %q", message)
 	}
 }
@@ -70,7 +77,7 @@ func TestStopSandboxRuntimePersistsIntentAndReleasesOwnership(t *testing.T) {
 	store := &stoppedRuntimeTestStore{sandbox: sandbox}
 	driver := &stoppedRuntimeTestDriver{store: store, requireIntent: true}
 
-	result, err := StopSandboxRuntime(context.Background(), root, store, driver, sandbox, true)
+	result, err := StopSandboxRuntime(context.Background(), root, store, driver, sandbox)
 	if err != nil || !result.Stopped || !result.Released || driver.stopCalls != 1 || driver.releaseCalls != 1 {
 		t.Fatalf("result=%#v stop/release=%d/%d err=%v", result, driver.stopCalls, driver.releaseCalls, err)
 	}
@@ -80,7 +87,7 @@ func TestStopSandboxRuntimePersistsIntentAndReleasesOwnership(t *testing.T) {
 	if len(store.events) != 1 || store.events[0].Type != "sandbox.runtime_released" {
 		t.Fatalf("release events = %#v", store.events)
 	}
-	if message := SandboxStoppedEventMessage(result); message != "sandbox stopped and runtime released" {
+	if message := SandboxStoppedEventMessage(sandbox, result); message != "sandbox stopped and runtime released" {
 		t.Fatalf("stopped event message = %q", message)
 	}
 	record, err := ReadOwnershipRecord(root, sandbox.Summary.ID)
@@ -104,7 +111,7 @@ func TestStopSandboxRuntimeReleaseFailureIsRetryable(t *testing.T) {
 	releaseErr := errors.New("remove failed")
 	driver := &stoppedRuntimeTestDriver{store: store, requireIntent: true, releaseErr: releaseErr}
 
-	_, err := StopSandboxRuntime(context.Background(), root, store, driver, sandbox, true)
+	result, err := StopSandboxRuntime(context.Background(), root, store, driver, sandbox)
 	if !errors.Is(err, releaseErr) || sandbox.Summary.VMStatus != domain.VMStatusStopped ||
 		domain.EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateReleasePending || sandbox.StoppedRuntime.LastError == "" {
 		t.Fatalf("sandbox=%#v release=%#v err=%v", sandbox.Summary, sandbox.StoppedRuntime, err)
@@ -112,10 +119,43 @@ func TestStopSandboxRuntimeReleaseFailureIsRetryable(t *testing.T) {
 	if len(store.events) != 1 || store.events[0].Type != "sandbox.runtime_release_failed" {
 		t.Fatalf("release failure events = %#v", store.events)
 	}
+	if message := SandboxStoppedEventMessage(sandbox, result); message != "sandbox stopped; runtime release pending" {
+		t.Fatalf("stopped event message = %q", message)
+	}
 	driver.releaseErr = nil
-	result, err := StopSandboxRuntime(context.Background(), root, store, driver, sandbox, false)
+	result, err = StopSandboxRuntime(context.Background(), root, store, driver, sandbox)
 	if err != nil || !result.Released || driver.stopCalls != 1 || driver.releaseCalls != 2 {
 		t.Fatalf("retry result=%#v stop/release=%d/%d err=%v", result, driver.stopCalls, driver.releaseCalls, err)
+	}
+}
+
+func TestStopSandboxRuntimeStopsAfterUnconfirmedStartAttempt(t *testing.T) {
+	now := time.Now().UTC()
+	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox", VMStatus: domain.VMStatusFailed}}
+	store := &stoppedRuntimeTestStore{
+		sandbox: sandbox,
+		vmState: domain.VMState{
+			StartAttemptedAt: now,
+			StoppedAt:        now.Add(-time.Minute),
+		},
+	}
+	driver := &stoppedRuntimeTestDriver{}
+
+	result, err := StopSandboxRuntime(context.Background(), "", store, driver, sandbox)
+	if err != nil || !result.Stopped || driver.stopCalls != 1 || sandbox.Summary.VMStatus != domain.VMStatusStopped {
+		t.Fatalf("result=%#v stopCalls=%d sandbox=%#v err=%v", result, driver.stopCalls, sandbox.Summary, err)
+	}
+}
+
+func TestStopSandboxRuntimeReturnsVMStateErrorBeforeDriverAction(t *testing.T) {
+	stateErr := errors.New("VM state unavailable")
+	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox", VMStatus: domain.VMStatusFailed}}
+	store := &stoppedRuntimeTestStore{sandbox: sandbox, vmErr: stateErr}
+	driver := &stoppedRuntimeTestDriver{}
+
+	_, err := StopSandboxRuntime(context.Background(), "", store, driver, sandbox)
+	if !errors.Is(err, stateErr) || driver.stopCalls != 0 || driver.releaseCalls != 0 {
+		t.Fatalf("stop/release=%d/%d err=%v", driver.stopCalls, driver.releaseCalls, err)
 	}
 }
 

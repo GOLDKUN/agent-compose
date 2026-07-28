@@ -188,6 +188,44 @@ func TestSandboxDriverStartSandboxVMSavesRuntimeState(t *testing.T) {
 	}
 }
 
+func TestSandboxDriverRollsBackRuntimeWhenOwnershipUpdateFails(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	config := &appconfig.Config{
+		DataRoot: root, SandboxRoot: filepath.Join(root, "sandboxes"), RuntimeDriver: driverpkg.RuntimeDriverBoxlite,
+		BoxliteHome: filepath.Join(root, "boxlite"), DefaultImage: "guest:latest", GuestWorkspacePath: "/workspace",
+		JupyterProxyBasePath: "/agent-compose/session", SandboxStartTimeout: 2 * time.Second, SandboxStopTimeout: time.Second,
+	}
+	store, err := sandboxstore.NewWithConfig(config)
+	if err != nil {
+		t.Fatalf("NewWithConfig returned error: %v", err)
+	}
+	sandbox, err := store.CreateSandbox(ctx, "ownership failure", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeManual, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	invalidRoot := filepath.Join(root, "ownership-root-file")
+	if err := os.WriteFile(invalidRoot, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write invalid ownership root: %v", err)
+	}
+	config.SandboxRoot = invalidRoot
+	removed := false
+	runtime := fakeSessionRuntime{
+		info:       domain.SandboxVMInfo{BoxID: "unowned-runtime"},
+		removeHook: func(*domain.Sandbox) { removed = true },
+	}
+	driver := NewSandboxDriver(config, store, nil, fakeRuntimeProvider{runtime: runtime})
+
+	err = driver.StartSandboxVM(ctx, sandbox)
+	if err == nil || !removed {
+		t.Fatalf("StartSandboxVM error/removed = %v/%v, want ownership error and rollback", err, removed)
+	}
+	vmState, stateErr := store.GetVMState(sandbox.Summary.ID)
+	if stateErr != nil || vmState.BoxID != "" || !vmState.StartedAt.IsZero() || !vmState.StartAttemptedAt.IsZero() || !vmState.StoppedAt.IsZero() {
+		t.Fatalf("VM state after rollback = %#v, error = %v", vmState, stateErr)
+	}
+}
+
 func TestSandboxDriverRecreatesOnlyAfterIntentionalRuntimeRelease(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -291,6 +329,63 @@ func TestSandboxDriverFreshStartFailureRevokesPreparedAgentToken(t *testing.T) {
 	}
 	if token.RevokedAt.IsZero() {
 		t.Fatalf("failed fresh start token remains active: %#v", token)
+	}
+}
+
+func TestSandboxDriverReleasedRuntimeRecreationFailureRevokesPreparedAgentToken(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	config := &appconfig.Config{
+		DataRoot:            root,
+		DbAddr:              filepath.Join(root, "data.db"),
+		SandboxRoot:         filepath.Join(root, "sandboxes"),
+		RuntimeDriver:       driverpkg.RuntimeDriverBoxlite,
+		DefaultImage:        "guest:latest",
+		GuestWorkspacePath:  "/workspace",
+		GuestStateRoot:      "/state",
+		GuestHomePath:       "/root",
+		RuntimeBaseURL:      "http://agent-compose.test:7410",
+		LLMAPIEndpoint:      "https://llm.example.test/v1",
+		LLMAPIKey:           "provider-key",
+		LLMModel:            "gpt-test",
+		LLMAPIProtocol:      "responses",
+		SandboxStartTimeout: 2 * time.Second,
+	}
+	configDB, store, err := testutil.OpenStores(t, config)
+	if err != nil {
+		t.Fatalf("OpenStores returned error: %v", err)
+	}
+	session, err := store.CreateSandbox(ctx, "failed released runtime recreation", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeManual, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	session.StoppedRuntime = &domain.StoppedRuntime{State: domain.StoppedRuntimeStateReleased, ReleasedAt: time.Now().UTC()}
+	runner := NewAgentRunner(config, store, configDB, configDB, nil)
+	if err := runner.PrepareSandboxAgentEnvironment(ctx, session, execution.AgentConfig{Provider: "codex", Model: "gpt-test"}, nil); err != nil {
+		t.Fatalf("PrepareSandboxAgentEnvironment returned error: %v", err)
+	}
+	rawToken := domain.SandboxEnvMap(session.RuntimeEnvItems)["AGENT_COMPOSE_SANDBOX_TOKEN"]
+	if rawToken == "" {
+		t.Fatal("prepared sandbox token is empty")
+	}
+	if err := store.SaveVMState(session.Summary.ID, domain.VMState{
+		Driver:    driverpkg.RuntimeDriverBoxlite,
+		StartedAt: time.Now().Add(-time.Minute).UTC(),
+	}); err != nil {
+		t.Fatalf("SaveVMState returned error: %v", err)
+	}
+
+	startErr := errors.New("runtime recreation failed")
+	driver := NewSandboxDriver(config, store, configDB, fakeRuntimeProvider{runtime: fakeSessionRuntime{ensureErr: startErr}})
+	if err := driver.StartSandboxVM(ctx, session); !errors.Is(err, startErr) {
+		t.Fatalf("StartSandboxVM error = %v, want %v", err, startErr)
+	}
+	token, err := configDB.GetLLMFacadeToken(ctx, rawToken)
+	if err != nil {
+		t.Fatalf("GetLLMFacadeToken returned error: %v", err)
+	}
+	if token.RevokedAt.IsZero() {
+		t.Fatalf("failed runtime recreation token remains active: %#v", token)
 	}
 }
 
@@ -460,7 +555,7 @@ func TestSandboxDriverStopSandboxVMAddsDockerStopContextMargin(t *testing.T) {
 	}
 }
 
-func TestSandboxDriverStopPreservesFacadeTokensUntilRemove(t *testing.T) {
+func TestSandboxDriverStopPreservesFacadeTokensUntilRuntimeRelease(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	config := &appconfig.Config{
@@ -498,9 +593,11 @@ func TestSandboxDriverStopPreservesFacadeTokensUntilRemove(t *testing.T) {
 	if err := configDB.SaveLLMFacadeToken(ctx, token); err != nil {
 		t.Fatalf("SaveLLMFacadeToken returned error: %v", err)
 	}
-	removed := false
+	removeCalls := 0
 	runtime := fakeSessionRuntime{removeHook: func(removedSession *domain.Sandbox) {
-		removed = removedSession != nil && removedSession.Summary.ID == session.Summary.ID
+		if removedSession != nil && removedSession.Summary.ID == session.Summary.ID {
+			removeCalls++
+		}
 	}}
 	driver := NewSandboxDriver(config, store, configDB, fakeRuntimeProvider{runtime: runtime})
 
@@ -515,18 +612,18 @@ func TestSandboxDriverStopPreservesFacadeTokensUntilRemove(t *testing.T) {
 		t.Fatalf("facade token revoked during resumable stop: %+v", storedToken)
 	}
 
-	if err := driver.RemoveSandboxVM(ctx, session); err != nil {
-		t.Fatalf("RemoveSandboxVM returned error: %v", err)
+	if err := driver.ReleaseSandboxRuntime(ctx, session); err != nil {
+		t.Fatalf("ReleaseSandboxRuntime returned error: %v", err)
 	}
-	if !removed {
+	if removeCalls != 1 {
 		t.Fatal("runtime RemoveSandbox was not called")
 	}
 	storedToken, err = configDB.GetLLMFacadeToken(ctx, rawToken)
 	if err != nil {
-		t.Fatalf("GetLLMFacadeToken after remove returned error: %v", err)
+		t.Fatalf("GetLLMFacadeToken after runtime release returned error: %v", err)
 	}
 	if storedToken.RevokedAt.IsZero() {
-		t.Fatalf("facade token remains active after remove: %+v", storedToken)
+		t.Fatalf("facade token remains active after runtime release: %+v", storedToken)
 	}
 }
 
@@ -551,19 +648,29 @@ func TestSandboxDriverResumeReusesRuntimeWithoutRefreshingStartupEnv(t *testing.
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
 	session.RuntimeEnvItems = []domain.SandboxEnvVar{{Name: "OPENAI_API_KEY", Value: "existing-token"}}
+	stoppedAt := time.Now().UTC()
 	if err := store.SaveVMState(session.Summary.ID, domain.VMState{
 		Driver:    driverpkg.RuntimeDriverBoxlite,
 		BoxID:     "container-1",
-		StoppedAt: time.Now().UTC(),
+		StartedAt: stoppedAt.Add(-time.Minute),
+		StoppedAt: stoppedAt,
 	}); err != nil {
 		t.Fatalf("SaveVMState returned error: %v", err)
 	}
+	invalidRoot := filepath.Join(root, "unavailable-ownership-root")
+	if err := os.WriteFile(invalidRoot, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write unavailable ownership root: %v", err)
+	}
+	config.SandboxRoot = invalidRoot
 	runtime := fakeSessionRuntime{
 		info: domain.SandboxVMInfo{BoxID: "container-1"},
 		ensureHook: func(resumed *domain.Sandbox) {
 			if got := domain.SandboxEnvMap(resumed.RuntimeEnvItems)["OPENAI_API_KEY"]; got != "existing-token" {
 				t.Fatalf("resume runtime env = %#v", resumed.RuntimeEnvItems)
 			}
+		},
+		removeHook: func(*domain.Sandbox) {
+			t.Fatal("retained runtime was removed during resume")
 		},
 	}
 	driver := NewSandboxDriver(config, store, nil, fakeRuntimeProvider{runtime: runtime})

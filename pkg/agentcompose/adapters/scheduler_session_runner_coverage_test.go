@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
+	"agent-compose/pkg/capabilities"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
@@ -93,6 +95,108 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 	}
 	if image := runner.guestImage(domain.SchedulerAgentRequest{GuestImage: "request:latest"}, domain.Scheduler{Summary: domain.SchedulerSummary{GuestImage: "loader:latest"}}, &domain.AgentDefinition{GuestImage: "agent:latest"}, driverpkg.RuntimeDriverDocker); image != "request:latest" {
 		t.Fatalf("guestImage = %q", image)
+	}
+}
+
+func TestLoaderSandboxRunnerReleasedRuntimeResumePreparesAgentEnvironment(t *testing.T) {
+	ctx := context.Background()
+	bridge, driver := newTestSandboxRPCBridge(t)
+	bridge.config.RuntimeBaseURL = "http://agent-compose.test:7410"
+	bridge.config.LLMAPIEndpoint = "https://llm.example.test/v1"
+	bridge.config.LLMAPIKey = "provider-key"
+	bridge.config.LLMModel = "gpt-loader-retry"
+	bridge.config.LLMAPIProtocol = "responses"
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+
+	released, err := bridge.store.CreateSandbox(ctx, "released", "", driverpkg.RuntimeDriverBoxlite, "", "", "loader", nil, nil, []domain.SandboxTag{
+		{Name: domain.AgentSandboxTagProvider, Value: "codex"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	released.Summary.VMStatus = domain.VMStatusStopped
+	released.StoppedRuntime = &domain.StoppedRuntime{State: domain.StoppedRuntimeStateReleased, ReleasedAt: time.Now().UTC()}
+	if err := bridge.store.UpdateSandbox(ctx, released); err != nil {
+		t.Fatalf("UpdateSandbox returned error: %v", err)
+	}
+	if err := bridge.store.SaveVMState(released.Summary.ID, domain.VMState{
+		Driver:    driverpkg.RuntimeDriverBoxlite,
+		StartedAt: time.Now().Add(-time.Minute).UTC(),
+	}); err != nil {
+		t.Fatalf("SaveVMState returned error: %v", err)
+	}
+
+	resumed, eventType, err := runner.LoadOrResume(ctx, released.Summary.ID)
+	if err != nil {
+		t.Fatalf("LoadOrResume returned error: %v", err)
+	}
+	if resumed.Summary.VMStatus != domain.VMStatusRunning || eventType != "loader.sandbox.resumed" || len(driver.startSessions) != 1 {
+		t.Fatalf("resumed=%#v event=%q starts=%d", resumed, eventType, len(driver.startSessions))
+	}
+	if token := domain.SandboxEnvMap(driver.startSessions[0].RuntimeEnvItems)["AGENT_COMPOSE_SANDBOX_TOKEN"]; token == "" {
+		t.Fatal("released runtime recreation started without a replacement agent token")
+	}
+}
+
+func TestLoaderSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *testing.T) {
+	ctx := context.Background()
+	bridge, driver := newTestSandboxRPCBridge(t)
+	releaseErr := errors.New("runtime release failed")
+	driver.releaseErr = releaseErr
+	publisher := &loaderSessionPublisherFake{}
+	resolver := NewCapabilitySandboxResolver(bridge.store)
+	resolver.initialized = true
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, publisher, resolver, bridge.agentExecutor)
+
+	const capabilityToken = "capability-token"
+	sandbox, err := bridge.store.CreateSandbox(ctx, "release failure", "", driverpkg.RuntimeDriverBoxlite, "", "", "loader", nil,
+		[]domain.SandboxEnvVar{{Name: capabilities.SandboxTokenEnvName, Value: capabilityToken, Secret: true}},
+		[]domain.SandboxTag{{Name: capabilities.CapsetTagName, Value: "dev"}},
+	)
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	sandbox.Summary.VMStatus = domain.VMStatusRunning
+	sandbox.StoppedRuntimePolicy = domain.StoppedRuntimePolicyRemove
+	if err := bridge.store.UpdateSandbox(ctx, sandbox); err != nil {
+		t.Fatalf("UpdateSandbox returned error: %v", err)
+	}
+	resolver.IndexSandbox(sandbox)
+	if _, ok := resolver.tokens[capabilityToken]; !ok {
+		t.Fatal("capability token was not indexed before shutdown")
+	}
+
+	if err := runner.Shutdown(ctx, sandbox.Summary.ID); !errors.Is(err, releaseErr) {
+		t.Fatalf("Shutdown error = %v, want %v", err, releaseErr)
+	}
+	loaded, err := bridge.store.GetSandbox(ctx, sandbox.Summary.ID)
+	if err != nil {
+		t.Fatalf("GetSandbox returned error: %v", err)
+	}
+	if loaded.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
+		t.Fatalf("stopped sandbox = %#v release=%#v", loaded.Summary, loaded.StoppedRuntime)
+	}
+	if _, ok := resolver.tokens[capabilityToken]; ok {
+		t.Fatal("capability token remains indexed after confirmed stop")
+	}
+	if len(publisher.events) != 1 || publisher.events[0].Topic != "agent-compose.session.stopped" {
+		t.Fatalf("publisher events = %#v, want one stopped event", publisher.events)
+	}
+	events, err := bridge.store.ListEvents(ctx, sandbox.Summary.ID)
+	if err != nil {
+		t.Fatalf("ListEvents returned error: %v", err)
+	}
+	var releaseFailed, stopped bool
+	for _, event := range events {
+		switch event.Type {
+		case "sandbox.runtime_release_failed":
+			releaseFailed = true
+		case "sandbox.stopped":
+			stopped = event.Message == "sandbox stopped; runtime release pending"
+		}
+	}
+	if !releaseFailed || !stopped {
+		t.Fatalf("events = %#v, want release failure and pending stopped event", events)
 	}
 }
 

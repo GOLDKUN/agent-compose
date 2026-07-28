@@ -305,12 +305,15 @@ func (h *SandboxHandler) StopSandbox(ctx context.Context, req *connect.Request[a
 	if err != nil {
 		return nil, err
 	}
+	policy := domain.EffectiveStoppedRuntimePolicy(sandbox)
+	state := domain.EffectiveStoppedRuntimeState(sandbox)
 	if sandbox.Summary.VMStatus == domain.VMStatusStopped &&
-		(domain.EffectiveStoppedRuntimePolicy(sandbox) == domain.StoppedRuntimePolicyRetain ||
-			domain.EffectiveStoppedRuntimeState(sandbox) == domain.StoppedRuntimeStateReleased) {
+		(policy == domain.StoppedRuntimePolicyRetain || state == domain.StoppedRuntimeStateReleased) {
 		return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Sandbox: h.sandboxToV2(ctx, sandbox)}), nil
 	}
-	if sandbox.Summary.VMStatus != domain.VMStatusRunning {
+	retryRelease := sandbox.Summary.VMStatus == domain.VMStatusStopped &&
+		policy == domain.StoppedRuntimePolicyRemove && state == domain.StoppedRuntimeStateReleasePending
+	if sandbox.Summary.VMStatus != domain.VMStatusRunning && !retryRelease {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("sandbox %s cannot be stopped from state %s", sandbox.Summary.ID, sandbox.Summary.VMStatus))
 	}
 	stopped, err := h.delegate.StopSandbox(ctx, sandbox.Summary.ID)

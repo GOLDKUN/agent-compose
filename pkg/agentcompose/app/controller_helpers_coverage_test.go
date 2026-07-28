@@ -259,6 +259,10 @@ func (s *projectSessionStoreFake) AddEvent(_ context.Context, _ string, event do
 	return nil
 }
 
+func (s *projectSessionStoreFake) GetVMState(string) (domain.VMState, error) {
+	return domain.VMState{}, nil
+}
+
 type projectSandboxDriverFake struct {
 	err error
 }

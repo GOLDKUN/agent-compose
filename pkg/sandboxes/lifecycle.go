@@ -262,7 +262,7 @@ func (l Lifecycle) prepareFreshStartAgentEnvironment(ctx context.Context, sessio
 	if err != nil {
 		return err
 	}
-	if !vmState.StartedAt.IsZero() {
+	if !vmState.StartedAt.IsZero() && !domain.SandboxRuntimeReleaseIntentional(session) {
 		return nil
 	}
 	return l.PrepareAgentEnvironment(ctx, session)
@@ -285,32 +285,30 @@ func (l Lifecycle) StopLoaded(ctx context.Context, session *domain.Sandbox) (*do
 	if session.Summary.VMStatus == domain.VMStatusDeleting {
 		return nil, false, fmt.Errorf("sandbox is being deleted")
 	}
-	stopRequired, err := l.stopRequired(session)
-	if err != nil {
-		return nil, false, err
-	}
-	if !stopRequired && domain.EffectiveStoppedRuntimePolicy(session) == domain.StoppedRuntimePolicyRetain {
-		return session, false, nil
-	}
 	sandboxRoot := ""
 	if l.Config != nil {
 		sandboxRoot = l.Config.SandboxRoot
 	}
-	result, err := StopSandboxRuntime(ctx, sandboxRoot, l.Store, l.Driver, session, stopRequired)
-	if err != nil {
-		return nil, false, err
+	result, stopErr := StopSandboxRuntime(ctx, sandboxRoot, l.Store, l.Driver, session)
+	if result.Stopped || result.Released {
+		l.publishSandboxUpdated(&session.Summary)
 	}
-	l.publishSandboxUpdated(&session.Summary)
+	for _, event := range result.RuntimeEvents {
+		l.publishEventAdded(session.Summary.ID, event)
+	}
 	if result.Stopped {
 		event := domain.SandboxEvent{
 			ID:        uuid.NewString(),
 			Type:      "sandbox.stopped",
 			Level:     "info",
-			Message:   SandboxStoppedEventMessage(result),
+			Message:   SandboxStoppedEventMessage(session, result),
 			CreatedAt: time.Now().UTC(),
 		}
 		_ = l.Store.AddEvent(ctx, session.Summary.ID, event)
 		l.publishEventAdded(session.Summary.ID, event)
+	}
+	if stopErr != nil {
+		return session, result.Stopped, stopErr
 	}
 	loaded, err := l.Store.GetSandbox(ctx, session.Summary.ID)
 	if err != nil {
@@ -345,18 +343,6 @@ func (l Lifecycle) RecoverStoppedRuntimeReleases(ctx context.Context) []string {
 		}
 	}
 	return warnings
-}
-
-func (l Lifecycle) stopRequired(session *domain.Sandbox) (bool, error) {
-	if session.Summary.VMStatus == domain.VMStatusRunning {
-		return true, nil
-	}
-	vmState, err := l.Store.GetVMState(session.Summary.ID)
-	if err != nil {
-		return false, err
-	}
-	latestStartRecorded := !vmState.StartedAt.IsZero() || !vmState.StartAttemptedAt.IsZero()
-	return latestStartRecorded && !vmStopIsCurrent(vmState), nil
 }
 
 func (l Lifecycle) publishSandboxUpdated(summary *domain.SandboxSummary) {
