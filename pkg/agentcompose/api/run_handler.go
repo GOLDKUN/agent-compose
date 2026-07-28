@@ -219,6 +219,10 @@ func (h *RunHandler) ListRuns(ctx context.Context, req *connect.Request[agentcom
 	if err != nil {
 		return nil, err
 	}
+	startedFrom, startedTo, err := listRunsStartedRange(req.Msg.GetStartedFrom(), req.Msg.GetStartedTo())
+	if err != nil {
+		return nil, err
+	}
 	options := domain.ProjectRunListOptions{
 		ProjectID:   req.Msg.GetProjectId(),
 		AgentName:   req.Msg.GetAgentName(),
@@ -226,6 +230,8 @@ func (h *RunHandler) ListRuns(ctx context.Context, req *connect.Request[agentcom
 		SchedulerID: req.Msg.GetSchedulerId(),
 		Status:      ProjectRunStatusFromProto(req.Msg.GetStatus()),
 		Source:      ProjectRunSourceFilterFromProto(req.Msg.GetSource()),
+		StartedFrom: startedFrom,
+		StartedTo:   startedTo,
 		Offset:      offset,
 		Limit:       limit,
 	}

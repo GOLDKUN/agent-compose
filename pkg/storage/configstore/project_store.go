@@ -11,7 +11,6 @@ import (
 
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
-	"agent-compose/pkg/runs"
 )
 
 // projectStore owns projects, revisions, agents, schedulers, runs, and sandboxes.
@@ -556,32 +555,7 @@ func (s *projectStore) ListProjectRunsByOptions(ctx context.Context, options Pro
 	if offset < 0 {
 		offset = 0
 	}
-	where := make([]string, 0, 6)
-	args := make([]any, 0, 8)
-	if projectID := strings.TrimSpace(options.ProjectID); projectID != "" {
-		where = append(where, "project_id = ?")
-		args = append(args, projectID)
-	}
-	if agentName := strings.TrimSpace(options.AgentName); agentName != "" {
-		where = append(where, "agent_name = ?")
-		args = append(args, agentName)
-	}
-	if sandboxID := strings.TrimSpace(options.SandboxID); sandboxID != "" {
-		where = append(where, "sandbox_id = ?")
-		args = append(args, sandboxID)
-	}
-	if schedulerID := strings.TrimSpace(options.SchedulerID); schedulerID != "" {
-		where = append(where, "scheduler_id = ?")
-		args = append(args, schedulerID)
-	}
-	if status := strings.TrimSpace(options.Status); status != "" {
-		where = append(where, "status = ?")
-		args = append(args, projects.NormalizeRunStatus(status))
-	}
-	if source := strings.TrimSpace(options.Source); source != "" {
-		where = append(where, "source = ?")
-		args = append(args, runs.NormalizeSource(source))
-	}
+	where, args := projectRunFilter(options)
 	query := projects.SelectProjectRunSQL()
 	if len(where) > 0 {
 		query += ` WHERE ` + strings.Join(where, ` AND `)
@@ -608,32 +582,7 @@ func (s *projectStore) ListProjectRunsByOptions(ctx context.Context, options Pro
 }
 
 func (s *projectStore) CountProjectRuns(ctx context.Context, options ProjectRunListOptions) (int, error) {
-	where := make([]string, 0, 6)
-	args := make([]any, 0, 6)
-	if projectID := strings.TrimSpace(options.ProjectID); projectID != "" {
-		where = append(where, "project_id = ?")
-		args = append(args, projectID)
-	}
-	if agentName := strings.TrimSpace(options.AgentName); agentName != "" {
-		where = append(where, "agent_name = ?")
-		args = append(args, agentName)
-	}
-	if sandboxID := strings.TrimSpace(options.SandboxID); sandboxID != "" {
-		where = append(where, "sandbox_id = ?")
-		args = append(args, sandboxID)
-	}
-	if schedulerID := strings.TrimSpace(options.SchedulerID); schedulerID != "" {
-		where = append(where, "scheduler_id = ?")
-		args = append(args, schedulerID)
-	}
-	if status := strings.TrimSpace(options.Status); status != "" {
-		where = append(where, "status = ?")
-		args = append(args, projects.NormalizeRunStatus(status))
-	}
-	if source := strings.TrimSpace(options.Source); source != "" {
-		where = append(where, "source = ?")
-		args = append(args, runs.NormalizeSource(source))
-	}
+	where, args := projectRunFilter(options)
 	query := `SELECT COUNT(*) FROM project_run`
 	if len(where) > 0 {
 		query += ` WHERE ` + strings.Join(where, ` AND `)

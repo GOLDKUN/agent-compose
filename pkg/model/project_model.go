@@ -138,6 +138,8 @@ type ProjectRunListOptions struct {
 	SchedulerID string
 	Status      string
 	Source      string
+	StartedFrom *time.Time
+	StartedTo   *time.Time
 	Offset      int
 	Limit       int
 }
