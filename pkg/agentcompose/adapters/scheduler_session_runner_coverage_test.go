@@ -130,7 +130,7 @@ func TestLoaderSandboxRunnerReleasedRuntimeResumePreparesAgentEnvironment(t *tes
 	if err != nil {
 		t.Fatalf("LoadOrResume returned error: %v", err)
 	}
-	if resumed.Summary.VMStatus != domain.VMStatusRunning || eventType != "loader.sandbox.resumed" || len(driver.startSessions) != 1 {
+	if resumed.Summary.VMStatus != domain.VMStatusRunning || eventType != "scheduler.sandbox.resumed" || len(driver.startSessions) != 1 {
 		t.Fatalf("resumed=%#v event=%q starts=%d", resumed, eventType, len(driver.startSessions))
 	}
 	if token := domain.SandboxEnvMap(driver.startSessions[0].RuntimeEnvItems)["AGENT_COMPOSE_SANDBOX_TOKEN"]; token == "" {
