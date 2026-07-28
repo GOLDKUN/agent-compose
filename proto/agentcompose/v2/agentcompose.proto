@@ -256,7 +256,7 @@ enum CacheDomain {
   CACHE_DOMAIN_OCI_IMAGE_STORE = 1;
   CACHE_DOMAIN_MATERIALIZED_IMAGE_CACHE = 2;
   CACHE_DOMAIN_RUNTIME_DERIVED_CACHE = 3;
-  CACHE_DOMAIN_SKILL_ARTIFACT_CACHE = 5;
+  CACHE_DOMAIN_SKILL_ARTIFACT_CACHE = 4;
 }
 
 enum CacheReferencePolicy {
@@ -446,10 +446,10 @@ message ProjectScheduler {
   string project_id = 1;
   string agent_name = 2;
   string scheduler_id = 3;
-  bool enabled = 5;
-  uint32 trigger_count = 6;
-  string display_name = 7;
-  string description = 8;
+  bool enabled = 4;
+  uint32 trigger_count = 5;
+  string display_name = 6;
+  string description = 7;
 }
 
 message GetSchedulerRequest {
@@ -712,11 +712,11 @@ message ProjectChange {
 message ProjectSpec {
   string name = 1;
   repeated EnvVarSpec variables = 2;
-  repeated AgentSpec agents = 4;
-  repeated ProjectVolumeSpec volumes = 6;
-  repeated NamedWorkspaceSpec workspaces = 7;
-  repeated MCPServerSpec mcp_servers = 8;
-  repeated OctoBusServerSpec octobus_servers = 9;
+  repeated AgentSpec agents = 3;
+  repeated ProjectVolumeSpec volumes = 4;
+  repeated NamedWorkspaceSpec workspaces = 5;
+  repeated MCPServerSpec mcp_servers = 6;
+  repeated OctoBusServerSpec octobus_servers = 7;
 }
 
 message NamedWorkspaceSpec {
@@ -865,18 +865,18 @@ message RunAgentRequest {
   string agent_name = 2;
   string prompt = 3;
   RunSource source = 4;
-  repeated EnvVarSpec env = 6;
-  RunSandboxCleanupPolicy cleanup_policy = 7;
-  string scheduler_id = 8;
-  string trigger_id = 9;
-  string output_schema_json = 10;
-  string client_request_id = 11;
-  string command = 12;
-  RunJupyterSpec jupyter = 13;
-  string driver = 14;
-  string sandbox_id = 15;
-  repeated VolumeMountSpec volumes = 16;
-  string payload_json = 17;
+  repeated EnvVarSpec env = 5;
+  RunSandboxCleanupPolicy cleanup_policy = 6;
+  string scheduler_id = 7;
+  string trigger_id = 8;
+  string output_schema_json = 9;
+  string client_request_id = 10;
+  string command = 11;
+  RunJupyterSpec jupyter = 12;
+  string driver = 13;
+  string sandbox_id = 14;
+  repeated VolumeMountSpec volumes = 15;
+  string payload_json = 16;
 }
 
 message RunAgentResponse {
@@ -896,6 +896,8 @@ message RunAgentStreamResponse {
 }
 
 message RunAttachRequest {
+  // Frame variants occupy the low-number range. Envelope metadata starts at
+  // 15 so future frame variants can be added without moving metadata fields.
   string client_frame_id = 15;
 
   oneof frame {
@@ -910,6 +912,8 @@ message RunAttachRequest {
 }
 
 message RunAttachResponse {
+  // Frame variants occupy the low-number range. Envelope metadata starts at
+  // 15 so future frame variants can be added without moving metadata fields.
   string server_frame_id = 15;
   google.protobuf.Timestamp created_at = 16;
 
@@ -934,9 +938,9 @@ message RunAttachStart {
 message TranscriptEvent {
   StdioStream stream = 1;
   string text = 2;
-  string name = 4;
-  string payload_json = 5;
-  google.protobuf.Timestamp created_at = 6;
+  string name = 3;
+  string payload_json = 4;
+  google.protobuf.Timestamp created_at = 5;
 }
 
 message GetRunRequest {
@@ -952,16 +956,16 @@ message ListRunsRequest {
 
   string project_id = 1;
   string agent_name = 2;
-  string scheduler_id = 4;
-  RunStatus status = 5;
-  RunSource source = 6;
-  string started_from = 7;
-  string started_to = 8;
+  string scheduler_id = 3;
+  RunStatus status = 4;
+  RunSource source = 5;
+  string started_from = 6;
+  string started_to = 7;
   // Number of matching resources to skip. Values at or above total return an empty page.
-  uint32 offset = 9;
+  uint32 offset = 8;
   // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
-  uint32 limit = 10;
-  string sandbox_id = 11;
+  uint32 limit = 9;
+  string sandbox_id = 10;
 }
 
 message ListRunsResponse {
@@ -1200,17 +1204,17 @@ message RunSummary {
   string scheduler_id = 8;
   string trigger_id = 9;
   RunStatus status = 10;
-  int32 exit_code = 12;
-  string error = 13;
-  google.protobuf.Timestamp started_at = 14;
-  google.protobuf.Timestamp completed_at = 15;
-  int64 duration_ms = 16;
-  google.protobuf.Timestamp created_at = 17;
-  google.protobuf.Timestamp updated_at = 18;
-  repeated string warnings = 19;
-  string sandbox_id = 20;
-  string run_short_id = 21;
-  string sandbox_short_id = 22;
+  int32 exit_code = 11;
+  string error = 12;
+  google.protobuf.Timestamp started_at = 13;
+  google.protobuf.Timestamp completed_at = 14;
+  int64 duration_ms = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+  repeated string warnings = 18;
+  string sandbox_id = 19;
+  string run_short_id = 20;
+  string sandbox_short_id = 21;
 }
 
 message RunDetail {
@@ -1268,6 +1272,8 @@ message ExecStreamResponse {
 }
 
 message ExecAttachRequest {
+  // Frame variants occupy the low-number range. Envelope metadata starts at
+  // 15 so future frame variants can be added without moving metadata fields.
   string client_frame_id = 15;
 
   oneof frame {
@@ -1282,6 +1288,8 @@ message ExecAttachRequest {
 }
 
 message ExecAttachResponse {
+  // Frame variants occupy the low-number range. Envelope metadata starts at
+  // 15 so future frame variants can be added without moving metadata fields.
   string server_frame_id = 15;
   google.protobuf.Timestamp created_at = 16;
 
@@ -1412,7 +1420,7 @@ message ListImagesResponse {
   repeated Image images = 1;
   // Total matching resources before offset and limit are applied.
   uint32 total = 2;
-  ImageStoreStatus store_status = 5;
+  ImageStoreStatus store_status = 3;
 }
 
 message PullImageRequest {
@@ -1511,7 +1519,7 @@ message InspectCacheResponse {
 
 message PruneCachesRequest {
   CacheFilter filter = 1;
-  bool force = 3;
+  bool force = 2;
 }
 
 message PruneCachesResponse {
@@ -1546,13 +1554,13 @@ message CacheItem {
   string image_id = 7;
   string image_ref = 8;
   string resolved_ref = 9;
-  CacheStatus status = 12;
-  bool removable = 13;
-  repeated string blocked_reasons = 14;
-  google.protobuf.Timestamp last_used_at = 15;
-  string last_used_source = 16;
-  repeated CacheReference references = 17;
-  repeated string warnings = 18;
+  CacheStatus status = 10;
+  bool removable = 11;
+  repeated string blocked_reasons = 12;
+  google.protobuf.Timestamp last_used_at = 13;
+  string last_used_source = 14;
+  repeated CacheReference references = 15;
+  repeated string warnings = 16;
 }
 
 message CacheReference {
