@@ -22,11 +22,11 @@ import (
 	"github.com/samber/do/v2"
 )
 
-func TestDaemonTCPServerRunAttachBidiUsesH2C(t *testing.T) {
+func TestDaemonTCPServerAttachAgentRunBidiUsesH2C(t *testing.T) {
 	seen := make(chan string, 1)
 	mux := http.NewServeMux()
 	path, handler := agentcomposev2connect.NewRunServiceHandler(runServiceStub{
-		runAttach: func(_ context.Context, stream *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error {
+		runAttach: func(_ context.Context, stream *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
 			req, err := stream.Receive()
 			if err != nil {
 				return err
@@ -34,8 +34,8 @@ func TestDaemonTCPServerRunAttachBidiUsesH2C(t *testing.T) {
 			if req.GetStart() == nil {
 				return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("start frame is required"))
 			}
-			return stream.Send(&agentcomposev2.RunAttachResponse{
-				Frame: &agentcomposev2.RunAttachResponse_Result{Result: &agentcomposev2.AttachResult{Success: true}},
+			return stream.Send(&agentcomposev2.AttachAgentRunResponse{
+				Frame: &agentcomposev2.AttachAgentRunResponse_Result{Result: &agentcomposev2.AttachResult{Success: true}},
 			})
 		},
 	})
@@ -65,27 +65,27 @@ func TestDaemonTCPServerRunAttachBidiUsesH2C(t *testing.T) {
 
 	baseURL := "http://" + listener.Addr().String()
 	client := agentcomposev2connect.NewRunServiceClient(newDaemonHTTPClient(cliClientConfig{BaseURL: baseURL}), baseURL)
-	stream := client.RunAttach(context.Background())
-	if err := stream.Send(&agentcomposev2.RunAttachRequest{
-		Frame: &agentcomposev2.RunAttachRequest_Start{Start: &agentcomposev2.RunAttachStart{
+	stream := client.AttachAgentRun(context.Background())
+	if err := stream.Send(&agentcomposev2.AttachAgentRunRequest{
+		Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
 			Request: &agentcomposev2.RunAgentRequest{ProjectId: "project-1", AgentName: "dialog", Command: "bash"},
 			Mode:    agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND,
 		}},
 	}); err != nil {
-		t.Fatalf("RunAttach Send() error = %v", err)
+		t.Fatalf("AttachAgentRun Send() error = %v", err)
 	}
 	if err := stream.CloseRequest(); err != nil {
-		t.Fatalf("RunAttach CloseRequest() error = %v", err)
+		t.Fatalf("AttachAgentRun CloseRequest() error = %v", err)
 	}
 	resp, err := stream.Receive()
 	if err != nil {
-		t.Fatalf("RunAttach Receive() error = %v", err)
+		t.Fatalf("AttachAgentRun Receive() error = %v", err)
 	}
 	if !resp.GetResult().GetSuccess() {
-		t.Fatalf("RunAttach result = %#v, want success", resp)
+		t.Fatalf("AttachAgentRun result = %#v, want success", resp)
 	}
 	if got, want := <-seen, "HTTP/2.0"; got != want {
-		t.Fatalf("RunAttach protocol = %q, want %q", got, want)
+		t.Fatalf("AttachAgentRun protocol = %q, want %q", got, want)
 	}
 }
 

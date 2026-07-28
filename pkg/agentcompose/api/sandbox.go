@@ -158,7 +158,11 @@ func (h *SandboxHandler) ListSandboxes(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, err
 	}
-	statuses, err := domain.NormalizeSandboxVMStatuses(req.Msg.GetStatus())
+	statusValues, err := sandboxStatusesFromProto(req.Msg.GetStatus())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	statuses, err := domain.NormalizeSandboxVMStatuses(statusValues)
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -373,7 +377,7 @@ func sandboxToV2WithTarget(sandbox *domain.Sandbox, target runs.SandboxRunTarget
 	}
 	result := &agentcomposev2.Sandbox{
 		SandboxId:            sandbox.Summary.ID,
-		Status:               sandbox.Summary.VMStatus,
+		Status:               sandboxStatusToProto(sandbox.Summary.VMStatus),
 		Driver:               sandbox.Summary.Driver,
 		CreatedAt:            timestamppb.New(sandbox.Summary.CreatedAt),
 		UpdatedAt:            timestamppb.New(sandbox.Summary.UpdatedAt),
@@ -397,7 +401,7 @@ func sandboxToV2WithTarget(sandbox *domain.Sandbox, target runs.SandboxRunTarget
 		result.Tags = append(result.Tags, &agentcomposev2.SandboxTag{Name: tag.Name, Value: tag.Value})
 	}
 	if reclamation := sandbox.WorkspaceReclamation; reclamation != nil {
-		result.WorkspaceReclamationState = reclamation.State
+		result.WorkspaceReclamationState = reclamationStateToProto(reclamation.State)
 		result.WorkspaceReclamationStartedAt = sandboxHistoryTimestamp(reclamation.StartedAt)
 		result.WorkspaceReclamationCompletedAt = sandboxHistoryTimestamp(reclamation.CompletedAt)
 		result.WorkspaceReclamationLastError = reclamation.LastError
@@ -499,8 +503,12 @@ func (h *SandboxHandler) PruneSandboxes(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	statuses, err := sandboxStatusesFromProto(req.Msg.GetStatus())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	result, err := h.removal.Prune(ctx, sandboxes.PruneRequest{
-		ProjectID: strings.TrimSpace(req.Msg.GetProjectId()), Statuses: append([]string(nil), req.Msg.GetStatus()...),
+		ProjectID: strings.TrimSpace(req.Msg.GetProjectId()), Statuses: statuses,
 		AgentName: strings.TrimSpace(req.Msg.GetAgentName()), Driver: strings.TrimSpace(req.Msg.GetDriver()),
 		OlderThan: olderThan, IncludeOrphans: req.Msg.GetIncludeOrphans(), Force: req.Msg.GetForce(),
 	})
@@ -522,7 +530,7 @@ func sandboxPruneCandidatesToProto(items []sandboxes.PruneCandidate) []*agentcom
 		}
 		candidate := &agentcomposev2.SandboxPruneCandidate{
 			Kind: kind, SandboxId: item.SandboxID, ProjectId: item.ProjectID, AgentName: item.AgentName,
-			Driver: item.Driver, Status: item.Status, RuntimeId: item.RuntimeID,
+			Driver: item.Driver, Status: sandboxStatusToProto(item.Status), RuntimeId: item.RuntimeID,
 			Removable: item.Removable, BlockedReasons: append([]string(nil), item.BlockedReasons...),
 		}
 		if !item.UpdatedAt.IsZero() {

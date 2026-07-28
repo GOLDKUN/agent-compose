@@ -20,12 +20,12 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				if req.Msg.GetSandboxId() != "sandbox-existing" {
-					t.Fatalf("RunAgentStream sandbox = %q, want sandbox-existing", req.Msg.GetSandboxId())
+					t.Fatalf("StreamAgentRun sandbox = %q, want sandbox-existing", req.Msg.GetSandboxId())
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-repl-existing",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-repl-existing",
@@ -64,12 +64,12 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				if req.Msg.GetCleanupPolicy() != agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION {
-					t.Fatalf("RunAgentStream cleanup policy = %#v", req.Msg.GetCleanupPolicy())
+					t.Fatalf("StreamAgentRun cleanup policy = %#v", req.Msg.GetCleanupPolicy())
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-rm-failed",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-rm-failed",

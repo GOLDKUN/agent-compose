@@ -404,14 +404,14 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 		return runtime, nil
 	})
 
-	var events []*agentcomposev2.ExecStreamResponse
+	var events []*agentcomposev2.StreamExecResponse
 	resp, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
 		Target:    &agentcomposev2.ExecRequest_RunId{RunId: "run-1"},
 		Command:   &agentcomposev2.ExecCommand{Command: "echo", Args: []string{"hi"}},
 		Cwd:       "/custom",
 		Env:       []*agentcomposev2.EnvVarSpec{{Name: "A", Value: "B"}},
 		TimeoutMs: 1000,
-	}, "exec-run", func(event *agentcomposev2.ExecStreamResponse) error {
+	}, "exec-run", func(event *agentcomposev2.StreamExecResponse) error {
 		events = append(events, event)
 		return nil
 	})
@@ -421,8 +421,8 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 	if resp.GetRunId() != "run-1" || resp.GetSandboxId() != "sandbox-running" || resp.GetCwd() != "/custom" || len(events) < 2 {
 		t.Fatalf("run target resp=%#v events=%#v", resp, events)
 	}
-	if events[0].GetEventType() != agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_STARTED ||
-		events[1].GetEventType() != agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_OUTPUT ||
+	if events[0].GetEventType() != agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_STARTED ||
+		events[1].GetEventType() != agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_OUTPUT ||
 		events[1].GetTranscript().GetText() == "" {
 		t.Fatalf("stream events = %#v", events)
 	}
@@ -504,7 +504,7 @@ func TestExecHandlerSelectorErrors(t *testing.T) {
 
 func TestExecAttachRequiresStartFrame(t *testing.T) {
 	handler := newExecAttachTestHandler(t, &apiExecRuntime{})
-	err := handler.execAttach(context.Background(), sliceExecAttachReceiver(), func(*agentcomposev2.ExecAttachResponse) error {
+	err := handler.execAttach(context.Background(), sliceExecAttachReceiver(), func(*agentcomposev2.AttachExecResponse) error {
 		t.Fatal("unexpected send")
 		return nil
 	})
@@ -512,9 +512,9 @@ func TestExecAttachRequiresStartFrame(t *testing.T) {
 		t.Fatalf("empty stream error = %v", err)
 	}
 
-	err = handler.execAttach(context.Background(), sliceExecAttachReceiver(&agentcomposev2.ExecAttachRequest{
-		Frame: &agentcomposev2.ExecAttachRequest_Stdin{Stdin: &agentcomposev2.AttachStdin{Data: []byte("x")}},
-	}), func(*agentcomposev2.ExecAttachResponse) error {
+	err = handler.execAttach(context.Background(), sliceExecAttachReceiver(&agentcomposev2.AttachExecRequest{
+		Frame: &agentcomposev2.AttachExecRequest_Stdin{Stdin: &agentcomposev2.AttachStdin{Data: []byte("x")}},
+	}), func(*agentcomposev2.AttachExecResponse) error {
 		t.Fatal("unexpected send")
 		return nil
 	})
@@ -525,8 +525,8 @@ func TestExecAttachRequiresStartFrame(t *testing.T) {
 
 func TestExecAttachRuntimeUnsupportedIsUnimplemented(t *testing.T) {
 	handler := newExecAttachTestHandler(t, &apiExecRuntime{})
-	var sent []*agentcomposev2.ExecAttachResponse
-	err := handler.execAttach(context.Background(), sliceExecAttachReceiver(execAttachStartRequest()), func(resp *agentcomposev2.ExecAttachResponse) error {
+	var sent []*agentcomposev2.AttachExecResponse
+	err := handler.execAttach(context.Background(), sliceExecAttachReceiver(execAttachStartRequest()), func(resp *agentcomposev2.AttachExecResponse) error {
 		sent = append(sent, resp)
 		return nil
 	})
@@ -546,8 +546,8 @@ func TestExecAttachProjectsStdoutAndResult(t *testing.T) {
 		{Type: driverpkg.RuntimeOutputResult, Result: &driverpkg.RuntimeResult{ExitCode: 7, Success: false, Error: "boom"}},
 	}}}
 	handler := newExecAttachTestHandler(t, runtime)
-	var sent []*agentcomposev2.ExecAttachResponse
-	err := handler.execAttach(context.Background(), sliceExecAttachReceiver(execAttachStartRequest()), func(resp *agentcomposev2.ExecAttachResponse) error {
+	var sent []*agentcomposev2.AttachExecResponse
+	err := handler.execAttach(context.Background(), sliceExecAttachReceiver(execAttachStartRequest()), func(resp *agentcomposev2.AttachExecResponse) error {
 		sent = append(sent, resp)
 		return nil
 	})
@@ -590,8 +590,8 @@ func TestExecAttachRunnerProjectsInteractionFramesWithoutRPC(t *testing.T) {
 		{Type: driverpkg.RuntimeOutputStderr, Data: []byte("beta\n")},
 		{Type: driverpkg.RuntimeOutputResult, Result: &driverpkg.RuntimeResult{ExitCode: 0, Success: true}},
 	}}
-	var sent []*agentcomposev2.ExecAttachResponse
-	runner.send = func(resp *agentcomposev2.ExecAttachResponse) error {
+	var sent []*agentcomposev2.AttachExecResponse
+	runner.send = func(resp *agentcomposev2.AttachExecResponse) error {
 		sent = append(sent, resp)
 		return nil
 	}
@@ -629,15 +629,15 @@ func TestExecAttachPromptDelegatesToRunAttach(t *testing.T) {
 	handler := NewExecHandler(&appconfig.Config{}, store, projects, func(*domain.Sandbox) (ExecRuntime, error) {
 		return &apiExecRuntime{}, nil
 	}, delegate)
-	var sent []*agentcomposev2.ExecAttachResponse
+	var sent []*agentcomposev2.AttachExecResponse
 	err := handler.execAttach(context.Background(), sliceExecAttachReceiver(
-		&agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_Start{Start: &agentcomposev2.ExecAttachStart{
+		&agentcomposev2.AttachExecRequest{Frame: &agentcomposev2.AttachExecRequest_Start{Start: &agentcomposev2.AttachExecStart{
 			Request: &agentcomposev2.ExecRequest{Target: &agentcomposev2.ExecRequest_SandboxId{SandboxId: "session-attach"}},
 			Mode:    agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT,
 			Prompt:  "hi",
 		}}},
-		&agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_HumanMessage{HumanMessage: &agentcomposev2.AttachHumanMessage{Text: "next"}}},
-	), func(resp *agentcomposev2.ExecAttachResponse) error {
+		&agentcomposev2.AttachExecRequest{Frame: &agentcomposev2.AttachExecRequest_HumanMessage{HumanMessage: &agentcomposev2.AttachHumanMessage{Text: "next"}}},
+	), func(resp *agentcomposev2.AttachExecResponse) error {
 		sent = append(sent, resp)
 		return nil
 	})
@@ -658,32 +658,32 @@ func TestExecAttachPromptDelegatesToRunAttach(t *testing.T) {
 func TestExecAttachInputFrameMapping(t *testing.T) {
 	cases := []struct {
 		name string
-		req  *agentcomposev2.ExecAttachRequest
+		req  *agentcomposev2.AttachExecRequest
 		want driverpkg.RuntimeInputFrame
 	}{
 		{
 			name: "stdin",
-			req:  &agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_Stdin{Stdin: &agentcomposev2.AttachStdin{Data: []byte("hi")}}},
+			req:  &agentcomposev2.AttachExecRequest{Frame: &agentcomposev2.AttachExecRequest_Stdin{Stdin: &agentcomposev2.AttachStdin{Data: []byte("hi")}}},
 			want: driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputStdin, Data: []byte("hi")},
 		},
 		{
 			name: "stdin eof",
-			req:  &agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}}},
+			req:  &agentcomposev2.AttachExecRequest{Frame: &agentcomposev2.AttachExecRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}}},
 			want: driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputStdinEOF},
 		},
 		{
 			name: "resize",
-			req:  &agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_Resize{Resize: &agentcomposev2.AttachResize{TerminalSize: &agentcomposev2.AttachTerminalSize{Rows: 24, Cols: 80}}}},
+			req:  &agentcomposev2.AttachExecRequest{Frame: &agentcomposev2.AttachExecRequest_Resize{Resize: &agentcomposev2.AttachResize{TerminalSize: &agentcomposev2.AttachTerminalSize{Rows: 24, Cols: 80}}}},
 			want: driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputResize, Rows: 24, Cols: 80},
 		},
 		{
 			name: "signal",
-			req:  &agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_Signal{Signal: &agentcomposev2.AttachSignal{Signal: " interrupt "}}},
+			req:  &agentcomposev2.AttachExecRequest{Frame: &agentcomposev2.AttachExecRequest_Signal{Signal: &agentcomposev2.AttachSignal{Signal: " interrupt "}}},
 			want: driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputSignal, Signal: driverpkg.RuntimeSignalInterrupt},
 		},
 		{
 			name: "cancel",
-			req:  &agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_Cancel{Cancel: &agentcomposev2.AttachCancel{Reason: "stop"}}},
+			req:  &agentcomposev2.AttachExecRequest{Frame: &agentcomposev2.AttachExecRequest_Cancel{Cancel: &agentcomposev2.AttachCancel{Reason: "stop"}}},
 			want: driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputCancel, Message: "stop"},
 		},
 	}
@@ -1125,8 +1125,8 @@ func newExecAttachTestHandler(t *testing.T, runtime ExecRuntime) *ExecHandler {
 	})
 }
 
-func execAttachStartRequest() *agentcomposev2.ExecAttachRequest {
-	return &agentcomposev2.ExecAttachRequest{Frame: &agentcomposev2.ExecAttachRequest_Start{Start: &agentcomposev2.ExecAttachStart{
+func execAttachStartRequest() *agentcomposev2.AttachExecRequest {
+	return &agentcomposev2.AttachExecRequest{Frame: &agentcomposev2.AttachExecRequest_Start{Start: &agentcomposev2.AttachExecStart{
 		Request: &agentcomposev2.ExecRequest{
 			Target:    &agentcomposev2.ExecRequest_SandboxId{SandboxId: "session-attach"},
 			Command:   &agentcomposev2.ExecCommand{Command: "printf", Args: []string{"hi"}},
@@ -1151,9 +1151,9 @@ func execAttachProjectionTestState() *execAttachState {
 	}
 }
 
-func sliceExecAttachReceiver(items ...*agentcomposev2.ExecAttachRequest) execAttachReceiver {
+func sliceExecAttachReceiver(items ...*agentcomposev2.AttachExecRequest) execAttachReceiver {
 	index := 0
-	return func() (*agentcomposev2.ExecAttachRequest, error) {
+	return func() (*agentcomposev2.AttachExecRequest, error) {
 		if index >= len(items) {
 			return nil, io.EOF
 		}
@@ -1164,7 +1164,7 @@ func sliceExecAttachReceiver(items ...*agentcomposev2.ExecAttachRequest) execAtt
 }
 
 type apiExecPromptRunAttachDelegate struct {
-	start *agentcomposev2.RunAttachStart
+	start *agentcomposev2.AttachAgentRunStart
 	human *agentcomposev2.AttachHumanMessage
 }
 
@@ -1179,10 +1179,10 @@ func (d *apiExecPromptRunAttachDelegate) RunProjectCommandAttach(_ context.Conte
 		return err
 	}
 	d.human = second.GetHumanMessage()
-	if err := send(&agentcomposev2.RunAttachResponse{Frame: &agentcomposev2.RunAttachResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "agent says hi"}}}); err != nil {
+	if err := send(&agentcomposev2.AttachAgentRunResponse{Frame: &agentcomposev2.AttachAgentRunResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "agent says hi"}}}); err != nil {
 		return err
 	}
-	return send(&agentcomposev2.RunAttachResponse{Frame: &agentcomposev2.RunAttachResponse_Result{Result: &agentcomposev2.AttachResult{Success: true}}})
+	return send(&agentcomposev2.AttachAgentRunResponse{Frame: &agentcomposev2.AttachAgentRunResponse_Result{Result: &agentcomposev2.AttachResult{Success: true}}})
 }
 
 type apiExecRuntime struct {

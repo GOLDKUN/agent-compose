@@ -22,16 +22,16 @@ agents:
 	var sawStart bool
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			startRun: func(ctx context.Context, req *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
+			startRun: func(ctx context.Context, req *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
 				sawStart = true
 				runReq := req.Msg.GetRun()
 				if runReq.GetAgentName() != "reviewer" || runReq.GetCommand() != "echo detached" || runReq.GetSandboxId() != "" || runReq.GetDriver() != "microsandbox" {
-					t.Fatalf("StartRun request = %#v", runReq)
+					t.Fatalf("StartAgentRun request = %#v", runReq)
 				}
 				if runReq.GetSource() != agentcomposev2.RunSource_RUN_SOURCE_MANUAL {
-					t.Fatalf("StartRun source = %#v", runReq.GetSource())
+					t.Fatalf("StartAgentRun source = %#v", runReq.GetSource())
 				}
-				return connect.NewResponse(&agentcomposev2.StartRunResponse{
+				return connect.NewResponse(&agentcomposev2.StartAgentRunResponse{
 					Run: &agentcomposev2.RunSummary{
 						RunId:       "run-detached",
 						ProjectId:   runReq.GetProjectId(),
@@ -45,8 +45,8 @@ agents:
 					Started:  true,
 				}), nil
 			},
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				t.Fatalf("RunAgentStream should not be called for detached run")
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				t.Fatalf("StreamAgentRun should not be called for detached run")
 				return nil
 			},
 		},
@@ -71,7 +71,7 @@ agents:
 		t.Fatalf("run -d stderr = %q", stderr)
 	}
 	if !sawStart {
-		t.Fatal("StartRun was not called")
+		t.Fatal("StartAgentRun was not called")
 	}
 }
 
@@ -84,12 +84,12 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			startRun: func(ctx context.Context, req *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
+			startRun: func(ctx context.Context, req *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
 				runReq := req.Msg.GetRun()
 				if runReq.GetJupyter() == nil || !runReq.GetJupyter().GetEnabled() || !runReq.GetJupyter().GetExpose() {
-					t.Fatalf("StartRun jupyter request = %#v", runReq)
+					t.Fatalf("StartAgentRun jupyter request = %#v", runReq)
 				}
-				return connect.NewResponse(&agentcomposev2.StartRunResponse{
+				return connect.NewResponse(&agentcomposev2.StartAgentRunResponse{
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-detached-jupyter",
 						ProjectId: runReq.GetProjectId(),
@@ -133,9 +133,9 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			startRun: func(ctx context.Context, req *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
+			startRun: func(ctx context.Context, req *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
 				runReq := req.Msg.GetRun()
-				return connect.NewResponse(&agentcomposev2.StartRunResponse{
+				return connect.NewResponse(&agentcomposev2.StartAgentRunResponse{
 					Run: &agentcomposev2.RunSummary{
 						RunId:       "run-detached-json",
 						ProjectId:   runReq.GetProjectId(),
@@ -180,13 +180,13 @@ agents:
 	var sawRequest bool
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				sawRequest = true
 				if req.Msg.GetJupyter() == nil || !req.Msg.GetJupyter().GetEnabled() || !req.Msg.GetJupyter().GetExpose() {
-					t.Fatalf("RunAgentStream jupyter request = %#v", req.Msg)
+					t.Fatalf("StreamAgentRun jupyter request = %#v", req.Msg)
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-jupyter",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-jupyter",
@@ -220,7 +220,7 @@ agents:
 		t.Fatalf("run --jupyter-expose stdout = %q, want %q", stdout, want)
 	}
 	if !sawRequest {
-		t.Fatal("RunAgentStream was not called")
+		t.Fatal("StreamAgentRun was not called")
 	}
 }
 
@@ -233,12 +233,12 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				if req.Msg.GetJupyter() == nil || !req.Msg.GetJupyter().GetEnabled() || req.Msg.GetJupyter().GetExpose() {
-					t.Fatalf("RunAgentStream jupyter request = %#v", req.Msg)
+					t.Fatalf("StreamAgentRun jupyter request = %#v", req.Msg)
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-jupyter-private",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-jupyter-private",
@@ -258,7 +258,7 @@ agents:
 				return connect.NewResponse(&agentcomposev2.GetSandboxResponse{Sandbox: &agentcomposev2.Sandbox{
 					SandboxId: req.Msg.GetSandboxId(),
 					ProxyPath: "/agent-compose/session/" + req.Msg.GetSandboxId() + "/lab",
-					Status:    domain.VMStatusRunning,
+					Status:    agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING,
 				}}), nil
 			},
 		},
@@ -284,15 +284,15 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				if req.Msg.GetJupyter() == nil || !req.Msg.GetJupyter().GetEnabled() || !req.Msg.GetJupyter().GetExpose() {
-					t.Fatalf("RunAgentStream jupyter request = %#v", req.Msg)
+					t.Fatalf("StreamAgentRun jupyter request = %#v", req.Msg)
 				}
 				if req.Msg.GetCleanupPolicy() != agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION {
-					t.Fatalf("RunAgentStream cleanup policy = %#v", req.Msg.GetCleanupPolicy())
+					t.Fatalf("StreamAgentRun cleanup policy = %#v", req.Msg.GetCleanupPolicy())
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-jupyter-stopped",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-jupyter-stopped",
@@ -331,12 +331,12 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				if req.Msg.GetJupyter() == nil || !req.Msg.GetJupyter().GetEnabled() || !req.Msg.GetJupyter().GetExpose() {
-					t.Fatalf("RunAgentStream jupyter request = %#v", req.Msg)
+					t.Fatalf("StreamAgentRun jupyter request = %#v", req.Msg)
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-jupyter-json",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-jupyter-json",
@@ -381,9 +381,9 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-jupyter-json-stopped",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-jupyter-json-stopped",
@@ -430,28 +430,28 @@ agents:
 	var sawRequest bool
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				sawRequest = true
 				if req.Msg.GetAgentName() != "reviewer" || req.Msg.GetCommand() != "echo command" || req.Msg.GetPrompt() != "" || req.Msg.GetTriggerId() != "" {
-					t.Fatalf("RunAgentStream command request = %#v", req.Msg)
+					t.Fatalf("StreamAgentRun command request = %#v", req.Msg)
 				}
-				if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+				if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 					RunId:     "run-command",
 					Chunk:     "command stdout",
 				}); err != nil {
 					return err
 				}
-				if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+				if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 					RunId:     "run-command",
 					Chunk:     "command stderr",
 					Stream:    agentcomposev2.StdioStream_STDIO_STREAM_STDERR,
 				}); err != nil {
 					return err
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-command",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-command",
@@ -462,8 +462,8 @@ agents:
 					},
 				})
 			},
-			runAttach: func(context.Context, *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error {
-				t.Fatalf("RunAttach should not be called for non-interactive run --command")
+			runAttach: func(context.Context, *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
+				t.Fatalf("AttachAgentRun should not be called for non-interactive run --command")
 				return nil
 			},
 			getRun: func(ctx context.Context, req *connect.Request[agentcomposev2.GetRunRequest]) (*connect.Response[agentcomposev2.GetRunResponse], error) {
@@ -486,7 +486,7 @@ agents:
 		t.Fatalf("run --command code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 	}
 	if !sawRequest {
-		t.Fatal("RunAgentStream was not called")
+		t.Fatal("StreamAgentRun was not called")
 	}
 }
 
@@ -499,10 +499,10 @@ agents:
 	var sawRun bool
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				sawRun = true
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-default-provider",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-default-provider",
@@ -525,7 +525,7 @@ agents:
 		t.Fatalf("run -i --prompt default provider code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 	}
 	if !sawRun {
-		t.Fatal("RunAgentStream was not called")
+		t.Fatal("StreamAgentRun was not called")
 	}
 }
 
@@ -537,17 +537,17 @@ agents:
     provider: codex
 `)
 	server := newRunServiceStubServer(t, runServiceStub{
-		runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-			if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-				EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+		runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+			if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+				EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 				RunId:     "run-failed",
 				Chunk:     "agent failed\n",
 				Stream:    agentcomposev2.StdioStream_STDIO_STREAM_STDERR,
 			}); err != nil {
 				return err
 			}
-			return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-				EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+			return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+				EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 				RunId:     "run-failed",
 				Run: &agentcomposev2.RunSummary{
 					RunId:     "run-failed",

@@ -137,7 +137,7 @@ func TestAppRunControllerHelperCoverage(t *testing.T) {
 	if req.ProjectID != "project-1" || req.Source != domain.ProjectRunSourceAPI || req.Jupyter == nil || len(req.Env) != 1 {
 		t.Fatalf("runAgentRequestFromProto = %#v", req)
 	}
-	if _, err := (runControllerDelegate{}).StartRun(context.Background(), connect.NewRequest(&agentcomposev2.StartRunRequest{Run: msg})); connect.CodeOf(err) != connect.CodeInternal {
+	if _, err := (runControllerDelegate{}).StartAgentRun(context.Background(), connect.NewRequest(&agentcomposev2.StartAgentRunRequest{Run: msg})); connect.CodeOf(err) != connect.CodeInternal {
 		t.Fatalf("StartRun nil supervisor err=%v", err)
 	}
 	for _, tc := range []struct {

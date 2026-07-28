@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -60,11 +60,11 @@ func runComposeSandboxPruneCommand(cmd *cobra.Command, cli cliOptions, options c
 		return err
 	}
 	projectID := runtimeProject.id()
-	statuses := make([]string, 0, len(statusFilter))
+	statuses := make([]agentcomposev2.SandboxStatus, 0, len(statusFilter))
 	for status := range statusFilter {
-		statuses = append(statuses, strings.ToUpper(status))
+		statuses = append(statuses, sandboxStatusFromText(status))
 	}
-	sort.Strings(statuses)
+	slices.Sort(statuses)
 	resp, err := clients.sandbox.PruneSandboxes(cmd.Context(), connect.NewRequest(&agentcomposev2.PruneSandboxesRequest{
 		ProjectId: projectID, Status: statuses, AgentName: strings.TrimSpace(options.Agent), Driver: options.Driver,
 		OlderThanSeconds: olderThanSeconds, IncludeOrphans: options.IncludeOrphans, Force: options.Force,
@@ -126,14 +126,14 @@ func composeSandboxPruneOutputFromResponse(resp *agentcomposev2.PruneSandboxesRe
 		output.Matched = append(output.Matched, composePSSandboxOutput{
 			SandboxID: displayOpaqueID(firstNonEmptyString(item.GetSandboxId(), item.GetRuntimeId())),
 			RawID:     item.GetSandboxId(), SandboxShortID: shortOpaqueID(firstNonEmptyString(item.GetSandboxId(), item.GetRuntimeId())),
-			Agent: item.GetAgentName(), Status: strings.ToLower(item.GetStatus()), Driver: item.GetDriver(),
+			Agent: item.GetAgentName(), Status: sandboxStatusText(item.GetStatus()), Driver: item.GetDriver(),
 			UpdatedAt: formatProtoTimestamp(item.GetUpdatedAt()), Kind: sandboxPruneCandidateKindText(item.GetKind()), RuntimeID: item.GetRuntimeId(),
 		})
 	}
 	for _, item := range resp.GetSkipped() {
 		output.Skipped = append(output.Skipped, composeSandboxPruneSkipped{
 			SandboxID: displayOpaqueID(firstNonEmptyString(item.GetSandboxId(), item.GetRuntimeId())), Agent: item.GetAgentName(),
-			Status: strings.ToLower(item.GetStatus()), Driver: item.GetDriver(), UpdatedAt: formatProtoTimestamp(item.GetUpdatedAt()),
+			Status: sandboxStatusText(item.GetStatus()), Driver: item.GetDriver(), UpdatedAt: formatProtoTimestamp(item.GetUpdatedAt()),
 			Kind: sandboxPruneCandidateKindText(item.GetKind()), RuntimeID: item.GetRuntimeId(), Reason: strings.Join(item.GetBlockedReasons(), "; "),
 		})
 	}

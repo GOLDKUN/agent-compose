@@ -105,9 +105,9 @@ func TestWriteTranscriptOrChunkRoutesTranscriptAndChunks(t *testing.T) {
 	}
 }
 
-func (s runServiceStub) RunAgentStream(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+func (s runServiceStub) StreamAgentRun(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 	if s.runAgentStream == nil {
-		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("RunAgentStream stub is not configured"))
+		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("StreamAgentRun stub is not configured"))
 	}
 	return s.runAgentStream(ctx, req, stream)
 }

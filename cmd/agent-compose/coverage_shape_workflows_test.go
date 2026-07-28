@@ -75,7 +75,7 @@ func TestE2ECLISandboxOperationsPublicContractWorkflow(t *testing.T) {
 	TestIntegrationCLIStatsWithoutSandboxUsesProjectRunningSandboxes(t)
 	TestIntegrationCLIStatsWithoutSandboxAllowsNoRunningSandboxes(t)
 	TestIntegrationCLIRemoveSandboxes(t)
-	TestIntegrationCLIExecStreamsAndSupportsJSON(t)
+	TestIntegrationCLIStreamExecsAndSupportsJSON(t)
 }
 
 func TestE2ECLIProjectAndRunPublicContractWorkflow(t *testing.T) {
@@ -116,7 +116,7 @@ func TestE2ECLIInteractiveAndJupyterPublicContractWorkflow(t *testing.T) {
 	TestIntegrationCLIRunJupyterExposeJSONIncludesURL(t)
 	TestIntegrationCLIRunJupyterExposeJSONDefaultCleanupOmitsURL(t)
 	TestIntegrationCLIRunInteractivePromptReusesSession(t)
-	TestIntegrationCLIRunPromptTTYUsesRunAttach(t)
+	TestIntegrationCLIRunPromptTTYUsesAttachAgentRun(t)
 	TestIntegrationCLIRunInteractiveDriverOnlySentForInitialSandbox(t)
 	TestIntegrationCLIRunInteractiveCommandReusesSession(t)
 	TestIntegrationCLIRunInteractiveRemoveCreatedSandboxOnExit(t)
@@ -988,7 +988,7 @@ func testComposeImageStatsAndSessionHelpers(t *testing.T) {
 		SandboxId:               "session-1",
 		Title:                   "title",
 		Driver:                  "docker",
-		Status:                  " RUNNING ",
+		Status:                  agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING,
 		WorkspacePath:           "/repo",
 		ProxyPath:               "/proxy",
 		Image:                   "guest",

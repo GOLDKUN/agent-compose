@@ -201,6 +201,6 @@ func testCLISandboxProxy(sessionID, token string) *agentcomposev2.Sandbox {
 		ProxyPath:   proxyPath,
 		NotebookUrl: proxyPath + "?token=" + token,
 		Driver:      "boxlite",
-		Status:      "RUNNING",
+		Status:      agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING,
 	}
 }

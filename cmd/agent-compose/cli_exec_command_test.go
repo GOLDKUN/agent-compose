@@ -110,7 +110,7 @@ func TestCLIExecInteractiveReservedUnsupported(t *testing.T) {
 }
 
 func TestCLIExecInteractiveUnsupportedUsesUnsupportedExitCode(t *testing.T) {
-	client := &fakeExecAttachClient{stream: &fakeExecAttachStream{
+	client := &fakeAttachExecClient{stream: &fakeAttachExecStream{
 		closedCh: make(chan struct{}),
 		recvErr:  connect.NewError(connect.CodeUnimplemented, fmt.Errorf("exec attach unsupported")),
 	}}
@@ -121,7 +121,7 @@ func TestCLIExecInteractiveUnsupportedUsesUnsupportedExitCode(t *testing.T) {
 	cmd.SetIn(strings.NewReader(""))
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
-	err := runComposeExecAttachCommand(cmd, "cli-exec-attach", client, &agentcomposev2.ExecRequest{
+	err := runComposeAttachExecCommand(cmd, "cli-exec-attach", client, &agentcomposev2.ExecRequest{
 		Target:  &agentcomposev2.ExecRequest_SandboxId{SandboxId: "sandbox-attach"},
 		Command: &agentcomposev2.ExecCommand{Command: "sh"},
 	}, composeExecOptions{Interactive: true})
@@ -129,12 +129,12 @@ func TestCLIExecInteractiveUnsupportedUsesUnsupportedExitCode(t *testing.T) {
 		t.Fatalf("exec attach unsupported err=%v code=%d, want %d", err, commandExitCode(err), exitCodeUnsupported)
 	}
 	if client.calls != 1 {
-		t.Fatalf("ExecAttach calls = %d, want 1", client.calls)
+		t.Fatalf("AttachExec calls = %d, want 1", client.calls)
 	}
 }
 
 func TestCLIExecTTYRequiresLocalTerminal(t *testing.T) {
-	client := &fakeExecAttachClient{stream: newFakeExecAttachStream(nil)}
+	client := &fakeAttachExecClient{stream: newFakeAttachExecStream(nil)}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd := &cobra.Command{Use: "exec"}
@@ -142,7 +142,7 @@ func TestCLIExecTTYRequiresLocalTerminal(t *testing.T) {
 	cmd.SetIn(strings.NewReader(""))
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
-	err := runComposeExecAttachCommand(cmd, "cli-exec-attach", client, &agentcomposev2.ExecRequest{
+	err := runComposeAttachExecCommand(cmd, "cli-exec-attach", client, &agentcomposev2.ExecRequest{
 		Target:  &agentcomposev2.ExecRequest_SandboxId{SandboxId: "sandbox-attach"},
 		Command: &agentcomposev2.ExecCommand{Command: "sh"},
 	}, composeExecOptions{Interactive: true, TTY: true})
@@ -150,18 +150,18 @@ func TestCLIExecTTYRequiresLocalTerminal(t *testing.T) {
 		t.Fatalf("exec -it non-terminal err=%v code=%d", err, commandExitCode(err))
 	}
 	if client.calls != 0 {
-		t.Fatalf("ExecAttach calls = %d, want 0", client.calls)
+		t.Fatalf("AttachExec calls = %d, want 0", client.calls)
 	}
 }
 
-func (s *fakeRunAttachStream) Send(req *agentcomposev2.RunAttachRequest) error {
+func (s *fakeAttachAgentRunStream) Send(req *agentcomposev2.AttachAgentRunRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sent = append(s.sent, req)
 	return nil
 }
 
-func (s *fakeRunAttachStream) Receive() (*agentcomposev2.RunAttachResponse, error) {
+func (s *fakeAttachAgentRunStream) Receive() (*agentcomposev2.AttachAgentRunResponse, error) {
 	for {
 		s.mu.Lock()
 		if s.recvIndex < len(s.responses) {
@@ -179,7 +179,7 @@ func (s *fakeRunAttachStream) Receive() (*agentcomposev2.RunAttachResponse, erro
 	}
 }
 
-func (s *fakeRunAttachStream) CloseRequest() error {
+func (s *fakeAttachAgentRunStream) CloseRequest() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.closed {
@@ -189,26 +189,26 @@ func (s *fakeRunAttachStream) CloseRequest() error {
 	return nil
 }
 
-func (s *fakeRunAttachStream) sentFrames() []*agentcomposev2.RunAttachRequest {
+func (s *fakeAttachAgentRunStream) sentFrames() []*agentcomposev2.AttachAgentRunRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]*agentcomposev2.RunAttachRequest(nil), s.sent...)
+	return append([]*agentcomposev2.AttachAgentRunRequest(nil), s.sent...)
 }
 
-func (s *fakeRunAttachStream) closedRequest() bool {
+func (s *fakeAttachAgentRunStream) closedRequest() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.closed
 }
 
-func (s *fakeExecAttachStream) Send(req *agentcomposev2.ExecAttachRequest) error {
+func (s *fakeAttachExecStream) Send(req *agentcomposev2.AttachExecRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sent = append(s.sent, req)
 	return nil
 }
 
-func (s *fakeExecAttachStream) Receive() (*agentcomposev2.ExecAttachResponse, error) {
+func (s *fakeAttachExecStream) Receive() (*agentcomposev2.AttachExecResponse, error) {
 	if s.recvErr != nil {
 		return nil, s.recvErr
 	}
@@ -229,7 +229,7 @@ func (s *fakeExecAttachStream) Receive() (*agentcomposev2.ExecAttachResponse, er
 	}
 }
 
-func (s *fakeExecAttachStream) CloseRequest() error {
+func (s *fakeAttachExecStream) CloseRequest() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.closed {
@@ -239,13 +239,13 @@ func (s *fakeExecAttachStream) CloseRequest() error {
 	return nil
 }
 
-func (s *fakeExecAttachStream) sentFrames() []*agentcomposev2.ExecAttachRequest {
+func (s *fakeAttachExecStream) sentFrames() []*agentcomposev2.AttachExecRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]*agentcomposev2.ExecAttachRequest(nil), s.sent...)
+	return append([]*agentcomposev2.AttachExecRequest(nil), s.sent...)
 }
 
-func (s *fakeExecAttachStream) closedRequest() bool {
+func (s *fakeAttachExecStream) closedRequest() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.closed
@@ -263,8 +263,8 @@ func TestCLIExecAgentFlagIsRemoved(t *testing.T) {
 
 type execServiceStub struct {
 	exec       func(context.Context, *connect.Request[agentcomposev2.ExecRequest]) (*connect.Response[agentcomposev2.ExecResponse], error)
-	execStream func(context.Context, *connect.Request[agentcomposev2.ExecRequest], *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error
-	execAttach func(context.Context, *connect.BidiStream[agentcomposev2.ExecAttachRequest, agentcomposev2.ExecAttachResponse]) error
+	execStream func(context.Context, *connect.Request[agentcomposev2.ExecRequest], *connect.ServerStream[agentcomposev2.StreamExecResponse]) error
+	execAttach func(context.Context, *connect.BidiStream[agentcomposev2.AttachExecRequest, agentcomposev2.AttachExecResponse]) error
 
 	agentcomposev2connect.UnimplementedExecServiceHandler
 }
@@ -276,9 +276,9 @@ func (s execServiceStub) Exec(ctx context.Context, req *connect.Request[agentcom
 	return s.exec(ctx, req)
 }
 
-func (s execServiceStub) ExecStream(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error {
+func (s execServiceStub) StreamExec(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.StreamExecResponse]) error {
 	if s.execStream == nil {
-		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("ExecStream stub is not configured"))
+		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("StreamExec stub is not configured"))
 	}
 	return s.execStream(ctx, req, stream)
 }

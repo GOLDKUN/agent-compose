@@ -10,7 +10,7 @@ import (
 
 func TestPumpExecAttachInputClosesRuntimeInputOnReceiveError(t *testing.T) {
 	interaction := &execClosingRuntimeInteraction{}
-	pumpExecAttachInput(func() (*agentcomposev2.ExecAttachRequest, error) {
+	pumpExecAttachInput(func() (*agentcomposev2.AttachExecRequest, error) {
 		return nil, errors.New("stream reset")
 	}, interaction)
 	if interaction.closeCalls != 1 {

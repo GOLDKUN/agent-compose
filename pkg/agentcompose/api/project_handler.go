@@ -245,7 +245,7 @@ func resolvedTriggerToProto(trigger domain.SchedulerTrigger, declared *agentcomp
 }
 
 func runtimeTriggerSpec(trigger domain.SchedulerTrigger) *agentcomposev2.TriggerSpec {
-	spec := &agentcomposev2.TriggerSpec{Name: trigger.ID, Kind: trigger.Kind}
+	spec := &agentcomposev2.TriggerSpec{Name: trigger.ID, Kind: triggerKindToProto(trigger.Kind)}
 	duration := time.Duration(trigger.IntervalMs * int64(time.Millisecond)).String()
 	switch trigger.Kind {
 	case domain.SchedulerTriggerKindCron:

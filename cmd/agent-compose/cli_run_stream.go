@@ -15,7 +15,7 @@ import (
 )
 
 func runComposeRunStreamAndDetail(ctx context.Context, stdout, stderr io.Writer, client agentcomposev2connect.RunServiceClient, projectID, projectName string, runReq *agentcomposev2.RunAgentRequest, suppressOutput bool) (*agentcomposev2.RunDetail, *agentcomposev2.RunSummary, []string, error) {
-	stream, err := client.RunAgentStream(ctx, connect.NewRequest(runReq))
+	stream, err := client.StreamAgentRun(ctx, connect.NewRequest(runReq))
 	if err != nil {
 		return nil, nil, nil, commandExitErrorForConnect(fmt.Errorf("run project %s agent %s: %w", projectName, runReq.GetAgentName(), err))
 	}
@@ -41,14 +41,14 @@ func runComposeRunStreamAndDetail(ctx context.Context, stdout, stderr io.Writer,
 			warnings = appendUniqueStrings(warnings, event.GetRun().GetWarnings()...)
 		}
 		switch event.GetEventType() {
-		case agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT:
+		case agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT:
 			if suppressOutput {
 				continue
 			}
 			if err := output.Write(event.GetTranscript(), event.GetChunk(), event.GetStream()); err != nil {
 				return nil, nil, nil, err
 			}
-		case agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED:
+		case agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED:
 			completed = event.GetRun()
 			if completed.GetRunId() != "" {
 				runID = completed.GetRunId()

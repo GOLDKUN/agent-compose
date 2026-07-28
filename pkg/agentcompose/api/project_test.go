@@ -31,7 +31,7 @@ func TestProjectToProtoOnlyIncludesCurrentRevisionArtifacts(t *testing.T) {
 }
 
 func TestResolvedTriggerPreservesDeclaredSpec(t *testing.T) {
-	declared := &agentcomposev2.TriggerSpec{Name: "later", Kind: "timeout", Timeout: "2s", Prompt: "continue", SandboxPolicy: "sticky"}
+	declared := &agentcomposev2.TriggerSpec{Name: "later", Kind: agentcomposev2.TriggerKind_TRIGGER_KIND_TIMEOUT, Timeout: "2s", Prompt: "continue", SandboxPolicy: agentcomposev2.SchedulerSandboxPolicy_SCHEDULER_SANDBOX_POLICY_STICKY}
 	trigger := domain.SchedulerTrigger{ID: "trigger-id", Kind: domain.SchedulerTriggerKindTimeout, IntervalMs: 2000, Enabled: true, NextFireAt: time.Unix(10, 0)}
 	resolved := resolvedTriggerToProto(trigger, declared)
 	if resolved.GetTriggerId() != "trigger-id" || resolved.GetSpec().GetName() != "later" || resolved.GetSpec().GetTimeout() != "2s" || resolved.GetSpec().GetPrompt() != "continue" || resolved.GetSpec().GetInterval() != "" {
@@ -122,10 +122,10 @@ func TestProjectSpecToProtoIncludesSchedulerScript(t *testing.T) {
 	if scheduler.GetScript() != script {
 		t.Fatalf("scheduler script = %q, want %q", scheduler.GetScript(), script)
 	}
-	if scheduler.GetSandboxPolicy() != "sticky" {
+	if scheduler.GetSandboxPolicy() != agentcomposev2.SchedulerSandboxPolicy_SCHEDULER_SANDBOX_POLICY_STICKY {
 		t.Fatalf("scheduler sandbox policy = %q, want sticky", scheduler.GetSandboxPolicy())
 	}
-	if scheduler.GetConcurrencyPolicy() != "parallel" {
+	if scheduler.GetConcurrencyPolicy() != agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_PARALLEL {
 		t.Fatalf("scheduler concurrency policy = %q, want parallel", scheduler.GetConcurrencyPolicy())
 	}
 	if scheduler.GetDisplayName() != "Hourly review" || scheduler.GetDescription() != "Reviews pending changes every hour" {
@@ -358,7 +358,7 @@ agents:
 	if err != nil {
 		t.Fatalf("convert normalized project to protobuf: %v", err)
 	}
-	if got := wireSpec.GetAgents()[0].GetScheduler().GetConcurrencyPolicy(); got != domain.SchedulerConcurrencyPolicyParallel {
+	if got := wireSpec.GetAgents()[0].GetScheduler().GetConcurrencyPolicy(); got != agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_PARALLEL {
 		t.Fatalf("protobuf concurrency policy = %q, want parallel", got)
 	}
 	shape, issues := ProjectSpecYAMLShape(wireSpec)

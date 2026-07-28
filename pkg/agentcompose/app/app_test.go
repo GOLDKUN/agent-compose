@@ -315,7 +315,7 @@ func TestRunAgentRequestFromProtoPreservesCommand(t *testing.T) {
 		PayloadJson: `{"input":true}`,
 		Driver:      "microsandbox",
 		Jupyter:     &agentcomposev2.RunJupyterSpec{Enabled: true, Expose: true},
-		Volumes:     []*agentcomposev2.VolumeMountSpec{{Type: "bind", Source: "./fixtures", Target: "/fixtures", ReadOnly: true}},
+		Volumes:     []*agentcomposev2.VolumeMountSpec{{Type: agentcomposev2.VolumeMountType_VOLUME_MOUNT_TYPE_BIND, Source: "./fixtures", Target: "/fixtures", ReadOnly: true}},
 	})
 	if req.ProjectID != "project-1" || req.AgentName != "worker" || req.Prompt != "prompt" || req.Command != "echo hi" || req.TriggerID != "trigger-1" || req.PayloadJSON != `{"input":true}` || req.Driver != "microsandbox" {
 		t.Fatalf("mapped request = %#v", req)

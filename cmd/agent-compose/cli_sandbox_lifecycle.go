@@ -173,7 +173,7 @@ func listFilteredSandboxes(ctx context.Context, client agentcomposev2connect.San
 			Offset:    offset,
 			Limit:     limit,
 			ProjectId: strings.TrimSpace(projectID),
-			Status:    append([]string(nil), statuses...),
+			Status:    sandboxStatusesFromText(statuses),
 		}))
 		if err != nil {
 			return nil, err
@@ -235,7 +235,7 @@ func firstRunningSandboxOutput(ctx context.Context, clients cliServiceClients, p
 			continue
 		}
 		summary := session.Msg.GetSandbox()
-		if strings.EqualFold(summary.GetStatus(), "running") {
+		if summary.GetStatus() == agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING {
 			output := composeSandboxOutputFromSummary(summary)
 			return &output, nil
 		}
@@ -260,7 +260,7 @@ func composeSandboxOutputFromSummary(summary *agentcomposev2.Sandbox) composeSan
 		SandboxShortID:           identity.ShortID(summary.GetSandboxId()),
 		Title:                    summary.GetTitle(),
 		Driver:                   summary.GetDriver(),
-		VMStatus:                 strings.ToLower(strings.TrimSpace(summary.GetStatus())),
+		VMStatus:                 sandboxStatusText(summary.GetStatus()),
 		WorkspacePath:            summary.GetWorkspacePath(),
 		ProxyPath:                summary.GetProxyPath(),
 		GuestImage:               summary.GetImage(),
@@ -275,9 +275,9 @@ func composeSandboxOutputFromSummary(summary *agentcomposev2.Sandbox) composeSan
 		StoppedRuntimeError:      summary.GetStoppedRuntimeLastError(),
 		StoppedRuntimeReleasedAt: formatProtoTimestamp(summary.GetStoppedRuntimeReleasedAt()),
 	}
-	if summary.GetWorkspaceReclamationState() != "" {
+	if state := workspaceReclamationStateText(summary.GetWorkspaceReclamationState()); state != "" {
 		result.WorkspaceReclamation = &composeWorkspaceReclamationOutput{
-			State: summary.GetWorkspaceReclamationState(), StartedAt: formatProtoTimestamp(summary.GetWorkspaceReclamationStartedAt()),
+			State: state, StartedAt: formatProtoTimestamp(summary.GetWorkspaceReclamationStartedAt()),
 			CompletedAt: formatProtoTimestamp(summary.GetWorkspaceReclamationCompletedAt()), LastError: summary.GetWorkspaceReclamationLastError(),
 		}
 	}

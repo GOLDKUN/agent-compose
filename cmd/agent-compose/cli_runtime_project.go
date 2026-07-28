@@ -158,8 +158,8 @@ func normalizedRuntimeAgentSpec(agent *agentcomposev2.AgentSpec) compose.Normali
 	if scheduler := agent.GetScheduler(); scheduler != nil {
 		result.Scheduler = &compose.NormalizedSchedulerSpec{
 			Enabled:           scheduler.GetEnabled(),
-			SandboxPolicy:     scheduler.GetSandboxPolicy(),
-			ConcurrencyPolicy: scheduler.GetConcurrencyPolicy(),
+			SandboxPolicy:     schedulerSandboxPolicyText(scheduler.GetSandboxPolicy()),
+			ConcurrencyPolicy: schedulerConcurrencyPolicyText(scheduler.GetConcurrencyPolicy()),
 			DisplayName:       scheduler.GetDisplayName(),
 			Description:       scheduler.GetDescription(),
 			Script:            scheduler.GetScript(),
@@ -168,12 +168,12 @@ func normalizedRuntimeAgentSpec(agent *agentcomposev2.AgentSpec) compose.Normali
 		for _, trigger := range scheduler.GetTriggers() {
 			item := compose.NormalizedTriggerSpec{
 				Name:          trigger.GetName(),
-				Kind:          trigger.GetKind(),
+				Kind:          triggerKindText(trigger.GetKind()),
 				Cron:          trigger.GetCron(),
 				Interval:      trigger.GetInterval(),
 				Timeout:       trigger.GetTimeout(),
 				Prompt:        trigger.GetPrompt(),
-				SandboxPolicy: trigger.GetSandboxPolicy(),
+				SandboxPolicy: schedulerSandboxPolicyText(trigger.GetSandboxPolicy()),
 			}
 			if event := trigger.GetEvent(); event != nil {
 				item.Event = &compose.EventTriggerSpec{Topic: event.GetTopic()}

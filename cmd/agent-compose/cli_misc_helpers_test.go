@@ -114,15 +114,15 @@ agents:
 `)
 		server := newComposeServiceStubServer(t, composeServiceStubs{
 			exec: execServiceStub{
-				execStream: func(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error {
+				execStream: func(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.StreamExecResponse]) error {
 					switch target := req.Msg.GetTarget().(type) {
 					case *agentcomposev2.ExecRequest_SandboxId:
 						switch target.SandboxId {
 						case "no-result":
 							return nil
 						case "failed":
-							return stream.Send(&agentcomposev2.ExecStreamResponse{
-								EventType: agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_COMPLETED,
+							return stream.Send(&agentcomposev2.StreamExecResponse{
+								EventType: agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_COMPLETED,
 								Result: &agentcomposev2.ExecResult{
 									ExecId: "exec-failed", SandboxId: target.SandboxId,
 									Command: req.Msg.GetCommand(), ExitCode: 42, Success: false, Stderr: "boom\n",
@@ -132,8 +132,8 @@ agents:
 							if req.Msg.GetCommand().GetCommand() != "sh" || len(req.Msg.GetCommand().GetArgs()) != 0 {
 								t.Fatalf("default shell request = %#v", req.Msg.GetCommand())
 							}
-							return stream.Send(&agentcomposev2.ExecStreamResponse{
-								EventType: agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_COMPLETED,
+							return stream.Send(&agentcomposev2.StreamExecResponse{
+								EventType: agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_COMPLETED,
 								Result:    &agentcomposev2.ExecResult{ExecId: "exec-shell", SandboxId: target.SandboxId, Command: req.Msg.GetCommand(), Success: true},
 							})
 						}

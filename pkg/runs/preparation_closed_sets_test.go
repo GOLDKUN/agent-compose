@@ -1,0 +1,30 @@
+package runs
+
+import (
+	"testing"
+
+	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+)
+
+func TestDecodeRevisionSpecMapsStoredClosedSetStrings(t *testing.T) {
+	spec, err := DecodeRevisionSpec(`{"name":"demo","agents":[{"name":"worker","provider":"extension-provider","model":"extension-model","image":"registry.example/guest:next","volumes":[{"type":"bind","source":"/src","target":"/dst"}],"scheduler":{"sandbox_policy":"sticky","concurrency_policy":"parallel","triggers":[{"kind":"event","event":{"topic":"extension.topic"},"sandbox_policy":"new"}]}}]}`)
+	if err != nil {
+		t.Fatalf("DecodeRevisionSpec returned error: %v", err)
+	}
+	agent := spec.GetAgents()[0]
+	if agent.GetProvider() != "extension-provider" || agent.GetModel() != "extension-model" || agent.GetImage() != "registry.example/guest:next" {
+		t.Fatalf("open extension strings were not preserved: %#v", agent)
+	}
+	if agent.GetVolumes()[0].GetType() != agentcomposev2.VolumeMountType_VOLUME_MOUNT_TYPE_BIND ||
+		agent.GetScheduler().GetSandboxPolicy() != agentcomposev2.SchedulerSandboxPolicy_SCHEDULER_SANDBOX_POLICY_STICKY ||
+		agent.GetScheduler().GetConcurrencyPolicy() != agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_PARALLEL ||
+		agent.GetScheduler().GetTriggers()[0].GetKind() != agentcomposev2.TriggerKind_TRIGGER_KIND_EVENT {
+		t.Fatalf("closed sets were not mapped: %#v", agent)
+	}
+}
+
+func TestDecodeRevisionSpecRejectsUnknownStoredClosedSetString(t *testing.T) {
+	if _, err := DecodeRevisionSpec(`{"agents":[{"scheduler":{"concurrency_policy":"queue"}}]}`); err == nil {
+		t.Fatal("DecodeRevisionSpec accepted an unknown concurrency policy")
+	}
+}

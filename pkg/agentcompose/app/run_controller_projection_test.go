@@ -28,7 +28,7 @@ func TestRunAgentStreamStartedProjectionPreservesResponseFields(t *testing.T) {
 	resp := runAgentStreamStartedProjection(run, createdAt)
 	run.Warnings[0] = "mutated"
 
-	if resp.GetEventType() != agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_STARTED {
+	if resp.GetEventType() != agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_STARTED {
 		t.Fatalf("event type = %s", resp.GetEventType())
 	}
 	if resp.GetRunId() != "run-1" || !resp.GetCreatedAt().AsTime().Equal(createdAt) {
@@ -53,7 +53,7 @@ func TestRunAgentStreamChunkProjectionPreservesOutputFields(t *testing.T) {
 		Stream: domain.StdioStderr,
 	}, createdAt)
 
-	if resp.GetEventType() != agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT {
+	if resp.GetEventType() != agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT {
 		t.Fatalf("event type = %s", resp.GetEventType())
 	}
 	if resp.GetRunId() != "run-1" || resp.GetChunk() != "stderr text\n" || !resp.GetCreatedAt().AsTime().Equal(createdAt) {
@@ -80,7 +80,7 @@ func TestRunAgentStreamCompletedProjectionPreservesResponseFields(t *testing.T) 
 	resp := runAgentStreamCompletedProjection(run, createdAt)
 	run.Warnings[0] = "mutated"
 
-	if resp.GetEventType() != agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED {
+	if resp.GetEventType() != agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED {
 		t.Fatalf("event type = %s", resp.GetEventType())
 	}
 	if resp.GetRunId() != "run-1" || !resp.GetCreatedAt().AsTime().Equal(createdAt) {

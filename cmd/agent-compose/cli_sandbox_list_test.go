@@ -197,7 +197,7 @@ func testCLISessionSummary(sessionID, vmStatus, projectID, agentName, runID stri
 		SandboxId:     sessionID,
 		Title:         "CLI Session",
 		Driver:        "boxlite",
-		Status:        vmStatus,
+		Status:        sandboxStatusFromText(strings.ToLower(strings.TrimSpace(vmStatus))),
 		WorkspacePath: "/workspace/" + sessionID,
 		ProxyPath:     "/agent-compose/session/" + sessionID + "/lab",
 		Image:         "guest:latest",

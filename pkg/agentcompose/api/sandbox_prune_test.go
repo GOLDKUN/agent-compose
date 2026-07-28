@@ -26,7 +26,7 @@ func TestPruneSandboxesMapsRequestAndCandidates(t *testing.T) {
 	}}
 	handler := NewSandboxHandler(nil, nil, nil, nil).WithRemovalCoordinator(coordinator)
 	response, err := handler.PruneSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.PruneSandboxesRequest{
-		ProjectId: " project-1 ", Status: []string{"stopped"}, AgentName: " worker ", Driver: " docker ",
+		ProjectId: " project-1 ", Status: []agentcomposev2.SandboxStatus{agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED}, AgentName: " worker ", Driver: " docker ",
 		OlderThanSeconds: 3600, IncludeOrphans: true, Force: false,
 	}))
 	if err != nil {

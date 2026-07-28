@@ -24,9 +24,9 @@ func TestIntegrationListSandboxesRejectsInvalidStatusOverConnect(t *testing.T) {
 	client := agentcomposev2connect.NewSandboxServiceClient(server.Client(), server.URL)
 
 	_, err := client.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{
-		Status: []string{"running", "definitely-invalid"},
+		Status: []agentcomposev2.SandboxStatus{agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, agentcomposev2.SandboxStatus(99)},
 	}))
-	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), `invalid sandbox status "definitely-invalid"`) {
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "unsupported sandbox status") {
 		t.Fatalf("ListSandboxes() code/error = %v / %v", connect.CodeOf(err), err)
 	}
 	if len(store.listOptions) != 0 {

@@ -113,7 +113,7 @@ func TestDaemonHTTPClientUsesH2COnlyForAttachRPCs(t *testing.T) {
 	defer server.Close()
 
 	client := newDaemonHTTPClient(cliClientConfig{BaseURL: server.URL})
-	for _, path := range []string{"/api/version", agentcomposev2connect.RunServiceRunAttachProcedure} {
+	for _, path := range []string{"/api/version", agentcomposev2connect.RunServiceAttachAgentRunProcedure} {
 		req, err := http.NewRequest(http.MethodPost, server.URL+path, nil)
 		if err != nil {
 			t.Fatalf("NewRequest(%q) error = %v", path, err)
@@ -128,16 +128,16 @@ func TestDaemonHTTPClientUsesH2COnlyForAttachRPCs(t *testing.T) {
 	if got, want := <-seen, "/api/version HTTP/1.1"; got != want {
 		t.Fatalf("ordinary request protocol = %q, want %q", got, want)
 	}
-	if got, want := <-seen, agentcomposev2connect.RunServiceRunAttachProcedure+" HTTP/2.0"; got != want {
+	if got, want := <-seen, agentcomposev2connect.RunServiceAttachAgentRunProcedure+" HTTP/2.0"; got != want {
 		t.Fatalf("attach request protocol = %q, want %q", got, want)
 	}
 }
 
-func TestDaemonHTTPClientRunAttachBidiUsesH2C(t *testing.T) {
+func TestDaemonHTTPClientAttachAgentRunBidiUsesH2C(t *testing.T) {
 	seen := make(chan string, 1)
 	mux := http.NewServeMux()
 	path, handler := agentcomposev2connect.NewRunServiceHandler(runServiceStub{
-		runAttach: func(_ context.Context, stream *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error {
+		runAttach: func(_ context.Context, stream *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
 			req, err := stream.Receive()
 			if err != nil {
 				return err
@@ -145,14 +145,14 @@ func TestDaemonHTTPClientRunAttachBidiUsesH2C(t *testing.T) {
 			if req.GetStart() == nil {
 				return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("start frame is required"))
 			}
-			return stream.Send(&agentcomposev2.RunAttachResponse{
-				Frame: &agentcomposev2.RunAttachResponse_Result{Result: &agentcomposev2.AttachResult{Success: true}},
+			return stream.Send(&agentcomposev2.AttachAgentRunResponse{
+				Frame: &agentcomposev2.AttachAgentRunResponse_Result{Result: &agentcomposev2.AttachResult{Success: true}},
 			})
 		},
 	})
 	mux.Handle(path, handler)
 	server := httptest.NewServer(h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { //nolint:staticcheck // Tests required h2c transport compatibility.
-		if r.URL.Path == agentcomposev2connect.RunServiceRunAttachProcedure {
+		if r.URL.Path == agentcomposev2connect.RunServiceAttachAgentRunProcedure {
 			seen <- r.Proto
 		}
 		mux.ServeHTTP(w, r)
@@ -160,27 +160,27 @@ func TestDaemonHTTPClientRunAttachBidiUsesH2C(t *testing.T) {
 	defer server.Close()
 
 	client := agentcomposev2connect.NewRunServiceClient(newDaemonHTTPClient(cliClientConfig{BaseURL: server.URL}), server.URL)
-	stream := client.RunAttach(context.Background())
-	if err := stream.Send(&agentcomposev2.RunAttachRequest{
-		Frame: &agentcomposev2.RunAttachRequest_Start{Start: &agentcomposev2.RunAttachStart{
+	stream := client.AttachAgentRun(context.Background())
+	if err := stream.Send(&agentcomposev2.AttachAgentRunRequest{
+		Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
 			Request: &agentcomposev2.RunAgentRequest{ProjectId: "project-1", AgentName: "dialog", Command: "bash"},
 			Mode:    agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND,
 		}},
 	}); err != nil {
-		t.Fatalf("RunAttach Send() error = %v", err)
+		t.Fatalf("AttachAgentRun Send() error = %v", err)
 	}
 	if err := stream.CloseRequest(); err != nil {
-		t.Fatalf("RunAttach CloseRequest() error = %v", err)
+		t.Fatalf("AttachAgentRun CloseRequest() error = %v", err)
 	}
 	resp, err := stream.Receive()
 	if err != nil {
-		t.Fatalf("RunAttach Receive() error = %v", err)
+		t.Fatalf("AttachAgentRun Receive() error = %v", err)
 	}
 	if !resp.GetResult().GetSuccess() {
-		t.Fatalf("RunAttach result = %#v, want success", resp)
+		t.Fatalf("AttachAgentRun result = %#v, want success", resp)
 	}
 	if got, want := <-seen, "HTTP/2.0"; got != want {
-		t.Fatalf("RunAttach protocol = %q, want %q", got, want)
+		t.Fatalf("AttachAgentRun protocol = %q, want %q", got, want)
 	}
 }
 

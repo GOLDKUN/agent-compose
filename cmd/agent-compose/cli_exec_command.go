@@ -117,23 +117,23 @@ func runComposeExecCommand(cmd *cobra.Command, cli cliOptions, options composeEx
 		return err
 	}
 	if options.Interactive {
-		attachClient, err := newCLIExecAttachServiceClient(cli)
+		attachClient, err := newCLIAttachExecServiceClient(cli)
 		if err != nil {
 			return err
 		}
 		if strings.TrimSpace(options.Prompt) != "" {
-			return runComposeExecPromptAttachCommand(cmd, runtimeProject.name(), connectExecAttachClient{client: attachClient}, req, options)
+			return runComposeExecPromptAttachCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: attachClient}, req, options)
 		}
-		return runComposeExecAttachCommand(cmd, runtimeProject.name(), connectExecAttachClient{client: attachClient}, req, options)
+		return runComposeAttachExecCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: attachClient}, req, options)
 	}
 	if strings.TrimSpace(options.Prompt) != "" {
-		attachClient, err := newCLIExecAttachServiceClient(cli)
+		attachClient, err := newCLIAttachExecServiceClient(cli)
 		if err != nil {
 			return err
 		}
-		return runComposeExecPromptOnceCommand(cmd, runtimeProject.name(), connectExecAttachClient{client: attachClient}, req, options, cli.JSON)
+		return runComposeExecPromptOnceCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: attachClient}, req, options, cli.JSON)
 	}
-	stream, err := clients.execStream.ExecStream(cmd.Context(), connect.NewRequest(req))
+	stream, err := clients.execStream.StreamExec(cmd.Context(), connect.NewRequest(req))
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("exec project %s: %w", runtimeProject.name(), err))
 	}
@@ -142,14 +142,14 @@ func runComposeExecCommand(cmd *cobra.Command, cli cliOptions, options composeEx
 	for stream.Receive() {
 		event := stream.Msg()
 		switch event.GetEventType() {
-		case agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_OUTPUT:
+		case agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_OUTPUT:
 			if cli.JSON {
 				continue
 			}
 			if err := output.Write(event.GetTranscript(), event.GetChunk(), event.GetStream()); err != nil {
 				return err
 			}
-		case agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_COMPLETED:
+		case agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_COMPLETED:
 			result = event.GetResult()
 		}
 	}

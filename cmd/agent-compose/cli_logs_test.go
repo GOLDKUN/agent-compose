@@ -25,12 +25,12 @@ agents:
 	var followRequests []*agentcomposev2.FollowRunLogsRequest
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			startRun: func(ctx context.Context, req *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
+			startRun: func(ctx context.Context, req *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
 				if req.Msg.GetRun().GetCommand() != "printf detached" {
-					t.Fatalf("StartRun command = %#v", req.Msg.GetRun())
+					t.Fatalf("StartAgentRun command = %#v", req.Msg.GetRun())
 				}
 				sawCommand = true
-				return connect.NewResponse(&agentcomposev2.StartRunResponse{Run: &agentcomposev2.RunSummary{
+				return connect.NewResponse(&agentcomposev2.StartAgentRunResponse{Run: &agentcomposev2.RunSummary{
 					RunId:     "run-detached-logs",
 					ProjectId: req.Msg.GetRun().GetProjectId(),
 					AgentName: "reviewer",
