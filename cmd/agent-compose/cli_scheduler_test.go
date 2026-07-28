@@ -775,7 +775,7 @@ agents:
 			},
 			getScheduler: func(_ context.Context, req *connect.Request[agentcomposev2.GetSchedulerRequest]) (*connect.Response[agentcomposev2.GetSchedulerResponse], error) {
 				requestedAgent = req.Msg.GetAgentName()
-				return connect.NewResponse(&agentcomposev2.GetSchedulerResponse{Triggers: []*agentcomposev2.ResolvedTrigger{{TriggerId: "loader-every-minute", Enabled: true, Spec: &agentcomposev2.TriggerSpec{Kind: "interval", Interval: "1m"}, NextFireAt: timestamppb.New(time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)), LastFiredAt: timestamppb.New(time.Date(2026, 7, 6, 11, 59, 0, 0, time.UTC))}}}), nil
+				return connect.NewResponse(&agentcomposev2.GetSchedulerResponse{Triggers: []*agentcomposev2.ResolvedTrigger{{TriggerId: "loader-every-minute", Enabled: true, Spec: &agentcomposev2.TriggerSpec{Kind: agentcomposev2.TriggerKind_TRIGGER_KIND_INTERVAL, Interval: "1m"}, NextFireAt: timestamppb.New(time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)), LastFiredAt: timestamppb.New(time.Date(2026, 7, 6, 11, 59, 0, 0, time.UTC))}}}), nil
 			},
 		},
 	})

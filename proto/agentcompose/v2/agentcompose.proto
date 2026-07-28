@@ -197,6 +197,47 @@ enum SchedulerRunStatus {
   SCHEDULER_RUN_STATUS_SKIPPED = 5;
 }
 
+enum SandboxStatus {
+  SANDBOX_STATUS_UNSPECIFIED = 0;
+  SANDBOX_STATUS_PENDING = 1;
+  SANDBOX_STATUS_RUNNING = 2;
+  SANDBOX_STATUS_STOPPED = 3;
+  SANDBOX_STATUS_FAILED = 4;
+  SANDBOX_STATUS_DELETING = 5;
+}
+
+enum WorkspaceReclamationState {
+  WORKSPACE_RECLAMATION_STATE_UNSPECIFIED = 0;
+  WORKSPACE_RECLAMATION_STATE_RECLAIMING = 1;
+  WORKSPACE_RECLAMATION_STATE_RECLAIMED = 2;
+}
+
+enum SchedulerConcurrencyPolicy {
+  SCHEDULER_CONCURRENCY_POLICY_UNSPECIFIED = 0;
+  SCHEDULER_CONCURRENCY_POLICY_SKIP = 1;
+  SCHEDULER_CONCURRENCY_POLICY_PARALLEL = 2;
+}
+
+enum SchedulerSandboxPolicy {
+  SCHEDULER_SANDBOX_POLICY_UNSPECIFIED = 0;
+  SCHEDULER_SANDBOX_POLICY_STICKY = 1;
+  SCHEDULER_SANDBOX_POLICY_NEW = 2;
+}
+
+enum TriggerKind {
+  TRIGGER_KIND_UNSPECIFIED = 0;
+  TRIGGER_KIND_CRON = 1;
+  TRIGGER_KIND_INTERVAL = 2;
+  TRIGGER_KIND_TIMEOUT = 3;
+  TRIGGER_KIND_EVENT = 4;
+}
+
+enum VolumeMountType {
+  VOLUME_MOUNT_TYPE_UNSPECIFIED = 0;
+  VOLUME_MOUNT_TYPE_VOLUME = 1;
+  VOLUME_MOUNT_TYPE_BIND = 2;
+}
+
 enum ProjectAgentAvailability {
   PROJECT_AGENT_AVAILABILITY_UNSPECIFIED = 0;
   PROJECT_AGENT_AVAILABILITY_AVAILABLE = 1;
@@ -777,9 +818,12 @@ message NamedWorkspaceSpec {
 
 message AgentSpec {
   string name = 1;
+  // Provider-defined identifier. Unknown extension values are allowed.
   string provider = 2;
+  // Provider-defined model identifier. Unknown extension values are allowed.
   string model = 3;
   string system_prompt = 4;
+  // Runtime image reference. Registries define its extensible syntax.
   string image = 5;
   DriverSpec driver = 6;
   repeated EnvVarSpec env = 7;
@@ -798,7 +842,9 @@ message AgentSpec {
 
 message MCPServerSpec {
   string name = 1;
+  // MCP implementation type. Unknown extension values are allowed.
   string type = 2;
+  // MCP transport name. Unknown extension values are allowed.
   string transport = 3;
   string command = 4;
   repeated string args = 5;
@@ -823,7 +869,7 @@ message ProjectVolumeSpec {
 }
 
 message VolumeMountSpec {
-  string type = 1;
+  VolumeMountType type = 1;
   string source = 2;
   string target = 3;
   bool read_only = 4;
@@ -859,11 +905,13 @@ message EnvVarUpdateSpec {
 }
 
 message WorkspaceSpec {
+  // Workspace provider name. Unknown extension values are allowed.
   string provider = 1;
   string url = 2;
   string ref = 3;
   string path = 4;
   string name = 5;
+  // Provider-defined workspace format. Unknown extension values are allowed.
   string format = 6;
   string target = 7;
   string username = 8;
@@ -875,24 +923,25 @@ message SchedulerSpec {
   bool enabled = 1;
   repeated TriggerSpec triggers = 2;
   string script = 3;
-  string sandbox_policy = 4;
+  SchedulerSandboxPolicy sandbox_policy = 4;
   string display_name = 5;
   string description = 6;
-  string concurrency_policy = 7;
+  SchedulerConcurrencyPolicy concurrency_policy = 7;
 }
 
 message TriggerSpec {
   string name = 1;
-  string kind = 2;
+  TriggerKind kind = 2;
   string cron = 3;
   string interval = 4;
   string timeout = 5;
   EventTriggerSpec event = 6;
   string prompt = 7;
-  string sandbox_policy = 8;
+  SchedulerSandboxPolicy sandbox_policy = 8;
 }
 
 message EventTriggerSpec {
+  // Producer-defined event topic. Unknown extension values are allowed.
   string topic = 1;
 }
 
@@ -1134,8 +1183,9 @@ message RemoveSandboxResponse {
 
 message PruneSandboxesRequest {
   string project_id = 1;
-  // Optional case-insensitive filter. Only stopped and failed are safe to prune.
-  repeated string status = 2;
+  // Optional lifecycle-state filter. Only STOPPED and FAILED are safe to prune;
+  // UNSPECIFIED and other states are rejected unless force is true.
+  repeated SandboxStatus status = 2;
   string agent_name = 3;
   string driver = 4;
   uint64 older_than_seconds = 5;
@@ -1149,7 +1199,7 @@ message SandboxPruneCandidate {
   string project_id = 3;
   string agent_name = 4;
   string driver = 5;
-  string status = 6;
+  SandboxStatus status = 6;
   string runtime_id = 7;
   google.protobuf.Timestamp updated_at = 8;
   bool removable = 9;
@@ -1178,7 +1228,7 @@ message GetSandboxRequest {
 
 message Sandbox {
   string sandbox_id = 1;
-  string status = 2;
+  SandboxStatus status = 2;
   string driver = 3;
   string project_id = 4;
   string agent_name = 5;
@@ -1193,7 +1243,7 @@ message Sandbox {
   uint32 cell_count = 14;
   uint32 event_count = 15;
   string notebook_url = 16;
-  string workspace_reclamation_state = 17;
+  WorkspaceReclamationState workspace_reclamation_state = 17;
   google.protobuf.Timestamp workspace_reclamation_started_at = 18;
   google.protobuf.Timestamp workspace_reclamation_completed_at = 19;
   string workspace_reclamation_last_error = 20;
@@ -1210,9 +1260,8 @@ message ListSandboxesRequest {
   // Number of matching resources to skip. Values at or above total return an empty page.
   uint32 offset = 2;
   string project_id = 3;
-  // Optional case-insensitive filter. Accepted values are pending, running,
-  // stopped, failed, and deleting. Empty entries are ignored.
-  repeated string status = 4;
+  // Optional lifecycle-state filter. UNSPECIFIED entries are rejected.
+  repeated SandboxStatus status = 4;
 }
 
 message ListSandboxesResponse {

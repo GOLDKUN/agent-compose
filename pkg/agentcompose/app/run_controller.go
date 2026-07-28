@@ -201,7 +201,7 @@ func volumeMountSpecsFromProto(values []*agentcomposev2.VolumeMountSpec) []domai
 			continue
 		}
 		out = append(out, domain.VolumeMountSpec{
-			Type:     value.GetType(),
+			Type:     api.VolumeMountTypeText(value.GetType()),
 			Source:   value.GetSource(),
 			Target:   value.GetTarget(),
 			ReadOnly: value.GetReadOnly(),

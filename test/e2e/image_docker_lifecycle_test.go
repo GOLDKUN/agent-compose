@@ -25,7 +25,6 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
-	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -175,7 +174,7 @@ func TestE2EImageDockerSandboxLifecycle(t *testing.T) {
 		failImageDockerFixture(t, fixture, "GetSandbox returned error: %v", err)
 	}
 	summary := sandboxResp.Msg.GetSandbox()
-	if summary.GetDriver() != "docker" || summary.GetStatus() != domain.VMStatusRunning {
+	if summary.GetDriver() != "docker" || summary.GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING {
 		failImageDockerFixture(t, fixture, "GetSandbox summary = %#v", summary)
 	}
 	initialContainer := inspectImageDockerSandboxContainer(t, ctx, fixture)
@@ -192,8 +191,8 @@ func TestE2EImageDockerSandboxLifecycle(t *testing.T) {
 	if err != nil {
 		failImageDockerFixture(t, fixture, "StopSandbox returned error: %v", err)
 	}
-	if got := stopResp.Msg.GetSandbox().GetStatus(); got != domain.VMStatusStopped {
-		failImageDockerFixture(t, fixture, "StopSandbox status = %q, want %q", got, domain.VMStatusStopped)
+	if got := stopResp.Msg.GetSandbox().GetStatus(); got != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED {
+		failImageDockerFixture(t, fixture, "StopSandbox status = %q, want %q", got, agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED)
 	}
 	stoppedContainer := inspectImageDockerSandboxContainer(t, ctx, fixture)
 	if stoppedContainer.ID != initialContainer.ID || stoppedContainer.State == nil || stoppedContainer.State.Running {
@@ -204,8 +203,8 @@ func TestE2EImageDockerSandboxLifecycle(t *testing.T) {
 	if err != nil {
 		failImageDockerFixture(t, fixture, "ResumeSandbox returned error: %v", err)
 	}
-	if got := resumeResp.Msg.GetSandbox().GetStatus(); got != domain.VMStatusRunning {
-		failImageDockerFixture(t, fixture, "ResumeSandbox status = %q, want %q", got, domain.VMStatusRunning)
+	if got := resumeResp.Msg.GetSandbox().GetStatus(); got != agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING {
+		failImageDockerFixture(t, fixture, "ResumeSandbox status = %q, want %q", got, agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING)
 	}
 	resumedContainer := inspectImageDockerSandboxContainer(t, ctx, fixture)
 	if resumedContainer.ID != initialContainer.ID || resumedContainer.State == nil || !resumedContainer.State.Running {

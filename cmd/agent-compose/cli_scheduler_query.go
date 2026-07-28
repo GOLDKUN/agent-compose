@@ -443,13 +443,14 @@ func schedulerTriggerItemFromDeclarative(agentName, schedulerID string, schedule
 
 func schedulerTriggerItemFromResolved(agentName, schedulerID string, schedulerEnabled bool, trigger *agentcomposev2.ResolvedTrigger) composeSchedulerTriggerItem {
 	interval, _ := time.ParseDuration(trigger.GetSpec().GetInterval())
-	registered := map[string]any{"loader_id": "", "trigger_id": trigger.GetTriggerId(), "kind": trigger.GetSpec().GetKind(), "enabled": trigger.GetEnabled(), "auto_id": false, "interval_ms": interval.Milliseconds(), "topic": trigger.GetSpec().GetEvent().GetTopic(), "spec_json": "", "next_fire_at": formatProtoTimestamp(trigger.GetNextFireAt()), "last_fired_at": formatProtoTimestamp(trigger.GetLastFiredAt())}
+	kind := triggerKindText(trigger.GetSpec().GetKind())
+	registered := map[string]any{"loader_id": "", "trigger_id": trigger.GetTriggerId(), "kind": kind, "enabled": trigger.GetEnabled(), "auto_id": false, "interval_ms": interval.Milliseconds(), "topic": trigger.GetSpec().GetEvent().GetTopic(), "spec_json": "", "next_fire_at": formatProtoTimestamp(trigger.GetNextFireAt()), "last_fired_at": formatProtoTimestamp(trigger.GetLastFiredAt())}
 	return composeSchedulerTriggerItem{
 		AgentName:        agentName,
 		TriggerID:        displayOpaqueID(trigger.GetTriggerId()),
 		TriggerShortID:   shortOpaqueID(trigger.GetTriggerId()),
 		RawTriggerID:     trigger.GetTriggerId(),
-		Kind:             trigger.GetSpec().GetKind(),
+		Kind:             kind,
 		Source:           "script",
 		SchedulerID:      displayOpaqueID(schedulerID),
 		SchedulerShortID: shortOpaqueID(schedulerID),

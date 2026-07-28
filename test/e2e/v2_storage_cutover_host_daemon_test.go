@@ -13,7 +13,6 @@ import (
 
 	"connectrpc.com/connect"
 
-	domain "agent-compose/pkg/model"
 	storagesqlite "agent-compose/pkg/storage/sqlite"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
@@ -80,7 +79,7 @@ func TestE2EV2StorageMigratorDockerCutover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSandbox after cutover: %v", err)
 	}
-	if sandboxResp.Msg.GetSandbox().GetStatus() != domain.VMStatusStopped || sandboxResp.Msg.GetSandbox().GetProjectId() != projectID {
+	if sandboxResp.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED || sandboxResp.Msg.GetSandbox().GetProjectId() != projectID {
 		t.Fatalf("migrated scheduler sandbox = %#v, want completed stopped sandbox for project %s", sandboxResp.Msg.GetSandbox(), projectID)
 	}
 	container := inspectE2EDockerSandboxContainer(t, ctx, dockerClient, sandboxID)

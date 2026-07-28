@@ -134,7 +134,11 @@ func jupyterOptionsFromAgentSpec(agent *agentcomposev2.AgentSpec) sandboxstore.C
 func DecodeRevisionSpec(raw string) (*agentcomposev2.ProjectSpec, error) {
 	var spec agentcomposev2.ProjectSpec
 	data := []byte(strings.TrimSpace(raw))
-	if err := json.Unmarshal(data, &spec); err != nil {
+	normalizedData, err := normalizeRevisionClosedSetsJSON(data)
+	if err != nil {
+		return nil, fmt.Errorf("decode project revision spec: %w", err)
+	}
+	if err := json.Unmarshal(normalizedData, &spec); err != nil {
 		return nil, fmt.Errorf("decode project revision spec: %w", err)
 	}
 	if err := restoreCanonicalRevisionWorkspaces(data, &spec); err != nil {

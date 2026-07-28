@@ -258,7 +258,7 @@ agents:
 				return connect.NewResponse(&agentcomposev2.GetSandboxResponse{Sandbox: &agentcomposev2.Sandbox{
 					SandboxId: req.Msg.GetSandboxId(),
 					ProxyPath: "/agent-compose/session/" + req.Msg.GetSandboxId() + "/lab",
-					Status:    domain.VMStatusRunning,
+					Status:    agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING,
 				}}), nil
 			},
 		},

@@ -14,7 +14,6 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 
-	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -119,7 +118,7 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 	t.Cleanup(func() {
 		cleanupE2EWorkspaceSandbox(t, dockerClient, sandboxClient, sandboxAID, sandboxARemoved)
 	})
-	assertE2ESandboxWorkspaceState(t, sandboxA, sandboxAID, projectID, domain.VMStatusRunning, "")
+	assertE2ESandboxWorkspaceState(t, sandboxA, sandboxAID, projectID, agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, "")
 	workspaceAPath := sandboxA.GetWorkspacePath()
 	if restartBinary != binary {
 		assertE2EBaselineSandboxPath(t, testRoot, sandboxAID, workspaceAPath)
@@ -142,7 +141,7 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StopSandbox A returned error: %v", err)
 	}
-	assertE2ESandboxWorkspaceState(t, stopResp.Msg.GetSandbox(), sandboxAID, projectID, domain.VMStatusStopped, workspaceAPath)
+	assertE2ESandboxWorkspaceState(t, stopResp.Msg.GetSandbox(), sandboxAID, projectID, agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED, workspaceAPath)
 	stoppedHandleA := inspectE2EDockerSandbox(t, ctx, dockerClient, sandboxAID)
 	if stoppedHandleA.ContainerID != handleA.ContainerID || stoppedHandleA.Running {
 		t.Fatalf("stopped Docker sandbox A handle = %+v, want stopped container %s", stoppedHandleA, handleA.ContainerID)
@@ -183,13 +182,13 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSandbox A after daemon restart returned error: %v", err)
 	}
-	assertE2ESandboxWorkspaceState(t, getAResp.Msg.GetSandbox(), sandboxAID, projectID, domain.VMStatusStopped, workspaceAPath)
+	assertE2ESandboxWorkspaceState(t, getAResp.Msg.GetSandbox(), sandboxAID, projectID, agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED, workspaceAPath)
 
 	resumeAResp, err := sandboxClient.ResumeSandbox(ctx, connect.NewRequest(&agentcomposev2.ResumeSandboxRequest{SandboxId: sandboxAID}))
 	if err != nil {
 		t.Fatalf("ResumeSandbox A after daemon restart returned error: %v", err)
 	}
-	assertE2ESandboxWorkspaceState(t, resumeAResp.Msg.GetSandbox(), sandboxAID, projectID, domain.VMStatusRunning, workspaceAPath)
+	assertE2ESandboxWorkspaceState(t, resumeAResp.Msg.GetSandbox(), sandboxAID, projectID, agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, workspaceAPath)
 	resumedHandleA := inspectE2EDockerSandbox(t, ctx, dockerClient, sandboxAID)
 	if resumedHandleA.ContainerID != handleA.ContainerID || !resumedHandleA.Running || filepath.Clean(resumedHandleA.WorkspaceSource) != filepath.Clean(workspaceAPath) {
 		t.Fatalf("resumed Docker sandbox A handle = %+v, want original running handle %+v", resumedHandleA, handleA)
@@ -204,7 +203,7 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 	t.Cleanup(func() {
 		cleanupE2EWorkspaceSandbox(t, dockerClient, sandboxClient, sandboxBID, sandboxBRemoved)
 	})
-	assertE2ESandboxWorkspaceState(t, sandboxB, sandboxBID, projectID, domain.VMStatusRunning, "")
+	assertE2ESandboxWorkspaceState(t, sandboxB, sandboxBID, projectID, agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, "")
 	if restartBinary != binary {
 		assertE2EDatePartitionedSandboxPath(t, testRoot, sandboxBID, sandboxB.GetWorkspacePath())
 	}
@@ -374,7 +373,7 @@ func assertE2EDockerSandboxContainerCount(t *testing.T, ctx context.Context, doc
 	}
 }
 
-func assertE2ESandboxWorkspaceState(t *testing.T, sandbox *agentcomposev2.Sandbox, sandboxID, projectID, status, wantWorkspacePath string) {
+func assertE2ESandboxWorkspaceState(t *testing.T, sandbox *agentcomposev2.Sandbox, sandboxID, projectID string, status agentcomposev2.SandboxStatus, wantWorkspacePath string) {
 	t.Helper()
 	if sandbox == nil || sandboxID == "" || sandbox.GetSandboxId() != sandboxID || sandbox.GetProjectId() != projectID || sandbox.GetDriver() != "docker" || sandbox.GetStatus() != status || sandbox.GetImage() == "" {
 		t.Fatalf("sandbox %s = %#v, want docker/%s with stable project identity", sandboxID, sandbox, status)
