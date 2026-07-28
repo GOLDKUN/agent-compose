@@ -278,7 +278,7 @@ func newSchedulerRunHandlerFixture() (*schedulerRunProjectStoreFake, *schedulerR
 			ID:          "loader-1",
 			Revision:    1,
 			Enabled:     false,
-			SpecJSON:    `{"script":"function main() {}"}`,
+			SpecJSON:    `{"sandbox_policy":"new","concurrency_policy":"skip","script":"function main() {}"}`,
 		},
 	}
 	runtime := &schedulerRunRuntimeFake{}
