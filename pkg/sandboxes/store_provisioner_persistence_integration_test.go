@@ -214,13 +214,16 @@ func seedPersistenceWorkspace(t *testing.T, ctx context.Context, root string) pe
 	if err != nil {
 		t.Fatalf("stop initial sandbox: %v", err)
 	}
-	if !outcome.DriverStopped || initialDriver.stopCalls != 1 {
-		t.Fatalf("initial stop outcome = %#v with %d driver calls, want stopped with 1 call", outcome, initialDriver.stopCalls)
+	if !outcome.DriverStopped || !outcome.RuntimeReleased || initialDriver.stopCalls != 1 || initialDriver.releaseCalls != 1 {
+		t.Fatalf("initial stop outcome = %#v with stop/release calls %d/%d, want stopped and released with 1 call each", outcome, initialDriver.stopCalls, initialDriver.releaseCalls)
 	}
 	stopped := outcome.Sandbox
 	assertPersistenceWorkspaceReady(t, stopped, readyUpdatedAt, "after initial stop")
 	if stopped.Summary.VMStatus != domain.VMStatusStopped {
 		t.Fatalf("stopped VM status = %q, want %q", stopped.Summary.VMStatus, domain.VMStatusStopped)
+	}
+	if domain.EffectiveStoppedRuntimePolicy(stopped) != domain.StoppedRuntimePolicyRemove || domain.EffectiveStoppedRuntimeState(stopped) != domain.StoppedRuntimeStateReleased {
+		t.Fatalf("stopped runtime policy/state = %q/%q, want remove/released", domain.EffectiveStoppedRuntimePolicy(stopped), domain.EffectiveStoppedRuntimeState(stopped))
 	}
 	manifest := mustPersistenceWorkspaceManifest(t, workspaceRoot)
 
@@ -292,9 +295,10 @@ func (g *persistenceWorkspaceConfigGuard) GetWorkspaceConfig(ctx context.Context
 }
 
 type persistenceInitialDriver struct {
-	store      *sandboxstore.Store
-	startCalls int
-	stopCalls  int
+	store        *sandboxstore.Store
+	startCalls   int
+	stopCalls    int
+	releaseCalls int
 }
 
 func (d *persistenceInitialDriver) StartSandboxVM(ctx context.Context, sandbox *domain.Sandbox) error {
@@ -315,6 +319,11 @@ func (d *persistenceInitialDriver) StartSandboxVM(ctx context.Context, sandbox *
 
 func (d *persistenceInitialDriver) StopSandboxVM(context.Context, *domain.Sandbox) error {
 	d.stopCalls++
+	return nil
+}
+
+func (d *persistenceInitialDriver) ReleaseSandboxRuntime(context.Context, *domain.Sandbox) error {
+	d.releaseCalls++
 	return nil
 }
 

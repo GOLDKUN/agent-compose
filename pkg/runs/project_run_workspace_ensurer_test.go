@@ -225,7 +225,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerFailureShortCircuitsAndCleansUp
 		if run.Status != domain.ProjectRunStatusFailed || run.SandboxID != sandbox.Summary.ID {
 			t.Fatalf("failed run = %#v, want reused sandbox %q", run, sandbox.Summary.ID)
 		}
-		if fixture.driver.started || fixture.driver.removed {
+		if fixture.driver.started || !fixture.driver.removed {
 			t.Fatalf("driver started=%v removed=%v after reused sandbox Ensurer failure", fixture.driver.started, fixture.driver.removed)
 		}
 		assertProjectRunEnsurerCall(t, ensurer, sandbox.Summary.ID, original)
@@ -233,8 +233,8 @@ func TestRunsControllerProjectRunWorkspaceEnsurerFailureShortCircuitsAndCleansUp
 		if loadErr != nil {
 			t.Fatalf("reused sandbox was removed: %v", loadErr)
 		}
-		if persisted.Summary.VMStatus != domain.VMStatusFailed {
-			t.Fatalf("reused sandbox VM status = %q, want failed", persisted.Summary.VMStatus)
+		if persisted.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(persisted) != domain.StoppedRuntimeStateReleased {
+			t.Fatalf("reused sandbox stop state = %q/%q, want stopped/released", persisted.Summary.VMStatus, domain.EffectiveStoppedRuntimeState(persisted))
 		}
 		assertProjectRunWorkspaceSnapshot(t, "reused failed sandbox", persisted.Workspace, original)
 	})

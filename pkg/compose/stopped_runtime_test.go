@@ -25,7 +25,7 @@ func TestNormalizeAgentStoppedRuntimePolicy(t *testing.T) {
 		wantNil    bool
 	}{
 		{name: "missing", wantNil: true},
-		{name: "default", sandbox: &SandboxSpec{}, wantPolicy: domain.StoppedRuntimePolicyRetain},
+		{name: "default", sandbox: &SandboxSpec{}, wantPolicy: domain.StoppedRuntimePolicyRemove},
 		{name: "remove", sandbox: &SandboxSpec{StoppedRuntimePolicy: " remove "}, wantPolicy: domain.StoppedRuntimePolicyRemove},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

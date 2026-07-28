@@ -9,6 +9,8 @@ import (
 const (
 	StoppedRuntimePolicyRetain = "retain"
 	StoppedRuntimePolicyRemove = "remove"
+	// DefaultStoppedRuntimePolicy is snapshotted for newly created sandboxes.
+	DefaultStoppedRuntimePolicy = StoppedRuntimePolicyRemove
 
 	StoppedRuntimeStateRetained       = "retained"
 	StoppedRuntimeStateReleasePending = "release_pending"
@@ -26,7 +28,9 @@ type StoppedRuntime struct {
 
 func NormalizeStoppedRuntimePolicy(value string) (string, error) {
 	switch normalized := strings.ToLower(strings.TrimSpace(value)); normalized {
-	case "", StoppedRuntimePolicyRetain:
+	case "":
+		return DefaultStoppedRuntimePolicy, nil
+	case StoppedRuntimePolicyRetain:
 		return StoppedRuntimePolicyRetain, nil
 	case StoppedRuntimePolicyRemove:
 		return StoppedRuntimePolicyRemove, nil
@@ -36,7 +40,9 @@ func NormalizeStoppedRuntimePolicy(value string) (string, error) {
 }
 
 func EffectiveStoppedRuntimePolicy(sandbox *Sandbox) string {
-	if sandbox == nil {
+	// Sandboxes created before the policy was introduced have no snapshot.
+	// Preserve their retained runtime instead of applying today's default.
+	if sandbox == nil || strings.TrimSpace(sandbox.StoppedRuntimePolicy) == "" {
 		return StoppedRuntimePolicyRetain
 	}
 	policy, err := NormalizeStoppedRuntimePolicy(sandbox.StoppedRuntimePolicy)

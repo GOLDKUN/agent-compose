@@ -738,19 +738,19 @@ If `name` is combined with any source field or `target`, the object is treated a
 
 ### `sandbox`: stopped runtime lifecycle
 
-By default, stopping a sandbox retains its driver runtime and private writable state so `resume` restarts the same container, box, or microVM sandbox. Disposable agents can release that private runtime state after every confirmed stop:
+By default, stopping a sandbox removes its driver runtime and private writable state after confirming the stop. Sandbox metadata, logs, workspace, and declared durable mounts remain, and `resume` creates a fresh runtime. To restart the same container, box, or microVM sandbox, retain its private runtime state explicitly:
 
 ```yaml
 sandbox:
-  stopped_runtime_policy: remove
+  stopped_runtime_policy: retain
 ```
 
-`stopped_runtime_policy` accepts only `retain` (the default) or `remove`:
+`stopped_runtime_policy` accepts only `retain` or `remove` (the default):
 
 - `retain` keeps the stopped runtime and its private writable layer. Resume requires that same runtime; unexpected runtime loss is not silently recreated.
 - `remove` explicitly deletes the stopped container, BoxLite box/private disk, or Microsandbox sandbox/private qcow2 overlay. Sandbox metadata, events, logs, workspace, and declared durable mounts remain. Resume creates a new runtime, so data stored only in the private writable layer is lost.
 
-The effective policy is snapshotted when the sandbox is created. Editing the project changes only new sandboxes. `agent-compose inspect sandbox <sandbox> --json` exposes the lifecycle record through `stopped_runtime_policy`, `stopped_runtime_state`, `stopped_runtime_last_error`, and `stopped_runtime_released_at`. The states are:
+The effective policy is snapshotted when the sandbox is created. Editing the project changes only new sandboxes. Legacy sandboxes without a policy snapshot continue to retain their runtime. `agent-compose inspect sandbox <sandbox> --json` exposes the lifecycle record through `stopped_runtime_policy`, `stopped_runtime_state`, `stopped_runtime_last_error`, and `stopped_runtime_released_at`. The states are:
 
 - `retained`: no intentional runtime release is in progress; a stopped sandbox is expected to resume the retained runtime.
 - `release_pending`: release intent is durable, but stopping, runtime removal, or the ownership update has not been fully confirmed. The daemon retries this state after an interruption, and resume completes the pending release before creating a fresh runtime.

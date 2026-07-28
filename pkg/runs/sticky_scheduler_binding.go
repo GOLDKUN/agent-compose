@@ -33,8 +33,8 @@ type stickyProjectRunSandboxConfig struct {
 }
 
 // stickyProjectSandboxOptions preserves the serialized shape used before
-// stopped-runtime policy existed. Only the behavior-changing remove policy is
-// added to the hash, so default and explicit retain remain compatible.
+// stopped-runtime policy existed for explicit retain. The default remove policy
+// is added to the hash so existing retained bindings are retired.
 type stickyProjectSandboxOptions struct {
 	JupyterEnabled       bool
 	JupyterGuestPort     int

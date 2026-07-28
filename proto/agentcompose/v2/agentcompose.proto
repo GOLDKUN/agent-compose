@@ -844,6 +844,7 @@ message AgentSpec {
 }
 
 message SandboxSpec {
+  // Runtime handling after a confirmed stop. Empty defaults to "remove".
   string stopped_runtime_policy = 1;
 }
 

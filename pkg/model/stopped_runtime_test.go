@@ -8,7 +8,7 @@ func TestNormalizeStoppedRuntimePolicy(t *testing.T) {
 		want  string
 		ok    bool
 	}{
-		{want: StoppedRuntimePolicyRetain, ok: true},
+		{want: StoppedRuntimePolicyRemove, ok: true},
 		{value: " retain ", want: StoppedRuntimePolicyRetain, ok: true},
 		{value: "REMOVE", want: StoppedRuntimePolicyRemove, ok: true},
 		{value: "prune"},
@@ -22,10 +22,12 @@ func TestNormalizeStoppedRuntimePolicy(t *testing.T) {
 }
 
 func TestLegacySandboxDefaultsToRetainedRuntime(t *testing.T) {
-	sandbox := &Sandbox{}
-	if policy := EffectiveStoppedRuntimePolicy(sandbox); policy != StoppedRuntimePolicyRetain {
-		t.Fatalf("legacy policy = %q, want retain", policy)
+	for _, sandbox := range []*Sandbox{nil, {}, {StoppedRuntimePolicy: " "}, {StoppedRuntimePolicy: "invalid"}} {
+		if policy := EffectiveStoppedRuntimePolicy(sandbox); policy != StoppedRuntimePolicyRetain {
+			t.Fatalf("legacy policy = %q, want retain", policy)
+		}
 	}
+	sandbox := &Sandbox{}
 	if state := EffectiveStoppedRuntimeState(sandbox); state != StoppedRuntimeStateRetained {
 		t.Fatalf("legacy state = %q, want retained", state)
 	}
