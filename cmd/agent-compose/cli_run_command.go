@@ -84,6 +84,9 @@ func runComposeListProjectsCommand(cmd *cobra.Command, cli cliOptions, options c
 }
 
 func runComposeUpCommand(cmd *cobra.Command, cli cliOptions) error {
+	if cli.ProjectName != "" {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("up does not support --project-name; project identity comes from the compose file")}
+	}
 	composePath, normalized, err := loadResolvedNormalizedCompose(cmd.Context(), cli)
 	if err != nil {
 		return err
