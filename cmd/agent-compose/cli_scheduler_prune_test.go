@@ -70,6 +70,9 @@ func TestIntegrationCLISchedulerPruneMapsFiltersAndJSONStats(t *testing.T) {
 	composePath := writeSchedulerPruneCompose(t)
 	var captured *agentcomposev2.PruneSchedulerRunsRequest
 	server := newComposeServiceStubServer(t, composeServiceStubs{project: projectServiceStub{
+		getProject: func(_ context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
+			return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProject(req.Msg.GetProject().GetProjectId(), "scheduler-prune-test", composePath)}), nil
+		},
 		pruneSchedulerRuns: func(_ context.Context, req *connect.Request[agentcomposev2.PruneSchedulerRunsRequest]) (*connect.Response[agentcomposev2.PruneSchedulerRunsResponse], error) {
 			captured = req.Msg
 			return connect.NewResponse(&agentcomposev2.PruneSchedulerRunsResponse{
@@ -105,6 +108,7 @@ func TestIntegrationCLISchedulerPruneMapsFiltersAndJSONStats(t *testing.T) {
 		output.Scheduler != "reviewer" || output.TriggerID != captured.GetTriggerId() || !slices.Equal(output.Statuses, []string{"failed", "succeeded"}) {
 		t.Fatalf("output=%#v", output)
 	}
+	assertSchedulerProjectJSONMatchesSummary(t, stdout, testSchedulerProjectSummary(t, "scheduler-prune-test", composePath))
 }
 
 func TestIntegrationCLISchedulerPruneSupportsHistoricalTriggerID(t *testing.T) {

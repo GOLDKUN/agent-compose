@@ -3,11 +3,14 @@ package main
 import (
 	"agent-compose/pkg/agentcompose/api"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	"context"
 	"fmt"
 	"io"
 	"strings"
 	"text/tabwriter"
 
+	"connectrpc.com/connect"
 	"gopkg.in/yaml.v3"
 )
 
@@ -110,6 +113,62 @@ func writeSchedulerLogsText(out io.Writer, output composeSchedulerLogsOutput) er
 	return nil
 }
 
+type composeSchedulerProjectOutput struct {
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	ShortID         string  `json:"short_id"`
+	SourcePath      string  `json:"source_path,omitempty"`
+	CurrentRevision *uint64 `json:"current_revision,omitempty"`
+	SpecHash        string  `json:"spec_hash,omitempty"`
+	AgentCount      *uint32 `json:"agent_count,omitempty"`
+	SchedulerCount  *uint32 `json:"scheduler_count,omitempty"`
+}
+
+func schedulerProjectOutput(ctx context.Context, client agentcomposev2connect.ProjectServiceClient, runtimeProject composeRuntimeProject) composeSchedulerProjectOutput {
+	// 权威摘要来自 daemon 已应用状态，字段规范化由 daemon 负责。此处与
+	// composeProjectSummaryOutput 同源直接映射，保证 scheduler JSON 的 project
+	// 字段与 `inspect project --json` 一致。
+	if runtimeProject.summaryLoaded {
+		return schedulerProjectOutputFromSummary(runtimeProject.project.GetSummary())
+	}
+
+	// 退化路径：只能解析本地项目身份时，按需补全摘要。补全仅服务 JSON 展示，
+	// scheduler 历史查询不依赖当前部署状态，失败时退化为最小项目引用。
+	response, err := client.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: runtimeProject.id()}},
+	}))
+	if err == nil && response != nil && response.Msg != nil {
+		if loadedSummary := response.Msg.GetProject().GetSummary(); strings.TrimSpace(loadedSummary.GetProjectId()) != "" {
+			return schedulerProjectOutputFromSummary(loadedSummary)
+		}
+	}
+
+	summary := runtimeProject.project.GetSummary()
+	return composeSchedulerProjectOutput{
+		ID:         displayOpaqueID(summary.GetProjectId()),
+		Name:       summary.GetName(),
+		ShortID:    shortOpaqueID(summary.GetProjectId()),
+		SourcePath: firstNonEmptyString(summary.GetSourcePath(), runtimeProject.composePath),
+	}
+}
+
+// schedulerProjectOutputFromSummary 映射权威项目摘要，数值字段用指针保留合法的零值。
+func schedulerProjectOutputFromSummary(summary *agentcomposev2.ProjectSummary) composeSchedulerProjectOutput {
+	currentRevision := summary.GetCurrentRevision()
+	agentCount := summary.GetAgentCount()
+	schedulerCount := summary.GetSchedulerCount()
+	return composeSchedulerProjectOutput{
+		ID:              displayOpaqueID(summary.GetProjectId()),
+		Name:            summary.GetName(),
+		ShortID:         shortOpaqueID(summary.GetProjectId()),
+		SourcePath:      summary.GetSourcePath(),
+		CurrentRevision: &currentRevision,
+		SpecHash:        summary.GetSpecHash(),
+		AgentCount:      &agentCount,
+		SchedulerCount:  &schedulerCount,
+	}
+}
+
 type composeProjectSchedulerOutput struct {
 	AgentName    string `json:"agent_name"`
 	SchedulerID  string `json:"scheduler_id"`
@@ -118,31 +177,31 @@ type composeProjectSchedulerOutput struct {
 }
 
 type composeSchedulerListOutput struct {
-	Project  composeUpProjectOutput        `json:"project"`
+	Project  composeSchedulerProjectOutput `json:"project"`
 	Triggers []composeSchedulerTriggerItem `json:"triggers"`
 }
 
 type composeSchedulerInspectOutput struct {
-	Project    composeUpProjectOutput       `json:"project"`
-	Resource   string                       `json:"resource"`
-	Source     string                       `json:"source"`
-	AgentName  string                       `json:"agent_name"`
-	Scheduler  *composeSchedulerItem        `json:"scheduler,omitempty"`
-	Trigger    *composeSchedulerTriggerItem `json:"trigger,omitempty"`
-	Run        *composeSchedulerRunItem     `json:"run,omitempty"`
-	Definition map[string]any               `json:"definition,omitempty"`
-	Registered map[string]any               `json:"registered,omitempty"`
+	Project    composeSchedulerProjectOutput `json:"project"`
+	Resource   string                        `json:"resource"`
+	Source     string                        `json:"source"`
+	AgentName  string                        `json:"agent_name"`
+	Scheduler  *composeSchedulerItem         `json:"scheduler,omitempty"`
+	Trigger    *composeSchedulerTriggerItem  `json:"trigger,omitempty"`
+	Run        *composeSchedulerRunItem      `json:"run,omitempty"`
+	Definition map[string]any                `json:"definition,omitempty"`
+	Registered map[string]any                `json:"registered,omitempty"`
 }
 
 type composeSchedulerRunsOutput struct {
-	Project composeUpProjectOutput    `json:"project"`
-	Runs    []composeSchedulerRunItem `json:"runs"`
+	Project composeSchedulerProjectOutput `json:"project"`
+	Runs    []composeSchedulerRunItem     `json:"runs"`
 }
 
 type composeSchedulerLogsOutput struct {
-	Project composeUpProjectOutput     `json:"project"`
-	Run     *composeSchedulerRunItem   `json:"run,omitempty"`
-	Events  []composeSchedulerLogEvent `json:"events"`
+	Project composeSchedulerProjectOutput `json:"project"`
+	Run     *composeSchedulerRunItem      `json:"run,omitempty"`
+	Events  []composeSchedulerLogEvent    `json:"events"`
 }
 
 func composeProjectSchedulerOutputFromProto(scheduler *agentcomposev2.ProjectScheduler) composeProjectSchedulerOutput {
