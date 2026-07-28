@@ -63,10 +63,13 @@ COPY scripts/build-agent-compose-binary.sh scripts/build-agent-compose-binary.sh
 COPY scripts/with-go-toolchain.sh scripts/with-go-toolchain.sh
 COPY go.mod go.sum ./
 RUN go env -w GOPROXY="${GOPROXY}" && go mod download
+RUN go install github.com/bufbuild/buf/cmd/buf@v1.68.1
 COPY cmd ./cmd
 COPY pkg ./pkg
 COPY assets ./assets
 COPY proto ./proto
+COPY buf.yaml buf.gen.yaml ./
+RUN buf generate
 ARG VERSION=0
 ARG TARGETARCH
 RUN target_arch="${TARGETARCH:-$(dpkg --print-architecture)}" && \

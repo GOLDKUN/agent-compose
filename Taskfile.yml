@@ -67,7 +67,7 @@ tasks:
       - echo "Deps ready"
 
   generate:
-    desc: Generate all committed source artifacts
+    desc: Generate source artifacts
     cmds:
       - task: generate:proto
 
@@ -135,6 +135,7 @@ tasks:
   lint:go:
     desc: Lint and format Go project code
     dir: '{{.TASKFILE_DIR}}'
+    deps: ['generate:proto']
     cmds:
       - mkdir -p {{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_BUILD_CACHE_DIR}}
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint fmt --no-config --diff {{.GO_LINT_PACKAGES}}
@@ -150,6 +151,7 @@ tasks:
 
   test:
     desc: Run all test shapes with coverage quality gates
+    deps: ['generate:proto']
     cmds:
       - task: test:scripts
       - task: test:deploy
@@ -158,7 +160,9 @@ tasks:
   test:scripts:
     desc: Run deterministic build helper, verifier, and CI topology checks
     dir: '{{.TASKFILE_DIR}}'
+    deps: ['generate:proto']
     cmds:
+      - ./scripts/tests/test-generated-proto-contract.sh
       - ./scripts/tests/test-proto-breaking-ci-contract.sh
       - ./scripts/tests/test-build-agent-compose-binary.sh
       - ./scripts/tests/test-verify-agent-compose-binary.sh
@@ -187,6 +191,7 @@ tasks:
 
   test:unit:
     desc: Run unit tests
+    deps: ['generate:proto']
     cmds:
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} ./scripts/run-go-test-shape.sh unit
       - cd runtime/agent-compose-runtime-sdk && npm test
@@ -194,12 +199,14 @@ tasks:
 
   test:integration:
     desc: Run integration tests
+    deps: ['generate:proto']
     cmds:
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} ./scripts/run-go-test-shape.sh integration
       - cd runtime/javascript && TEST_SHAPE=integration npm run test:unit
 
   test:e2e:
     desc: Run E2E tests
+    deps: ['generate:proto']
     cmds:
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} ./scripts/run-go-test-shape.sh e2e
       - cd runtime/javascript && TEST_SHAPE=e2e npm run test:unit
@@ -255,6 +262,7 @@ tasks:
   test:e2e:docker-scheduler:
     desc: Run the opt-in Docker scheduler script E2E test
     dir: '{{.TASKFILE_DIR}}'
+    deps: ['generate:proto']
     cmds:
       - |
         image="${AGENT_COMPOSE_E2E_GUEST_IMAGE:-agent-compose-guest:latest}"
@@ -292,7 +300,7 @@ tasks:
   test:runtime-smoke:
     desc: Run opt-in real BoxLite/Microsandbox runtime smoke tests
     dir: '{{.TASKFILE_DIR}}'
-    deps: ['prepare:boxlite-dev', 'prepare:microsandbox-dev']
+    deps: ['generate:proto', 'prepare:boxlite-dev', 'prepare:microsandbox-dev']
     cmds:
       - |
         set -euo pipefail
@@ -325,7 +333,7 @@ tasks:
   test:boxlite-mount-repro:
     desc: Run manual BoxLite multi-directory mount repro tests
     dir: '{{.TASKFILE_DIR}}'
-    deps: ['prepare:boxlite-dev']
+    deps: ['generate:proto', 'prepare:boxlite-dev']
     cmds:
       - |
         set -euo pipefail
@@ -412,6 +420,7 @@ tasks:
   build:agent-compose:darwin:
     desc: Build the Darwin Docker-only agent-compose binary
     dir: '{{.TASKFILE_DIR}}'
+    deps: ['generate:proto']
     env:
       AGENT_COMPOSE_BUILD_TARGET_ARCH: '{{.GOARCH}}'
       AGENT_COMPOSE_BUILD_VERSION: '{{.VERSION}}'
@@ -421,7 +430,7 @@ tasks:
   build:agent-compose:linux:
     desc: Build the Linux full agent-compose binary
     dir: '{{.TASKFILE_DIR}}'
-    deps: ['prepare:boxlite-dev', 'prepare:microsandbox-dev']
+    deps: ['generate:proto', 'prepare:boxlite-dev', 'prepare:microsandbox-dev']
     env:
       AGENT_COMPOSE_BUILD_TARGET_ARCH: '{{.GOARCH}}'
       AGENT_COMPOSE_BUILD_VERSION: '{{.VERSION}}'
@@ -431,6 +440,7 @@ tasks:
   build:proto:
     desc: Verify maintained agent-compose protobuf Go packages build
     dir: '{{.TASKFILE_DIR}}'
+    deps: ['generate:proto']
     cmds:
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} go build ./proto/agentcompose/v2 ./proto/agentcompose/v2/agentcomposev2connect
 

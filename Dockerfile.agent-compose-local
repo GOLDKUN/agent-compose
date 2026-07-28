@@ -26,10 +26,14 @@ COPY scripts/with-go-toolchain.sh scripts/with-go-toolchain.sh
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go env -w GOPROXY="${GOPROXY}" && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go install github.com/bufbuild/buf/cmd/buf@v1.68.1
 COPY cmd ./cmd
 COPY pkg ./pkg
 COPY assets ./assets
 COPY proto ./proto
+COPY buf.yaml buf.gen.yaml ./
+RUN buf generate
 ARG VERSION=0
 ARG TARGETARCH
 RUN --mount=type=cache,target=/root/.cache/go-build \
