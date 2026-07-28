@@ -21,7 +21,7 @@ agent-compose [global options] <command> [command options] [arguments]
 | --- | --- |
 | `-f, --file <path>` | 指定 project 配置文件。支持 `agent-compose.yml` 和 `agent-compose.yaml`。使用该参数后，可以在任意目录操作该 project，project root 为配置文件所在目录。 |
 | `--host <endpoint>` | 指定 daemon 地址。可以连接本机 daemon，也可以连接远程 daemon。 |
-| `--project-name <name>` | 按名称选择 daemon 中已部署的 project；它不会修改 compose 文件声明的项目名称。 |
+| `--project-name <name>` | 按名称选择 daemon 中已部署的 project；`up` 和 `project up` 不支持该参数，且它不会修改 compose 文件声明的项目名称。 |
 | `--json` | 使用 JSON 输出，供脚本、AI 和自动化系统解析。 |
 
 示例：
@@ -36,7 +36,7 @@ agent-compose --host http://10.0.0.12:7410 ls --json
 
 - 未指定 `-f` 和 `--project-name` 时，project 范围的命令在当前目录查找 `agent-compose.yml` 或 `agent-compose.yaml`。
 - 指定 `--project-name` 时，已部署项目命令直接选择 daemon project，不读取 compose 文件；即使同时指定 `-f` 也是如此。
-- `config`、`up` 等本地编排命令始终使用 compose 文件声明的项目名称（或根据其目录推导），`--project-name` 不会覆盖该名称。
+- 本地编排命令始终使用 compose 文件声明的项目名称（或根据其目录推导）。`up` 和 `project up` 会拒绝 `--project-name`，不再静默忽略；`config` 也不会用它覆盖 compose project 名称。
 - 使用 `-f` 时，不需要切换到 project root。
 - `--host` 只决定 CLI 连接哪个 daemon；sandbox 实际运行在 daemon 所在环境中。
 - daemon 不再消费浏览器登录用的 `AUTH_*` / `OAUTH_*` 配置；UI 浏览器认证由 agent-compose-ui server 处理。
@@ -286,7 +286,7 @@ agent-compose scheduler inspect <scheduler-or-trigger-or-run-ref> [--scheduler <
 
 查看当前 project 下的 sandbox。默认只显示运行中的 sandbox。使用 `--all` 时仍限定当前 project，但会包含所有状态。
 该 project 必须已经存在于 daemon 中；执行 `agent-compose down` 后，需要先重新执行 `agent-compose up`，再使用 `ps`。
-使用 `--project-name <name>` 时，会直接选择 daemon 中已有的 project；即使同时指定 `--file`，已部署项目选择也不会读取 compose 文件。本地编排命令仍要求 compose 文件，且绝不会用 `--project-name` 修改其中的项目名称。
+使用 `--project-name <name>` 时，会直接选择 daemon 中已有的 project；即使同时指定 `--file`，已部署项目选择也不会读取 compose 文件。本地编排命令仍要求 compose 文件；`up` 和 `project up` 会拒绝 `--project-name`，`config` 也不会用它修改 compose project 名称。
 
 ```bash
 agent-compose ps
