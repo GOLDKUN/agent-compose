@@ -38,7 +38,9 @@ RUN if [ -n "${BUILDPLATFORM}" ] && [ "${BUILDPLATFORM}" != "${TARGETPLATFORM}" 
       sed -i 's/^#DisableSandboxSyscalls/DisableSandboxSyscalls/' /etc/pacman.conf; \
     fi && \
     if [ -n "${ARCHLINUX_MIRROR}" ]; then \
-      printf 'Server = %s/$repo/os/$arch\n' "${ARCHLINUX_MIRROR%/}" > /etc/pacman.d/mirrorlist; \
+      printf 'Server = %s/$repo/os/$arch\n' "${ARCHLINUX_MIRROR%/}" > /tmp/pacman-mirrorlist && \
+      cat /etc/pacman.d/mirrorlist >> /tmp/pacman-mirrorlist && \
+      mv /tmp/pacman-mirrorlist /etc/pacman.d/mirrorlist; \
     fi && \
     pacman -Syu --noconfirm --needed \
       ca-certificates \
