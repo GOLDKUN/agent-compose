@@ -215,6 +215,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
+      - name: Generate Protobuf sources
+        run: buf generate
       - uses: docker/setup-buildx-action@v3
       - name: Build loadable guest image
         uses: docker/build-push-action@v6

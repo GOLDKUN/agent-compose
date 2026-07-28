@@ -294,6 +294,7 @@ tasks:
   test:e2e:image-docker:
     desc: Run the full daemon image without KVM and exercise a Docker sandbox lifecycle
     dir: '{{.TASKFILE_DIR}}'
+    deps: ['generate:proto']
     cmds:
       - GOCACHE={{.GO_BUILD_CACHE_DIR}} ./scripts/test-image-docker-e2e.sh
 
