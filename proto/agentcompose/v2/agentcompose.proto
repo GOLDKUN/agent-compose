@@ -961,14 +961,21 @@ message GetRunResponse {
 }
 
 message ListRunsRequest {
-
   string project_id = 1;
   string agent_name = 2;
   string scheduler_id = 3;
   RunStatus status = 4;
   RunSource source = 5;
-  string started_from = 6;
-  string started_to = 7;
+  // Inclusive lower bound for the run start time. Values must use millisecond precision;
+  // timestamps with sub-millisecond precision return INVALID_ARGUMENT.
+  // An unset field applies no lower bound.
+  // Invalid timestamps, or a value later than started_to, return INVALID_ARGUMENT.
+  google.protobuf.Timestamp started_from = 6;
+  // Inclusive upper bound for the run start time. Values must use millisecond precision;
+  // timestamps with sub-millisecond precision return INVALID_ARGUMENT.
+  // An unset field applies no upper bound.
+  // Invalid timestamps, or a value earlier than started_from, return INVALID_ARGUMENT.
+  google.protobuf.Timestamp started_to = 7;
   // Number of matching resources to skip. Values at or above total return an empty page.
   uint32 offset = 8;
   // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
