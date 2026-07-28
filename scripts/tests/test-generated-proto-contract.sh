@@ -23,4 +23,15 @@ for generated_file in "${generated_files[@]}"; do
   fi
 done
 
+for dockerfile in Dockerfile Dockerfile.agent-compose-local; do
+  if ! grep -Fq 'GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@v1.68.1' "$dockerfile"; then
+    echo "Dockerfile must install buf into PATH: $dockerfile" >&2
+    exit 1
+  fi
+  if ! grep -Fq 'RUN buf generate' "$dockerfile"; then
+    echo "Dockerfile must generate protobuf sources: $dockerfile" >&2
+    exit 1
+  fi
+done
+
 echo "generated protobuf contract passed"

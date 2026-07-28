@@ -63,7 +63,7 @@ COPY scripts/build-agent-compose-binary.sh scripts/build-agent-compose-binary.sh
 COPY scripts/with-go-toolchain.sh scripts/with-go-toolchain.sh
 COPY go.mod go.sum ./
 RUN go env -w GOPROXY="${GOPROXY}" && go mod download
-RUN go install github.com/bufbuild/buf/cmd/buf@v1.68.1
+RUN GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@v1.68.1
 COPY cmd ./cmd
 COPY pkg ./pkg
 COPY assets ./assets
