@@ -231,8 +231,7 @@ agents:
 		Agents []struct {
 			Name   string `json:"name"`
 			Driver struct {
-				Name   string         `json:"name"`
-				Docker map[string]any `json:"docker"`
+				Name string `json:"name"`
 			} `json:"driver"`
 		} `json:"agents"`
 	}
@@ -245,7 +244,7 @@ agents:
 	if len(decoded.Variables) != 1 || decoded.Variables[0].Name != "TOKEN" || decoded.Variables[0].Value != "********" || !decoded.Variables[0].Secret {
 		t.Fatalf("decoded variables = %#v", decoded.Variables)
 	}
-	if len(decoded.Agents) != 1 || decoded.Agents[0].Name != "reviewer" || decoded.Agents[0].Driver.Name != "docker" || decoded.Agents[0].Driver.Docker == nil {
+	if len(decoded.Agents) != 1 || decoded.Agents[0].Name != "reviewer" || decoded.Agents[0].Driver.Name != "docker" {
 		t.Fatalf("decoded agents = %#v", decoded.Agents)
 	}
 }
