@@ -66,7 +66,7 @@ func TestE2EDockerJupyterHostDaemonStopResume(t *testing.T) {
 				Image:    image,
 				Driver: &agentcomposev2.DriverSpec{
 					Name:   "docker",
-					Docker: &agentcomposev2.DockerDriverSpec{},
+					Config: &agentcomposev2.DriverSpec_Docker{Docker: &agentcomposev2.DockerDriverSpec{}},
 				},
 			}},
 		},

@@ -163,6 +163,61 @@ func TestProjectSpecToProtoIncludesJupyter(t *testing.T) {
 	}
 }
 
+func TestDriverYAMLShapeRequiresMatchingNameAndConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		driver     *agentcomposev2.DriverSpec
+		wantConfig string
+		wantIssue  bool
+	}{
+		{
+			name: "matching docker",
+			driver: &agentcomposev2.DriverSpec{
+				Name:   compose.DriverDocker,
+				Config: &agentcomposev2.DriverSpec_Docker{Docker: &agentcomposev2.DockerDriverSpec{Host: "unix:///docker.sock"}},
+			},
+			wantConfig: compose.DriverDocker,
+		},
+		{
+			name: "missing name",
+			driver: &agentcomposev2.DriverSpec{
+				Config: &agentcomposev2.DriverSpec_Docker{Docker: &agentcomposev2.DockerDriverSpec{}},
+			},
+			wantIssue: true,
+		},
+		{
+			name: "missing config",
+			driver: &agentcomposev2.DriverSpec{
+				Name: compose.DriverDocker,
+			},
+			wantIssue: true,
+		},
+		{
+			name: "mismatched config",
+			driver: &agentcomposev2.DriverSpec{
+				Name:   compose.DriverDocker,
+				Config: &agentcomposev2.DriverSpec_Boxlite{Boxlite: &agentcomposev2.BoxliteDriverSpec{}},
+			},
+			wantIssue: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			shape, issues := DriverYAMLShape("agents.worker.driver", test.driver)
+			if test.wantIssue {
+				if len(issues) != 1 || shape != nil {
+					t.Fatalf("shape=%#v issues=%#v", shape, issues)
+				}
+				return
+			}
+			if len(issues) != 0 || shape[test.wantConfig] == nil {
+				t.Fatalf("shape=%#v issues=%#v", shape, issues)
+			}
+		})
+	}
+}
+
 func TestAgentEnablementRoundTripsThroughAPIShape(t *testing.T) {
 	spec := &compose.NormalizedProjectSpec{
 		Name: "enablement",

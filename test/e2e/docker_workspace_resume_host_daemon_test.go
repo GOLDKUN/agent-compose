@@ -96,7 +96,7 @@ func TestE2EDockerFileWorkspaceResumePreservesState(t *testing.T) {
 				Name:      "worker",
 				Provider:  "codex",
 				Image:     image,
-				Driver:    &agentcomposev2.DriverSpec{Name: "docker", Docker: &agentcomposev2.DockerDriverSpec{}},
+				Driver:    &agentcomposev2.DriverSpec{Name: "docker", Config: &agentcomposev2.DriverSpec_Docker{Docker: &agentcomposev2.DockerDriverSpec{}}},
 				Workspace: &agentcomposev2.WorkspaceSpec{Name: "source"},
 			}},
 		},
