@@ -37,7 +37,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 
 	project, err := store.UpsertProject(ctx, domain.ProjectRecord{
 		ID:         "project-regression",
-		Name:       "Scheduler run regression",
+		Name:       "scheduler-run-regression",
 		SourcePath: "/tmp/scheduler-run-regression",
 		SourceJSON: `{"kind":"local"}`,
 	})
@@ -47,7 +47,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	revision, _, err := store.SaveProjectRevision(ctx, domain.ProjectRevisionRecord{
 		ProjectID: project.ID,
 		SpecHash:  "regression-spec",
-		SpecJSON:  `{"name":"Scheduler run regression","agents":[{"name":"reviewer","enabled":true,"scheduler":{"enabled":true,"sandbox_policy":"sticky","concurrency_policy":"skip","script":"function main() {}"}}]}`,
+		SpecJSON:  `{"name":"scheduler-run-regression","agents":[{"name":"reviewer","enabled":true,"scheduler":{"enabled":true,"sandbox_policy":"sticky","concurrency_policy":"skip","script":"function main() {}"}}]}`,
 	})
 	if err != nil {
 		t.Fatalf("create project revision: %v", err)

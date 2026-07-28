@@ -14,7 +14,7 @@ func TestListProjectAgentRunStatesAggregatesAllAgentRuns(t *testing.T) {
 	if err := store.initSchema(ctx); err != nil {
 		t.Fatalf("init schema: %v", err)
 	}
-	project, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-run-states", Name: "run states"})
+	project, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-run-states", Name: "run-states"})
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}

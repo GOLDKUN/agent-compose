@@ -18,7 +18,7 @@ func TestRunSupervisorStopActiveRunRemovesActiveBeforeMarkCanceled(t *testing.T)
 	store := newRunSupervisorTestConfigStore(t)
 	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{
 		ID:         "project-1",
-		Name:       "Project",
+		Name:       "project",
 		SourcePath: "/tmp/project",
 		SourceJSON: "{}",
 	}); err != nil {
@@ -31,7 +31,7 @@ func TestRunSupervisorStopActiveRunRemovesActiveBeforeMarkCanceled(t *testing.T)
 	if _, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{
 		RunID:       "run-1",
 		ProjectID:   "project-1",
-		ProjectName: "Project",
+		ProjectName: "project",
 		AgentName:   "worker",
 		AgentID:     agent.ID,
 		Source:      domain.ProjectRunSourceManual,

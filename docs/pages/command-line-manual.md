@@ -183,6 +183,10 @@ agent-compose -f /path/to/project/agent-compose.yml up
 
 Current `up` semantics are daemon-style: the command applies the project and returns. It does not attach project logs and does not support `-d/--detach`.
 
+Project identity is resolved by the normalized project name, not by the compose file path. Applying the same name from a moved compose file updates the existing daemon project and retains its ID and history.
+
+If an upgrade finds multiple stored projects with the same name, it preserves every project and deterministically renames the additional records to available `<name>-N` values. Check `project ls` before operating on those projects and use the assigned name in the corresponding compose file.
+
 The top-level `up` command is an alias for `project up`.
 
 ## `project down`: Stop a Project
@@ -201,7 +205,7 @@ Notes:
 
 - `down` only affects the selected project.
 - When using `-f` or `--project-name`, verify that the command targets the intended project.
-- If some sandboxes cannot be stopped, the command exits non-zero and reports the failed items.
+- If some sandboxes cannot be stopped, the command exits non-zero, reports the failed items, and leaves the project active so `down` can be retried.
 
 ## `run`: Run a Sandbox
 

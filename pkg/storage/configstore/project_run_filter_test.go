@@ -15,7 +15,7 @@ func TestListProjectRunsByOptionsFiltersInclusiveStartRange(t *testing.T) {
 	if err := store.initSchema(ctx); err != nil {
 		t.Fatalf("init schema: %v", err)
 	}
-	project, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-1", Name: "Project", SourcePath: "/project", SourceJSON: `{}`})
+	project, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-1", Name: "project", SourcePath: "/project", SourceJSON: `{}`})
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}

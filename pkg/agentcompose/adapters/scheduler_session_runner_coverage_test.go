@@ -329,7 +329,7 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, resolver, bridge.streams, nil, nil, bridge.agentExecutor)
 	projectRoot := t.TempDir()
 	projectPath := filepath.Join(projectRoot, "agent-compose.yml")
-	if _, err := bridge.configDB.UpsertProject(ctx, domain.ProjectRecord{ID: "project-1", Name: "Project", SourcePath: projectPath}); err != nil {
+	if _, err := bridge.configDB.UpsertProject(ctx, domain.ProjectRecord{ID: "project-1", Name: "project", SourcePath: projectPath}); err != nil {
 		t.Fatalf("UpsertProject returned error: %v", err)
 	}
 	projectVolume, err := bridge.configDB.CreateVolume(ctx, domain.VolumeRecord{ID: "vol-request-cache", Name: "project_request-cache", Driver: domain.VolumeDriverLocal, Path: t.TempDir()})

@@ -77,7 +77,7 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 }
 
 func TestProjectNormalizeAndScanCoverage(t *testing.T) {
-	project, err := NormalizeRecord(domain.ProjectRecord{ID: " project-1 ", Name: " Project ", SourcePath: ".", CurrentRevision: 2})
+	project, err := NormalizeRecord(domain.ProjectRecord{ID: " project-1 ", Name: " project ", SourcePath: ".", CurrentRevision: 2})
 	if err != nil {
 		t.Fatalf("NormalizeRecord returned error: %v", err)
 	}

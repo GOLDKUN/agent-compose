@@ -58,11 +58,19 @@ func runComposeSchedulerPruneCommand(cmd interface {
 	Context() context.Context
 	OutOrStdout() io.Writer
 }, cli cliOptions, options composeSchedulerPruneOptions) error {
+	statuses, statusNames, err := parseSchedulerRunPruneStatuses(options.Status)
+	if err != nil {
+		return err
+	}
+	olderThanSeconds, err := parseOlderThanSeconds(options.OlderThan)
+	if err != nil {
+		return commandExitError{Code: exitCodeUsage, Err: err}
+	}
 	clients, err := newCLIServiceClients(cli)
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler prune", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler prune")
 	if err != nil {
 		return err
 	}
@@ -85,14 +93,6 @@ func runComposeSchedulerPruneCommand(cmd interface {
 			}
 			return err
 		}
-	}
-	statuses, statusNames, err := parseSchedulerRunPruneStatuses(options.Status)
-	if err != nil {
-		return err
-	}
-	olderThanSeconds, err := parseOlderThanSeconds(options.OlderThan)
-	if err != nil {
-		return commandExitError{Code: exitCodeUsage, Err: err}
 	}
 	response, err := clients.project.PruneSchedulerRuns(cmd.Context(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
 		Project:          &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},

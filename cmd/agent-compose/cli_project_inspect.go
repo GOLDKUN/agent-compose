@@ -16,7 +16,7 @@ import (
 func runComposeProjectInspectCommand(cmd *cobra.Command, cli cliOptions, clients cliServiceClients, ref string) error {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "inspect project", runtimeProjectWithState)
+		runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "inspect project")
 		if err != nil {
 			return err
 		}

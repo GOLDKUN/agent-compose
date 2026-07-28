@@ -24,38 +24,21 @@ func (s *projectStore) UpsertProject(ctx context.Context, project ProjectRecord)
 		return ProjectRecord{}, err
 	}
 	now := time.Now().UTC()
-	existing, found, err := s.getProject(ctx, project.ID, true)
-	if err != nil {
-		return ProjectRecord{}, err
-	}
-	if found {
-		project.CreatedAt = existing.CreatedAt
-		project.CurrentRevision = existing.CurrentRevision
-		if project.SpecHash == "" {
-			project.SpecHash = existing.SpecHash
-		}
-		project.UpdatedAt = now
-		project.RemovedAt = time.Time{}
-		result, err := s.db.ExecContext(ctx, `UPDATE project SET
-			name = ?, short_id = ?, source_path = ?, source_json = ?, spec_hash = ?, updated_at = ?, removed_at = 0
-			WHERE id = ?`,
-			project.Name, project.ShortID, project.SourcePath, project.SourceJSON, project.SpecHash, project.UpdatedAt.Unix(), project.ID)
-		if err != nil {
-			return ProjectRecord{}, fmt.Errorf("update project %s: %w", project.ID, err)
-		}
-		if rows, _ := result.RowsAffected(); rows == 0 {
-			return ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", project.ID, fmt.Sprintf("project %s not found", project.ID), nil)
-		}
-		return s.GetProject(ctx, project.ID)
-	}
-
 	project.CreatedAt = now
 	project.UpdatedAt = now
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO project(
 		id, name, short_id, source_path, source_json, current_revision, spec_hash, created_at, updated_at, removed_at
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+	ON CONFLICT(id) DO UPDATE SET
+		name = excluded.name,
+		short_id = excluded.short_id,
+		source_path = excluded.source_path,
+		source_json = excluded.source_json,
+		spec_hash = CASE WHEN excluded.spec_hash = '' THEN project.spec_hash ELSE excluded.spec_hash END,
+		updated_at = excluded.updated_at,
+		removed_at = 0`,
 		project.ID, project.Name, project.ShortID, project.SourcePath, project.SourceJSON, project.CurrentRevision, project.SpecHash, project.CreatedAt.Unix(), project.UpdatedAt.Unix()); err != nil {
-		return ProjectRecord{}, fmt.Errorf("insert project %s: %w", project.ID, err)
+		return ProjectRecord{}, fmt.Errorf("upsert project %s: %w", project.ID, err)
 	}
 	return s.GetProject(ctx, project.ID)
 }

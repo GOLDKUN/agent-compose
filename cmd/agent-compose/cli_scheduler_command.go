@@ -59,7 +59,7 @@ func runComposeSchedulerRunsCommand(cmd *cobra.Command, cli cliOptions, options 
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler runs", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler runs")
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func runComposeSchedulerLogsCommand(cmd *cobra.Command, cli cliOptions, options 
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler logs", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler logs")
 	if err != nil {
 		return err
 	}
@@ -187,7 +187,7 @@ func runComposeSchedulerInspectCommand(cmd *cobra.Command, cli cliOptions, optio
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler inspect", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler inspect")
 	if err != nil {
 		return err
 	}

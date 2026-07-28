@@ -22,7 +22,7 @@ const (
 	databaseName         = "data.db"
 	journalName          = ".agent-compose-migrate.json"
 	inPlaceBackupName    = ".agent-compose-migrate-backup"
-	currentSchemaVersion = 8
+	currentSchemaVersion = 9
 )
 
 var knownMigrationChecksums = map[int64]string{
@@ -34,6 +34,7 @@ var knownMigrationChecksums = map[int64]string{
 	6: "92da2ea1c85e7d1321ca1e4260370a3d12057219005a83808529dbdd8d25299a",
 	7: "a8cb740e25992d3f3121bcfbff07c67cff699e8625d281edf60c0e76f91ce9ba",
 	8: "4569a4d7f82de70d3a2545dcdff07e0929e55daffaedf13fd6f2b8a8bcbf1d3e",
+	9: "7090094be268e368c74fd6a98709d01fc2423534ee6f03a0202b426d050ade48",
 }
 
 var ErrReported = errors.New("migration failure is included in the report")

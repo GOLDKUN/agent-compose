@@ -306,8 +306,8 @@ agents:
 			project: projectServiceStub{
 				removeProject: func(_ context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
 					callCount++
-					if strings.TrimSpace(req.Msg.GetProject().GetProjectId()) == "" {
-						t.Fatalf("RemoveProject project id is empty: %#v", req.Msg.GetProject())
+					if req.Msg.GetProject().GetName() != "cli-down-demo" || req.Msg.GetProject().GetProjectId() != "" {
+						t.Fatalf("RemoveProject selector = %#v, want project name", req.Msg.GetProject())
 					}
 					project := testCLIProject("project-down", "cli-down-demo", "compose.yml")
 					if callCount == 1 {

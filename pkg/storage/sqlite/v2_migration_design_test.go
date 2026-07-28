@@ -97,8 +97,8 @@ func TestV2MigrationDesignPreservesManagedHistory(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&historyCount); err != nil {
 		t.Fatalf("count v2 migration history: %v", err)
 	}
-	if historyCount != 8 {
-		t.Fatalf("v2 migration history count = %d, want 8", historyCount)
+	if historyCount != len(chain) {
+		t.Fatalf("v2 migration history count = %d, want %d", historyCount, len(chain))
 	}
 }
 
@@ -372,7 +372,7 @@ func TestCronLocalTimezoneMigrationOnlyUpdatesDeclarativeSchedulers(t *testing.T
 			if _, err := db.ExecContext(ctx, `UPDATE scheduler_trigger SET spec_json = '{"kind":"cron","expr":"0 9 * * *","timezone":"UTC"}', next_fire_at = 2000 WHERE scheduler_id = 'scheduler-1'`); err != nil {
 				t.Fatalf("set cron trigger: %v", err)
 			}
-			if err := applyMigrationSet(ctx, db, chain); err != nil {
+			if err := applyMigrationSet(ctx, db, chain[:8]); err != nil {
 				t.Fatalf("apply local timezone migration: %v", err)
 			}
 			var specJSON string
@@ -393,8 +393,8 @@ func loadV2MigrationDesignChain(t *testing.T) []migration {
 	if err != nil {
 		t.Fatalf("load migrations: %v", err)
 	}
-	if len(chain) != 8 {
-		t.Fatalf("migration count = %d, want 8", len(chain))
+	if len(chain) != 9 {
+		t.Fatalf("migration count = %d, want 9", len(chain))
 	}
 	return chain
 }

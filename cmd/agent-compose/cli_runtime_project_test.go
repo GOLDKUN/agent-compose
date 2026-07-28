@@ -49,7 +49,7 @@ func TestIntegrationCLIRuntimeCommandsSelectStoredProjectByName(t *testing.T) {
 				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: project}), nil
 			},
 			removeProject: func(_ context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
-				if req.Msg.GetProject().GetProjectId() != "project-stored" {
+				if req.Msg.GetProject().GetName() != "stored-project" || req.Msg.GetProject().GetProjectId() != "" {
 					t.Fatalf("RemoveProject ref = %#v", req.Msg.GetProject())
 				}
 				return connect.NewResponse(&agentcomposev2.RemoveProjectResponse{Project: project}), nil
@@ -106,8 +106,8 @@ func TestIntegrationCLIRuntimeCommandsSelectStoredProjectByName(t *testing.T) {
 			}
 		})
 	}
-	if getProjectCalls != len(tests) {
-		t.Fatalf("GetProject calls = %d, want %d", getProjectCalls, len(tests))
+	if getProjectCalls != len(tests)-1 {
+		t.Fatalf("GetProject calls = %d, want %d", getProjectCalls, len(tests)-1)
 	}
 }
 

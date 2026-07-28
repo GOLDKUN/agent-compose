@@ -302,7 +302,7 @@ func resolveComposeSandboxRefsForCommand(ctx context.Context, cli cliOptions, cl
 			continue
 		}
 		if projectID == "" {
-			runtimeProject, err := resolveComposeRuntimeProject(ctx, clients.project, cli, "resolve sandbox", runtimeProjectIdentityOnly)
+			runtimeProject, err := resolveComposeRuntimeProject(ctx, clients.project, cli, "resolve sandbox")
 			if err != nil {
 				return nil, err
 			}
@@ -325,7 +325,7 @@ func resolveComposeSandboxRefForCommand(ctx context.Context, cli cliOptions, cli
 	if !shouldResolveComposeLogResourceRef(ref) {
 		return ref, nil
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(ctx, clients.project, cli, "resolve sandbox", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(ctx, clients.project, cli, "resolve sandbox")
 	if err != nil {
 		return "", err
 	}

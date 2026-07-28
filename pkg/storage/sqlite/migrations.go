@@ -168,6 +168,9 @@ func applyMigrationSet(ctx context.Context, db *sql.DB, migrations []migration) 
 
 	pending := migrations[len(applied):]
 	for _, item := range pending {
+		if err := applyMigrationDataStep(ctx, conn, item); err != nil {
+			return fmt.Errorf("prepare SQLite migration %s: %w", item.name, err)
+		}
 		if _, err := conn.ExecContext(ctx, item.statement); err != nil {
 			return fmt.Errorf("apply SQLite migration %s: %w", item.name, err)
 		}

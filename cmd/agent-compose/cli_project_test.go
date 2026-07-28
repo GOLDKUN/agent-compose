@@ -1,6 +1,9 @@
 package main
 
 import (
+	"agent-compose/pkg/agentcompose/api"
+	"agent-compose/pkg/compose"
+	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
@@ -736,6 +739,13 @@ func TestComposePSAllIncludesEveryStatusOnlyForCurrentProject(t *testing.T) {
 }
 
 func testCLIProject(projectID, name, sourcePath string) *agentcomposev2.Project {
+	if strings.TrimSpace(projectID) == "" {
+		var err error
+		projectID, err = domain.StableProjectID(name, sourcePath)
+		if err != nil {
+			panic(fmt.Sprintf("resolve test project ID: %v", err))
+		}
+	}
 	return &agentcomposev2.Project{
 		Summary: &agentcomposev2.ProjectSummary{
 			ProjectId:       projectID,
@@ -778,4 +788,19 @@ func testCLIProject(projectID, name, sourcePath string) *agentcomposev2.Project 
 			},
 		},
 	}
+}
+
+func testCLIProjectFromCompose(t *testing.T, projectID, sourcePath string) *agentcomposev2.Project {
+	t.Helper()
+	normalized, err := compose.NormalizeFile(sourcePath)
+	if err != nil {
+		t.Fatalf("normalize project fixture: %v", err)
+	}
+	spec, err := api.ProjectSpecToProtoChecked(normalized)
+	if err != nil {
+		t.Fatalf("encode project fixture: %v", err)
+	}
+	project := testCLIProject(projectID, normalized.Name, sourcePath)
+	project.Spec = spec
+	return project
 }

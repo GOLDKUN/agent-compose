@@ -16,11 +16,18 @@ func (c *Controller) ensureProjectVolumes(ctx context.Context, project domain.Pr
 	if spec == nil || len(spec.Volumes) == 0 {
 		return c.volumes.ReplaceProjectVolumes(ctx, project.ID, nil)
 	}
+	existing, err := c.volumes.ListProjectVolumes(ctx, project.ID)
+	if err != nil {
+		return fmt.Errorf("list project volumes: %w", err)
+	}
 	links := make(map[string]domain.ProjectVolumeLink, len(spec.Volumes))
 	for key, volumeSpec := range spec.Volumes {
 		name := strings.TrimSpace(volumeSpec.Name)
 		if name == "" {
-			name = fmt.Sprintf("%s_%s", spec.Name, key)
+			name = strings.TrimSpace(existing[key].Name)
+			if name == "" {
+				name = fmt.Sprintf("%s_%s", spec.Name, key)
+			}
 		}
 		var record domain.VolumeRecord
 		var err error

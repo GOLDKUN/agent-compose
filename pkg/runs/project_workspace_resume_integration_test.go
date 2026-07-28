@@ -50,7 +50,7 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	const projectID = "project-local-resume"
 	project, err := configDB.UpsertProject(ctx, domain.ProjectRecord{
 		ID:         projectID,
-		Name:       "Project Local Resume",
+		Name:       "project-local-resume",
 		SourcePath: filepath.Join(projectRoot, "agent-compose.yaml"),
 	})
 	if err != nil {

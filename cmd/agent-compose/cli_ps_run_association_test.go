@@ -95,8 +95,9 @@ agents:
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		project: projectServiceStub{
 			getProject: func(_ context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-				projectID = req.Msg.GetProject().GetProjectId()
-				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProject(projectID, "cli-ps-scheduler-run", composePath)}), nil
+				project := testCLIProject(req.Msg.GetProject().GetProjectId(), "cli-ps-scheduler-run", composePath)
+				projectID = project.GetSummary().GetProjectId()
+				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: project}), nil
 			},
 			batchGetLatestSchedulerRuns: func(_ context.Context, req *connect.Request[agentcomposev2.BatchGetLatestSchedulerRunsRequest]) (*connect.Response[agentcomposev2.BatchGetLatestSchedulerRunsResponse], error) {
 				if req.Msg.GetProject().GetProjectId() != projectID || len(req.Msg.GetSandboxIds()) != 1 || req.Msg.GetSandboxIds()[0] != sandboxID {

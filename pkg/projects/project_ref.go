@@ -45,6 +45,14 @@ type ProjectRefStore interface {
 	ListProjects(context.Context, domain.ProjectListOptions) (domain.ProjectListResult, error)
 }
 
+type projectNameStore interface {
+	GetProjectByName(context.Context, string, bool) (domain.ProjectRecord, error)
+}
+
+type projectSourcePathStore interface {
+	GetProjectBySourcePath(context.Context, string, bool) (domain.ProjectRecord, error)
+}
+
 // ResolveProjectRef resolves one project selector against active projects.
 func ResolveProjectRef(ctx context.Context, store ProjectRefStore, ref ProjectRef) (domain.ProjectRecord, error) {
 	if store == nil {
@@ -79,6 +87,16 @@ func resolveProjectByExactMatch(
 	selectorName string,
 	projectValue func(domain.ProjectRecord) string,
 ) (domain.ProjectRecord, error) {
+	if selectorName == "name" {
+		if nameStore, ok := store.(projectNameStore); ok {
+			return nameStore.GetProjectByName(ctx, value, includeRemoved)
+		}
+	}
+	if selectorName == "source path" {
+		if sourcePathStore, ok := store.(projectSourcePathStore); ok {
+			return sourcePathStore.GetProjectBySourcePath(ctx, value, includeRemoved)
+		}
+	}
 	const pageSize = 200
 	var matches []domain.ProjectRecord
 	for offset := 0; ; offset += pageSize {

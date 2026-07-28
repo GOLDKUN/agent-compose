@@ -189,8 +189,8 @@ func runV2StorageMigrator(t *testing.T, ctx context.Context, binary, dataRoot st
 	if err := json.Unmarshal(output, &report); err != nil {
 		t.Fatalf("decode V2 storage migrator report %q: %v", output, err)
 	}
-	if report.Stage != "complete" || report.SourceVersion != 4 || report.TargetVersion != 7 || !report.InPlace {
-		t.Fatalf("V2 storage migrator report = %+v, want in-place v4 to v7 completion", report)
+	if report.Stage != "complete" || report.SourceVersion != 4 || report.TargetVersion != 8 || !report.InPlace {
+		t.Fatalf("V2 storage migrator report = %+v, want in-place v4 to v9 completion", report)
 	}
 }
 

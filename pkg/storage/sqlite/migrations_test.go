@@ -79,6 +79,7 @@ func TestMigrationBaseline(t *testing.T) {
 		assertSQLiteIndexExists(t, db, index)
 	}
 	assertSQLiteIndexUnique(t, db, "idx_event_idempotency", true)
+	assertSQLiteIndexUnique(t, db, "idx_project_name", true)
 	var idempotencyIndexSQL string
 	if err := db.QueryRowContext(ctx,
 		`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_event_idempotency'`).Scan(&idempotencyIndexSQL); err != nil {

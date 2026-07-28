@@ -96,6 +96,58 @@ agents:
 	}
 }
 
+func TestNormalizeProjectNameMatchesDockerComposeRules(t *testing.T) {
+	spec := mustParseCompose(t, "name: 1project\nagents: {}\n")
+	normalized, err := Normalize(spec, NormalizeOptions{})
+	if err != nil {
+		t.Fatalf("Normalize digit-prefixed project name: %v", err)
+	}
+	if normalized.Name != "1project" {
+		t.Fatalf("Name = %q, want 1project", normalized.Name)
+	}
+
+	defaulted, err := Normalize(mustParseCompose(t, "agents: {}\n"), NormalizeOptions{ProjectDir: "/tmp/Agent.Compose_Name"})
+	if err != nil {
+		t.Fatalf("Normalize default project name: %v", err)
+	}
+	if defaulted.Name != "agentcompose_name" {
+		t.Fatalf("default Name = %q, want agentcompose_name", defaulted.Name)
+	}
+}
+
+func TestNormalizeDefaultProjectNameMatchesDockerComposeDirectoryRules(t *testing.T) {
+	tests := []struct {
+		name       string
+		projectDir string
+		want       string
+		wantErr    string
+	}{
+		{name: "remove punctuation and lowercase", projectDir: "/tmp/Agent.Compose_Name", want: "agentcompose_name"},
+		{name: "trim leading hyphens", projectDir: "/tmp/---Foo.Bar", want: "foobar"},
+		{name: "trim leading underscores and allow digit", projectDir: "/tmp/___123.Project", want: "123project"},
+		{name: "preserve supported separators", projectDir: "/tmp/foo--BAR__", want: "foo--bar__"},
+		{name: "reject empty normalized name", projectDir: "/tmp/---...", wantErr: "project name is required"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			normalized, err := Normalize(mustParseCompose(t, "agents: {}\n"), NormalizeOptions{ProjectDir: test.projectDir})
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("Normalize error = %v, want %q", err, test.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Normalize returned error: %v", err)
+			}
+			if normalized.Name != test.want {
+				t.Fatalf("Name = %q, want %q", normalized.Name, test.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeRequiresProjectNameWithoutDefaultPath(t *testing.T) {
 	spec := mustParseCompose(t, `
 agents:

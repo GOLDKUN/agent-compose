@@ -134,15 +134,15 @@ func runComposeDownCommand(cmd *cobra.Command, cli cliOptions) error {
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "down", runtimeProjectIdentityOnly)
+	selection, err := resolveComposeRuntimeProjectSelectionForCLI(cli)
 	if err != nil {
 		return err
 	}
 	resp, err := clients.project.RemoveProject(cmd.Context(), connect.NewRequest(&agentcomposev2.RemoveProjectRequest{
-		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: runtimeProject.id()}},
+		Project: selection.ref,
 	}))
 	if err != nil {
-		return commandExitErrorForConnect(fmt.Errorf("down project %s: %w", runtimeProject.name(), err))
+		return commandExitErrorForConnect(fmt.Errorf("down project %s: %w", selection.requestedName, err))
 	}
 	output := composeDownOutputFromResponse(resp.Msg)
 	if cli.JSON {
@@ -153,13 +153,13 @@ func runComposeDownCommand(cmd *cobra.Command, cli cliOptions) error {
 		if err := writeCommandOutput(cmd.OutOrStdout(), append(data, '\n')); err != nil {
 			return err
 		}
-	} else if err := writeComposeDownText(cmd.OutOrStdout(), composeDownDisplayChanges(resp.Msg, runtimeProject.spec)); err != nil {
+	} else if err := writeComposeDownText(cmd.OutOrStdout(), composeDownDisplayChanges(resp.Msg, selection.localSpec)); err != nil {
 		return err
 	}
 	if output.FailedSandboxStops > 0 {
 		return commandExitError{
 			Code: exitCodeGeneral,
-			Err:  fmt.Errorf("down project %s completed with %d sandbox stop failure(s)", runtimeProject.name(), output.FailedSandboxStops),
+			Err:  fmt.Errorf("down project %s completed with %d sandbox stop failure(s)", selection.requestedName, output.FailedSandboxStops),
 		}
 	}
 	return nil
@@ -173,7 +173,7 @@ func runComposeStatsCommand(cmd *cobra.Command, cli cliOptions, args []string) e
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "stats", runtimeProjectWithState)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "stats")
 	if err != nil {
 		return err
 	}
@@ -297,7 +297,7 @@ func runComposeRunCommand(cmd *cobra.Command, cli cliOptions, options composeRun
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "run", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "run")
 	if err != nil {
 		return err
 	}
@@ -479,7 +479,7 @@ func runComposePSCommand(cmd *cobra.Command, cli cliOptions, options composePSOp
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "ps", runtimeProjectWithState)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "ps")
 	if err != nil {
 		return err
 	}
@@ -548,11 +548,7 @@ func runComposeInspectCommand(cmd *cobra.Command, cli cliOptions, args []string)
 	if kind == "project" {
 		return runComposeProjectInspectCommand(cmd, cli, clients, target)
 	}
-	loadMode := runtimeProjectIdentityOnly
-	if kind == "agent" {
-		loadMode = runtimeProjectWithState
-	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "inspect "+kind, loadMode)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "inspect "+kind)
 	if err != nil {
 		return err
 	}

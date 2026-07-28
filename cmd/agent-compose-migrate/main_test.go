@@ -91,7 +91,7 @@ func TestE2ELegacyMigratorCLITextDryRun(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exit code = %d, want 0", exitCode)
 	}
-	if got, want := strings.TrimSpace(string(output)), "legacy migration dry run: source schema version 8 is eligible"; got != want {
+	if got, want := strings.TrimSpace(string(output)), "legacy migration dry run: source schema version 9 is eligible"; got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {

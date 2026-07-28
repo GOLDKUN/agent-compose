@@ -178,6 +178,10 @@ agent-compose -f /path/to/project/agent-compose.yml up
 
 当前 `up` 的行为是将 project 应用到 daemon 后返回，project 后续由 daemon 管理。它不会 attach project 日志，也不提供 `-d/--detach` 参数。
 
+Project 身份由规范化后的 project name 决定，不再由 compose 文件路径决定。同名 compose 文件移动后再次执行 `up`，会更新 daemon 中原有 project，并保留其 ID 和历史。
+
+如果升级时数据库中已有多个同名 project，系统会保留每个 project，并把其余记录确定性地改为可用的 `<name>-N`。操作这些 project 前应先查看 `project ls`，并在对应 compose 文件中使用迁移后分配的名称。
+
 顶级 `up` 是 `project up` 的别名。
 
 ## `project down`：关闭 project
@@ -196,7 +200,7 @@ agent-compose -f /path/to/project/agent-compose.yml down
 
 - `down` 只影响当前 project。
 - 使用 `-f` 或 `--project-name` 时，应确认定位到的是预期 project。
-- 如果部分 sandbox 停止失败，命令返回非零退出码，并在输出中说明失败项。
+- 如果部分 sandbox 停止失败，命令返回非零退出码并说明失败项，同时保持 project 为 active，以便再次执行 `down`。
 
 ## `run`：运行 sandbox
 

@@ -150,6 +150,13 @@ func (m *Manager) ReplaceProjectVolumes(ctx context.Context, projectID string, l
 	return m.Project.ReplaceProjectVolumes(ctx, projectID, links)
 }
 
+func (m *Manager) ListProjectVolumes(ctx context.Context, projectID string) (map[string]domain.VolumeRecord, error) {
+	if m == nil || m.Project == nil {
+		return nil, fmt.Errorf("project volume store is required")
+	}
+	return m.Project.ListProjectVolumes(ctx, projectID)
+}
+
 func (m *Manager) RemoveProjectVolumes(ctx context.Context, projectID string) error {
 	if m == nil || m.Project == nil {
 		return fmt.Errorf("project volume store is required")

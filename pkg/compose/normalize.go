@@ -26,6 +26,7 @@ const (
 )
 
 var stableIdentifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+var invalidDefaultProjectNamePattern = regexp.MustCompile(`[^a-z0-9_-]`)
 var volumeSourceNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 var envReferencePattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 var composeCronParser = cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
@@ -190,7 +191,7 @@ func Normalize(spec *ProjectSpec, options NormalizeOptions) (*NormalizedProjectS
 	if name == "" {
 		name = defaultProjectName(options)
 	}
-	if err := validateStableIdentifier("name", name, "project name"); err != nil {
+	if err := validateProjectName("name", name); err != nil {
 		return nil, err
 	}
 
@@ -1358,6 +1359,16 @@ func validateStableIdentifier(path string, value string, label string) error {
 	return nil
 }
 
+func validateProjectName(path, value string) error {
+	if value == "" {
+		return &ValidationError{Path: path, Message: "project name is required"}
+	}
+	if !domain.IsProjectName(value) {
+		return &ValidationError{Path: path, Message: "project name must match " + domain.ProjectNamePattern}
+	}
+	return nil
+}
+
 func defaultProjectName(options NormalizeOptions) string {
 	dir := strings.TrimSpace(options.ProjectDir)
 	if dir == "" && strings.TrimSpace(options.ComposePath) != "" {
@@ -1373,7 +1384,9 @@ func defaultProjectName(options NormalizeOptions) string {
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
-	return filepath.Base(filepath.Clean(dir))
+	name := strings.ToLower(filepath.Base(filepath.Clean(dir)))
+	name = invalidDefaultProjectNamePattern.ReplaceAllString(name, "")
+	return strings.TrimLeft(name, "-_")
 }
 
 func normalizeEnvVarMap(path string, values map[string]EnvVarSpec, options NormalizeOptions) (map[string]EnvVarSpec, error) {
