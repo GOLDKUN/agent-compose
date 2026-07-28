@@ -131,7 +131,7 @@ func applyE2ERetentionProject(t *testing.T, ctx context.Context, client agentcom
 			Name: "docker-retention-e2e",
 			Agents: []*agentcomposev2.AgentSpec{{
 				Name: "worker", Provider: "codex", Image: image,
-				Driver: &agentcomposev2.DriverSpec{Name: "docker", Docker: &agentcomposev2.DockerDriverSpec{}},
+				Driver: &agentcomposev2.DriverSpec{Config: &agentcomposev2.DriverSpec_Docker{Docker: &agentcomposev2.DockerDriverSpec{}}},
 			}},
 		},
 		Source: &agentcomposev2.ProjectSource{ComposePath: filepath.Join(root, "agent-compose.yml"), ProjectDir: root},

@@ -308,13 +308,19 @@ message ValidateProjectResponse {
 }
 
 message ApplyProjectRequest {
+  // Required. The complete desired project specification. All repeated and map
+  // fields in the spec replace the previously persisted collections; an empty
+  // collection explicitly clears that collection.
   ProjectSpec spec = 1;
+  // Optional source metadata used while normalizing the replacement. An absent
+  // source supplies empty compose_path and project_dir values.
   ProjectSource source = 2;
   // submitted_spec_hash optionally verifies the submitted spec after the server
   // normalizes it. It is not compared with the currently stored project and is
   // not an optimistic-concurrency precondition. An empty value skips this check.
   // Canonicalization, encoding, and hashing are defined by pkg/compose.
   string submitted_spec_hash = 3;
+  // Explicit execution mode. False applies the replacement; true only plans it.
   bool dry_run = 4;
 }
 
@@ -682,8 +688,11 @@ message SchedulerRun {
 }
 
 message SetSchedulerEnabledRequest {
+  // Required. Exactly one non-empty project selector must be set.
   ProjectRef project = 1;
+  // Required stable agent name within the selected project.
   string agent_name = 2;
+  // Explicit replacement value. False disables the scheduler; it is not a no-op.
   bool enabled = 3;
 }
 
@@ -693,9 +702,13 @@ message SetSchedulerEnabledResponse {
 }
 
 message SetSchedulerTriggerEnabledRequest {
+  // Required. Exactly one non-empty project selector must be set.
   ProjectRef project = 1;
+  // Required stable agent name within the selected project.
   string agent_name = 2;
+  // Required stable trigger ID within the selected scheduler.
   string trigger_id = 3;
+  // Explicit replacement value. False disables the trigger; it is not a no-op.
   bool enabled = 4;
 }
 
@@ -804,8 +817,14 @@ message EnvVarSpec {
 }
 
 message EnvVarUpdateSpec {
+  // Required replacement key. Duplicate names are normalized with the last
+  // occurrence winning.
   string name = 1;
+  // Presence is meaningful only for secret preservation during
+  // UpdateGlobalEnv: absent preserves the existing secret value; present empty
+  // explicitly clears it. Non-secret entries treat absence as an empty value.
   optional string value = 2;
+  // Explicit replacement value. False changes the entry to non-secret.
   bool secret = 3;
 }
 
@@ -848,10 +867,16 @@ message EventTriggerSpec {
 }
 
 message DriverSpec {
-  string name = 1;
-  BoxliteDriverSpec boxlite = 2;
-  DockerDriverSpec docker = 3;
-  MicrosandboxDriverSpec microsandbox = 4;
+  reserved 1;
+  reserved "name";
+
+  // Required. A project agent has exactly one runtime driver configuration;
+  // the selected oneof case is the driver name.
+  oneof config {
+    BoxliteDriverSpec boxlite = 2;
+    DockerDriverSpec docker = 3;
+    MicrosandboxDriverSpec microsandbox = 4;
+  }
 }
 
 message BoxliteDriverSpec {
@@ -1253,8 +1278,12 @@ message ExecRequest {
 }
 
 message ExecSandboxSelector {
-  string project_id = 1;
-  string project_name = 2;
+  // Required. Select exactly one project by stable ID or exact name.
+  oneof project {
+    string project_id = 1;
+    string project_name = 2;
+  }
+  // Optional filter. Empty matches sandboxes for every agent in the project.
   string agent_name = 3;
 }
 
@@ -1783,7 +1812,13 @@ message WatchDashboardOverviewResponse {
 
 message GetGlobalEnvRequest {}
 message GetGlobalEnvResponse { repeated EnvVarSpec env = 1; }
-message UpdateGlobalEnvRequest { repeated EnvVarUpdateSpec env = 1; }
+message UpdateGlobalEnvRequest {
+  // Complete replacement keyed by EnvVarUpdateSpec.name. An empty list clears
+  // all global environment variables; omitted existing names are deleted.
+  // For a secret entry only, an absent value preserves the existing secret
+  // value with the same name. An explicitly empty value clears it.
+  repeated EnvVarUpdateSpec env = 1;
+}
 message UpdateGlobalEnvResponse { repeated EnvVarSpec env = 1; }
 
 message GetCapabilityGatewayConfigRequest {}
@@ -1793,7 +1828,9 @@ message CapabilityGatewayConfig {
 }
 message GetCapabilityGatewayConfigResponse { CapabilityGatewayConfig config = 1; }
 message UpdateCapabilityGatewayConfigRequest {
+  // Field patch: absent is no-op; present empty explicitly clears the address.
   optional string addr = 1;
+  // Field patch: absent is no-op; present empty explicitly clears the token.
   optional string token = 2;
 }
 message UpdateCapabilityGatewayConfigResponse { CapabilityGatewayConfig config = 1; }
@@ -1825,10 +1862,15 @@ message CreateWorkspacePresetRequest {
   string comment = 4;
 }
 message UpdateWorkspacePresetRequest {
+  // Required stable preset ID.
   string preset_id = 1;
+  // Required replacement value.
   string name = 2;
+  // Required replacement value.
   string type = 3;
+  // Required replacement value. Empty is rejected rather than treated as no-op.
   string config_json = 4;
+  // Replacement value. Empty explicitly clears the comment.
   string comment = 5;
 }
 message DeleteWorkspacePresetRequest { string preset_id = 1; }

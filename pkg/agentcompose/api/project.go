@@ -473,24 +473,27 @@ func DriverSpecToProto(driver *compose.NormalizedDriverSpec) *agentcomposev2.Dri
 	if driver == nil {
 		return nil
 	}
-	result := &agentcomposev2.DriverSpec{Name: driver.Name}
+	result := &agentcomposev2.DriverSpec{}
 	switch driver.Name {
 	case compose.DriverBoxlite:
-		result.Boxlite = &agentcomposev2.BoxliteDriverSpec{}
+		config := &agentcomposev2.BoxliteDriverSpec{}
 		if driver.Boxlite != nil {
-			result.Boxlite.Kernel = driver.Boxlite.Kernel
-			result.Boxlite.Rootfs = driver.Boxlite.Rootfs
+			config.Kernel = driver.Boxlite.Kernel
+			config.Rootfs = driver.Boxlite.Rootfs
 		}
+		result.Config = &agentcomposev2.DriverSpec_Boxlite{Boxlite: config}
 	case compose.DriverDocker:
-		result.Docker = &agentcomposev2.DockerDriverSpec{}
+		config := &agentcomposev2.DockerDriverSpec{}
 		if driver.Docker != nil {
-			result.Docker.Host = driver.Docker.Host
+			config.Host = driver.Docker.Host
 		}
+		result.Config = &agentcomposev2.DriverSpec_Docker{Docker: config}
 	case compose.DriverMicrosandbox:
-		result.Microsandbox = &agentcomposev2.MicrosandboxDriverSpec{}
+		config := &agentcomposev2.MicrosandboxDriverSpec{}
 		if driver.Microsandbox != nil {
-			result.Microsandbox.Profile = driver.Microsandbox.Profile
+			config.Profile = driver.Microsandbox.Profile
 		}
+		result.Config = &agentcomposev2.DriverSpec_Microsandbox{Microsandbox: config}
 	}
 	return result
 }
@@ -893,36 +896,19 @@ func DriverYAMLShape(path string, driver *agentcomposev2.DriverSpec) (map[string
 	if driver == nil {
 		return nil, nil
 	}
-	byName := strings.ToLower(strings.TrimSpace(driver.GetName()))
-	runtimes := make(map[string]any, 3)
-	if driver.GetBoxlite() != nil {
-		runtimes[compose.DriverBoxlite] = map[string]any{
+	switch driver.GetConfig().(type) {
+	case *agentcomposev2.DriverSpec_Boxlite:
+		return map[string]any{compose.DriverBoxlite: map[string]any{
 			"kernel": driver.GetBoxlite().GetKernel(),
 			"rootfs": driver.GetBoxlite().GetRootfs(),
-		}
-	}
-	if driver.GetDocker() != nil {
-		runtimes[compose.DriverDocker] = map[string]any{"host": driver.GetDocker().GetHost()}
-	}
-	if driver.GetMicrosandbox() != nil {
-		runtimes[compose.DriverMicrosandbox] = map[string]any{"profile": driver.GetMicrosandbox().GetProfile()}
-	}
-	switch byName {
-	case "":
-	case compose.DriverBoxlite, compose.DriverDocker, compose.DriverMicrosandbox:
-		for runtimeName := range runtimes {
-			if runtimeName != byName {
-				return nil, []*agentcomposev2.ProjectValidationIssue{ProjectValidationIssue(path, fmt.Sprintf("driver name %q conflicts with %q runtime config", byName, runtimeName))}
-			}
-		}
-		if existing, ok := runtimes[byName]; ok {
-			return map[string]any{byName: existing}, nil
-		}
-		return map[string]any{byName: map[string]any{}}, nil
+		}}, nil
+	case *agentcomposev2.DriverSpec_Docker:
+		return map[string]any{compose.DriverDocker: map[string]any{"host": driver.GetDocker().GetHost()}}, nil
+	case *agentcomposev2.DriverSpec_Microsandbox:
+		return map[string]any{compose.DriverMicrosandbox: map[string]any{"profile": driver.GetMicrosandbox().GetProfile()}}, nil
 	default:
-		return nil, []*agentcomposev2.ProjectValidationIssue{ProjectValidationIssue(path+".name", fmt.Sprintf("unsupported runtime driver %q", byName))}
+		return nil, []*agentcomposev2.ProjectValidationIssue{ProjectValidationIssue(path, "driver requires exactly one runtime config")}
 	}
-	return runtimes, nil
 }
 
 func SchedulerYAMLShape(scheduler *agentcomposev2.SchedulerSpec) map[string]any {

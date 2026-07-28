@@ -44,6 +44,32 @@ func TestSettingsGlobalEnvDistinguishesRetainAndClearSecret(t *testing.T) {
 	}
 }
 
+func TestSettingsGlobalEnvEmptyAndOmittedEntriesReplaceCollection(t *testing.T) {
+	ctx := context.Background()
+	store := &settingsStoreFake{env: []domain.SandboxEnvVar{
+		{Name: "KEEP", Value: "old"},
+		{Name: "DELETE", Value: "old"},
+	}}
+	handler := NewSettingsV2Handler(&appconfig.Config{DataRoot: t.TempDir()}, store)
+
+	value := "new"
+	if _, err := handler.UpdateGlobalEnv(ctx, connect.NewRequest(&agentcomposev2.UpdateGlobalEnvRequest{
+		Env: []*agentcomposev2.EnvVarUpdateSpec{{Name: "KEEP", Value: &value}},
+	})); err != nil {
+		t.Fatalf("replace env: %v", err)
+	}
+	if len(store.env) != 1 || store.env[0].Name != "KEEP" || store.env[0].Value != "new" {
+		t.Fatalf("replacement env = %#v", store.env)
+	}
+
+	if _, err := handler.UpdateGlobalEnv(ctx, connect.NewRequest(&agentcomposev2.UpdateGlobalEnvRequest{})); err != nil {
+		t.Fatalf("clear env: %v", err)
+	}
+	if len(store.env) != 0 {
+		t.Fatalf("cleared env = %#v", store.env)
+	}
+}
+
 type settingsStoreFake struct{ env []domain.SandboxEnvVar }
 
 func (s *settingsStoreFake) ListGlobalEnv(context.Context) ([]domain.SandboxEnvVar, error) {
