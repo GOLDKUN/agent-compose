@@ -13,6 +13,7 @@ import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
 	"agent-compose/pkg/runs"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -167,28 +168,28 @@ func TestAppRunControllerHelperCoverage(t *testing.T) {
 
 func TestStopProjectSandboxCoverage(t *testing.T) {
 	ctx := context.Background()
-	if err := stopProjectSandbox(ctx, "", nil, nil, nil, nil, nil); err != nil {
+	if err := stopProjectSandbox(ctx, "", nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatalf("stopProjectSandbox nil sandbox err=%v", err)
 	}
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-1"}}
-	if err := stopProjectSandbox(ctx, "", nil, nil, nil, nil, session); err == nil {
+	if err := stopProjectSandbox(ctx, "", nil, nil, nil, nil, session, nil); err == nil {
 		t.Fatalf("stopProjectSandbox nil store returned nil error")
 	}
 	store := &projectSessionStoreFake{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-1", VMStatus: domain.VMStatusStopped}}}
-	if err := stopProjectSandbox(ctx, "", nil, store, nil, nil, session); err != nil || store.updated {
+	if err := stopProjectSandbox(ctx, "", nil, store, nil, nil, session, nil); err != nil || store.updated {
 		t.Fatalf("stopProjectSandbox stopped err=%v updated=%v", err, store.updated)
 	}
 	store.session.Summary.VMStatus = domain.VMStatusRunning
-	if err := stopProjectSandbox(ctx, "", nil, store, nil, nil, session); err == nil {
+	if err := stopProjectSandbox(ctx, "", nil, store, nil, nil, session, nil); err == nil {
 		t.Fatalf("stopProjectSandbox nil driver returned nil error")
 	}
 	driver := &projectSandboxDriverFake{err: errors.New("stop failed")}
-	if err := stopProjectSandbox(ctx, "", nil, store, driver, nil, session); err == nil {
+	if err := stopProjectSandbox(ctx, "", nil, store, driver, nil, session, nil); err == nil {
 		t.Fatalf("stopProjectSandbox driver error returned nil error")
 	}
 	driver.err = nil
 	streams := &projectSessionStreamsFake{}
-	if err := stopProjectSandbox(ctx, "", nil, store, driver, streams, session); err != nil {
+	if err := stopProjectSandbox(ctx, "", nil, store, driver, streams, session, nil); err != nil {
 		t.Fatalf("stopProjectSandbox running err=%v", err)
 	}
 	if !store.updated || store.session.Summary.VMStatus != domain.VMStatusStopped || len(store.events) != 1 || streams.updated == 0 || streams.events == 0 {
@@ -263,8 +264,20 @@ func (s *projectSessionStoreFake) GetVMState(string) (domain.VMState, error) {
 	return domain.VMState{}, nil
 }
 
+func (s *projectSessionStoreFake) SaveVMState(string, domain.VMState) error {
+	return nil
+}
+
+func (s *projectSessionStoreFake) GetProxyState(string) (domain.ProxyState, error) {
+	return domain.ProxyState{}, nil
+}
+
 type projectSandboxDriverFake struct {
 	err error
+}
+
+func (*projectSandboxDriverFake) StartSandboxVM(context.Context, *domain.Sandbox) error {
+	return nil
 }
 
 func (d *projectSandboxDriverFake) StopSandboxVM(context.Context, *domain.Sandbox) error {
@@ -284,6 +297,6 @@ func (s *projectSessionStreamsFake) PublishEventAdded(string, domain.SandboxEven
 	s.events++
 }
 
-var _ projectSandboxStore = (*projectSessionStoreFake)(nil)
-var _ projectSandboxDriver = (*projectSandboxDriverFake)(nil)
+var _ sandboxes.LifecycleStore = (*projectSessionStoreFake)(nil)
+var _ sandboxes.SandboxDriver = (*projectSandboxDriverFake)(nil)
 var _ projectSandboxStreams = (*projectSessionStreamsFake)(nil)

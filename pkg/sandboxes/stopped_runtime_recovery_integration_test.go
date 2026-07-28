@@ -123,7 +123,7 @@ func TestLifecycleSerializesRuntimeReleaseAgainstResume(t *testing.T) {
 	lifecycle := sandboxes.Lifecycle{Config: config, Store: store, Driver: driver, WorkspaceEnsurer: releaseWorkspaceEnsurer{}, Locks: locks}
 	stopDone := make(chan error, 1)
 	go func() {
-		_, _, err := lifecycle.StopLoaded(context.Background(), sandbox)
+		_, err := lifecycle.StopLoaded(context.Background(), sandbox)
 		stopDone <- err
 	}()
 	select {
@@ -166,7 +166,7 @@ func TestLifecycleSerializesRuntimeReleaseAgainstRemoval(t *testing.T) {
 
 	stopDone := make(chan error, 1)
 	go func() {
-		_, _, err := lifecycle.StopLoaded(context.Background(), sandbox)
+		_, err := lifecycle.StopLoaded(context.Background(), sandbox)
 		stopDone <- err
 	}()
 	select {

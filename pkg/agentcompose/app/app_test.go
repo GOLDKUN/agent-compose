@@ -353,7 +353,7 @@ func TestStopProjectSandboxUsesInternalStopSemantics(t *testing.T) {
 	driver := &projectStopSandboxDriver{}
 	streams := &projectStopSandboxStreams{}
 
-	if err := stopProjectSandbox(context.Background(), "", nil, store, driver, streams, store.session); err != nil {
+	if err := stopProjectSandbox(context.Background(), "", nil, store, driver, streams, store.session, nil); err != nil {
 		t.Fatalf("stopProjectSandbox returned error: %v", err)
 	}
 	if driver.stopCount != 1 {
@@ -381,7 +381,7 @@ func TestStopProjectSandboxRuntimeReleaseFailureFinalizesConfirmedStop(t *testin
 	driver := &projectStopSandboxDriver{releaseErr: releaseErr}
 	streams := &projectStopSandboxStreams{}
 
-	if err := stopProjectSandbox(context.Background(), t.TempDir(), nil, store, driver, streams, store.session); !errors.Is(err, releaseErr) {
+	if err := stopProjectSandbox(context.Background(), t.TempDir(), nil, store, driver, streams, store.session, nil); !errors.Is(err, releaseErr) {
 		t.Fatalf("stopProjectSandbox error = %v, want %v", err, releaseErr)
 	}
 	if driver.stopCount != 1 || driver.releaseCount != 1 {
@@ -427,10 +427,22 @@ func (s *projectStopSandboxStore) GetVMState(string) (domain.VMState, error) {
 	return domain.VMState{}, nil
 }
 
+func (s *projectStopSandboxStore) SaveVMState(string, domain.VMState) error {
+	return nil
+}
+
+func (s *projectStopSandboxStore) GetProxyState(string) (domain.ProxyState, error) {
+	return domain.ProxyState{}, nil
+}
+
 type projectStopSandboxDriver struct {
 	stopCount    int
 	releaseCount int
 	releaseErr   error
+}
+
+func (*projectStopSandboxDriver) StartSandboxVM(context.Context, *domain.Sandbox) error {
+	return nil
 }
 
 func (d *projectStopSandboxDriver) StopSandboxVM(context.Context, *domain.Sandbox) error {

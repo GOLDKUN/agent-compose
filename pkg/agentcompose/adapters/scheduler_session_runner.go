@@ -57,47 +57,36 @@ func (r *SchedulerSandboxRunner) Shutdown(ctx context.Context, sessionID string)
 	if sessionID == "" {
 		return nil
 	}
-	unlock := r.LifecycleLocks.Lock(sessionID)
-	defer unlock()
 	stopCtx := context.WithoutCancel(ctx)
 	session, err := r.Store.GetSandbox(stopCtx, sessionID)
 	if err != nil {
 		return err
 	}
-	result, stopErr := sandboxes.StopSandboxRuntime(stopCtx, r.Config.SandboxRoot, r.Store, r.Driver, session)
-	if r.Streams != nil && (result.Stopped || result.Released) {
-		r.Streams.PublishSandboxUpdated(&session.Summary)
-	}
-	if r.Streams != nil {
-		for _, event := range result.RuntimeEvents {
-			r.Streams.PublishEventAdded(session.Summary.ID, event)
-		}
-	}
-	if result.Stopped {
-		event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: sandboxes.SandboxStoppedEventMessage(session, result), CreatedAt: time.Now().UTC()}
-		_ = r.Store.AddEvent(stopCtx, session.Summary.ID, event)
-		if r.Streams != nil {
-			r.Streams.PublishEventAdded(session.Summary.ID, event)
-		}
-	}
-	if session.Summary.VMStatus == domain.VMStatusStopped {
-		r.revokeCapabilitySandbox(session.Summary.ID)
-	}
+	outcome, stopErr := r.stopLifecycle().StopLoaded(stopCtx, session)
 	if stopErr != nil {
-		if result.Stopped {
-			r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(session, "loader"))
+		if outcome.DriverStopped && outcome.Sandbox != nil {
+			r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(outcome.Sandbox, "loader"))
 		}
 		return stopErr
 	}
-	if !result.Stopped && !result.Released {
+	if !outcome.Changed() || outcome.Sandbox == nil {
 		return nil
 	}
-	loaded, err := r.Store.GetSandbox(stopCtx, session.Summary.ID)
-	if err != nil {
-		return err
-	}
-	r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(loaded, "loader"))
+	r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(outcome.Sandbox, "loader"))
 	return nil
+}
+
+func (r *SchedulerSandboxRunner) stopLifecycle() sandboxes.Lifecycle {
+	return sandboxes.Lifecycle{
+		Config:        r.Config,
+		Store:         r.Store,
+		Driver:        r.Driver,
+		AccessRevoker: r.CapTokens,
+		Notifier: sandboxLifecycleNotifier{
+			streams: r.Streams,
+		},
+		Locks: r.LifecycleLocks,
+	}
 }
 
 // Ensure preserves historical loader wording in observable errors, event
@@ -368,12 +357,6 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 func (r *SchedulerSandboxRunner) indexCapabilitySandbox(session *domain.Sandbox) {
 	if r != nil && r.CapTokens != nil {
 		r.CapTokens.IndexSandbox(session)
-	}
-}
-
-func (r *SchedulerSandboxRunner) revokeCapabilitySandbox(sandboxID string) {
-	if r != nil && r.CapTokens != nil {
-		r.CapTokens.RevokeSandbox(sandboxID)
 	}
 }
 

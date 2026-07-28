@@ -40,6 +40,12 @@ type FacadeTokenRevoker interface {
 	RevokeLLMFacadeTokensForSandbox(context.Context, string) error
 }
 
+// SandboxAccessRevoker withdraws in-memory access associated with a sandbox
+// after its runtime has stopped or become unreachable.
+type SandboxAccessRevoker interface {
+	RevokeSandbox(string)
+}
+
 type LifecycleNotifier interface {
 	PublishSandboxUpdated(*domain.SandboxSummary)
 	PublishEventAdded(string, domain.SandboxEvent)
@@ -56,6 +62,7 @@ type Lifecycle struct {
 	Driver                  SandboxDriver
 	Liveness                RuntimeLivenessProvider
 	TokenRevoker            FacadeTokenRevoker
+	AccessRevoker           SandboxAccessRevoker
 	Notifier                LifecycleNotifier
 	GuideWriter             CapabilityGuideWriter
 	PrepareAgentEnvironment func(context.Context, *domain.Sandbox) error
@@ -114,6 +121,9 @@ func (l Lifecycle) ReconcileRuntimeState(ctx context.Context, session *domain.Sa
 	}
 	if l.TokenRevoker != nil {
 		_ = l.TokenRevoker.RevokeLLMFacadeTokensForSandbox(ctx, session.Summary.ID)
+	}
+	if l.AccessRevoker != nil {
+		l.AccessRevoker.RevokeSandbox(session.Summary.ID)
 	}
 	event := domain.SandboxEvent{
 		ID:        uuid.NewString(),
@@ -268,22 +278,55 @@ func (l Lifecycle) prepareFreshStartAgentEnvironment(ctx context.Context, sessio
 	return l.PrepareAgentEnvironment(ctx, session)
 }
 
-func (l Lifecycle) StopLoaded(ctx context.Context, session *domain.Sandbox) (*domain.Sandbox, bool, error) {
+// StopOutcome describes the observable runtime transitions completed by a
+// Lifecycle stop operation.
+type StopOutcome struct {
+	Sandbox         *domain.Sandbox
+	DriverStopped   bool
+	RuntimeReleased bool
+}
+
+// Changed reports whether the driver was stopped or its private runtime was
+// released by this operation.
+func (o StopOutcome) Changed() bool {
+	return o.DriverStopped || o.RuntimeReleased
+}
+
+// StopLoaded serializes and performs the complete stop lifecycle for a loaded
+// sandbox, including policy application, persistence, events, and access
+// revocation.
+func (l Lifecycle) StopLoaded(ctx context.Context, session *domain.Sandbox) (StopOutcome, error) {
 	if session == nil {
-		return nil, false, fmt.Errorf("sandbox is required")
+		return StopOutcome{}, fmt.Errorf("sandbox is required")
+	}
+	if l.Locks == nil {
+		return l.stopLoadedWhileLocked(ctx, session)
 	}
 	unlock := l.Locks.Lock(session.Summary.ID)
 	defer unlock()
+	return l.stopLoadedWhileLocked(ctx, session)
+}
+
+// StopLoadedWhileLocked performs the complete stop lifecycle while the caller
+// owns the sandbox lifecycle lock. Callers should normally use StopLoaded.
+func (l Lifecycle) StopLoadedWhileLocked(ctx context.Context, session *domain.Sandbox) (StopOutcome, error) {
+	if session == nil {
+		return StopOutcome{}, fmt.Errorf("sandbox is required")
+	}
+	return l.stopLoadedWhileLocked(ctx, session)
+}
+
+func (l Lifecycle) stopLoadedWhileLocked(ctx context.Context, session *domain.Sandbox) (StopOutcome, error) {
 	if l.Store != nil {
 		current, err := l.Store.GetSandbox(ctx, session.Summary.ID)
 		if err != nil {
-			return nil, false, err
+			return StopOutcome{}, err
 		}
 		domain.RestoreSandboxTransientFields(current, session)
 		session = current
 	}
 	if session.Summary.VMStatus == domain.VMStatusDeleting {
-		return nil, false, fmt.Errorf("sandbox is being deleted")
+		return StopOutcome{}, fmt.Errorf("sandbox is being deleted")
 	}
 	sandboxRoot := ""
 	if l.Config != nil {
@@ -307,14 +350,23 @@ func (l Lifecycle) StopLoaded(ctx context.Context, session *domain.Sandbox) (*do
 		_ = l.Store.AddEvent(ctx, session.Summary.ID, event)
 		l.publishEventAdded(session.Summary.ID, event)
 	}
+	outcome := StopOutcome{
+		Sandbox:         session,
+		DriverStopped:   result.Stopped,
+		RuntimeReleased: result.Released,
+	}
+	if session.Summary.VMStatus == domain.VMStatusStopped && l.AccessRevoker != nil {
+		l.AccessRevoker.RevokeSandbox(session.Summary.ID)
+	}
 	if stopErr != nil {
-		return session, result.Stopped, stopErr
+		return outcome, stopErr
 	}
 	loaded, err := l.Store.GetSandbox(ctx, session.Summary.ID)
 	if err != nil {
-		return nil, false, err
+		return StopOutcome{}, err
 	}
-	return loaded, result.Stopped, nil
+	outcome.Sandbox = loaded
+	return outcome, nil
 }
 
 type stoppedRuntimeRecoveryStore interface {
@@ -338,7 +390,7 @@ func (l Lifecycle) RecoverStoppedRuntimeReleases(ctx context.Context) []string {
 			(state != domain.StoppedRuntimeStateReleasePending && state != domain.StoppedRuntimeStateReleased) {
 			continue
 		}
-		if _, _, err := l.StopLoaded(ctx, sandbox); err != nil {
+		if _, err := l.StopLoaded(ctx, sandbox); err != nil {
 			warnings = append(warnings, fmt.Sprintf("recover stopped runtime release %s: %v", sandbox.Summary.ID, err))
 		}
 	}

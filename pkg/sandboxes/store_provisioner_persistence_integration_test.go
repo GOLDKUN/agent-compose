@@ -210,13 +210,14 @@ func seedPersistenceWorkspace(t *testing.T, ctx context.Context, root string) pe
 		t.Fatalf("create workspace symlink: %v", err)
 	}
 
-	stopped, didStop, err := lifecycle.StopLoaded(ctx, running)
+	outcome, err := lifecycle.StopLoaded(ctx, running)
 	if err != nil {
 		t.Fatalf("stop initial sandbox: %v", err)
 	}
-	if !didStop || initialDriver.stopCalls != 1 {
-		t.Fatalf("initial stop result = %t with %d driver calls, want true with 1 call", didStop, initialDriver.stopCalls)
+	if !outcome.DriverStopped || initialDriver.stopCalls != 1 {
+		t.Fatalf("initial stop outcome = %#v with %d driver calls, want stopped with 1 call", outcome, initialDriver.stopCalls)
 	}
+	stopped := outcome.Sandbox
 	assertPersistenceWorkspaceReady(t, stopped, readyUpdatedAt, "after initial stop")
 	if stopped.Summary.VMStatus != domain.VMStatusStopped {
 		t.Fatalf("stopped VM status = %q, want %q", stopped.Summary.VMStatus, domain.VMStatusStopped)
