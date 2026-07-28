@@ -2064,6 +2064,9 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			unlock()
 			locked = false
 		} else {
+			if err := validateProjectRunSandboxOwnership(sandbox, run); err != nil {
+				return SandboxResult{}, err
+			}
 			if sandbox.Summary.VMStatus == domain.VMStatusDeleting {
 				return SandboxResult{Sandbox: sandbox}, fmt.Errorf("sandbox %s is being deleted", sandboxID)
 			}
