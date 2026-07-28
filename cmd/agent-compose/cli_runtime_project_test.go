@@ -89,7 +89,7 @@ func TestIntegrationCLIRuntimeCommandsSelectStoredProjectByName(t *testing.T) {
 	}{
 		{name: "down with ignored compose file", args: []string{"down", "--file", "missing.yml"}, want: "stored-project"},
 		{name: "run", args: []string{"run", "-d", "worker", "--command", "true"}, want: "run-stored"},
-		{name: "scheduler list", args: []string{"scheduler", "ls"}, want: "manual"},
+		{name: "scheduler list", args: []string{"scheduler", "ls"}, want: "timeout"},
 		{name: "logs", args: []string{"logs"}},
 		{name: "exec", args: []string{"exec", "sandbox-stored", "--command", "true"}},
 	}

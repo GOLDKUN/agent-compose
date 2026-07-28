@@ -11,7 +11,6 @@ import (
 	"connectrpc.com/connect"
 
 	"agent-compose/pkg/imagecache"
-	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -73,12 +72,12 @@ func TestE2EDockerDaemonRetentionCleanup(t *testing.T) {
 	workspacePath := sandbox.GetWorkspacePath()
 
 	stopResp, err := sandboxClient.StopSandbox(ctx, connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID}))
-	if err != nil || stopResp.Msg.GetSandbox().GetStatus() != domain.VMStatusStopped {
+	if err != nil || stopResp.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED {
 		t.Fatalf("StopSandbox = %#v, error %v", stopResp, err)
 	}
 	waitForE2ECondition(t, 15*time.Second, func() bool {
 		response, getErr := sandboxClient.GetSandbox(ctx, connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
-		return getErr == nil && response.Msg.GetSandbox().GetWorkspaceReclamationState() == domain.SandboxWorkspaceReclamationStateReclaimed
+		return getErr == nil && response.Msg.GetSandbox().GetWorkspaceReclamationState() == agentcomposev2.WorkspaceReclamationState_WORKSPACE_RECLAMATION_STATE_RECLAIMED
 	}, "stopped sandbox workspace was not reclaimed")
 	if _, err := os.Stat(workspacePath); !os.IsNotExist(err) {
 		t.Fatalf("reclaimed workspace still exists: %v", err)
