@@ -321,10 +321,11 @@ func cloneSandboxWorkspace(item *SandboxWorkspace) *SandboxWorkspace {
 }
 
 type CreateSandboxOptions struct {
-	JupyterEnabled   bool
-	JupyterGuestPort int
-	JupyterExpose    bool
-	VolumeMounts     []domain.SandboxVolumeMount
+	JupyterEnabled       bool
+	JupyterGuestPort     int
+	JupyterExpose        bool
+	VolumeMounts         []domain.SandboxVolumeMount
+	StoppedRuntimePolicy string
 }
 
 func (s *Store) CreateSandbox(ctx context.Context, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource string, workspace *SandboxWorkspace, envItems []SandboxEnvVar, tags []SandboxTag) (*Sandbox, error) {
@@ -368,6 +369,10 @@ func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImag
 		return nil, err
 	}
 	guestImage = driverpkg.ResolveSandboxGuestImage(guestImage, "", driverpkg.DefaultGuestImageForDriver(s.config, driver))
+	stoppedRuntimePolicy, err := domain.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy)
+	if err != nil {
+		return nil, fmt.Errorf("create sandbox: %w", err)
+	}
 	var workspaceProvisioning *domain.SandboxWorkspaceProvisioning
 	if workspace != nil || workspaceID != "" {
 		workspaceProvisioning = &domain.SandboxWorkspaceProvisioning{
@@ -416,6 +421,7 @@ func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImag
 		WorkspaceID:           workspaceID,
 		Workspace:             cloneSandboxWorkspace(workspace),
 		WorkspaceProvisioning: workspaceProvisioning,
+		StoppedRuntimePolicy:  stoppedRuntimePolicy,
 		EnvItems:              append([]SandboxEnvVar(nil), envItems...),
 		VolumeMounts:          domain.NormalizeSandboxVolumeMounts(options.VolumeMounts),
 	}

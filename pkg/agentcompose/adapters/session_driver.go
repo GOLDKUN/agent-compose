@@ -91,7 +91,20 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 		return err
 	}
 
-	info, err := runtime.EnsureSandbox(ctx, session, vmState, proxyState)
+	if domain.EffectiveStoppedRuntimeState(session) == domain.StoppedRuntimeStateReleasePending {
+		if err := d.releaseSandboxRuntime(ctx, session, runtime, vmState); err != nil {
+			return err
+		}
+		vmState, err = d.Store.GetVMState(session.Summary.ID)
+		if err != nil {
+			return err
+		}
+	}
+	runtimeVMState := vmState
+	if domain.SandboxRuntimeReleaseIntentional(session) {
+		runtimeVMState.StoppedAt = time.Time{}
+	}
+	info, err := runtime.EnsureSandbox(ctx, session, runtimeVMState, proxyState)
 	if err != nil {
 		vmState.LastError = err.Error()
 		_ = d.Store.SaveVMState(session.Summary.ID, vmState)
@@ -99,7 +112,10 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 	}
 	runtimeStarted = true
 
-	return d.saveSandboxStartInfo(session, vmState, proxyState, info)
+	if err := d.saveSandboxStartInfo(session, vmState, proxyState, info); err != nil {
+		return err
+	}
+	return sessions.MarkSandboxRuntimeOwned(d.Config.SandboxRoot, session)
 }
 
 func (d *SandboxDriver) saveSandboxStartInfo(session *domain.Sandbox, vmState domain.VMState, proxyState domain.ProxyState, info domain.SandboxVMInfo) error {
@@ -148,9 +164,7 @@ func (d *SandboxDriver) RemoveSandboxVM(ctx context.Context, session *domain.San
 	if err != nil {
 		return err
 	}
-	if err := runtime.RemoveSandbox(ctx, session, vmState); err != nil {
-		vmState.LastError = err.Error()
-		_ = d.Store.SaveVMState(session.Summary.ID, vmState)
+	if err := d.releaseSandboxRuntime(ctx, session, runtime, vmState); err != nil {
 		return err
 	}
 	if d.ConfigDB != nil {
@@ -161,6 +175,31 @@ func (d *SandboxDriver) RemoveSandboxVM(ctx context.Context, session *domain.San
 		}
 	}
 	return nil
+}
+
+func (d *SandboxDriver) ReleaseSandboxRuntime(ctx context.Context, session *domain.Sandbox) error {
+	driver, runtime, err := d.runtimeForSession(session)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, driverpkg.SandboxStopContextTimeout(driver, d.Config.SandboxStopTimeout))
+	defer cancel()
+	vmState, err := d.Store.GetVMState(session.Summary.ID)
+	if err != nil {
+		return err
+	}
+	return d.releaseSandboxRuntime(ctx, session, runtime, vmState)
+}
+
+func (d *SandboxDriver) releaseSandboxRuntime(ctx context.Context, session *domain.Sandbox, runtime SandboxRuntime, vmState domain.VMState) error {
+	if err := runtime.RemoveSandbox(ctx, session, vmState); err != nil {
+		vmState.LastError = err.Error()
+		_ = d.Store.SaveVMState(session.Summary.ID, vmState)
+		return err
+	}
+	vmState.BoxID = ""
+	vmState.LastError = ""
+	return d.Store.SaveVMState(session.Summary.ID, vmState)
 }
 
 func (d *SandboxDriver) prepareSandboxStart(ctx context.Context, driver string, session *domain.Sandbox, vmState *domain.VMState) error {

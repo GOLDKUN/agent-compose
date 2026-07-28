@@ -33,6 +33,27 @@ func TestNewAgentDefinitionFromSpecPreservesJupyterConfig(t *testing.T) {
 	}
 }
 
+func TestNewAgentDefinitionFromSpecPreservesStoppedRuntimePolicy(t *testing.T) {
+	project := domain.ProjectRecord{ID: "project-1", Name: "project"}
+	agent := compose.NormalizedAgentSpec{
+		Name: "reviewer", Enabled: true, Provider: "codex",
+		Sandbox: &compose.NormalizedSandboxSpec{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove},
+	}
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
+	}
+	var config struct {
+		Sandbox *compose.NormalizedSandboxSpec `json:"sandbox"`
+	}
+	if err := json.Unmarshal([]byte(definition.ConfigJSON), &config); err != nil {
+		t.Fatalf("unmarshal config json: %v", err)
+	}
+	if config.Sandbox == nil || config.Sandbox.StoppedRuntimePolicy != domain.StoppedRuntimePolicyRemove {
+		t.Fatalf("config json = %s, want stopped runtime remove", definition.ConfigJSON)
+	}
+}
+
 func TestNewAgentDefinitionFromSpecKeepsEmptyConfigWithoutJupyter(t *testing.T) {
 	project := domain.ProjectRecord{ID: "project-1", Name: "project"}
 	agent := compose.NormalizedAgentSpec{Name: "reviewer", Enabled: true, Provider: "codex"}

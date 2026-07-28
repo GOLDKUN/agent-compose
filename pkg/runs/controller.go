@@ -1908,7 +1908,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	if c == nil || c.config == nil || c.store == nil || c.driver == nil {
 		return SandboxResult{}, fmt.Errorf("sandbox runtime dependencies are required")
 	}
-	jupyterOptions, err := resolveRunJupyterOptions(prepared.Jupyter, req.Jupyter)
+	jupyterOptions, err := resolveRunJupyterOptions(prepared.SandboxOptions, req.Jupyter)
 	if err != nil {
 		return SandboxResult{}, err
 	}
@@ -2264,6 +2264,7 @@ func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox 
 			return err
 		}
 	}
+	sandbox.StoppedRuntime = nil
 	sandbox.Summary.VMStatus = domain.VMStatusRunning
 	if err := c.store.UpdateSandbox(ctx, sandbox); err != nil {
 		return err
@@ -2370,11 +2371,23 @@ func (c *Controller) stopProjectRunSandbox(ctx context.Context, sandbox *domain.
 	if c.store == nil {
 		return fmt.Errorf("sandbox store is required")
 	}
+	if c.lifecycleLocks != nil {
+		unlock := c.lifecycleLocks.Lock(sandbox.Summary.ID)
+		defer unlock()
+	}
+	return c.stopProjectRunSandboxLocked(ctx, sandbox)
+}
+
+// stopProjectRunSandboxLocked stops a project-run sandbox while the caller
+// owns its lifecycle lock. Keeping the locked form explicit avoids re-entering
+// LifecycleLocks from sticky-binding retirement.
+func (c *Controller) stopProjectRunSandboxLocked(ctx context.Context, sandbox *domain.Sandbox) error {
 	loaded, err := c.store.GetSandbox(ctx, sandbox.Summary.ID)
 	if err != nil {
 		return err
 	}
-	if loaded.Summary.VMStatus != domain.VMStatusRunning {
+	stopRequired := loaded.Summary.VMStatus == domain.VMStatusRunning
+	if !stopRequired && domain.EffectiveStoppedRuntimePolicy(loaded) == domain.StoppedRuntimePolicyRetain {
 		if c.capTokens != nil {
 			c.capTokens.RevokeSandbox(loaded.Summary.ID)
 		}
@@ -2383,21 +2396,20 @@ func (c *Controller) stopProjectRunSandbox(ctx context.Context, sandbox *domain.
 	if c.driver == nil {
 		return fmt.Errorf("sandbox driver is required")
 	}
-	if err := c.driver.StopSandboxVM(ctx, loaded); err != nil {
-		return err
-	}
-	loaded.Summary.VMStatus = domain.VMStatusStopped
-	if err := c.store.UpdateSandbox(ctx, loaded); err != nil {
+	result, err := sessions.StopSandboxRuntime(ctx, c.config.SandboxRoot, c.store, c.driver, loaded, stopRequired)
+	if err != nil {
 		return err
 	}
 	if c.capTokens != nil {
 		c.capTokens.RevokeSandbox(loaded.Summary.ID)
 	}
-	event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: "sandbox stopped", CreatedAt: time.Now().UTC()}
-	_ = c.store.AddEvent(ctx, loaded.Summary.ID, event)
-	if c.streams != nil {
-		c.streams.PublishSandboxUpdated(&loaded.Summary)
-		c.streams.PublishEventAdded(loaded.Summary.ID, event)
+	if result.Stopped {
+		event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: sessions.SandboxStoppedEventMessage(result), CreatedAt: time.Now().UTC()}
+		_ = c.store.AddEvent(ctx, loaded.Summary.ID, event)
+		if c.streams != nil {
+			c.streams.PublishSandboxUpdated(&loaded.Summary)
+			c.streams.PublishEventAdded(loaded.Summary.ID, event)
+		}
 	}
 	return nil
 }

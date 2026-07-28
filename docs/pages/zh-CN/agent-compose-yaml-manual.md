@@ -429,6 +429,7 @@ agents:
 | `skills` | list | 空 | 注入 Agent 的 Skill 来源。 |
 | `volumes` | list | 空 | Volume 或 bind mount 列表。 |
 | `workspace` | object | 无 | 显式引用一个顶层 `workspaces` 条目，或定义 Agent 内联 Workspace。 |
+| `sandbox` | object | 保留已停止 runtime | Sandbox 生命周期配置。 |
 | `scheduler` | object | 无 | 自动触发 Agent 的 Scheduler。 |
 | `jupyter` | object | disabled | Agent run 的 Jupyter 默认配置。 |
 
@@ -739,6 +740,22 @@ workspace:
 ```
 
 若 `name` 与任一来源字段或 `target` 同时出现，该对象按内联 Workspace 处理，而不是从顶层继承后局部覆盖。需要复用时只写 `name`。
+
+### `sandbox`：已停止 runtime 生命周期
+
+默认情况下，停止 sandbox 会保留 driver runtime 及其私有可写状态，因此 `resume` 会重新启动同一个容器、Box 或 microVM sandbox。对于一次性 Agent，可以在每次确认停止后释放这部分私有 runtime 状态：
+
+```yaml
+sandbox:
+  stopped_runtime_policy: remove
+```
+
+`stopped_runtime_policy` 只接受 `retain`（默认值）或 `remove`：
+
+- `retain` 保留已停止的 runtime 和私有可写层。Resume 必须使用同一个 runtime；runtime 意外丢失时不会静默重建。
+- `remove` 显式删除已停止的 Docker 容器、BoxLite box/私有磁盘，或 Microsandbox sandbox/私有 qcow2 overlay。Sandbox 元数据、事件、日志、workspace 和声明的持久挂载仍会保留。Resume 会创建新 runtime，因此只存在于私有可写层中的数据会丢失。
+
+有效策略会在 sandbox 创建时生成快照；之后修改项目配置只影响新 sandbox。Daemon 会重试被中断的 release，`sandbox inspect` 会显示有效策略、release 状态和最近一次 release 错误。
 
 ### `scheduler`
 

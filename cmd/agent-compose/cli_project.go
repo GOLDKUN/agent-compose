@@ -498,18 +498,20 @@ func composePSOutputFromProject(ctx context.Context, clients cliServiceClients, 
 			runID = schedulerRun.RunID
 		}
 		output.Sandboxes = append(output.Sandboxes, composePSSandboxOutput{
-			SandboxID:      displayOpaqueID(session.GetSandboxId()),
-			RawID:          session.GetSandboxId(),
-			SandboxShortID: shortOpaqueID(session.GetSandboxId()),
-			Agent:          agent,
-			Status:         status,
-			RunID:          displayOpaqueID(runID),
-			RunShortID:     shortOpaqueID(runID),
-			CreatedAt:      formatProtoTimestamp(session.GetCreatedAt()),
-			UpdatedAt:      formatProtoTimestamp(session.GetUpdatedAt()),
-			Driver:         session.GetDriver(),
-			Image:          session.GetImage(),
-			Workspace:      session.GetWorkspacePath(),
+			SandboxID:            displayOpaqueID(session.GetSandboxId()),
+			RawID:                session.GetSandboxId(),
+			SandboxShortID:       shortOpaqueID(session.GetSandboxId()),
+			Agent:                agent,
+			Status:               status,
+			RunID:                displayOpaqueID(runID),
+			RunShortID:           shortOpaqueID(runID),
+			CreatedAt:            formatProtoTimestamp(session.GetCreatedAt()),
+			UpdatedAt:            formatProtoTimestamp(session.GetUpdatedAt()),
+			Driver:               session.GetDriver(),
+			Image:                session.GetImage(),
+			Workspace:            session.GetWorkspacePath(),
+			StoppedRuntimePolicy: session.GetStoppedRuntimePolicy(),
+			StoppedRuntimeState:  session.GetStoppedRuntimeState(),
 		})
 	}
 	return output, nil

@@ -433,6 +433,8 @@ agents:
     jupyter:
       enabled: true
       guest_port: 8888
+    sandbox:
+      stopped_runtime_policy: remove
 `))
 	if err != nil {
 		t.Fatalf("parse rich project: %v", err)
@@ -506,6 +508,9 @@ agents:
 	}
 	if agent.Jupyter == nil || !agent.Jupyter.Enabled || agent.Jupyter.GuestPort != 8888 {
 		t.Fatalf("round-tripped jupyter = %#v", agent.Jupyter)
+	}
+	if agent.Sandbox == nil || agent.Sandbox.StoppedRuntimePolicy != domain.StoppedRuntimePolicyRemove {
+		t.Fatalf("round-tripped sandbox = %#v", agent.Sandbox)
 	}
 	if agent.Scheduler == nil || agent.Scheduler.ConcurrencyPolicy != domain.LoaderConcurrencyPolicyParallel {
 		t.Fatalf("round-tripped scheduler = %#v", agent.Scheduler)

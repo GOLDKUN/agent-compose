@@ -351,7 +351,7 @@ func TestStopProjectSandboxUsesInternalStopSemantics(t *testing.T) {
 	driver := &projectStopSandboxDriver{}
 	streams := &projectStopSandboxStreams{}
 
-	if err := stopProjectSandbox(context.Background(), store, driver, streams, store.session); err != nil {
+	if err := stopProjectSandbox(context.Background(), "", nil, store, driver, streams, store.session); err != nil {
 		t.Fatalf("stopProjectSandbox returned error: %v", err)
 	}
 	if driver.stopCount != 1 {
@@ -360,7 +360,7 @@ func TestStopProjectSandboxUsesInternalStopSemantics(t *testing.T) {
 	if store.updated == nil || store.updated.Summary.VMStatus != domain.VMStatusStopped {
 		t.Fatalf("updated sandbox = %#v, want stopped", store.updated)
 	}
-	if len(store.events) != 1 || store.events[0].Type != "sandbox.stopped" || store.events[0].Message != "sandbox stopped" {
+	if len(store.events) != 1 || store.events[0].Type != "sandbox.stopped" || store.events[0].Message != "sandbox stopped and runtime retained" {
 		t.Fatalf("events = %#v, want one sandbox.stopped event", store.events)
 	}
 	if streams.updatedCount != 1 || streams.eventCount != 1 {

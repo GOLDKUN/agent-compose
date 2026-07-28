@@ -18,18 +18,43 @@ import (
 )
 
 type stickyProjectRunSandboxConfig struct {
-	LoaderConfigHash string                            `json:"loader_config_hash"`
-	ProjectID        string                            `json:"project_id"`
-	ProjectRevision  int64                             `json:"project_revision"`
-	AgentName        string                            `json:"agent_name"`
-	ManagedAgentID   string                            `json:"managed_agent_id"`
-	Driver           string                            `json:"driver"`
-	ImageRef         string                            `json:"image_ref"`
-	EnvItems         []domain.SandboxEnvVar            `json:"env_items,omitempty"`
-	CapsetIDs        []string                          `json:"capset_ids,omitempty"`
-	Workspace        *domain.SandboxWorkspace          `json:"workspace,omitempty"`
-	VolumeMounts     []domain.SandboxVolumeMount       `json:"volume_mounts,omitempty"`
-	Jupyter          sessionstore.CreateSandboxOptions `json:"jupyter"`
+	LoaderConfigHash string                      `json:"loader_config_hash"`
+	ProjectID        string                      `json:"project_id"`
+	ProjectRevision  int64                       `json:"project_revision"`
+	AgentName        string                      `json:"agent_name"`
+	ManagedAgentID   string                      `json:"managed_agent_id"`
+	Driver           string                      `json:"driver"`
+	ImageRef         string                      `json:"image_ref"`
+	EnvItems         []domain.SandboxEnvVar      `json:"env_items,omitempty"`
+	CapsetIDs        []string                    `json:"capset_ids,omitempty"`
+	Workspace        *domain.SandboxWorkspace    `json:"workspace,omitempty"`
+	VolumeMounts     []domain.SandboxVolumeMount `json:"volume_mounts,omitempty"`
+	Jupyter          stickyProjectSandboxOptions `json:"jupyter"`
+}
+
+// stickyProjectSandboxOptions preserves the serialized shape used before
+// stopped-runtime policy existed. Only the behavior-changing remove policy is
+// added to the hash, so default and explicit retain remain compatible.
+type stickyProjectSandboxOptions struct {
+	JupyterEnabled       bool
+	JupyterGuestPort     int
+	JupyterExpose        bool
+	VolumeMounts         []domain.SandboxVolumeMount
+	StoppedRuntimePolicy string `json:",omitempty"`
+}
+
+func stickyProjectSandboxOptionsFrom(options sessionstore.CreateSandboxOptions) stickyProjectSandboxOptions {
+	policy := ""
+	if normalized, err := domain.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy); err == nil && normalized == domain.StoppedRuntimePolicyRemove {
+		policy = domain.StoppedRuntimePolicyRemove
+	}
+	return stickyProjectSandboxOptions{
+		JupyterEnabled:       options.JupyterEnabled,
+		JupyterGuestPort:     options.JupyterGuestPort,
+		JupyterExpose:        options.JupyterExpose,
+		VolumeMounts:         loaders.NormalizeStickySandboxVolumeMounts(options.VolumeMounts),
+		StoppedRuntimePolicy: policy,
+	}
 }
 
 func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, prepared Preparation, driver, guestImage string, volumeMounts []domain.SandboxVolumeMount, jupyter sessionstore.CreateSandboxOptions) (string, error) {
@@ -40,7 +65,6 @@ func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, pr
 	capsetIDs := capabilities.NormalizeCapsetIDs(prepared.CapsetIDs)
 	sort.Strings(capsetIDs)
 	volumeMounts = loaders.NormalizeStickySandboxVolumeMounts(volumeMounts)
-	jupyter.VolumeMounts = loaders.NormalizeStickySandboxVolumeMounts(jupyter.VolumeMounts)
 	payload, err := json.Marshal(stickyProjectRunSandboxConfig{
 		LoaderConfigHash: baseHash,
 		ProjectID:        run.ProjectID,
@@ -53,7 +77,7 @@ func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, pr
 		CapsetIDs:        capsetIDs,
 		Workspace:        prepared.Workspace,
 		VolumeMounts:     volumeMounts,
-		Jupyter:          jupyter,
+		Jupyter:          stickyProjectSandboxOptionsFrom(jupyter),
 	})
 	if err != nil {
 		return "", err
@@ -100,7 +124,7 @@ func (c *Controller) resolveStickyLoaderBinding(ctx context.Context, store stick
 		unlock := c.lifecycleLocks.Lock(binding.SandboxID)
 		sandbox, err := c.store.GetSandbox(ctx, binding.SandboxID)
 		if err == nil {
-			err = c.stopProjectRunSandbox(ctx, sandbox)
+			err = c.stopProjectRunSandboxLocked(ctx, sandbox)
 		}
 		unlock()
 		if err != nil {

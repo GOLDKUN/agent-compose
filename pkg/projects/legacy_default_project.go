@@ -398,6 +398,7 @@ func normalizedAgentFromLegacy(definition domain.AgentDefinition) (compose.Norma
 		Skills:       legacySkills(definition.Skills),
 		Volumes:      legacyVolumes(definition.Volumes),
 		Jupyter:      config.Jupyter,
+		Sandbox:      config.Sandbox,
 		MCPServers:   config.MCPServers,
 	}
 	return agent, nil
@@ -413,6 +414,7 @@ func distinctLegacyDisplayName(displayName, stableName string) string {
 
 type legacyAgentConfig struct {
 	Jupyter    *compose.JupyterSpec                       `json:"jupyter,omitempty"`
+	Sandbox    *compose.NormalizedSandboxSpec             `json:"sandbox,omitempty"`
 	MCPServers map[string]compose.NormalizedMCPServerSpec `json:"mcp_servers,omitempty"`
 }
 

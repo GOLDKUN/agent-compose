@@ -64,23 +64,23 @@ func (r *LoaderSandboxRunner) Shutdown(ctx context.Context, sessionID string) er
 	if err != nil {
 		return err
 	}
-	if session.Summary.VMStatus != domain.VMStatusRunning {
+	stopRequired := session.Summary.VMStatus == domain.VMStatusRunning
+	if !stopRequired && domain.EffectiveStoppedRuntimePolicy(session) == domain.StoppedRuntimePolicyRetain {
 		return nil
 	}
-	if err := r.Driver.StopSandboxVM(stopCtx, session); err != nil {
-		return err
-	}
-	session.Summary.VMStatus = domain.VMStatusStopped
-	if err := r.Store.UpdateSandbox(stopCtx, session); err != nil {
+	result, err := sessions.StopSandboxRuntime(stopCtx, r.Config.SandboxRoot, r.Store, r.Driver, session, stopRequired)
+	if err != nil {
 		return err
 	}
 	if r.Streams != nil {
 		r.Streams.PublishSandboxUpdated(&session.Summary)
 	}
-	event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: "sandbox stopped", CreatedAt: time.Now().UTC()}
-	_ = r.Store.AddEvent(stopCtx, session.Summary.ID, event)
-	if r.Streams != nil {
-		r.Streams.PublishEventAdded(session.Summary.ID, event)
+	if result.Stopped {
+		event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: sessions.SandboxStoppedEventMessage(result), CreatedAt: time.Now().UTC()}
+		_ = r.Store.AddEvent(stopCtx, session.Summary.ID, event)
+		if r.Streams != nil {
+			r.Streams.PublishEventAdded(session.Summary.ID, event)
+		}
 	}
 	r.revokeCapabilitySandbox(session.Summary.ID)
 	loaded, err := r.Store.GetSandbox(stopCtx, session.Summary.ID)
@@ -194,8 +194,9 @@ func (r *LoaderSandboxRunner) Ensure(ctx context.Context, loader domain.Loader, 
 		)
 	}
 	session, err := r.Store.CreateSandboxWithOptions(ctx, title, "", driver, guestImage, workspaceID, domain.SandboxTypeScript+":"+loader.Summary.ID, workspaceSnapshot, envItems, tags, sessionstore.CreateSandboxOptions{
-		JupyterEnabled: request.JupyterEnabled,
-		VolumeMounts:   volumeMounts,
+		JupyterEnabled:       request.JupyterEnabled,
+		VolumeMounts:         volumeMounts,
+		StoppedRuntimePolicy: stoppedRuntimePolicyFromAgentDefinition(agentDefinition),
 	})
 	if err != nil {
 		return nil, "", err
@@ -320,6 +321,7 @@ func (r *LoaderSandboxRunner) loadOrResumeLocked(ctx context.Context, sessionID 
 	if err := r.Driver.StartSandboxVM(ctx, session); err != nil {
 		return nil, "", err
 	}
+	session.StoppedRuntime = nil
 	session.Summary.VMStatus = domain.VMStatusRunning
 	if err := r.Store.UpdateSandbox(ctx, session); err != nil {
 		return nil, "", err

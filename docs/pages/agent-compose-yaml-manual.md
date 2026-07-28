@@ -428,6 +428,7 @@ agents:
 | `skills` | list | Empty | Skill sources projected into the agent runtime. |
 | `volumes` | list | Empty | Volume and bind mounts. |
 | `workspace` | object | None | Explicitly selects a project `workspaces` entry or defines an inline workspace. |
+| `sandbox` | object | Retain stopped runtime | Sandbox lifecycle configuration. |
 | `scheduler` | object | None | Automatic trigger configuration. |
 | `jupyter` | object | Disabled | Default Jupyter behavior for agent runs. |
 
@@ -734,6 +735,22 @@ workspace:
 ```
 
 If `name` is combined with any source field or `target`, the object is treated as an inline workspace rather than an inherited project workspace with overrides. To reuse a project entry, set only `name`.
+
+### `sandbox`: stopped runtime lifecycle
+
+By default, stopping a sandbox retains its driver runtime and private writable state so `resume` restarts the same container, box, or microVM sandbox. Disposable agents can release that private runtime state after every confirmed stop:
+
+```yaml
+sandbox:
+  stopped_runtime_policy: remove
+```
+
+`stopped_runtime_policy` accepts only `retain` (the default) or `remove`:
+
+- `retain` keeps the stopped runtime and its private writable layer. Resume requires that same runtime; unexpected runtime loss is not silently recreated.
+- `remove` explicitly deletes the stopped container, BoxLite box/private disk, or Microsandbox sandbox/private qcow2 overlay. Sandbox metadata, events, logs, workspace, and declared durable mounts remain. Resume creates a new runtime, so data stored only in the private writable layer is lost.
+
+The effective policy is snapshotted when the sandbox is created. Editing the project changes only new sandboxes. An interrupted release is retried by the daemon, and `sandbox inspect` reports the effective policy, release state, and last release error.
 
 ### `scheduler`
 

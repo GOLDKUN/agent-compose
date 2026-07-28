@@ -327,7 +327,9 @@ func (h *SandboxHandler) StopSandbox(ctx context.Context, req *connect.Request[a
 	if err != nil {
 		return nil, err
 	}
-	if sandbox.Summary.VMStatus == domain.VMStatusStopped {
+	if sandbox.Summary.VMStatus == domain.VMStatusStopped &&
+		(domain.EffectiveStoppedRuntimePolicy(sandbox) == domain.StoppedRuntimePolicyRetain ||
+			domain.EffectiveStoppedRuntimeState(sandbox) == domain.StoppedRuntimeStateReleased) {
 		return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Sandbox: h.sandboxToV2(ctx, sandbox)}), nil
 	}
 	if sandbox.Summary.VMStatus != domain.VMStatusRunning {
@@ -389,20 +391,26 @@ func sandboxToV2WithTarget(sandbox *domain.Sandbox, target runs.SandboxRunTarget
 		return nil
 	}
 	result := &agentcomposev2.Sandbox{
-		SandboxId:     sandbox.Summary.ID,
-		Status:        sandbox.Summary.VMStatus,
-		Driver:        sandbox.Summary.Driver,
-		CreatedAt:     timestamppb.New(sandbox.Summary.CreatedAt),
-		UpdatedAt:     timestamppb.New(sandbox.Summary.UpdatedAt),
-		Image:         sandbox.Summary.GuestImage,
-		WorkspacePath: sandbox.Summary.WorkspacePath,
-		Title:         sandbox.Summary.Title,
-		ProxyPath:     sandbox.Summary.ProxyPath,
-		TriggerSource: sandbox.Summary.TriggerSource,
-		CellCount:     uint32(sandbox.Summary.CellCount),
-		EventCount:    uint32(sandbox.Summary.EventCount),
-		ProjectId:     target.ProjectID,
-		AgentName:     target.AgentName,
+		SandboxId:            sandbox.Summary.ID,
+		Status:               sandbox.Summary.VMStatus,
+		Driver:               sandbox.Summary.Driver,
+		CreatedAt:            timestamppb.New(sandbox.Summary.CreatedAt),
+		UpdatedAt:            timestamppb.New(sandbox.Summary.UpdatedAt),
+		Image:                sandbox.Summary.GuestImage,
+		WorkspacePath:        sandbox.Summary.WorkspacePath,
+		Title:                sandbox.Summary.Title,
+		ProxyPath:            sandbox.Summary.ProxyPath,
+		TriggerSource:        sandbox.Summary.TriggerSource,
+		CellCount:            uint32(sandbox.Summary.CellCount),
+		EventCount:           uint32(sandbox.Summary.EventCount),
+		ProjectId:            target.ProjectID,
+		AgentName:            target.AgentName,
+		StoppedRuntimePolicy: domain.EffectiveStoppedRuntimePolicy(sandbox),
+		StoppedRuntimeState:  domain.EffectiveStoppedRuntimeState(sandbox),
+	}
+	if stoppedRuntime := sandbox.StoppedRuntime; stoppedRuntime != nil {
+		result.StoppedRuntimeLastError = stoppedRuntime.LastError
+		result.StoppedRuntimeReleasedAt = sandboxHistoryTimestamp(stoppedRuntime.ReleasedAt)
 	}
 	for _, tag := range sandbox.Summary.Tags {
 		result.Tags = append(result.Tags, &agentcomposev2.SandboxTag{Name: tag.Name, Value: tag.Value})

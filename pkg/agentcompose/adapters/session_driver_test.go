@@ -14,6 +14,7 @@ import (
 	"agent-compose/pkg/internal/testutil"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sessions"
 	"agent-compose/pkg/storage/sessionstore"
 
 	"github.com/samber/do/v2"
@@ -184,6 +185,63 @@ func TestSandboxDriverStartSandboxVMSavesRuntimeState(t *testing.T) {
 	}
 	if vmState.BoxID != "container-1" || vmState.BootstrapRef != updatedProxyState.JupyterURL {
 		t.Fatalf("vm state = %+v, want box id and bootstrap ref from runtime", vmState)
+	}
+}
+
+func TestSandboxDriverRecreatesOnlyAfterIntentionalRuntimeRelease(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	config := &appconfig.Config{
+		DataRoot: root, SandboxRoot: filepath.Join(root, "sandboxes"), RuntimeDriver: driverpkg.RuntimeDriverBoxlite,
+		BoxliteHome: filepath.Join(root, "boxlite"), DefaultImage: "guest:latest", GuestWorkspacePath: "/workspace",
+		JupyterProxyBasePath: "/agent-compose/session", SandboxStartTimeout: 2 * time.Second, SandboxStopTimeout: time.Second,
+	}
+	store, err := sessionstore.NewWithConfig(config)
+	if err != nil {
+		t.Fatalf("NewWithConfig returned error: %v", err)
+	}
+	sandbox, err := store.CreateSandboxWithOptions(ctx, "released", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeManual, nil, nil, nil, sessionstore.CreateSandboxOptions{
+		StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove,
+	})
+	if err != nil {
+		t.Fatalf("CreateSandboxWithOptions returned error: %v", err)
+	}
+	sandbox.Summary.VMStatus = domain.VMStatusStopped
+	sandbox.StoppedRuntime = &domain.StoppedRuntime{State: domain.StoppedRuntimeStateReleasePending, RequestedAt: time.Now().UTC()}
+	if err := store.UpdateSandbox(ctx, sandbox); err != nil {
+		t.Fatalf("UpdateSandbox returned error: %v", err)
+	}
+	vmState, err := store.GetVMState(sandbox.Summary.ID)
+	if err != nil {
+		t.Fatalf("GetVMState returned error: %v", err)
+	}
+	vmState.BoxID = "old-runtime"
+	vmState.StoppedAt = time.Now().UTC()
+	if err := store.SaveVMState(sandbox.Summary.ID, vmState); err != nil {
+		t.Fatalf("SaveVMState returned error: %v", err)
+	}
+
+	removed := false
+	var ensureState domain.VMState
+	runtime := fakeSessionRuntime{
+		info:            domain.SandboxVMInfo{BoxID: "new-runtime"},
+		removeHook:      func(*domain.Sandbox) { removed = true },
+		ensureStateHook: func(state domain.VMState) { ensureState = state },
+	}
+	driver := NewSandboxDriver(config, store, nil, fakeRuntimeProvider{runtime: runtime})
+	if err := driver.StartSandboxVM(ctx, sandbox); err != nil {
+		t.Fatalf("StartSandboxVM returned error: %v", err)
+	}
+	if !removed || !ensureState.StoppedAt.IsZero() || ensureState.BoxID != "" {
+		t.Fatalf("removed=%v ensure state=%#v, want released runtime recreation inputs", removed, ensureState)
+	}
+	vmState, err = store.GetVMState(sandbox.Summary.ID)
+	if err != nil || vmState.BoxID != "new-runtime" || !vmState.StoppedAt.IsZero() {
+		t.Fatalf("saved VM state=%#v err=%v", vmState, err)
+	}
+	record, err := sessions.ReadOwnershipRecord(config.SandboxRoot, sandbox.Summary.ID)
+	if err != nil || record.RuntimeID != sandbox.Summary.RuntimeRef {
+		t.Fatalf("runtime ownership=%#v err=%v", record, err)
 	}
 }
 

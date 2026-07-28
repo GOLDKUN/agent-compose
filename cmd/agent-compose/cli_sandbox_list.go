@@ -12,20 +12,22 @@ import (
 )
 
 type composePSSandboxOutput struct {
-	Kind           string `json:"kind,omitempty"`
-	RuntimeID      string `json:"runtime_id,omitempty"`
-	SandboxID      string `json:"sandbox_id"`
-	RawID          string `json:"-"`
-	SandboxShortID string `json:"sandbox_short_id"`
-	Agent          string `json:"agent,omitempty"`
-	Status         string `json:"status"`
-	RunID          string `json:"run_id,omitempty"`
-	RunShortID     string `json:"run_short_id,omitempty"`
-	CreatedAt      string `json:"created_at,omitempty"`
-	UpdatedAt      string `json:"updated_at,omitempty"`
-	Driver         string `json:"driver,omitempty"`
-	Image          string `json:"image,omitempty"`
-	Workspace      string `json:"workspace,omitempty"`
+	Kind                 string `json:"kind,omitempty"`
+	RuntimeID            string `json:"runtime_id,omitempty"`
+	SandboxID            string `json:"sandbox_id"`
+	RawID                string `json:"-"`
+	SandboxShortID       string `json:"sandbox_short_id"`
+	Agent                string `json:"agent,omitempty"`
+	Status               string `json:"status"`
+	RunID                string `json:"run_id,omitempty"`
+	RunShortID           string `json:"run_short_id,omitempty"`
+	CreatedAt            string `json:"created_at,omitempty"`
+	UpdatedAt            string `json:"updated_at,omitempty"`
+	Driver               string `json:"driver,omitempty"`
+	Image                string `json:"image,omitempty"`
+	Workspace            string `json:"workspace,omitempty"`
+	StoppedRuntimePolicy string `json:"stopped_runtime_policy,omitempty"`
+	StoppedRuntimeState  string `json:"stopped_runtime_state,omitempty"`
 }
 
 func countProjectDownFailedSandboxStops(changes []*agentcomposev2.ProjectChange) int {

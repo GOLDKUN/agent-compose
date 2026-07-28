@@ -986,22 +986,27 @@ func testComposeImageStatsAndSessionHelpers(t *testing.T) {
 	}
 
 	session := composeSandboxOutputFromSummary(&agentcomposev2.Sandbox{
-		SandboxId:     "session-1",
-		Title:         "title",
-		Driver:        "docker",
-		Status:        " RUNNING ",
-		WorkspacePath: "/repo",
-		ProxyPath:     "/proxy",
-		Image:         "guest",
-		TriggerSource: "manual",
-		CellCount:     3,
-		EventCount:    4,
+		SandboxId:               "session-1",
+		Title:                   "title",
+		Driver:                  "docker",
+		Status:                  " RUNNING ",
+		WorkspacePath:           "/repo",
+		ProxyPath:               "/proxy",
+		Image:                   "guest",
+		TriggerSource:           "manual",
+		CellCount:               3,
+		EventCount:              4,
+		StoppedRuntimePolicy:    domain.StoppedRuntimePolicyRemove,
+		StoppedRuntimeState:     domain.StoppedRuntimeStateReleasePending,
+		StoppedRuntimeLastError: "remove failed",
 		Tags: []*agentcomposev2.SandboxTag{
 			{Name: "agent", Value: "reviewer"},
 			{Name: " ", Value: "ignored"},
 		},
 	})
-	if session.SandboxID != "session-1" || session.VMStatus != "running" || session.Tags["agent"] != "reviewer" || session.EventCount != 4 {
+	if session.SandboxID != "session-1" || session.VMStatus != "running" || session.Tags["agent"] != "reviewer" || session.EventCount != 4 ||
+		session.StoppedRuntimePolicy != domain.StoppedRuntimePolicyRemove || session.StoppedRuntimeState != domain.StoppedRuntimeStateReleasePending ||
+		session.StoppedRuntimeError != "remove failed" {
 		t.Fatalf("composeSandboxOutputFromSummary = %#v", session)
 	}
 	if commandExitCode(nil) != 0 ||

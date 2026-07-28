@@ -171,6 +171,7 @@ func (l Lifecycle) EnsureProxyReady(ctx context.Context, sessionID string) (*dom
 		_ = l.Store.UpdateSandbox(ctx, session)
 		return nil, domain.ProxyState{}, err
 	}
+	session.StoppedRuntime = nil
 	session.Summary.VMStatus = domain.VMStatusRunning
 	if err := l.Store.UpdateSandbox(ctx, session); err != nil {
 		return nil, domain.ProxyState{}, err
@@ -220,6 +221,7 @@ func (l Lifecycle) ResumeLoaded(ctx context.Context, session *domain.Sandbox, ca
 	if err := l.Driver.StartSandboxVM(ctx, session); err != nil {
 		return nil, err
 	}
+	session.StoppedRuntime = nil
 	session.Summary.VMStatus = domain.VMStatusRunning
 	if err := l.Store.UpdateSandbox(ctx, session); err != nil {
 		return nil, err
@@ -287,31 +289,62 @@ func (l Lifecycle) StopLoaded(ctx context.Context, session *domain.Sandbox) (*do
 	if err != nil {
 		return nil, false, err
 	}
-	if !stopRequired {
+	if !stopRequired && domain.EffectiveStoppedRuntimePolicy(session) == domain.StoppedRuntimePolicyRetain {
 		return session, false, nil
 	}
-	if err := l.Driver.StopSandboxVM(ctx, session); err != nil {
-		return nil, false, err
+	sandboxRoot := ""
+	if l.Config != nil {
+		sandboxRoot = l.Config.SandboxRoot
 	}
-	session.Summary.VMStatus = domain.VMStatusStopped
-	if err := l.Store.UpdateSandbox(ctx, session); err != nil {
+	result, err := StopSandboxRuntime(ctx, sandboxRoot, l.Store, l.Driver, session, stopRequired)
+	if err != nil {
 		return nil, false, err
 	}
 	l.publishSandboxUpdated(&session.Summary)
-	event := domain.SandboxEvent{
-		ID:        uuid.NewString(),
-		Type:      "sandbox.stopped",
-		Level:     "info",
-		Message:   "sandbox stopped",
-		CreatedAt: time.Now().UTC(),
+	if result.Stopped {
+		event := domain.SandboxEvent{
+			ID:        uuid.NewString(),
+			Type:      "sandbox.stopped",
+			Level:     "info",
+			Message:   SandboxStoppedEventMessage(result),
+			CreatedAt: time.Now().UTC(),
+		}
+		_ = l.Store.AddEvent(ctx, session.Summary.ID, event)
+		l.publishEventAdded(session.Summary.ID, event)
 	}
-	_ = l.Store.AddEvent(ctx, session.Summary.ID, event)
-	l.publishEventAdded(session.Summary.ID, event)
 	loaded, err := l.Store.GetSandbox(ctx, session.Summary.ID)
 	if err != nil {
 		return nil, false, err
 	}
-	return loaded, true, nil
+	return loaded, result.Stopped, nil
+}
+
+type stoppedRuntimeRecoveryStore interface {
+	LifecycleStore
+	ListSandboxes(context.Context, domain.SandboxListOptions) (domain.SandboxListResult, error)
+}
+
+func (l Lifecycle) RecoverStoppedRuntimeReleases(ctx context.Context) []string {
+	store, ok := l.Store.(stoppedRuntimeRecoveryStore)
+	if !ok {
+		return []string{"stopped runtime recovery store does not support sandbox listing"}
+	}
+	listed, err := store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: 1 << 30})
+	if err != nil {
+		return []string{fmt.Sprintf("list sandboxes for stopped runtime recovery: %v", err)}
+	}
+	var warnings []string
+	for _, sandbox := range listed.Sandboxes {
+		state := domain.EffectiveStoppedRuntimeState(sandbox)
+		if domain.EffectiveStoppedRuntimePolicy(sandbox) != domain.StoppedRuntimePolicyRemove ||
+			(state != domain.StoppedRuntimeStateReleasePending && state != domain.StoppedRuntimeStateReleased) {
+			continue
+		}
+		if _, _, err := l.StopLoaded(ctx, sandbox); err != nil {
+			warnings = append(warnings, fmt.Sprintf("recover stopped runtime release %s: %v", sandbox.Summary.ID, err))
+		}
+	}
+	return warnings
 }
 
 func (l Lifecycle) stopRequired(session *domain.Sandbox) (bool, error) {

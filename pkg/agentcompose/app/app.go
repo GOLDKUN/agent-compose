@@ -228,6 +228,9 @@ func StartBackground(di do.Injector) error {
 	for _, warning := range do.MustInvoke[*sessions.RemovalCoordinator](di).Recover(do.MustInvoke[context.Context](di)) {
 		slog.Warn("failed to recover sandbox deletion", "warning", warning)
 	}
+	for _, warning := range do.MustInvoke[*adapters.SandboxRPCBridge](di).RecoverStoppedRuntimeReleases(do.MustInvoke[context.Context](di)) {
+		slog.Warn("failed to recover stopped runtime release", "warning", warning)
+	}
 	if err := syncLegacyDefaultProject(do.MustInvoke[context.Context](di), do.MustInvoke[*projects.Controller](di)); err != nil {
 		slog.Warn("failed to sync legacy v1 agents into the default project", "error", err)
 	}

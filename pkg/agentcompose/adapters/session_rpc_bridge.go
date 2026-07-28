@@ -312,6 +312,10 @@ func (b *SandboxRPCBridge) ReconcileRuntimeState(ctx context.Context, session *d
 	return reconciled, err
 }
 
+func (b *SandboxRPCBridge) RecoverStoppedRuntimeReleases(ctx context.Context) []string {
+	return b.sessionLifecycle().RecoverStoppedRuntimeReleases(ctx)
+}
+
 func (b *SandboxRPCBridge) StopSandbox(ctx context.Context, sandboxID string) (*domain.Sandbox, error) {
 	return b.stopSandbox(ctx, sandboxID, domain.SandboxTypeManual)
 }

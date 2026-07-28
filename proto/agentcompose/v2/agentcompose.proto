@@ -740,6 +740,11 @@ message AgentSpec {
   optional bool enabled = 16;
   string display_name = 17;
   string description = 18;
+  SandboxSpec sandbox = 19;
+}
+
+message SandboxSpec {
+  string stopped_runtime_policy = 1;
 }
 
 message MCPServerSpec {
@@ -1112,6 +1117,10 @@ message Sandbox {
   google.protobuf.Timestamp workspace_reclamation_started_at = 18;
   google.protobuf.Timestamp workspace_reclamation_completed_at = 19;
   string workspace_reclamation_last_error = 20;
+  string stopped_runtime_policy = 21;
+  string stopped_runtime_state = 22;
+  string stopped_runtime_last_error = 23;
+  google.protobuf.Timestamp stopped_runtime_released_at = 24;
 }
 
 message SandboxTag {

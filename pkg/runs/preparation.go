@@ -38,7 +38,7 @@ type Preparation struct {
 	Volumes          []domain.VolumeMountSpec
 	ProjectRoot      string
 	ProjectVolumes   map[string]domain.VolumeRecord
-	Jupyter          sessionstore.CreateSandboxOptions
+	SandboxOptions   sessionstore.CreateSandboxOptions
 }
 
 func PrepareProjectRun(ctx context.Context, store PreparationStore, resolver WorkspaceResolver, run domain.ProjectRunRecord, requestEnv []*agentcomposev2.EnvVarSpec) (Preparation, error) {
@@ -83,7 +83,7 @@ func PrepareProjectRun(ctx context.Context, store PreparationStore, resolver Wor
 		CapsetIDs:        capabilities.NormalizeCapsetIDs(agent.CapsetIDs),
 		Volumes:          agent.Volumes,
 		ProjectRoot:      ProjectRoot(project),
-		Jupyter:          jupyterOptionsFromAgentSpec(agentSpec),
+		SandboxOptions:   sandboxOptionsFromAgentSpec(agentSpec),
 	}
 	projectVolumes, err := store.ListProjectVolumes(ctx, project.ID)
 	if err != nil {
@@ -129,15 +129,19 @@ func ProjectRoot(project domain.ProjectRecord) string {
 	return filepath.Dir(sourcePath)
 }
 
-func jupyterOptionsFromAgentSpec(agent *agentcomposev2.AgentSpec) sessionstore.CreateSandboxOptions {
-	if agent == nil || agent.GetJupyter() == nil {
+func sandboxOptionsFromAgentSpec(agent *agentcomposev2.AgentSpec) sessionstore.CreateSandboxOptions {
+	if agent == nil {
 		return sessionstore.CreateSandboxOptions{}
 	}
-	jupyter := agent.GetJupyter()
-	return sessionstore.CreateSandboxOptions{
-		JupyterEnabled:   jupyter.GetEnabled(),
-		JupyterGuestPort: int(jupyter.GetGuestPort()),
+	options := sessionstore.CreateSandboxOptions{}
+	if jupyter := agent.GetJupyter(); jupyter != nil {
+		options.JupyterEnabled = jupyter.GetEnabled()
+		options.JupyterGuestPort = int(jupyter.GetGuestPort())
 	}
+	if sandbox := agent.GetSandbox(); sandbox != nil {
+		options.StoppedRuntimePolicy = sandbox.GetStoppedRuntimePolicy()
+	}
+	return options
 }
 
 func DecodeRevisionSpec(raw string) (*agentcomposev2.ProjectSpec, error) {
