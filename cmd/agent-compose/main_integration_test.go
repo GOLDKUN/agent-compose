@@ -68,7 +68,7 @@ func testDaemonListenConfigWorkflow(t *testing.T) {
 	t.Run("cli remove sandbox usage errors", TestCLIRemoveSandboxUsageErrors)
 	t.Run("cli stop requires sandbox", TestCLIStopRequiresSandboxUsageError)
 	t.Run("cli resume rejects empty sandbox", TestCLIResumeRejectsEmptySandboxUsageError)
-	t.Run("cli exec streams and json", TestIntegrationCLIExecStreamsAndSupportsJSON)
+	t.Run("cli exec streams and json", TestIntegrationCLIStreamExecsAndSupportsJSON)
 	t.Run("cli exec interactive reserved unsupported", TestCLIExecInteractiveReservedUnsupported)
 	t.Run("cli exec rejects empty sandbox", TestCLIExecRejectsEmptySandboxUsageError)
 	t.Run("cli exec agent flag is removed", TestCLIExecAgentFlagIsRemoved)

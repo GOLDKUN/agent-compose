@@ -347,18 +347,18 @@ func runComposeRunCommand(cmd *cobra.Command, cli cliOptions, options composeRun
 	client = clients.runStream
 	if normalizedOptions.Interactive {
 		if normalizedOptions.TTY {
-			attachClient, err := newCLIRunAttachServiceClient(cli)
+			attachClient, err := newCLIAttachAgentRunServiceClient(cli)
 			if err != nil {
 				return err
 			}
 			if promptFlagChanged {
 				runReq.Prompt = prompt
 				runReq.Command = ""
-				return runComposeRunPromptAttachCommand(cmd, runtimeProject.name(), connectRunAttachClient{client: attachClient}, runReq)
+				return runComposeRunPromptAttachCommand(cmd, runtimeProject.name(), connectAttachAgentRunClient{client: attachClient}, runReq)
 			}
 			runReq.Prompt = ""
 			runReq.Command = commandText
-			return runComposeRunAttachCommand(cmd, runtimeProject.name(), connectRunAttachClient{client: attachClient}, runReq, normalizedOptions)
+			return runComposeAttachAgentRunCommand(cmd, runtimeProject.name(), connectAttachAgentRunClient{client: attachClient}, runReq, normalizedOptions)
 		}
 		runReq.Prompt = ""
 		runReq.Command = ""

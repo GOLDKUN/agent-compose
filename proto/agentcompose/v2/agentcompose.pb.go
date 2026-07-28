@@ -502,58 +502,58 @@ func (RunEventKind) EnumDescriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{8}
 }
 
-type RunAgentStreamEventType int32
+type StreamAgentRunEventType int32
 
 const (
-	RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_UNSPECIFIED RunAgentStreamEventType = 0
-	RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_STARTED     RunAgentStreamEventType = 1
-	RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT      RunAgentStreamEventType = 2
-	RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_STATUS      RunAgentStreamEventType = 3
-	RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED   RunAgentStreamEventType = 4
+	StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_UNSPECIFIED StreamAgentRunEventType = 0
+	StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_STARTED     StreamAgentRunEventType = 1
+	StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT      StreamAgentRunEventType = 2
+	StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_STATUS      StreamAgentRunEventType = 3
+	StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED   StreamAgentRunEventType = 4
 )
 
-// Enum value maps for RunAgentStreamEventType.
+// Enum value maps for StreamAgentRunEventType.
 var (
-	RunAgentStreamEventType_name = map[int32]string{
-		0: "RUN_AGENT_STREAM_EVENT_TYPE_UNSPECIFIED",
-		1: "RUN_AGENT_STREAM_EVENT_TYPE_STARTED",
-		2: "RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT",
-		3: "RUN_AGENT_STREAM_EVENT_TYPE_STATUS",
-		4: "RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED",
+	StreamAgentRunEventType_name = map[int32]string{
+		0: "STREAM_AGENT_RUN_EVENT_TYPE_UNSPECIFIED",
+		1: "STREAM_AGENT_RUN_EVENT_TYPE_STARTED",
+		2: "STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT",
+		3: "STREAM_AGENT_RUN_EVENT_TYPE_STATUS",
+		4: "STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED",
 	}
-	RunAgentStreamEventType_value = map[string]int32{
-		"RUN_AGENT_STREAM_EVENT_TYPE_UNSPECIFIED": 0,
-		"RUN_AGENT_STREAM_EVENT_TYPE_STARTED":     1,
-		"RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT":      2,
-		"RUN_AGENT_STREAM_EVENT_TYPE_STATUS":      3,
-		"RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED":   4,
+	StreamAgentRunEventType_value = map[string]int32{
+		"STREAM_AGENT_RUN_EVENT_TYPE_UNSPECIFIED": 0,
+		"STREAM_AGENT_RUN_EVENT_TYPE_STARTED":     1,
+		"STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT":      2,
+		"STREAM_AGENT_RUN_EVENT_TYPE_STATUS":      3,
+		"STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED":   4,
 	}
 )
 
-func (x RunAgentStreamEventType) Enum() *RunAgentStreamEventType {
-	p := new(RunAgentStreamEventType)
+func (x StreamAgentRunEventType) Enum() *StreamAgentRunEventType {
+	p := new(StreamAgentRunEventType)
 	*p = x
 	return p
 }
 
-func (x RunAgentStreamEventType) String() string {
+func (x StreamAgentRunEventType) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (RunAgentStreamEventType) Descriptor() protoreflect.EnumDescriptor {
+func (StreamAgentRunEventType) Descriptor() protoreflect.EnumDescriptor {
 	return file_agentcompose_v2_agentcompose_proto_enumTypes[9].Descriptor()
 }
 
-func (RunAgentStreamEventType) Type() protoreflect.EnumType {
+func (StreamAgentRunEventType) Type() protoreflect.EnumType {
 	return &file_agentcompose_v2_agentcompose_proto_enumTypes[9]
 }
 
-func (x RunAgentStreamEventType) Number() protoreflect.EnumNumber {
+func (x StreamAgentRunEventType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use RunAgentStreamEventType.Descriptor instead.
-func (RunAgentStreamEventType) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use StreamAgentRunEventType.Descriptor instead.
+func (StreamAgentRunEventType) EnumDescriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{9}
 }
 
@@ -609,55 +609,55 @@ func (RunSandboxCleanupPolicy) EnumDescriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{10}
 }
 
-type ExecStreamEventType int32
+type StreamExecEventType int32
 
 const (
-	ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_UNSPECIFIED ExecStreamEventType = 0
-	ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_STARTED     ExecStreamEventType = 1
-	ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_OUTPUT      ExecStreamEventType = 2
-	ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_COMPLETED   ExecStreamEventType = 3
+	StreamExecEventType_STREAM_EXEC_EVENT_TYPE_UNSPECIFIED StreamExecEventType = 0
+	StreamExecEventType_STREAM_EXEC_EVENT_TYPE_STARTED     StreamExecEventType = 1
+	StreamExecEventType_STREAM_EXEC_EVENT_TYPE_OUTPUT      StreamExecEventType = 2
+	StreamExecEventType_STREAM_EXEC_EVENT_TYPE_COMPLETED   StreamExecEventType = 3
 )
 
-// Enum value maps for ExecStreamEventType.
+// Enum value maps for StreamExecEventType.
 var (
-	ExecStreamEventType_name = map[int32]string{
-		0: "EXEC_STREAM_EVENT_TYPE_UNSPECIFIED",
-		1: "EXEC_STREAM_EVENT_TYPE_STARTED",
-		2: "EXEC_STREAM_EVENT_TYPE_OUTPUT",
-		3: "EXEC_STREAM_EVENT_TYPE_COMPLETED",
+	StreamExecEventType_name = map[int32]string{
+		0: "STREAM_EXEC_EVENT_TYPE_UNSPECIFIED",
+		1: "STREAM_EXEC_EVENT_TYPE_STARTED",
+		2: "STREAM_EXEC_EVENT_TYPE_OUTPUT",
+		3: "STREAM_EXEC_EVENT_TYPE_COMPLETED",
 	}
-	ExecStreamEventType_value = map[string]int32{
-		"EXEC_STREAM_EVENT_TYPE_UNSPECIFIED": 0,
-		"EXEC_STREAM_EVENT_TYPE_STARTED":     1,
-		"EXEC_STREAM_EVENT_TYPE_OUTPUT":      2,
-		"EXEC_STREAM_EVENT_TYPE_COMPLETED":   3,
+	StreamExecEventType_value = map[string]int32{
+		"STREAM_EXEC_EVENT_TYPE_UNSPECIFIED": 0,
+		"STREAM_EXEC_EVENT_TYPE_STARTED":     1,
+		"STREAM_EXEC_EVENT_TYPE_OUTPUT":      2,
+		"STREAM_EXEC_EVENT_TYPE_COMPLETED":   3,
 	}
 )
 
-func (x ExecStreamEventType) Enum() *ExecStreamEventType {
-	p := new(ExecStreamEventType)
+func (x StreamExecEventType) Enum() *StreamExecEventType {
+	p := new(StreamExecEventType)
 	*p = x
 	return p
 }
 
-func (x ExecStreamEventType) String() string {
+func (x StreamExecEventType) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (ExecStreamEventType) Descriptor() protoreflect.EnumDescriptor {
+func (StreamExecEventType) Descriptor() protoreflect.EnumDescriptor {
 	return file_agentcompose_v2_agentcompose_proto_enumTypes[11].Descriptor()
 }
 
-func (ExecStreamEventType) Type() protoreflect.EnumType {
+func (StreamExecEventType) Type() protoreflect.EnumType {
 	return &file_agentcompose_v2_agentcompose_proto_enumTypes[11]
 }
 
-func (x ExecStreamEventType) Number() protoreflect.EnumNumber {
+func (x StreamExecEventType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use ExecStreamEventType.Descriptor instead.
-func (ExecStreamEventType) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use StreamExecEventType.Descriptor instead.
+func (StreamExecEventType) EnumDescriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{11}
 }
 
@@ -6691,15 +6691,17 @@ type RunAgentRequest struct {
 	SchedulerId      string                  `protobuf:"bytes,7,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
 	TriggerId        string                  `protobuf:"bytes,8,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
 	OutputSchemaJson string                  `protobuf:"bytes,9,opt,name=output_schema_json,json=outputSchemaJson,proto3" json:"output_schema_json,omitempty"`
-	ClientRequestId  string                  `protobuf:"bytes,10,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	Command          string                  `protobuf:"bytes,11,opt,name=command,proto3" json:"command,omitempty"`
-	Jupyter          *RunJupyterSpec         `protobuf:"bytes,12,opt,name=jupyter,proto3" json:"jupyter,omitempty"`
-	Driver           string                  `protobuf:"bytes,13,opt,name=driver,proto3" json:"driver,omitempty"`
-	SandboxId        string                  `protobuf:"bytes,14,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
-	Volumes          []*VolumeMountSpec      `protobuf:"bytes,15,rep,name=volumes,proto3" json:"volumes,omitempty"`
-	PayloadJson      string                  `protobuf:"bytes,16,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Idempotency key scoped by project, agent, and run source. Retries with the
+	// same key resolve to the same persistent Run ID.
+	ClientRequestId string             `protobuf:"bytes,10,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
+	Command         string             `protobuf:"bytes,11,opt,name=command,proto3" json:"command,omitempty"`
+	Jupyter         *RunJupyterSpec    `protobuf:"bytes,12,opt,name=jupyter,proto3" json:"jupyter,omitempty"`
+	Driver          string             `protobuf:"bytes,13,opt,name=driver,proto3" json:"driver,omitempty"`
+	SandboxId       string             `protobuf:"bytes,14,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Volumes         []*VolumeMountSpec `protobuf:"bytes,15,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	PayloadJson     string             `protobuf:"bytes,16,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RunAgentRequest) Reset() {
@@ -6896,9 +6898,9 @@ func (x *RunAgentResponse) GetWarnings() []string {
 	return nil
 }
 
-type RunAgentStreamResponse struct {
+type StreamAgentRunResponse struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
-	EventType     RunAgentStreamEventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=agentcompose.v2.RunAgentStreamEventType" json:"event_type,omitempty"`
+	EventType     StreamAgentRunEventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=agentcompose.v2.StreamAgentRunEventType" json:"event_type,omitempty"`
 	Run           *RunSummary             `protobuf:"bytes,2,opt,name=run,proto3" json:"run,omitempty"`
 	RunId         string                  `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	Chunk         string                  `protobuf:"bytes,4,opt,name=chunk,proto3" json:"chunk,omitempty"`
@@ -6910,20 +6912,20 @@ type RunAgentStreamResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RunAgentStreamResponse) Reset() {
-	*x = RunAgentStreamResponse{}
+func (x *StreamAgentRunResponse) Reset() {
+	*x = StreamAgentRunResponse{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RunAgentStreamResponse) String() string {
+func (x *StreamAgentRunResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RunAgentStreamResponse) ProtoMessage() {}
+func (*StreamAgentRunResponse) ProtoMessage() {}
 
-func (x *RunAgentStreamResponse) ProtoReflect() protoreflect.Message {
+func (x *StreamAgentRunResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -6935,100 +6937,100 @@ func (x *RunAgentStreamResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RunAgentStreamResponse.ProtoReflect.Descriptor instead.
-func (*RunAgentStreamResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use StreamAgentRunResponse.ProtoReflect.Descriptor instead.
+func (*StreamAgentRunResponse) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{75}
 }
 
-func (x *RunAgentStreamResponse) GetEventType() RunAgentStreamEventType {
+func (x *StreamAgentRunResponse) GetEventType() StreamAgentRunEventType {
 	if x != nil {
 		return x.EventType
 	}
-	return RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_UNSPECIFIED
+	return StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_UNSPECIFIED
 }
 
-func (x *RunAgentStreamResponse) GetRun() *RunSummary {
+func (x *StreamAgentRunResponse) GetRun() *RunSummary {
 	if x != nil {
 		return x.Run
 	}
 	return nil
 }
 
-func (x *RunAgentStreamResponse) GetRunId() string {
+func (x *StreamAgentRunResponse) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *RunAgentStreamResponse) GetChunk() string {
+func (x *StreamAgentRunResponse) GetChunk() string {
 	if x != nil {
 		return x.Chunk
 	}
 	return ""
 }
 
-func (x *RunAgentStreamResponse) GetStream() StdioStream {
+func (x *StreamAgentRunResponse) GetStream() StdioStream {
 	if x != nil {
 		return x.Stream
 	}
 	return StdioStream_STDIO_STREAM_UNSPECIFIED
 }
 
-func (x *RunAgentStreamResponse) GetCreatedAt() *timestamppb.Timestamp {
+func (x *StreamAgentRunResponse) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *RunAgentStreamResponse) GetWarnings() []string {
+func (x *StreamAgentRunResponse) GetWarnings() []string {
 	if x != nil {
 		return x.Warnings
 	}
 	return nil
 }
 
-func (x *RunAgentStreamResponse) GetTranscript() *TranscriptEvent {
+func (x *StreamAgentRunResponse) GetTranscript() *TranscriptEvent {
 	if x != nil {
 		return x.Transcript
 	}
 	return nil
 }
 
-type RunAttachRequest struct {
+type AttachAgentRunRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Frame variants occupy the low-number range. Envelope metadata starts at
 	// 15 so future frame variants can be added without moving metadata fields.
 	ClientFrameId string `protobuf:"bytes,15,opt,name=client_frame_id,json=clientFrameId,proto3" json:"client_frame_id,omitempty"`
 	// Types that are valid to be assigned to Frame:
 	//
-	//	*RunAttachRequest_Start
-	//	*RunAttachRequest_Stdin
-	//	*RunAttachRequest_StdinEof
-	//	*RunAttachRequest_Resize
-	//	*RunAttachRequest_Signal
-	//	*RunAttachRequest_HumanMessage
-	//	*RunAttachRequest_Cancel
-	Frame         isRunAttachRequest_Frame `protobuf_oneof:"frame"`
+	//	*AttachAgentRunRequest_Start
+	//	*AttachAgentRunRequest_Stdin
+	//	*AttachAgentRunRequest_StdinEof
+	//	*AttachAgentRunRequest_Resize
+	//	*AttachAgentRunRequest_Signal
+	//	*AttachAgentRunRequest_HumanMessage
+	//	*AttachAgentRunRequest_Cancel
+	Frame         isAttachAgentRunRequest_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RunAttachRequest) Reset() {
-	*x = RunAttachRequest{}
+func (x *AttachAgentRunRequest) Reset() {
+	*x = AttachAgentRunRequest{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RunAttachRequest) String() string {
+func (x *AttachAgentRunRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RunAttachRequest) ProtoMessage() {}
+func (*AttachAgentRunRequest) ProtoMessage() {}
 
-func (x *RunAttachRequest) ProtoReflect() protoreflect.Message {
+func (x *AttachAgentRunRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -7040,135 +7042,135 @@ func (x *RunAttachRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RunAttachRequest.ProtoReflect.Descriptor instead.
-func (*RunAttachRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AttachAgentRunRequest.ProtoReflect.Descriptor instead.
+func (*AttachAgentRunRequest) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{76}
 }
 
-func (x *RunAttachRequest) GetClientFrameId() string {
+func (x *AttachAgentRunRequest) GetClientFrameId() string {
 	if x != nil {
 		return x.ClientFrameId
 	}
 	return ""
 }
 
-func (x *RunAttachRequest) GetFrame() isRunAttachRequest_Frame {
+func (x *AttachAgentRunRequest) GetFrame() isAttachAgentRunRequest_Frame {
 	if x != nil {
 		return x.Frame
 	}
 	return nil
 }
 
-func (x *RunAttachRequest) GetStart() *RunAttachStart {
+func (x *AttachAgentRunRequest) GetStart() *AttachAgentRunStart {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachRequest_Start); ok {
+		if x, ok := x.Frame.(*AttachAgentRunRequest_Start); ok {
 			return x.Start
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachRequest) GetStdin() *AttachStdin {
+func (x *AttachAgentRunRequest) GetStdin() *AttachStdin {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachRequest_Stdin); ok {
+		if x, ok := x.Frame.(*AttachAgentRunRequest_Stdin); ok {
 			return x.Stdin
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachRequest) GetStdinEof() *AttachStdinEOF {
+func (x *AttachAgentRunRequest) GetStdinEof() *AttachStdinEOF {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachRequest_StdinEof); ok {
+		if x, ok := x.Frame.(*AttachAgentRunRequest_StdinEof); ok {
 			return x.StdinEof
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachRequest) GetResize() *AttachResize {
+func (x *AttachAgentRunRequest) GetResize() *AttachResize {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachRequest_Resize); ok {
+		if x, ok := x.Frame.(*AttachAgentRunRequest_Resize); ok {
 			return x.Resize
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachRequest) GetSignal() *AttachSignal {
+func (x *AttachAgentRunRequest) GetSignal() *AttachSignal {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachRequest_Signal); ok {
+		if x, ok := x.Frame.(*AttachAgentRunRequest_Signal); ok {
 			return x.Signal
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachRequest) GetHumanMessage() *AttachHumanMessage {
+func (x *AttachAgentRunRequest) GetHumanMessage() *AttachHumanMessage {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachRequest_HumanMessage); ok {
+		if x, ok := x.Frame.(*AttachAgentRunRequest_HumanMessage); ok {
 			return x.HumanMessage
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachRequest) GetCancel() *AttachCancel {
+func (x *AttachAgentRunRequest) GetCancel() *AttachCancel {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachRequest_Cancel); ok {
+		if x, ok := x.Frame.(*AttachAgentRunRequest_Cancel); ok {
 			return x.Cancel
 		}
 	}
 	return nil
 }
 
-type isRunAttachRequest_Frame interface {
-	isRunAttachRequest_Frame()
+type isAttachAgentRunRequest_Frame interface {
+	isAttachAgentRunRequest_Frame()
 }
 
-type RunAttachRequest_Start struct {
-	Start *RunAttachStart `protobuf:"bytes,1,opt,name=start,proto3,oneof"`
+type AttachAgentRunRequest_Start struct {
+	Start *AttachAgentRunStart `protobuf:"bytes,1,opt,name=start,proto3,oneof"`
 }
 
-type RunAttachRequest_Stdin struct {
+type AttachAgentRunRequest_Stdin struct {
 	Stdin *AttachStdin `protobuf:"bytes,2,opt,name=stdin,proto3,oneof"`
 }
 
-type RunAttachRequest_StdinEof struct {
+type AttachAgentRunRequest_StdinEof struct {
 	StdinEof *AttachStdinEOF `protobuf:"bytes,3,opt,name=stdin_eof,json=stdinEof,proto3,oneof"`
 }
 
-type RunAttachRequest_Resize struct {
+type AttachAgentRunRequest_Resize struct {
 	Resize *AttachResize `protobuf:"bytes,4,opt,name=resize,proto3,oneof"`
 }
 
-type RunAttachRequest_Signal struct {
+type AttachAgentRunRequest_Signal struct {
 	Signal *AttachSignal `protobuf:"bytes,5,opt,name=signal,proto3,oneof"`
 }
 
-type RunAttachRequest_HumanMessage struct {
+type AttachAgentRunRequest_HumanMessage struct {
 	HumanMessage *AttachHumanMessage `protobuf:"bytes,6,opt,name=human_message,json=humanMessage,proto3,oneof"`
 }
 
-type RunAttachRequest_Cancel struct {
+type AttachAgentRunRequest_Cancel struct {
 	Cancel *AttachCancel `protobuf:"bytes,7,opt,name=cancel,proto3,oneof"`
 }
 
-func (*RunAttachRequest_Start) isRunAttachRequest_Frame() {}
+func (*AttachAgentRunRequest_Start) isAttachAgentRunRequest_Frame() {}
 
-func (*RunAttachRequest_Stdin) isRunAttachRequest_Frame() {}
+func (*AttachAgentRunRequest_Stdin) isAttachAgentRunRequest_Frame() {}
 
-func (*RunAttachRequest_StdinEof) isRunAttachRequest_Frame() {}
+func (*AttachAgentRunRequest_StdinEof) isAttachAgentRunRequest_Frame() {}
 
-func (*RunAttachRequest_Resize) isRunAttachRequest_Frame() {}
+func (*AttachAgentRunRequest_Resize) isAttachAgentRunRequest_Frame() {}
 
-func (*RunAttachRequest_Signal) isRunAttachRequest_Frame() {}
+func (*AttachAgentRunRequest_Signal) isAttachAgentRunRequest_Frame() {}
 
-func (*RunAttachRequest_HumanMessage) isRunAttachRequest_Frame() {}
+func (*AttachAgentRunRequest_HumanMessage) isAttachAgentRunRequest_Frame() {}
 
-func (*RunAttachRequest_Cancel) isRunAttachRequest_Frame() {}
+func (*AttachAgentRunRequest_Cancel) isAttachAgentRunRequest_Frame() {}
 
-type RunAttachResponse struct {
+type AttachAgentRunResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Frame variants occupy the low-number range. Envelope metadata starts at
 	// 15 so future frame variants can be added without moving metadata fields.
@@ -7176,31 +7178,31 @@ type RunAttachResponse struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// Types that are valid to be assigned to Frame:
 	//
-	//	*RunAttachResponse_Started
-	//	*RunAttachResponse_Output
-	//	*RunAttachResponse_AgentEvent
-	//	*RunAttachResponse_AgentTurnCompleted
-	//	*RunAttachResponse_Result
-	//	*RunAttachResponse_Error
-	Frame         isRunAttachResponse_Frame `protobuf_oneof:"frame"`
+	//	*AttachAgentRunResponse_Started
+	//	*AttachAgentRunResponse_Output
+	//	*AttachAgentRunResponse_AgentEvent
+	//	*AttachAgentRunResponse_AgentTurnCompleted
+	//	*AttachAgentRunResponse_Result
+	//	*AttachAgentRunResponse_Error
+	Frame         isAttachAgentRunResponse_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RunAttachResponse) Reset() {
-	*x = RunAttachResponse{}
+func (x *AttachAgentRunResponse) Reset() {
+	*x = AttachAgentRunResponse{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RunAttachResponse) String() string {
+func (x *AttachAgentRunResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RunAttachResponse) ProtoMessage() {}
+func (*AttachAgentRunResponse) ProtoMessage() {}
 
-func (x *RunAttachResponse) ProtoReflect() protoreflect.Message {
+func (x *AttachAgentRunResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -7212,127 +7214,127 @@ func (x *RunAttachResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RunAttachResponse.ProtoReflect.Descriptor instead.
-func (*RunAttachResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use AttachAgentRunResponse.ProtoReflect.Descriptor instead.
+func (*AttachAgentRunResponse) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{77}
 }
 
-func (x *RunAttachResponse) GetServerFrameId() string {
+func (x *AttachAgentRunResponse) GetServerFrameId() string {
 	if x != nil {
 		return x.ServerFrameId
 	}
 	return ""
 }
 
-func (x *RunAttachResponse) GetCreatedAt() *timestamppb.Timestamp {
+func (x *AttachAgentRunResponse) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *RunAttachResponse) GetFrame() isRunAttachResponse_Frame {
+func (x *AttachAgentRunResponse) GetFrame() isAttachAgentRunResponse_Frame {
 	if x != nil {
 		return x.Frame
 	}
 	return nil
 }
 
-func (x *RunAttachResponse) GetStarted() *AttachStarted {
+func (x *AttachAgentRunResponse) GetStarted() *AttachStarted {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachResponse_Started); ok {
+		if x, ok := x.Frame.(*AttachAgentRunResponse_Started); ok {
 			return x.Started
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachResponse) GetOutput() *AttachOutput {
+func (x *AttachAgentRunResponse) GetOutput() *AttachOutput {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachResponse_Output); ok {
+		if x, ok := x.Frame.(*AttachAgentRunResponse_Output); ok {
 			return x.Output
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachResponse) GetAgentEvent() *AttachAgentEvent {
+func (x *AttachAgentRunResponse) GetAgentEvent() *AttachAgentEvent {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachResponse_AgentEvent); ok {
+		if x, ok := x.Frame.(*AttachAgentRunResponse_AgentEvent); ok {
 			return x.AgentEvent
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachResponse) GetAgentTurnCompleted() *AttachAgentTurnCompleted {
+func (x *AttachAgentRunResponse) GetAgentTurnCompleted() *AttachAgentTurnCompleted {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachResponse_AgentTurnCompleted); ok {
+		if x, ok := x.Frame.(*AttachAgentRunResponse_AgentTurnCompleted); ok {
 			return x.AgentTurnCompleted
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachResponse) GetResult() *AttachResult {
+func (x *AttachAgentRunResponse) GetResult() *AttachResult {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachResponse_Result); ok {
+		if x, ok := x.Frame.(*AttachAgentRunResponse_Result); ok {
 			return x.Result
 		}
 	}
 	return nil
 }
 
-func (x *RunAttachResponse) GetError() *AttachError {
+func (x *AttachAgentRunResponse) GetError() *AttachError {
 	if x != nil {
-		if x, ok := x.Frame.(*RunAttachResponse_Error); ok {
+		if x, ok := x.Frame.(*AttachAgentRunResponse_Error); ok {
 			return x.Error
 		}
 	}
 	return nil
 }
 
-type isRunAttachResponse_Frame interface {
-	isRunAttachResponse_Frame()
+type isAttachAgentRunResponse_Frame interface {
+	isAttachAgentRunResponse_Frame()
 }
 
-type RunAttachResponse_Started struct {
+type AttachAgentRunResponse_Started struct {
 	Started *AttachStarted `protobuf:"bytes,1,opt,name=started,proto3,oneof"`
 }
 
-type RunAttachResponse_Output struct {
+type AttachAgentRunResponse_Output struct {
 	Output *AttachOutput `protobuf:"bytes,2,opt,name=output,proto3,oneof"`
 }
 
-type RunAttachResponse_AgentEvent struct {
+type AttachAgentRunResponse_AgentEvent struct {
 	AgentEvent *AttachAgentEvent `protobuf:"bytes,3,opt,name=agent_event,json=agentEvent,proto3,oneof"`
 }
 
-type RunAttachResponse_AgentTurnCompleted struct {
+type AttachAgentRunResponse_AgentTurnCompleted struct {
 	AgentTurnCompleted *AttachAgentTurnCompleted `protobuf:"bytes,4,opt,name=agent_turn_completed,json=agentTurnCompleted,proto3,oneof"`
 }
 
-type RunAttachResponse_Result struct {
+type AttachAgentRunResponse_Result struct {
 	Result *AttachResult `protobuf:"bytes,5,opt,name=result,proto3,oneof"`
 }
 
-type RunAttachResponse_Error struct {
+type AttachAgentRunResponse_Error struct {
 	Error *AttachError `protobuf:"bytes,6,opt,name=error,proto3,oneof"`
 }
 
-func (*RunAttachResponse_Started) isRunAttachResponse_Frame() {}
+func (*AttachAgentRunResponse_Started) isAttachAgentRunResponse_Frame() {}
 
-func (*RunAttachResponse_Output) isRunAttachResponse_Frame() {}
+func (*AttachAgentRunResponse_Output) isAttachAgentRunResponse_Frame() {}
 
-func (*RunAttachResponse_AgentEvent) isRunAttachResponse_Frame() {}
+func (*AttachAgentRunResponse_AgentEvent) isAttachAgentRunResponse_Frame() {}
 
-func (*RunAttachResponse_AgentTurnCompleted) isRunAttachResponse_Frame() {}
+func (*AttachAgentRunResponse_AgentTurnCompleted) isAttachAgentRunResponse_Frame() {}
 
-func (*RunAttachResponse_Result) isRunAttachResponse_Frame() {}
+func (*AttachAgentRunResponse_Result) isAttachAgentRunResponse_Frame() {}
 
-func (*RunAttachResponse_Error) isRunAttachResponse_Frame() {}
+func (*AttachAgentRunResponse_Error) isAttachAgentRunResponse_Frame() {}
 
-type RunAttachStart struct {
+type AttachAgentRunStart struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Request       *RunAgentRequest       `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
 	Mode          AttachRunMode          `protobuf:"varint,2,opt,name=mode,proto3,enum=agentcompose.v2.AttachRunMode" json:"mode,omitempty"`
@@ -7343,20 +7345,20 @@ type RunAttachStart struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RunAttachStart) Reset() {
-	*x = RunAttachStart{}
+func (x *AttachAgentRunStart) Reset() {
+	*x = AttachAgentRunStart{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RunAttachStart) String() string {
+func (x *AttachAgentRunStart) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RunAttachStart) ProtoMessage() {}
+func (*AttachAgentRunStart) ProtoMessage() {}
 
-func (x *RunAttachStart) ProtoReflect() protoreflect.Message {
+func (x *AttachAgentRunStart) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -7368,40 +7370,40 @@ func (x *RunAttachStart) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RunAttachStart.ProtoReflect.Descriptor instead.
-func (*RunAttachStart) Descriptor() ([]byte, []int) {
+// Deprecated: Use AttachAgentRunStart.ProtoReflect.Descriptor instead.
+func (*AttachAgentRunStart) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{78}
 }
 
-func (x *RunAttachStart) GetRequest() *RunAgentRequest {
+func (x *AttachAgentRunStart) GetRequest() *RunAgentRequest {
 	if x != nil {
 		return x.Request
 	}
 	return nil
 }
 
-func (x *RunAttachStart) GetMode() AttachRunMode {
+func (x *AttachAgentRunStart) GetMode() AttachRunMode {
 	if x != nil {
 		return x.Mode
 	}
 	return AttachRunMode_ATTACH_RUN_MODE_UNSPECIFIED
 }
 
-func (x *RunAttachStart) GetAttachStdin() bool {
+func (x *AttachAgentRunStart) GetAttachStdin() bool {
 	if x != nil {
 		return x.AttachStdin
 	}
 	return false
 }
 
-func (x *RunAttachStart) GetTty() bool {
+func (x *AttachAgentRunStart) GetTty() bool {
 	if x != nil {
 		return x.Tty
 	}
 	return false
 }
 
-func (x *RunAttachStart) GetTerminalSize() *AttachTerminalSize {
+func (x *AttachAgentRunStart) GetTerminalSize() *AttachTerminalSize {
 	if x != nil {
 		return x.TerminalSize
 	}
@@ -10395,9 +10397,9 @@ func (x *ExecResponse) GetResult() *ExecResult {
 	return nil
 }
 
-type ExecStreamResponse struct {
+type StreamExecResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventType     ExecStreamEventType    `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=agentcompose.v2.ExecStreamEventType" json:"event_type,omitempty"`
+	EventType     StreamExecEventType    `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=agentcompose.v2.StreamExecEventType" json:"event_type,omitempty"`
 	ExecId        string                 `protobuf:"bytes,2,opt,name=exec_id,json=execId,proto3" json:"exec_id,omitempty"`
 	SandboxId     string                 `protobuf:"bytes,3,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
 	RunId         string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -10409,20 +10411,20 @@ type ExecStreamResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ExecStreamResponse) Reset() {
-	*x = ExecStreamResponse{}
+func (x *StreamExecResponse) Reset() {
+	*x = StreamExecResponse{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ExecStreamResponse) String() string {
+func (x *StreamExecResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ExecStreamResponse) ProtoMessage() {}
+func (*StreamExecResponse) ProtoMessage() {}
 
-func (x *ExecStreamResponse) ProtoReflect() protoreflect.Message {
+func (x *StreamExecResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -10434,100 +10436,100 @@ func (x *ExecStreamResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecStreamResponse.ProtoReflect.Descriptor instead.
-func (*ExecStreamResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use StreamExecResponse.ProtoReflect.Descriptor instead.
+func (*StreamExecResponse) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{118}
 }
 
-func (x *ExecStreamResponse) GetEventType() ExecStreamEventType {
+func (x *StreamExecResponse) GetEventType() StreamExecEventType {
 	if x != nil {
 		return x.EventType
 	}
-	return ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_UNSPECIFIED
+	return StreamExecEventType_STREAM_EXEC_EVENT_TYPE_UNSPECIFIED
 }
 
-func (x *ExecStreamResponse) GetExecId() string {
+func (x *StreamExecResponse) GetExecId() string {
 	if x != nil {
 		return x.ExecId
 	}
 	return ""
 }
 
-func (x *ExecStreamResponse) GetSandboxId() string {
+func (x *StreamExecResponse) GetSandboxId() string {
 	if x != nil {
 		return x.SandboxId
 	}
 	return ""
 }
 
-func (x *ExecStreamResponse) GetRunId() string {
+func (x *StreamExecResponse) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *ExecStreamResponse) GetChunk() string {
+func (x *StreamExecResponse) GetChunk() string {
 	if x != nil {
 		return x.Chunk
 	}
 	return ""
 }
 
-func (x *ExecStreamResponse) GetStream() StdioStream {
+func (x *StreamExecResponse) GetStream() StdioStream {
 	if x != nil {
 		return x.Stream
 	}
 	return StdioStream_STDIO_STREAM_UNSPECIFIED
 }
 
-func (x *ExecStreamResponse) GetResult() *ExecResult {
+func (x *StreamExecResponse) GetResult() *ExecResult {
 	if x != nil {
 		return x.Result
 	}
 	return nil
 }
 
-func (x *ExecStreamResponse) GetTranscript() *TranscriptEvent {
+func (x *StreamExecResponse) GetTranscript() *TranscriptEvent {
 	if x != nil {
 		return x.Transcript
 	}
 	return nil
 }
 
-type ExecAttachRequest struct {
+type AttachExecRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Frame variants occupy the low-number range. Envelope metadata starts at
 	// 15 so future frame variants can be added without moving metadata fields.
 	ClientFrameId string `protobuf:"bytes,15,opt,name=client_frame_id,json=clientFrameId,proto3" json:"client_frame_id,omitempty"`
 	// Types that are valid to be assigned to Frame:
 	//
-	//	*ExecAttachRequest_Start
-	//	*ExecAttachRequest_Stdin
-	//	*ExecAttachRequest_StdinEof
-	//	*ExecAttachRequest_Resize
-	//	*ExecAttachRequest_Signal
-	//	*ExecAttachRequest_Cancel
-	//	*ExecAttachRequest_HumanMessage
-	Frame         isExecAttachRequest_Frame `protobuf_oneof:"frame"`
+	//	*AttachExecRequest_Start
+	//	*AttachExecRequest_Stdin
+	//	*AttachExecRequest_StdinEof
+	//	*AttachExecRequest_Resize
+	//	*AttachExecRequest_Signal
+	//	*AttachExecRequest_Cancel
+	//	*AttachExecRequest_HumanMessage
+	Frame         isAttachExecRequest_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ExecAttachRequest) Reset() {
-	*x = ExecAttachRequest{}
+func (x *AttachExecRequest) Reset() {
+	*x = AttachExecRequest{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ExecAttachRequest) String() string {
+func (x *AttachExecRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ExecAttachRequest) ProtoMessage() {}
+func (*AttachExecRequest) ProtoMessage() {}
 
-func (x *ExecAttachRequest) ProtoReflect() protoreflect.Message {
+func (x *AttachExecRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -10539,135 +10541,135 @@ func (x *ExecAttachRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecAttachRequest.ProtoReflect.Descriptor instead.
-func (*ExecAttachRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AttachExecRequest.ProtoReflect.Descriptor instead.
+func (*AttachExecRequest) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{119}
 }
 
-func (x *ExecAttachRequest) GetClientFrameId() string {
+func (x *AttachExecRequest) GetClientFrameId() string {
 	if x != nil {
 		return x.ClientFrameId
 	}
 	return ""
 }
 
-func (x *ExecAttachRequest) GetFrame() isExecAttachRequest_Frame {
+func (x *AttachExecRequest) GetFrame() isAttachExecRequest_Frame {
 	if x != nil {
 		return x.Frame
 	}
 	return nil
 }
 
-func (x *ExecAttachRequest) GetStart() *ExecAttachStart {
+func (x *AttachExecRequest) GetStart() *AttachExecStart {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachRequest_Start); ok {
+		if x, ok := x.Frame.(*AttachExecRequest_Start); ok {
 			return x.Start
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachRequest) GetStdin() *AttachStdin {
+func (x *AttachExecRequest) GetStdin() *AttachStdin {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachRequest_Stdin); ok {
+		if x, ok := x.Frame.(*AttachExecRequest_Stdin); ok {
 			return x.Stdin
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachRequest) GetStdinEof() *AttachStdinEOF {
+func (x *AttachExecRequest) GetStdinEof() *AttachStdinEOF {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachRequest_StdinEof); ok {
+		if x, ok := x.Frame.(*AttachExecRequest_StdinEof); ok {
 			return x.StdinEof
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachRequest) GetResize() *AttachResize {
+func (x *AttachExecRequest) GetResize() *AttachResize {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachRequest_Resize); ok {
+		if x, ok := x.Frame.(*AttachExecRequest_Resize); ok {
 			return x.Resize
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachRequest) GetSignal() *AttachSignal {
+func (x *AttachExecRequest) GetSignal() *AttachSignal {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachRequest_Signal); ok {
+		if x, ok := x.Frame.(*AttachExecRequest_Signal); ok {
 			return x.Signal
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachRequest) GetCancel() *AttachCancel {
+func (x *AttachExecRequest) GetCancel() *AttachCancel {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachRequest_Cancel); ok {
+		if x, ok := x.Frame.(*AttachExecRequest_Cancel); ok {
 			return x.Cancel
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachRequest) GetHumanMessage() *AttachHumanMessage {
+func (x *AttachExecRequest) GetHumanMessage() *AttachHumanMessage {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachRequest_HumanMessage); ok {
+		if x, ok := x.Frame.(*AttachExecRequest_HumanMessage); ok {
 			return x.HumanMessage
 		}
 	}
 	return nil
 }
 
-type isExecAttachRequest_Frame interface {
-	isExecAttachRequest_Frame()
+type isAttachExecRequest_Frame interface {
+	isAttachExecRequest_Frame()
 }
 
-type ExecAttachRequest_Start struct {
-	Start *ExecAttachStart `protobuf:"bytes,1,opt,name=start,proto3,oneof"`
+type AttachExecRequest_Start struct {
+	Start *AttachExecStart `protobuf:"bytes,1,opt,name=start,proto3,oneof"`
 }
 
-type ExecAttachRequest_Stdin struct {
+type AttachExecRequest_Stdin struct {
 	Stdin *AttachStdin `protobuf:"bytes,2,opt,name=stdin,proto3,oneof"`
 }
 
-type ExecAttachRequest_StdinEof struct {
+type AttachExecRequest_StdinEof struct {
 	StdinEof *AttachStdinEOF `protobuf:"bytes,3,opt,name=stdin_eof,json=stdinEof,proto3,oneof"`
 }
 
-type ExecAttachRequest_Resize struct {
+type AttachExecRequest_Resize struct {
 	Resize *AttachResize `protobuf:"bytes,4,opt,name=resize,proto3,oneof"`
 }
 
-type ExecAttachRequest_Signal struct {
+type AttachExecRequest_Signal struct {
 	Signal *AttachSignal `protobuf:"bytes,5,opt,name=signal,proto3,oneof"`
 }
 
-type ExecAttachRequest_Cancel struct {
+type AttachExecRequest_Cancel struct {
 	Cancel *AttachCancel `protobuf:"bytes,6,opt,name=cancel,proto3,oneof"`
 }
 
-type ExecAttachRequest_HumanMessage struct {
+type AttachExecRequest_HumanMessage struct {
 	HumanMessage *AttachHumanMessage `protobuf:"bytes,7,opt,name=human_message,json=humanMessage,proto3,oneof"`
 }
 
-func (*ExecAttachRequest_Start) isExecAttachRequest_Frame() {}
+func (*AttachExecRequest_Start) isAttachExecRequest_Frame() {}
 
-func (*ExecAttachRequest_Stdin) isExecAttachRequest_Frame() {}
+func (*AttachExecRequest_Stdin) isAttachExecRequest_Frame() {}
 
-func (*ExecAttachRequest_StdinEof) isExecAttachRequest_Frame() {}
+func (*AttachExecRequest_StdinEof) isAttachExecRequest_Frame() {}
 
-func (*ExecAttachRequest_Resize) isExecAttachRequest_Frame() {}
+func (*AttachExecRequest_Resize) isAttachExecRequest_Frame() {}
 
-func (*ExecAttachRequest_Signal) isExecAttachRequest_Frame() {}
+func (*AttachExecRequest_Signal) isAttachExecRequest_Frame() {}
 
-func (*ExecAttachRequest_Cancel) isExecAttachRequest_Frame() {}
+func (*AttachExecRequest_Cancel) isAttachExecRequest_Frame() {}
 
-func (*ExecAttachRequest_HumanMessage) isExecAttachRequest_Frame() {}
+func (*AttachExecRequest_HumanMessage) isAttachExecRequest_Frame() {}
 
-type ExecAttachResponse struct {
+type AttachExecResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Frame variants occupy the low-number range. Envelope metadata starts at
 	// 15 so future frame variants can be added without moving metadata fields.
@@ -10675,31 +10677,31 @@ type ExecAttachResponse struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// Types that are valid to be assigned to Frame:
 	//
-	//	*ExecAttachResponse_Started
-	//	*ExecAttachResponse_Output
-	//	*ExecAttachResponse_Result
-	//	*ExecAttachResponse_Error
-	//	*ExecAttachResponse_AgentEvent
-	//	*ExecAttachResponse_AgentTurnCompleted
-	Frame         isExecAttachResponse_Frame `protobuf_oneof:"frame"`
+	//	*AttachExecResponse_Started
+	//	*AttachExecResponse_Output
+	//	*AttachExecResponse_Result
+	//	*AttachExecResponse_Error
+	//	*AttachExecResponse_AgentEvent
+	//	*AttachExecResponse_AgentTurnCompleted
+	Frame         isAttachExecResponse_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ExecAttachResponse) Reset() {
-	*x = ExecAttachResponse{}
+func (x *AttachExecResponse) Reset() {
+	*x = AttachExecResponse{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ExecAttachResponse) String() string {
+func (x *AttachExecResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ExecAttachResponse) ProtoMessage() {}
+func (*AttachExecResponse) ProtoMessage() {}
 
-func (x *ExecAttachResponse) ProtoReflect() protoreflect.Message {
+func (x *AttachExecResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -10711,127 +10713,127 @@ func (x *ExecAttachResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecAttachResponse.ProtoReflect.Descriptor instead.
-func (*ExecAttachResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use AttachExecResponse.ProtoReflect.Descriptor instead.
+func (*AttachExecResponse) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{120}
 }
 
-func (x *ExecAttachResponse) GetServerFrameId() string {
+func (x *AttachExecResponse) GetServerFrameId() string {
 	if x != nil {
 		return x.ServerFrameId
 	}
 	return ""
 }
 
-func (x *ExecAttachResponse) GetCreatedAt() *timestamppb.Timestamp {
+func (x *AttachExecResponse) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *ExecAttachResponse) GetFrame() isExecAttachResponse_Frame {
+func (x *AttachExecResponse) GetFrame() isAttachExecResponse_Frame {
 	if x != nil {
 		return x.Frame
 	}
 	return nil
 }
 
-func (x *ExecAttachResponse) GetStarted() *AttachStarted {
+func (x *AttachExecResponse) GetStarted() *AttachStarted {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachResponse_Started); ok {
+		if x, ok := x.Frame.(*AttachExecResponse_Started); ok {
 			return x.Started
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachResponse) GetOutput() *AttachOutput {
+func (x *AttachExecResponse) GetOutput() *AttachOutput {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachResponse_Output); ok {
+		if x, ok := x.Frame.(*AttachExecResponse_Output); ok {
 			return x.Output
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachResponse) GetResult() *AttachResult {
+func (x *AttachExecResponse) GetResult() *AttachResult {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachResponse_Result); ok {
+		if x, ok := x.Frame.(*AttachExecResponse_Result); ok {
 			return x.Result
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachResponse) GetError() *AttachError {
+func (x *AttachExecResponse) GetError() *AttachError {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachResponse_Error); ok {
+		if x, ok := x.Frame.(*AttachExecResponse_Error); ok {
 			return x.Error
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachResponse) GetAgentEvent() *AttachAgentEvent {
+func (x *AttachExecResponse) GetAgentEvent() *AttachAgentEvent {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachResponse_AgentEvent); ok {
+		if x, ok := x.Frame.(*AttachExecResponse_AgentEvent); ok {
 			return x.AgentEvent
 		}
 	}
 	return nil
 }
 
-func (x *ExecAttachResponse) GetAgentTurnCompleted() *AttachAgentTurnCompleted {
+func (x *AttachExecResponse) GetAgentTurnCompleted() *AttachAgentTurnCompleted {
 	if x != nil {
-		if x, ok := x.Frame.(*ExecAttachResponse_AgentTurnCompleted); ok {
+		if x, ok := x.Frame.(*AttachExecResponse_AgentTurnCompleted); ok {
 			return x.AgentTurnCompleted
 		}
 	}
 	return nil
 }
 
-type isExecAttachResponse_Frame interface {
-	isExecAttachResponse_Frame()
+type isAttachExecResponse_Frame interface {
+	isAttachExecResponse_Frame()
 }
 
-type ExecAttachResponse_Started struct {
+type AttachExecResponse_Started struct {
 	Started *AttachStarted `protobuf:"bytes,1,opt,name=started,proto3,oneof"`
 }
 
-type ExecAttachResponse_Output struct {
+type AttachExecResponse_Output struct {
 	Output *AttachOutput `protobuf:"bytes,2,opt,name=output,proto3,oneof"`
 }
 
-type ExecAttachResponse_Result struct {
+type AttachExecResponse_Result struct {
 	Result *AttachResult `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
 }
 
-type ExecAttachResponse_Error struct {
+type AttachExecResponse_Error struct {
 	Error *AttachError `protobuf:"bytes,4,opt,name=error,proto3,oneof"`
 }
 
-type ExecAttachResponse_AgentEvent struct {
+type AttachExecResponse_AgentEvent struct {
 	AgentEvent *AttachAgentEvent `protobuf:"bytes,5,opt,name=agent_event,json=agentEvent,proto3,oneof"`
 }
 
-type ExecAttachResponse_AgentTurnCompleted struct {
+type AttachExecResponse_AgentTurnCompleted struct {
 	AgentTurnCompleted *AttachAgentTurnCompleted `protobuf:"bytes,6,opt,name=agent_turn_completed,json=agentTurnCompleted,proto3,oneof"`
 }
 
-func (*ExecAttachResponse_Started) isExecAttachResponse_Frame() {}
+func (*AttachExecResponse_Started) isAttachExecResponse_Frame() {}
 
-func (*ExecAttachResponse_Output) isExecAttachResponse_Frame() {}
+func (*AttachExecResponse_Output) isAttachExecResponse_Frame() {}
 
-func (*ExecAttachResponse_Result) isExecAttachResponse_Frame() {}
+func (*AttachExecResponse_Result) isAttachExecResponse_Frame() {}
 
-func (*ExecAttachResponse_Error) isExecAttachResponse_Frame() {}
+func (*AttachExecResponse_Error) isAttachExecResponse_Frame() {}
 
-func (*ExecAttachResponse_AgentEvent) isExecAttachResponse_Frame() {}
+func (*AttachExecResponse_AgentEvent) isAttachExecResponse_Frame() {}
 
-func (*ExecAttachResponse_AgentTurnCompleted) isExecAttachResponse_Frame() {}
+func (*AttachExecResponse_AgentTurnCompleted) isAttachExecResponse_Frame() {}
 
-type ExecAttachStart struct {
+type AttachExecStart struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Request       *ExecRequest           `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
 	AttachStdin   bool                   `protobuf:"varint,2,opt,name=attach_stdin,json=attachStdin,proto3" json:"attach_stdin,omitempty"`
@@ -10843,20 +10845,20 @@ type ExecAttachStart struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ExecAttachStart) Reset() {
-	*x = ExecAttachStart{}
+func (x *AttachExecStart) Reset() {
+	*x = AttachExecStart{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ExecAttachStart) String() string {
+func (x *AttachExecStart) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ExecAttachStart) ProtoMessage() {}
+func (*AttachExecStart) ProtoMessage() {}
 
-func (x *ExecAttachStart) ProtoReflect() protoreflect.Message {
+func (x *AttachExecStart) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -10868,47 +10870,47 @@ func (x *ExecAttachStart) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecAttachStart.ProtoReflect.Descriptor instead.
-func (*ExecAttachStart) Descriptor() ([]byte, []int) {
+// Deprecated: Use AttachExecStart.ProtoReflect.Descriptor instead.
+func (*AttachExecStart) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{121}
 }
 
-func (x *ExecAttachStart) GetRequest() *ExecRequest {
+func (x *AttachExecStart) GetRequest() *ExecRequest {
 	if x != nil {
 		return x.Request
 	}
 	return nil
 }
 
-func (x *ExecAttachStart) GetAttachStdin() bool {
+func (x *AttachExecStart) GetAttachStdin() bool {
 	if x != nil {
 		return x.AttachStdin
 	}
 	return false
 }
 
-func (x *ExecAttachStart) GetTty() bool {
+func (x *AttachExecStart) GetTty() bool {
 	if x != nil {
 		return x.Tty
 	}
 	return false
 }
 
-func (x *ExecAttachStart) GetTerminalSize() *AttachTerminalSize {
+func (x *AttachExecStart) GetTerminalSize() *AttachTerminalSize {
 	if x != nil {
 		return x.TerminalSize
 	}
 	return nil
 }
 
-func (x *ExecAttachStart) GetMode() AttachRunMode {
+func (x *AttachExecStart) GetMode() AttachRunMode {
 	if x != nil {
 		return x.Mode
 	}
 	return AttachRunMode_ATTACH_RUN_MODE_UNSPECIFIED
 }
 
-func (x *ExecAttachStart) GetPrompt() string {
+func (x *AttachExecStart) GetPrompt() string {
 	if x != nil {
 		return x.Prompt
 	}
@@ -14684,27 +14686,27 @@ func (x *RunJupyterSpec) GetExpose() bool {
 	return false
 }
 
-type StartRunRequest struct {
+type StartAgentRunRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Run           *RunAgentRequest       `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *StartRunRequest) Reset() {
-	*x = StartRunRequest{}
+func (x *StartAgentRunRequest) Reset() {
+	*x = StartAgentRunRequest{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[176]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *StartRunRequest) String() string {
+func (x *StartAgentRunRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*StartRunRequest) ProtoMessage() {}
+func (*StartAgentRunRequest) ProtoMessage() {}
 
-func (x *StartRunRequest) ProtoReflect() protoreflect.Message {
+func (x *StartAgentRunRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[176]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -14716,19 +14718,19 @@ func (x *StartRunRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartRunRequest.ProtoReflect.Descriptor instead.
-func (*StartRunRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use StartAgentRunRequest.ProtoReflect.Descriptor instead.
+func (*StartAgentRunRequest) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{176}
 }
 
-func (x *StartRunRequest) GetRun() *RunAgentRequest {
+func (x *StartAgentRunRequest) GetRun() *RunAgentRequest {
 	if x != nil {
 		return x.Run
 	}
 	return nil
 }
 
-type StartRunResponse struct {
+type StartAgentRunResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Run           *RunSummary            `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
 	Warnings      []string               `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
@@ -14737,20 +14739,20 @@ type StartRunResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *StartRunResponse) Reset() {
-	*x = StartRunResponse{}
+func (x *StartAgentRunResponse) Reset() {
+	*x = StartAgentRunResponse{}
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[177]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *StartRunResponse) String() string {
+func (x *StartAgentRunResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*StartRunResponse) ProtoMessage() {}
+func (*StartAgentRunResponse) ProtoMessage() {}
 
-func (x *StartRunResponse) ProtoReflect() protoreflect.Message {
+func (x *StartAgentRunResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_agentcompose_v2_agentcompose_proto_msgTypes[177]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -14762,26 +14764,26 @@ func (x *StartRunResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartRunResponse.ProtoReflect.Descriptor instead.
-func (*StartRunResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use StartAgentRunResponse.ProtoReflect.Descriptor instead.
+func (*StartAgentRunResponse) Descriptor() ([]byte, []int) {
 	return file_agentcompose_v2_agentcompose_proto_rawDescGZIP(), []int{177}
 }
 
-func (x *StartRunResponse) GetRun() *RunSummary {
+func (x *StartAgentRunResponse) GetRun() *RunSummary {
 	if x != nil {
 		return x.Run
 	}
 	return nil
 }
 
-func (x *StartRunResponse) GetWarnings() []string {
+func (x *StartAgentRunResponse) GetWarnings() []string {
 	if x != nil {
 		return x.Warnings
 	}
 	return nil
 }
 
-func (x *StartRunResponse) GetStarted() bool {
+func (x *StartAgentRunResponse) GetStarted() bool {
 	if x != nil {
 		return x.Started
 	}
@@ -18477,9 +18479,9 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x10RunAgentResponse\x12,\n" +
 	"\x03run\x18\x01 \x01(\v2\x1a.agentcompose.v2.RunDetailR\x03run\x12\x1a\n" +
 	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"\x8c\x03\n" +
-	"\x16RunAgentStreamResponse\x12G\n" +
+	"\x16StreamAgentRunResponse\x12G\n" +
 	"\n" +
-	"event_type\x18\x01 \x01(\x0e2(.agentcompose.v2.RunAgentStreamEventTypeR\teventType\x12-\n" +
+	"event_type\x18\x01 \x01(\x0e2(.agentcompose.v2.StreamAgentRunEventTypeR\teventType\x12-\n" +
 	"\x03run\x18\x02 \x01(\v2\x1b.agentcompose.v2.RunSummaryR\x03run\x12\x15\n" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12\x14\n" +
 	"\x05chunk\x18\x04 \x01(\tR\x05chunk\x124\n" +
@@ -18489,18 +18491,18 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\bwarnings\x18\a \x03(\tR\bwarnings\x12@\n" +
 	"\n" +
 	"transcript\x18\b \x01(\v2 .agentcompose.v2.TranscriptEventR\n" +
-	"transcript\"\xe9\x03\n" +
-	"\x10RunAttachRequest\x12&\n" +
-	"\x0fclient_frame_id\x18\x0f \x01(\tR\rclientFrameId\x127\n" +
-	"\x05start\x18\x01 \x01(\v2\x1f.agentcompose.v2.RunAttachStartH\x00R\x05start\x124\n" +
+	"transcript\"\xf3\x03\n" +
+	"\x15AttachAgentRunRequest\x12&\n" +
+	"\x0fclient_frame_id\x18\x0f \x01(\tR\rclientFrameId\x12<\n" +
+	"\x05start\x18\x01 \x01(\v2$.agentcompose.v2.AttachAgentRunStartH\x00R\x05start\x124\n" +
 	"\x05stdin\x18\x02 \x01(\v2\x1c.agentcompose.v2.AttachStdinH\x00R\x05stdin\x12>\n" +
 	"\tstdin_eof\x18\x03 \x01(\v2\x1f.agentcompose.v2.AttachStdinEOFH\x00R\bstdinEof\x127\n" +
 	"\x06resize\x18\x04 \x01(\v2\x1d.agentcompose.v2.AttachResizeH\x00R\x06resize\x127\n" +
 	"\x06signal\x18\x05 \x01(\v2\x1d.agentcompose.v2.AttachSignalH\x00R\x06signal\x12J\n" +
 	"\rhuman_message\x18\x06 \x01(\v2#.agentcompose.v2.AttachHumanMessageH\x00R\fhumanMessage\x127\n" +
 	"\x06cancel\x18\a \x01(\v2\x1d.agentcompose.v2.AttachCancelH\x00R\x06cancelB\a\n" +
-	"\x05frame\"\x88\x04\n" +
-	"\x11RunAttachResponse\x12&\n" +
+	"\x05frame\"\x8d\x04\n" +
+	"\x16AttachAgentRunResponse\x12&\n" +
 	"\x0fserver_frame_id\x18\x0f \x01(\tR\rserverFrameId\x129\n" +
 	"\n" +
 	"created_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12:\n" +
@@ -18511,8 +18513,8 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x14agent_turn_completed\x18\x04 \x01(\v2).agentcompose.v2.AttachAgentTurnCompletedH\x00R\x12agentTurnCompleted\x127\n" +
 	"\x06result\x18\x05 \x01(\v2\x1d.agentcompose.v2.AttachResultH\x00R\x06result\x124\n" +
 	"\x05error\x18\x06 \x01(\v2\x1c.agentcompose.v2.AttachErrorH\x00R\x05errorB\a\n" +
-	"\x05frame\"\xff\x01\n" +
-	"\x0eRunAttachStart\x12:\n" +
+	"\x05frame\"\x84\x02\n" +
+	"\x13AttachAgentRunStart\x12:\n" +
 	"\arequest\x18\x01 \x01(\v2 .agentcompose.v2.RunAgentRequestR\arequest\x122\n" +
 	"\x04mode\x18\x02 \x01(\x0e2\x1e.agentcompose.v2.AttachRunModeR\x04mode\x12!\n" +
 	"\fattach_stdin\x18\x03 \x01(\bR\vattachStdin\x12\x10\n" +
@@ -18807,9 +18809,9 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x04args\x18\x02 \x03(\tR\x04args\"C\n" +
 	"\fExecResponse\x123\n" +
 	"\x06result\x18\x01 \x01(\v2\x1b.agentcompose.v2.ExecResultR\x06result\"\xeb\x02\n" +
-	"\x12ExecStreamResponse\x12C\n" +
+	"\x12StreamExecResponse\x12C\n" +
 	"\n" +
-	"event_type\x18\x01 \x01(\x0e2$.agentcompose.v2.ExecStreamEventTypeR\teventType\x12\x17\n" +
+	"event_type\x18\x01 \x01(\x0e2$.agentcompose.v2.StreamExecEventTypeR\teventType\x12\x17\n" +
 	"\aexec_id\x18\x02 \x01(\tR\x06execId\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x03 \x01(\tR\tsandboxId\x12\x15\n" +
@@ -18820,9 +18822,9 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"transcript\x18\b \x01(\v2 .agentcompose.v2.TranscriptEventR\n" +
 	"transcript\"\xeb\x03\n" +
-	"\x11ExecAttachRequest\x12&\n" +
+	"\x11AttachExecRequest\x12&\n" +
 	"\x0fclient_frame_id\x18\x0f \x01(\tR\rclientFrameId\x128\n" +
-	"\x05start\x18\x01 \x01(\v2 .agentcompose.v2.ExecAttachStartH\x00R\x05start\x124\n" +
+	"\x05start\x18\x01 \x01(\v2 .agentcompose.v2.AttachExecStartH\x00R\x05start\x124\n" +
 	"\x05stdin\x18\x02 \x01(\v2\x1c.agentcompose.v2.AttachStdinH\x00R\x05stdin\x12>\n" +
 	"\tstdin_eof\x18\x03 \x01(\v2\x1f.agentcompose.v2.AttachStdinEOFH\x00R\bstdinEof\x127\n" +
 	"\x06resize\x18\x04 \x01(\v2\x1d.agentcompose.v2.AttachResizeH\x00R\x06resize\x127\n" +
@@ -18830,7 +18832,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x06cancel\x18\x06 \x01(\v2\x1d.agentcompose.v2.AttachCancelH\x00R\x06cancel\x12J\n" +
 	"\rhuman_message\x18\a \x01(\v2#.agentcompose.v2.AttachHumanMessageH\x00R\fhumanMessageB\a\n" +
 	"\x05frame\"\x89\x04\n" +
-	"\x12ExecAttachResponse\x12&\n" +
+	"\x12AttachExecResponse\x12&\n" +
 	"\x0fserver_frame_id\x18\x0f \x01(\tR\rserverFrameId\x129\n" +
 	"\n" +
 	"created_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12:\n" +
@@ -18842,7 +18844,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"agentEvent\x12]\n" +
 	"\x14agent_turn_completed\x18\x06 \x01(\v2).agentcompose.v2.AttachAgentTurnCompletedH\x00R\x12agentTurnCompletedB\a\n" +
 	"\x05frame\"\x94\x02\n" +
-	"\x0fExecAttachStart\x126\n" +
+	"\x0fAttachExecStart\x126\n" +
 	"\arequest\x18\x01 \x01(\v2\x1c.agentcompose.v2.ExecRequestR\arequest\x12!\n" +
 	"\fattach_stdin\x18\x02 \x01(\bR\vattachStdin\x12\x10\n" +
 	"\x03tty\x18\x03 \x01(\bR\x03tty\x12H\n" +
@@ -19186,10 +19188,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1d\n" +
 	"\n" +
 	"guest_port\x18\x02 \x01(\rR\tguestPort\x12\x16\n" +
-	"\x06expose\x18\x03 \x01(\bR\x06expose\"E\n" +
-	"\x0fStartRunRequest\x122\n" +
-	"\x03run\x18\x01 \x01(\v2 .agentcompose.v2.RunAgentRequestR\x03run\"w\n" +
-	"\x10StartRunResponse\x12-\n" +
+	"\x06expose\x18\x03 \x01(\bR\x06expose\"J\n" +
+	"\x14StartAgentRunRequest\x122\n" +
+	"\x03run\x18\x01 \x01(\v2 .agentcompose.v2.RunAgentRequestR\x03run\"|\n" +
+	"\x15StartAgentRunResponse\x12-\n" +
 	"\x03run\x18\x01 \x01(\v2\x1b.agentcompose.v2.RunSummaryR\x03run\x12\x1a\n" +
 	"\bwarnings\x18\x02 \x03(\tR\bwarnings\x12\x18\n" +
 	"\astarted\x18\x03 \x01(\bR\astarted\"\xd9\x01\n" +
@@ -19494,22 +19496,22 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x1cRUN_EVENT_KIND_AGENT_MESSAGE\x10\x02\x12!\n" +
 	"\x1dRUN_EVENT_KIND_AGENT_ACTIVITY\x10\x03\x12\x19\n" +
 	"\x15RUN_EVENT_KIND_STATUS\x10\x04*\xea\x01\n" +
-	"\x17RunAgentStreamEventType\x12+\n" +
-	"'RUN_AGENT_STREAM_EVENT_TYPE_UNSPECIFIED\x10\x00\x12'\n" +
-	"#RUN_AGENT_STREAM_EVENT_TYPE_STARTED\x10\x01\x12&\n" +
-	"\"RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT\x10\x02\x12&\n" +
-	"\"RUN_AGENT_STREAM_EVENT_TYPE_STATUS\x10\x03\x12)\n" +
-	"%RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED\x10\x04*\xda\x01\n" +
+	"\x17StreamAgentRunEventType\x12+\n" +
+	"'STREAM_AGENT_RUN_EVENT_TYPE_UNSPECIFIED\x10\x00\x12'\n" +
+	"#STREAM_AGENT_RUN_EVENT_TYPE_STARTED\x10\x01\x12&\n" +
+	"\"STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT\x10\x02\x12&\n" +
+	"\"STREAM_AGENT_RUN_EVENT_TYPE_STATUS\x10\x03\x12)\n" +
+	"%STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED\x10\x04*\xda\x01\n" +
 	"\x17RunSandboxCleanupPolicy\x12*\n" +
 	"&RUN_SANDBOX_CLEANUP_POLICY_UNSPECIFIED\x10\x00\x121\n" +
 	"-RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION\x10\x01\x12+\n" +
 	"'RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING\x10\x02\x123\n" +
 	"/RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION\x10\x03*\xaa\x01\n" +
-	"\x13ExecStreamEventType\x12&\n" +
-	"\"EXEC_STREAM_EVENT_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
-	"\x1eEXEC_STREAM_EVENT_TYPE_STARTED\x10\x01\x12!\n" +
-	"\x1dEXEC_STREAM_EVENT_TYPE_OUTPUT\x10\x02\x12$\n" +
-	" EXEC_STREAM_EVENT_TYPE_COMPLETED\x10\x03*i\n" +
+	"\x13StreamExecEventType\x12&\n" +
+	"\"STREAM_EXEC_EVENT_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eSTREAM_EXEC_EVENT_TYPE_STARTED\x10\x01\x12!\n" +
+	"\x1dSTREAM_EXEC_EVENT_TYPE_OUTPUT\x10\x02\x12$\n" +
+	" STREAM_EXEC_EVENT_TYPE_COMPLETED\x10\x03*i\n" +
 	"\rAttachRunMode\x12\x1f\n" +
 	"\x1bATTACH_RUN_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ATTACH_RUN_MODE_COMMAND\x10\x01\x12\x1a\n" +
@@ -19597,13 +19599,13 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x12PruneSchedulerRuns\x12*.agentcompose.v2.PruneSchedulerRunsRequest\x1a+.agentcompose.v2.PruneSchedulerRunsResponse\x12g\n" +
 	"\x10StopSchedulerRun\x12(.agentcompose.v2.StopSchedulerRunRequest\x1a).agentcompose.v2.StopSchedulerRunResponse\x12p\n" +
 	"\x13SetSchedulerEnabled\x12+.agentcompose.v2.SetSchedulerEnabledRequest\x1a,.agentcompose.v2.SetSchedulerEnabledResponse\x12\x85\x01\n" +
-	"\x1aSetSchedulerTriggerEnabled\x122.agentcompose.v2.SetSchedulerTriggerEnabledRequest\x1a3.agentcompose.v2.SetSchedulerTriggerEnabledResponse2\xfc\x06\n" +
+	"\x1aSetSchedulerTriggerEnabled\x122.agentcompose.v2.SetSchedulerTriggerEnabledRequest\x1a3.agentcompose.v2.SetSchedulerTriggerEnabledResponse2\x9a\a\n" +
 	"\n" +
 	"RunService\x12O\n" +
-	"\bRunAgent\x12 .agentcompose.v2.RunAgentRequest\x1a!.agentcompose.v2.RunAgentResponse\x12O\n" +
-	"\bStartRun\x12 .agentcompose.v2.StartRunRequest\x1a!.agentcompose.v2.StartRunResponse\x12]\n" +
-	"\x0eRunAgentStream\x12 .agentcompose.v2.RunAgentRequest\x1a'.agentcompose.v2.RunAgentStreamResponse0\x01\x12V\n" +
-	"\tRunAttach\x12!.agentcompose.v2.RunAttachRequest\x1a\".agentcompose.v2.RunAttachResponse(\x010\x01\x12I\n" +
+	"\bRunAgent\x12 .agentcompose.v2.RunAgentRequest\x1a!.agentcompose.v2.RunAgentResponse\x12^\n" +
+	"\rStartAgentRun\x12%.agentcompose.v2.StartAgentRunRequest\x1a&.agentcompose.v2.StartAgentRunResponse\x12]\n" +
+	"\x0eStreamAgentRun\x12 .agentcompose.v2.RunAgentRequest\x1a'.agentcompose.v2.StreamAgentRunResponse0\x01\x12e\n" +
+	"\x0eAttachAgentRun\x12&.agentcompose.v2.AttachAgentRunRequest\x1a'.agentcompose.v2.AttachAgentRunResponse(\x010\x01\x12I\n" +
 	"\x06GetRun\x12\x1e.agentcompose.v2.GetRunRequest\x1a\x1f.agentcompose.v2.GetRunResponse\x12O\n" +
 	"\bListRuns\x12 .agentcompose.v2.ListRunsRequest\x1a!.agentcompose.v2.ListRunsResponse\x12V\n" +
 	"\rFollowRunLogs\x12%.agentcompose.v2.FollowRunLogsRequest\x1a\x1c.agentcompose.v2.RunLogChunk0\x01\x12L\n" +
@@ -19613,9 +19615,9 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\vExecService\x12C\n" +
 	"\x04Exec\x12\x1c.agentcompose.v2.ExecRequest\x1a\x1d.agentcompose.v2.ExecResponse\x12Q\n" +
 	"\n" +
-	"ExecStream\x12\x1c.agentcompose.v2.ExecRequest\x1a#.agentcompose.v2.ExecStreamResponse0\x01\x12Y\n" +
+	"StreamExec\x12\x1c.agentcompose.v2.ExecRequest\x1a#.agentcompose.v2.StreamExecResponse0\x01\x12Y\n" +
 	"\n" +
-	"ExecAttach\x12\".agentcompose.v2.ExecAttachRequest\x1a#.agentcompose.v2.ExecAttachResponse(\x010\x012\xc6\x03\n" +
+	"AttachExec\x12\".agentcompose.v2.AttachExecRequest\x1a#.agentcompose.v2.AttachExecResponse(\x010\x012\xc6\x03\n" +
 	"\fImageService\x12U\n" +
 	"\n" +
 	"ListImages\x12\".agentcompose.v2.ListImagesRequest\x1a#.agentcompose.v2.ListImagesResponse\x12R\n" +
@@ -19693,9 +19695,9 @@ var file_agentcompose_v2_agentcompose_proto_goTypes = []any{
 	(ProjectAgentAvailability)(0),                 // 6: agentcompose.v2.ProjectAgentAvailability
 	(ProjectAgentHealth)(0),                       // 7: agentcompose.v2.ProjectAgentHealth
 	(RunEventKind)(0),                             // 8: agentcompose.v2.RunEventKind
-	(RunAgentStreamEventType)(0),                  // 9: agentcompose.v2.RunAgentStreamEventType
+	(StreamAgentRunEventType)(0),                  // 9: agentcompose.v2.StreamAgentRunEventType
 	(RunSandboxCleanupPolicy)(0),                  // 10: agentcompose.v2.RunSandboxCleanupPolicy
-	(ExecStreamEventType)(0),                      // 11: agentcompose.v2.ExecStreamEventType
+	(StreamExecEventType)(0),                      // 11: agentcompose.v2.StreamExecEventType
 	(AttachRunMode)(0),                            // 12: agentcompose.v2.AttachRunMode
 	(StdioStream)(0),                              // 13: agentcompose.v2.StdioStream
 	(ImageStoreKind)(0),                           // 14: agentcompose.v2.ImageStoreKind
@@ -19783,10 +19785,10 @@ var file_agentcompose_v2_agentcompose_proto_goTypes = []any{
 	(*MicrosandboxDriverSpec)(nil),                // 96: agentcompose.v2.MicrosandboxDriverSpec
 	(*RunAgentRequest)(nil),                       // 97: agentcompose.v2.RunAgentRequest
 	(*RunAgentResponse)(nil),                      // 98: agentcompose.v2.RunAgentResponse
-	(*RunAgentStreamResponse)(nil),                // 99: agentcompose.v2.RunAgentStreamResponse
-	(*RunAttachRequest)(nil),                      // 100: agentcompose.v2.RunAttachRequest
-	(*RunAttachResponse)(nil),                     // 101: agentcompose.v2.RunAttachResponse
-	(*RunAttachStart)(nil),                        // 102: agentcompose.v2.RunAttachStart
+	(*StreamAgentRunResponse)(nil),                // 99: agentcompose.v2.StreamAgentRunResponse
+	(*AttachAgentRunRequest)(nil),                 // 100: agentcompose.v2.AttachAgentRunRequest
+	(*AttachAgentRunResponse)(nil),                // 101: agentcompose.v2.AttachAgentRunResponse
+	(*AttachAgentRunStart)(nil),                   // 102: agentcompose.v2.AttachAgentRunStart
 	(*TranscriptEvent)(nil),                       // 103: agentcompose.v2.TranscriptEvent
 	(*GetRunRequest)(nil),                         // 104: agentcompose.v2.GetRunRequest
 	(*GetRunResponse)(nil),                        // 105: agentcompose.v2.GetRunResponse
@@ -19826,10 +19828,10 @@ var file_agentcompose_v2_agentcompose_proto_goTypes = []any{
 	(*ExecSandboxSelector)(nil),                   // 139: agentcompose.v2.ExecSandboxSelector
 	(*ExecCommand)(nil),                           // 140: agentcompose.v2.ExecCommand
 	(*ExecResponse)(nil),                          // 141: agentcompose.v2.ExecResponse
-	(*ExecStreamResponse)(nil),                    // 142: agentcompose.v2.ExecStreamResponse
-	(*ExecAttachRequest)(nil),                     // 143: agentcompose.v2.ExecAttachRequest
-	(*ExecAttachResponse)(nil),                    // 144: agentcompose.v2.ExecAttachResponse
-	(*ExecAttachStart)(nil),                       // 145: agentcompose.v2.ExecAttachStart
+	(*StreamExecResponse)(nil),                    // 142: agentcompose.v2.StreamExecResponse
+	(*AttachExecRequest)(nil),                     // 143: agentcompose.v2.AttachExecRequest
+	(*AttachExecResponse)(nil),                    // 144: agentcompose.v2.AttachExecResponse
+	(*AttachExecStart)(nil),                       // 145: agentcompose.v2.AttachExecStart
 	(*AttachTerminalSize)(nil),                    // 146: agentcompose.v2.AttachTerminalSize
 	(*AttachStdin)(nil),                           // 147: agentcompose.v2.AttachStdin
 	(*AttachStdinEOF)(nil),                        // 148: agentcompose.v2.AttachStdinEOF
@@ -19884,8 +19886,8 @@ var file_agentcompose_v2_agentcompose_proto_goTypes = []any{
 	(*ImagePullProgress)(nil),                     // 197: agentcompose.v2.ImagePullProgress
 	(*JupyterSpec)(nil),                           // 198: agentcompose.v2.JupyterSpec
 	(*RunJupyterSpec)(nil),                        // 199: agentcompose.v2.RunJupyterSpec
-	(*StartRunRequest)(nil),                       // 200: agentcompose.v2.StartRunRequest
-	(*StartRunResponse)(nil),                      // 201: agentcompose.v2.StartRunResponse
+	(*StartAgentRunRequest)(nil),                  // 200: agentcompose.v2.StartAgentRunRequest
+	(*StartAgentRunResponse)(nil),                 // 201: agentcompose.v2.StartAgentRunResponse
 	(*SkillSpec)(nil),                             // 202: agentcompose.v2.SkillSpec
 	(*ResolveResourceIDRequest)(nil),              // 203: agentcompose.v2.ResolveResourceIDRequest
 	(*ResolveResourceIDResponse)(nil),             // 204: agentcompose.v2.ResolveResourceIDResponse
@@ -20060,28 +20062,28 @@ var file_agentcompose_v2_agentcompose_proto_depIdxs = []int32{
 	199, // 105: agentcompose.v2.RunAgentRequest.jupyter:type_name -> agentcompose.v2.RunJupyterSpec
 	85,  // 106: agentcompose.v2.RunAgentRequest.volumes:type_name -> agentcompose.v2.VolumeMountSpec
 	137, // 107: agentcompose.v2.RunAgentResponse.run:type_name -> agentcompose.v2.RunDetail
-	9,   // 108: agentcompose.v2.RunAgentStreamResponse.event_type:type_name -> agentcompose.v2.RunAgentStreamEventType
-	136, // 109: agentcompose.v2.RunAgentStreamResponse.run:type_name -> agentcompose.v2.RunSummary
-	13,  // 110: agentcompose.v2.RunAgentStreamResponse.stream:type_name -> agentcompose.v2.StdioStream
-	265, // 111: agentcompose.v2.RunAgentStreamResponse.created_at:type_name -> google.protobuf.Timestamp
-	103, // 112: agentcompose.v2.RunAgentStreamResponse.transcript:type_name -> agentcompose.v2.TranscriptEvent
-	102, // 113: agentcompose.v2.RunAttachRequest.start:type_name -> agentcompose.v2.RunAttachStart
-	147, // 114: agentcompose.v2.RunAttachRequest.stdin:type_name -> agentcompose.v2.AttachStdin
-	148, // 115: agentcompose.v2.RunAttachRequest.stdin_eof:type_name -> agentcompose.v2.AttachStdinEOF
-	149, // 116: agentcompose.v2.RunAttachRequest.resize:type_name -> agentcompose.v2.AttachResize
-	150, // 117: agentcompose.v2.RunAttachRequest.signal:type_name -> agentcompose.v2.AttachSignal
-	151, // 118: agentcompose.v2.RunAttachRequest.human_message:type_name -> agentcompose.v2.AttachHumanMessage
-	152, // 119: agentcompose.v2.RunAttachRequest.cancel:type_name -> agentcompose.v2.AttachCancel
-	265, // 120: agentcompose.v2.RunAttachResponse.created_at:type_name -> google.protobuf.Timestamp
-	153, // 121: agentcompose.v2.RunAttachResponse.started:type_name -> agentcompose.v2.AttachStarted
-	154, // 122: agentcompose.v2.RunAttachResponse.output:type_name -> agentcompose.v2.AttachOutput
-	155, // 123: agentcompose.v2.RunAttachResponse.agent_event:type_name -> agentcompose.v2.AttachAgentEvent
-	156, // 124: agentcompose.v2.RunAttachResponse.agent_turn_completed:type_name -> agentcompose.v2.AttachAgentTurnCompleted
-	157, // 125: agentcompose.v2.RunAttachResponse.result:type_name -> agentcompose.v2.AttachResult
-	158, // 126: agentcompose.v2.RunAttachResponse.error:type_name -> agentcompose.v2.AttachError
-	97,  // 127: agentcompose.v2.RunAttachStart.request:type_name -> agentcompose.v2.RunAgentRequest
-	12,  // 128: agentcompose.v2.RunAttachStart.mode:type_name -> agentcompose.v2.AttachRunMode
-	146, // 129: agentcompose.v2.RunAttachStart.terminal_size:type_name -> agentcompose.v2.AttachTerminalSize
+	9,   // 108: agentcompose.v2.StreamAgentRunResponse.event_type:type_name -> agentcompose.v2.StreamAgentRunEventType
+	136, // 109: agentcompose.v2.StreamAgentRunResponse.run:type_name -> agentcompose.v2.RunSummary
+	13,  // 110: agentcompose.v2.StreamAgentRunResponse.stream:type_name -> agentcompose.v2.StdioStream
+	265, // 111: agentcompose.v2.StreamAgentRunResponse.created_at:type_name -> google.protobuf.Timestamp
+	103, // 112: agentcompose.v2.StreamAgentRunResponse.transcript:type_name -> agentcompose.v2.TranscriptEvent
+	102, // 113: agentcompose.v2.AttachAgentRunRequest.start:type_name -> agentcompose.v2.AttachAgentRunStart
+	147, // 114: agentcompose.v2.AttachAgentRunRequest.stdin:type_name -> agentcompose.v2.AttachStdin
+	148, // 115: agentcompose.v2.AttachAgentRunRequest.stdin_eof:type_name -> agentcompose.v2.AttachStdinEOF
+	149, // 116: agentcompose.v2.AttachAgentRunRequest.resize:type_name -> agentcompose.v2.AttachResize
+	150, // 117: agentcompose.v2.AttachAgentRunRequest.signal:type_name -> agentcompose.v2.AttachSignal
+	151, // 118: agentcompose.v2.AttachAgentRunRequest.human_message:type_name -> agentcompose.v2.AttachHumanMessage
+	152, // 119: agentcompose.v2.AttachAgentRunRequest.cancel:type_name -> agentcompose.v2.AttachCancel
+	265, // 120: agentcompose.v2.AttachAgentRunResponse.created_at:type_name -> google.protobuf.Timestamp
+	153, // 121: agentcompose.v2.AttachAgentRunResponse.started:type_name -> agentcompose.v2.AttachStarted
+	154, // 122: agentcompose.v2.AttachAgentRunResponse.output:type_name -> agentcompose.v2.AttachOutput
+	155, // 123: agentcompose.v2.AttachAgentRunResponse.agent_event:type_name -> agentcompose.v2.AttachAgentEvent
+	156, // 124: agentcompose.v2.AttachAgentRunResponse.agent_turn_completed:type_name -> agentcompose.v2.AttachAgentTurnCompleted
+	157, // 125: agentcompose.v2.AttachAgentRunResponse.result:type_name -> agentcompose.v2.AttachResult
+	158, // 126: agentcompose.v2.AttachAgentRunResponse.error:type_name -> agentcompose.v2.AttachError
+	97,  // 127: agentcompose.v2.AttachAgentRunStart.request:type_name -> agentcompose.v2.RunAgentRequest
+	12,  // 128: agentcompose.v2.AttachAgentRunStart.mode:type_name -> agentcompose.v2.AttachRunMode
+	146, // 129: agentcompose.v2.AttachAgentRunStart.terminal_size:type_name -> agentcompose.v2.AttachTerminalSize
 	13,  // 130: agentcompose.v2.TranscriptEvent.stream:type_name -> agentcompose.v2.StdioStream
 	265, // 131: agentcompose.v2.TranscriptEvent.created_at:type_name -> google.protobuf.Timestamp
 	137, // 132: agentcompose.v2.GetRunResponse.run:type_name -> agentcompose.v2.RunDetail
@@ -20134,27 +20136,27 @@ var file_agentcompose_v2_agentcompose_proto_depIdxs = []int32{
 	140, // 179: agentcompose.v2.ExecRequest.command:type_name -> agentcompose.v2.ExecCommand
 	87,  // 180: agentcompose.v2.ExecRequest.env:type_name -> agentcompose.v2.EnvVarSpec
 	159, // 181: agentcompose.v2.ExecResponse.result:type_name -> agentcompose.v2.ExecResult
-	11,  // 182: agentcompose.v2.ExecStreamResponse.event_type:type_name -> agentcompose.v2.ExecStreamEventType
-	13,  // 183: agentcompose.v2.ExecStreamResponse.stream:type_name -> agentcompose.v2.StdioStream
-	159, // 184: agentcompose.v2.ExecStreamResponse.result:type_name -> agentcompose.v2.ExecResult
-	103, // 185: agentcompose.v2.ExecStreamResponse.transcript:type_name -> agentcompose.v2.TranscriptEvent
-	145, // 186: agentcompose.v2.ExecAttachRequest.start:type_name -> agentcompose.v2.ExecAttachStart
-	147, // 187: agentcompose.v2.ExecAttachRequest.stdin:type_name -> agentcompose.v2.AttachStdin
-	148, // 188: agentcompose.v2.ExecAttachRequest.stdin_eof:type_name -> agentcompose.v2.AttachStdinEOF
-	149, // 189: agentcompose.v2.ExecAttachRequest.resize:type_name -> agentcompose.v2.AttachResize
-	150, // 190: agentcompose.v2.ExecAttachRequest.signal:type_name -> agentcompose.v2.AttachSignal
-	152, // 191: agentcompose.v2.ExecAttachRequest.cancel:type_name -> agentcompose.v2.AttachCancel
-	151, // 192: agentcompose.v2.ExecAttachRequest.human_message:type_name -> agentcompose.v2.AttachHumanMessage
-	265, // 193: agentcompose.v2.ExecAttachResponse.created_at:type_name -> google.protobuf.Timestamp
-	153, // 194: agentcompose.v2.ExecAttachResponse.started:type_name -> agentcompose.v2.AttachStarted
-	154, // 195: agentcompose.v2.ExecAttachResponse.output:type_name -> agentcompose.v2.AttachOutput
-	157, // 196: agentcompose.v2.ExecAttachResponse.result:type_name -> agentcompose.v2.AttachResult
-	158, // 197: agentcompose.v2.ExecAttachResponse.error:type_name -> agentcompose.v2.AttachError
-	155, // 198: agentcompose.v2.ExecAttachResponse.agent_event:type_name -> agentcompose.v2.AttachAgentEvent
-	156, // 199: agentcompose.v2.ExecAttachResponse.agent_turn_completed:type_name -> agentcompose.v2.AttachAgentTurnCompleted
-	138, // 200: agentcompose.v2.ExecAttachStart.request:type_name -> agentcompose.v2.ExecRequest
-	146, // 201: agentcompose.v2.ExecAttachStart.terminal_size:type_name -> agentcompose.v2.AttachTerminalSize
-	12,  // 202: agentcompose.v2.ExecAttachStart.mode:type_name -> agentcompose.v2.AttachRunMode
+	11,  // 182: agentcompose.v2.StreamExecResponse.event_type:type_name -> agentcompose.v2.StreamExecEventType
+	13,  // 183: agentcompose.v2.StreamExecResponse.stream:type_name -> agentcompose.v2.StdioStream
+	159, // 184: agentcompose.v2.StreamExecResponse.result:type_name -> agentcompose.v2.ExecResult
+	103, // 185: agentcompose.v2.StreamExecResponse.transcript:type_name -> agentcompose.v2.TranscriptEvent
+	145, // 186: agentcompose.v2.AttachExecRequest.start:type_name -> agentcompose.v2.AttachExecStart
+	147, // 187: agentcompose.v2.AttachExecRequest.stdin:type_name -> agentcompose.v2.AttachStdin
+	148, // 188: agentcompose.v2.AttachExecRequest.stdin_eof:type_name -> agentcompose.v2.AttachStdinEOF
+	149, // 189: agentcompose.v2.AttachExecRequest.resize:type_name -> agentcompose.v2.AttachResize
+	150, // 190: agentcompose.v2.AttachExecRequest.signal:type_name -> agentcompose.v2.AttachSignal
+	152, // 191: agentcompose.v2.AttachExecRequest.cancel:type_name -> agentcompose.v2.AttachCancel
+	151, // 192: agentcompose.v2.AttachExecRequest.human_message:type_name -> agentcompose.v2.AttachHumanMessage
+	265, // 193: agentcompose.v2.AttachExecResponse.created_at:type_name -> google.protobuf.Timestamp
+	153, // 194: agentcompose.v2.AttachExecResponse.started:type_name -> agentcompose.v2.AttachStarted
+	154, // 195: agentcompose.v2.AttachExecResponse.output:type_name -> agentcompose.v2.AttachOutput
+	157, // 196: agentcompose.v2.AttachExecResponse.result:type_name -> agentcompose.v2.AttachResult
+	158, // 197: agentcompose.v2.AttachExecResponse.error:type_name -> agentcompose.v2.AttachError
+	155, // 198: agentcompose.v2.AttachExecResponse.agent_event:type_name -> agentcompose.v2.AttachAgentEvent
+	156, // 199: agentcompose.v2.AttachExecResponse.agent_turn_completed:type_name -> agentcompose.v2.AttachAgentTurnCompleted
+	138, // 200: agentcompose.v2.AttachExecStart.request:type_name -> agentcompose.v2.ExecRequest
+	146, // 201: agentcompose.v2.AttachExecStart.terminal_size:type_name -> agentcompose.v2.AttachTerminalSize
+	12,  // 202: agentcompose.v2.AttachExecStart.mode:type_name -> agentcompose.v2.AttachRunMode
 	146, // 203: agentcompose.v2.AttachResize.terminal_size:type_name -> agentcompose.v2.AttachTerminalSize
 	256, // 204: agentcompose.v2.AttachHumanMessage.metadata:type_name -> agentcompose.v2.AttachHumanMessage.MetadataEntry
 	136, // 205: agentcompose.v2.AttachStarted.run:type_name -> agentcompose.v2.RunSummary
@@ -20218,8 +20220,8 @@ var file_agentcompose_v2_agentcompose_proto_depIdxs = []int32{
 	196, // 263: agentcompose.v2.Image.oci:type_name -> agentcompose.v2.OCIImageStatus
 	263, // 264: agentcompose.v2.Image.labels:type_name -> agentcompose.v2.Image.LabelsEntry
 	14,  // 265: agentcompose.v2.ImageStoreStatus.store:type_name -> agentcompose.v2.ImageStoreKind
-	97,  // 266: agentcompose.v2.StartRunRequest.run:type_name -> agentcompose.v2.RunAgentRequest
-	136, // 267: agentcompose.v2.StartRunResponse.run:type_name -> agentcompose.v2.RunSummary
+	97,  // 266: agentcompose.v2.StartAgentRunRequest.run:type_name -> agentcompose.v2.RunAgentRequest
+	136, // 267: agentcompose.v2.StartAgentRunResponse.run:type_name -> agentcompose.v2.RunSummary
 	22,  // 268: agentcompose.v2.ResolveResourceIDRequest.kinds:type_name -> agentcompose.v2.ResourceKind
 	205, // 269: agentcompose.v2.ResolveResourceIDResponse.targets:type_name -> agentcompose.v2.ResourceTarget
 	22,  // 270: agentcompose.v2.ResourceTarget.kind:type_name -> agentcompose.v2.ResourceKind
@@ -20280,9 +20282,9 @@ var file_agentcompose_v2_agentcompose_proto_depIdxs = []int32{
 	73,  // 325: agentcompose.v2.ProjectService.SetSchedulerEnabled:input_type -> agentcompose.v2.SetSchedulerEnabledRequest
 	75,  // 326: agentcompose.v2.ProjectService.SetSchedulerTriggerEnabled:input_type -> agentcompose.v2.SetSchedulerTriggerEnabledRequest
 	97,  // 327: agentcompose.v2.RunService.RunAgent:input_type -> agentcompose.v2.RunAgentRequest
-	200, // 328: agentcompose.v2.RunService.StartRun:input_type -> agentcompose.v2.StartRunRequest
-	97,  // 329: agentcompose.v2.RunService.RunAgentStream:input_type -> agentcompose.v2.RunAgentRequest
-	100, // 330: agentcompose.v2.RunService.RunAttach:input_type -> agentcompose.v2.RunAttachRequest
+	200, // 328: agentcompose.v2.RunService.StartAgentRun:input_type -> agentcompose.v2.StartAgentRunRequest
+	97,  // 329: agentcompose.v2.RunService.StreamAgentRun:input_type -> agentcompose.v2.RunAgentRequest
+	100, // 330: agentcompose.v2.RunService.AttachAgentRun:input_type -> agentcompose.v2.AttachAgentRunRequest
 	104, // 331: agentcompose.v2.RunService.GetRun:input_type -> agentcompose.v2.GetRunRequest
 	106, // 332: agentcompose.v2.RunService.ListRuns:input_type -> agentcompose.v2.ListRunsRequest
 	108, // 333: agentcompose.v2.RunService.FollowRunLogs:input_type -> agentcompose.v2.FollowRunLogsRequest
@@ -20290,8 +20292,8 @@ var file_agentcompose_v2_agentcompose_proto_depIdxs = []int32{
 	112, // 335: agentcompose.v2.RunService.ListRunEvents:input_type -> agentcompose.v2.ListRunEventsRequest
 	115, // 336: agentcompose.v2.RunService.ListSandboxRunEvents:input_type -> agentcompose.v2.ListSandboxRunEventsRequest
 	138, // 337: agentcompose.v2.ExecService.Exec:input_type -> agentcompose.v2.ExecRequest
-	138, // 338: agentcompose.v2.ExecService.ExecStream:input_type -> agentcompose.v2.ExecRequest
-	143, // 339: agentcompose.v2.ExecService.ExecAttach:input_type -> agentcompose.v2.ExecAttachRequest
+	138, // 338: agentcompose.v2.ExecService.StreamExec:input_type -> agentcompose.v2.ExecRequest
+	143, // 339: agentcompose.v2.ExecService.AttachExec:input_type -> agentcompose.v2.AttachExecRequest
 	160, // 340: agentcompose.v2.ImageService.ListImages:input_type -> agentcompose.v2.ListImagesRequest
 	162, // 341: agentcompose.v2.ImageService.PullImage:input_type -> agentcompose.v2.PullImageRequest
 	164, // 342: agentcompose.v2.ImageService.InspectImage:input_type -> agentcompose.v2.InspectImageRequest
@@ -20353,9 +20355,9 @@ var file_agentcompose_v2_agentcompose_proto_depIdxs = []int32{
 	74,  // 398: agentcompose.v2.ProjectService.SetSchedulerEnabled:output_type -> agentcompose.v2.SetSchedulerEnabledResponse
 	76,  // 399: agentcompose.v2.ProjectService.SetSchedulerTriggerEnabled:output_type -> agentcompose.v2.SetSchedulerTriggerEnabledResponse
 	98,  // 400: agentcompose.v2.RunService.RunAgent:output_type -> agentcompose.v2.RunAgentResponse
-	201, // 401: agentcompose.v2.RunService.StartRun:output_type -> agentcompose.v2.StartRunResponse
-	99,  // 402: agentcompose.v2.RunService.RunAgentStream:output_type -> agentcompose.v2.RunAgentStreamResponse
-	101, // 403: agentcompose.v2.RunService.RunAttach:output_type -> agentcompose.v2.RunAttachResponse
+	201, // 401: agentcompose.v2.RunService.StartAgentRun:output_type -> agentcompose.v2.StartAgentRunResponse
+	99,  // 402: agentcompose.v2.RunService.StreamAgentRun:output_type -> agentcompose.v2.StreamAgentRunResponse
+	101, // 403: agentcompose.v2.RunService.AttachAgentRun:output_type -> agentcompose.v2.AttachAgentRunResponse
 	105, // 404: agentcompose.v2.RunService.GetRun:output_type -> agentcompose.v2.GetRunResponse
 	107, // 405: agentcompose.v2.RunService.ListRuns:output_type -> agentcompose.v2.ListRunsResponse
 	109, // 406: agentcompose.v2.RunService.FollowRunLogs:output_type -> agentcompose.v2.RunLogChunk
@@ -20363,8 +20365,8 @@ var file_agentcompose_v2_agentcompose_proto_depIdxs = []int32{
 	114, // 408: agentcompose.v2.RunService.ListRunEvents:output_type -> agentcompose.v2.ListRunEventsResponse
 	116, // 409: agentcompose.v2.RunService.ListSandboxRunEvents:output_type -> agentcompose.v2.ListSandboxRunEventsResponse
 	141, // 410: agentcompose.v2.ExecService.Exec:output_type -> agentcompose.v2.ExecResponse
-	142, // 411: agentcompose.v2.ExecService.ExecStream:output_type -> agentcompose.v2.ExecStreamResponse
-	144, // 412: agentcompose.v2.ExecService.ExecAttach:output_type -> agentcompose.v2.ExecAttachResponse
+	142, // 411: agentcompose.v2.ExecService.StreamExec:output_type -> agentcompose.v2.StreamExecResponse
+	144, // 412: agentcompose.v2.ExecService.AttachExec:output_type -> agentcompose.v2.AttachExecResponse
 	161, // 413: agentcompose.v2.ImageService.ListImages:output_type -> agentcompose.v2.ListImagesResponse
 	163, // 414: agentcompose.v2.ImageService.PullImage:output_type -> agentcompose.v2.PullImageResponse
 	165, // 415: agentcompose.v2.ImageService.InspectImage:output_type -> agentcompose.v2.InspectImageResponse
@@ -20428,21 +20430,21 @@ func file_agentcompose_v2_agentcompose_proto_init() {
 		(*DriverSpec_Microsandbox)(nil),
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[76].OneofWrappers = []any{
-		(*RunAttachRequest_Start)(nil),
-		(*RunAttachRequest_Stdin)(nil),
-		(*RunAttachRequest_StdinEof)(nil),
-		(*RunAttachRequest_Resize)(nil),
-		(*RunAttachRequest_Signal)(nil),
-		(*RunAttachRequest_HumanMessage)(nil),
-		(*RunAttachRequest_Cancel)(nil),
+		(*AttachAgentRunRequest_Start)(nil),
+		(*AttachAgentRunRequest_Stdin)(nil),
+		(*AttachAgentRunRequest_StdinEof)(nil),
+		(*AttachAgentRunRequest_Resize)(nil),
+		(*AttachAgentRunRequest_Signal)(nil),
+		(*AttachAgentRunRequest_HumanMessage)(nil),
+		(*AttachAgentRunRequest_Cancel)(nil),
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[77].OneofWrappers = []any{
-		(*RunAttachResponse_Started)(nil),
-		(*RunAttachResponse_Output)(nil),
-		(*RunAttachResponse_AgentEvent)(nil),
-		(*RunAttachResponse_AgentTurnCompleted)(nil),
-		(*RunAttachResponse_Result)(nil),
-		(*RunAttachResponse_Error)(nil),
+		(*AttachAgentRunResponse_Started)(nil),
+		(*AttachAgentRunResponse_Output)(nil),
+		(*AttachAgentRunResponse_AgentEvent)(nil),
+		(*AttachAgentRunResponse_AgentTurnCompleted)(nil),
+		(*AttachAgentRunResponse_Result)(nil),
+		(*AttachAgentRunResponse_Error)(nil),
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[110].OneofWrappers = []any{}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[114].OneofWrappers = []any{
@@ -20455,21 +20457,21 @@ func file_agentcompose_v2_agentcompose_proto_init() {
 		(*ExecSandboxSelector_ProjectName)(nil),
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[119].OneofWrappers = []any{
-		(*ExecAttachRequest_Start)(nil),
-		(*ExecAttachRequest_Stdin)(nil),
-		(*ExecAttachRequest_StdinEof)(nil),
-		(*ExecAttachRequest_Resize)(nil),
-		(*ExecAttachRequest_Signal)(nil),
-		(*ExecAttachRequest_Cancel)(nil),
-		(*ExecAttachRequest_HumanMessage)(nil),
+		(*AttachExecRequest_Start)(nil),
+		(*AttachExecRequest_Stdin)(nil),
+		(*AttachExecRequest_StdinEof)(nil),
+		(*AttachExecRequest_Resize)(nil),
+		(*AttachExecRequest_Signal)(nil),
+		(*AttachExecRequest_Cancel)(nil),
+		(*AttachExecRequest_HumanMessage)(nil),
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[120].OneofWrappers = []any{
-		(*ExecAttachResponse_Started)(nil),
-		(*ExecAttachResponse_Output)(nil),
-		(*ExecAttachResponse_Result)(nil),
-		(*ExecAttachResponse_Error)(nil),
-		(*ExecAttachResponse_AgentEvent)(nil),
-		(*ExecAttachResponse_AgentTurnCompleted)(nil),
+		(*AttachExecResponse_Started)(nil),
+		(*AttachExecResponse_Output)(nil),
+		(*AttachExecResponse_Result)(nil),
+		(*AttachExecResponse_Error)(nil),
+		(*AttachExecResponse_AgentEvent)(nil),
+		(*AttachExecResponse_AgentTurnCompleted)(nil),
 	}
 	file_agentcompose_v2_agentcompose_proto_msgTypes[195].OneofWrappers = []any{}
 	type x struct{}

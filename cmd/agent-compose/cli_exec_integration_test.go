@@ -13,18 +13,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestIntegrationCLIRunPromptTTYUsesRunAttach(t *testing.T) {
-	stream := newFakeRunAttachStream([]*agentcomposev2.RunAttachResponse{
-		{Frame: &agentcomposev2.RunAttachResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "first output\n"}}},
-		{Frame: &agentcomposev2.RunAttachResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-prompt-attach"}}},
-		{Frame: &agentcomposev2.RunAttachResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "second output\n"}}},
-		{Frame: &agentcomposev2.RunAttachResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-prompt-attach"}}},
-		{Frame: &agentcomposev2.RunAttachResponse_Result{Result: &agentcomposev2.AttachResult{
+func TestIntegrationCLIRunPromptTTYUsesAttachAgentRun(t *testing.T) {
+	stream := newFakeAttachAgentRunStream([]*agentcomposev2.AttachAgentRunResponse{
+		{Frame: &agentcomposev2.AttachAgentRunResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "first output\n"}}},
+		{Frame: &agentcomposev2.AttachAgentRunResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-prompt-attach"}}},
+		{Frame: &agentcomposev2.AttachAgentRunResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "second output\n"}}},
+		{Frame: &agentcomposev2.AttachAgentRunResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-prompt-attach"}}},
+		{Frame: &agentcomposev2.AttachAgentRunResponse_Result{Result: &agentcomposev2.AttachResult{
 			Success: true,
 			Run:     &agentcomposev2.RunSummary{RunId: "run-prompt-attach", Status: agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED},
 		}}},
 	})
-	client := &fakeRunAttachClient{stream: stream}
+	client := &fakeAttachAgentRunClient{stream: stream}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd := &cobra.Command{Use: "run"}
@@ -45,20 +45,20 @@ func TestIntegrationCLIRunPromptTTYUsesRunAttach(t *testing.T) {
 	}
 	sent := stream.sentFrames()
 	if len(sent) != 3 {
-		t.Fatalf("RunAttach sent %d frames, want start/human/eof: %#v", len(sent), sent)
+		t.Fatalf("AttachAgentRun sent %d frames, want start/human/eof: %#v", len(sent), sent)
 	}
 	if start := sent[0].GetStart(); start == nil || start.GetMode() != agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT || start.GetTty() || start.GetRequest().GetPrompt() != "first prompt" {
-		t.Fatalf("RunAttach prompt start = %#v", sent[0])
+		t.Fatalf("AttachAgentRun prompt start = %#v", sent[0])
 	}
 	if sent[1].GetHumanMessage().GetText() != "second prompt" {
-		t.Fatalf("RunAttach human message = %#v", sent[1])
+		t.Fatalf("AttachAgentRun human message = %#v", sent[1])
 	}
 	if sent[2].GetStdinEof() == nil || !stream.closedRequest() {
-		t.Fatalf("RunAttach eof/close eof=%#v closed=%v", sent[2], stream.closedRequest())
+		t.Fatalf("AttachAgentRun eof/close eof=%#v closed=%v", sent[2], stream.closedRequest())
 	}
 }
 
-func TestIntegrationCLIExecStreamsAndSupportsJSON(t *testing.T) {
+func TestIntegrationCLIStreamExecsAndSupportsJSON(t *testing.T) {
 	composePath := writeComposeFile(t, t.TempDir(), `
 name: cli-exec-demo
 agents:
@@ -69,21 +69,21 @@ agents:
 	var sawCommand bool
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		exec: execServiceStub{
-			execStream: func(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error {
+			execStream: func(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.StreamExecResponse]) error {
 				if req.Msg.GetSandboxId() == "sandbox-exec" {
 					sawSandbox = true
 					if req.Msg.GetCommand().GetCommand() != "bash" || req.Msg.GetCommand().GetArgs()[0] != "-lc" {
-						t.Fatalf("ExecStream sandbox request = %#v", req.Msg)
+						t.Fatalf("StreamExec sandbox request = %#v", req.Msg)
 					}
 				}
 				if req.Msg.GetSandboxId() == "sandbox-command" {
 					sawCommand = true
 					if req.Msg.GetCommand().GetCommand() != "bash" || len(req.Msg.GetCommand().GetArgs()) != 2 || req.Msg.GetCommand().GetArgs()[0] != "-lc" || req.Msg.GetCommand().GetArgs()[1] != "git status --short" {
-						t.Fatalf("ExecStream --command request = %#v", req.Msg)
+						t.Fatalf("StreamExec --command request = %#v", req.Msg)
 					}
 				}
-				if err := stream.Send(&agentcomposev2.ExecStreamResponse{
-					EventType:  agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_OUTPUT,
+				if err := stream.Send(&agentcomposev2.StreamExecResponse{
+					EventType:  agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_OUTPUT,
 					ExecId:     "exec-cli",
 					SandboxId:  "session-exec",
 					RunId:      "run-exec",
@@ -91,8 +91,8 @@ agents:
 				}); err != nil {
 					return err
 				}
-				if err := stream.Send(&agentcomposev2.ExecStreamResponse{
-					EventType:  agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_OUTPUT,
+				if err := stream.Send(&agentcomposev2.StreamExecResponse{
+					EventType:  agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_OUTPUT,
 					ExecId:     "exec-cli",
 					SandboxId:  "session-exec",
 					RunId:      "run-exec",
@@ -100,8 +100,8 @@ agents:
 				}); err != nil {
 					return err
 				}
-				return stream.Send(&agentcomposev2.ExecStreamResponse{
-					EventType: agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamExecResponse{
+					EventType: agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_COMPLETED,
 					ExecId:    "exec-cli",
 					SandboxId: "session-exec",
 					RunId:     "run-exec",
@@ -119,8 +119,8 @@ agents:
 					},
 				})
 			},
-			execAttach: func(context.Context, *connect.BidiStream[agentcomposev2.ExecAttachRequest, agentcomposev2.ExecAttachResponse]) error {
-				t.Fatalf("ExecAttach should not be called for non-interactive exec")
+			execAttach: func(context.Context, *connect.BidiStream[agentcomposev2.AttachExecRequest, agentcomposev2.AttachExecResponse]) error {
+				t.Fatalf("AttachExec should not be called for non-interactive exec")
 				return nil
 			},
 		},
@@ -135,7 +135,7 @@ agents:
 		t.Fatalf("exec stdout/stderr = %q / %q", stdout, stderr)
 	}
 	if !sawSandbox {
-		t.Fatal("ExecStream sandbox target was not used")
+		t.Fatal("StreamExec sandbox target was not used")
 	}
 
 	commandOut, commandErr, _, commandCode := executeCLICommand("exec", "--host", server.URL, "--file", composePath, "sandbox-command", "--command", "git status --short")
@@ -146,7 +146,7 @@ agents:
 		t.Fatalf("exec --command stdout/stderr = %q / %q", commandOut, commandErr)
 	}
 	if !sawCommand {
-		t.Fatal("ExecStream --command target was not used")
+		t.Fatal("StreamExec --command target was not used")
 	}
 
 	jsonOut, jsonErr, _, jsonCode := executeCLICommand("exec", "--host", server.URL, "--file", composePath, "--json", "session-exec", "--command", "bash")
@@ -191,7 +191,7 @@ agents:
 	var execStreamCalls atomic.Int32
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		exec: execServiceStub{
-			execStream: func(context.Context, *connect.Request[agentcomposev2.ExecRequest], *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error {
+			execStream: func(context.Context, *connect.Request[agentcomposev2.ExecRequest], *connect.ServerStream[agentcomposev2.StreamExecResponse]) error {
 				execStreamCalls.Add(1)
 				return nil
 			},
@@ -216,6 +216,6 @@ agents:
 		t.Fatalf("exec conflicting targets emitted deprecation warning: %q", stderr)
 	}
 	if calls := execStreamCalls.Load(); calls != 0 {
-		t.Fatalf("ExecStream calls = %d, want 0", calls)
+		t.Fatalf("StreamExec calls = %d, want 0", calls)
 	}
 }

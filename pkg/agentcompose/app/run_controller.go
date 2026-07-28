@@ -76,7 +76,7 @@ func (d runControllerDelegate) RunAgent(ctx context.Context, req *connect.Reques
 	}), nil
 }
 
-func (d runControllerDelegate) StartRun(ctx context.Context, req *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
+func (d runControllerDelegate) StartAgentRun(ctx context.Context, req *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
 	if d.supervisor == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("run supervisor is required"))
 	}
@@ -84,14 +84,14 @@ func (d runControllerDelegate) StartRun(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, runConnectError(err)
 	}
-	return connect.NewResponse(&agentcomposev2.StartRunResponse{
+	return connect.NewResponse(&agentcomposev2.StartAgentRunResponse{
 		Run:      api.ProjectRunSummaryToProto(run),
 		Warnings: append([]string(nil), run.Warnings...),
 		Started:  !runs.StatusIsTerminal(run.Status),
 	}), nil
 }
 
-func (d runControllerDelegate) RunAgentStream(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+func (d runControllerDelegate) StreamAgentRun(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 	runs.PrepareStreamingHeaders(stream.ResponseHeader())
 	sink := runs.StreamSink{
 		SendStarted: func(run domain.ProjectRunRecord, createdAt time.Time) error {
@@ -114,23 +114,23 @@ func (d runControllerDelegate) RunAgentStream(ctx context.Context, req *connect.
 	return nil
 }
 
-func sendRunAgentStreamStarted(stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse], run domain.ProjectRunRecord, createdAt time.Time) error {
+func sendRunAgentStreamStarted(stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse], run domain.ProjectRunRecord, createdAt time.Time) error {
 	if err := stream.Send(runAgentStreamStartedProjection(run, createdAt)); err != nil {
 		return fmt.Errorf("%w: %w", runs.ErrRunAgentStreamSend, err)
 	}
 	return nil
 }
 
-func sendRunAgentStreamChunk(stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse], runID string, chunk domain.ExecChunk, createdAt time.Time) error {
+func sendRunAgentStreamChunk(stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse], runID string, chunk domain.ExecChunk, createdAt time.Time) error {
 	if err := stream.Send(runAgentStreamChunkProjection(runID, chunk, createdAt)); err != nil {
 		return fmt.Errorf("%w: %w", runs.ErrRunAgentStreamSend, err)
 	}
 	return nil
 }
 
-func runAgentStreamStartedProjection(run domain.ProjectRunRecord, createdAt time.Time) *agentcomposev2.RunAgentStreamResponse {
-	return &agentcomposev2.RunAgentStreamResponse{
-		EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_STARTED,
+func runAgentStreamStartedProjection(run domain.ProjectRunRecord, createdAt time.Time) *agentcomposev2.StreamAgentRunResponse {
+	return &agentcomposev2.StreamAgentRunResponse{
+		EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_STARTED,
 		Run:       api.ProjectRunSummaryToProto(run),
 		RunId:     run.RunID,
 		CreatedAt: api.FormatProjectTime(createdAt),
@@ -138,9 +138,9 @@ func runAgentStreamStartedProjection(run domain.ProjectRunRecord, createdAt time
 	}
 }
 
-func runAgentStreamChunkProjection(runID string, chunk domain.ExecChunk, createdAt time.Time) *agentcomposev2.RunAgentStreamResponse {
-	return &agentcomposev2.RunAgentStreamResponse{
-		EventType:  agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+func runAgentStreamChunkProjection(runID string, chunk domain.ExecChunk, createdAt time.Time) *agentcomposev2.StreamAgentRunResponse {
+	return &agentcomposev2.StreamAgentRunResponse{
+		EventType:  agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 		RunId:      runID,
 		Chunk:      chunk.Text,
 		Stream:     api.StdioStreamToProto(chunk.Stream),
@@ -149,9 +149,9 @@ func runAgentStreamChunkProjection(runID string, chunk domain.ExecChunk, created
 	}
 }
 
-func runAgentStreamCompletedProjection(run domain.ProjectRunRecord, createdAt time.Time) *agentcomposev2.RunAgentStreamResponse {
-	return &agentcomposev2.RunAgentStreamResponse{
-		EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+func runAgentStreamCompletedProjection(run domain.ProjectRunRecord, createdAt time.Time) *agentcomposev2.StreamAgentRunResponse {
+	return &agentcomposev2.StreamAgentRunResponse{
+		EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 		Run:       api.ProjectRunSummaryToProto(run),
 		RunId:     run.RunID,
 		CreatedAt: api.FormatProjectTime(createdAt),
@@ -159,7 +159,7 @@ func runAgentStreamCompletedProjection(run domain.ProjectRunRecord, createdAt ti
 	}
 }
 
-func (d runControllerDelegate) RunAttach(ctx context.Context, stream *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error {
+func (d runControllerDelegate) AttachAgentRun(ctx context.Context, stream *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
 	if d.controller == nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("run controller is required"))
 	}

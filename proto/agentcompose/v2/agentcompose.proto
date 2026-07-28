@@ -18,8 +18,16 @@ service ProjectService {
   rpc ListSchedulerEvents(ListSchedulerEventsRequest) returns (ListSchedulerEventsResponse);
   rpc ListProjectSchedulerEvents(ListProjectSchedulerEventsRequest) returns (ListProjectSchedulerEventsResponse);
   rpc StreamProjectSchedulerEvents(StreamProjectSchedulerEventsRequest) returns (stream StreamProjectSchedulerEventsResponse);
+  // Invokes the scheduler directly and returns its value without creating a
+  // persistent SchedulerRun. Cancellation cancels the invocation.
   rpc InvokeScheduler(InvokeSchedulerRequest) returns (InvokeSchedulerResponse);
+  // Creates a persistent SchedulerRun and waits for it to reach a terminal
+  // state. The returned run is queryable with GetSchedulerRun and
+  // ListSchedulerRuns. Cancellation requests cancellation of the execution.
   rpc RunScheduler(RunSchedulerRequest) returns (RunSchedulerResponse);
+  // Creates a persistent SchedulerRun and returns after submission, without
+  // waiting for a terminal state. Disconnecting after submission does not
+  // cancel the run; use StopSchedulerRun to cancel it.
   rpc StartSchedulerRun(StartSchedulerRunRequest) returns (StartSchedulerRunResponse);
   rpc GetSchedulerRun(GetSchedulerRunRequest) returns (GetSchedulerRunResponse);
   rpc ListSchedulerRuns(ListSchedulerRunsRequest) returns (ListSchedulerRunsResponse);
@@ -32,13 +40,28 @@ service ProjectService {
 }
 
 service RunService {
+  // Creates a persistent Agent Run and waits for it to reach a terminal state.
+  // The final RunDetail is equivalent to GetRun for the returned run ID. Client
+  // cancellation requests cancellation of the execution and its cleanup policy
+  // still applies.
   rpc RunAgent(RunAgentRequest) returns (RunAgentResponse);
-  rpc StartRun(StartRunRequest) returns (StartRunResponse);
-  // Stable server-stream projection of RunAgent for non-interactive stream views.
-  // Interactive clients that need stdin, resize, signal, or multi-turn prompt
-  // attachment should use RunAttach.
-  rpc RunAgentStream(RunAgentRequest) returns (stream RunAgentStreamResponse);
-  rpc RunAttach(stream RunAttachRequest) returns (stream RunAttachResponse);
+  // Creates or reuses a persistent Agent Run and returns after submission.
+  // started is true only when this call returns a non-terminal run that has been
+  // scheduled for background execution. A false value means the returned run
+  // was already terminal; it never means that submission failed. Disconnecting
+  // after submission does not cancel the run; use StopRun to cancel it.
+  rpc StartAgentRun(StartAgentRunRequest) returns (StartAgentRunResponse);
+  // Creates a persistent Agent Run and projects started, output, status, and
+  // completed events for non-interactive clients. The completed run has the same
+  // terminal state and common fields as RunAgent/GetRun. Client cancellation
+  // requests cancellation of the execution and its cleanup policy still applies.
+  rpc StreamAgentRun(RunAgentRequest) returns (stream StreamAgentRunResponse);
+  // Starts an interactive Agent Run. The first client frame must be start and
+  // start may appear exactly once. Frames before start, duplicate start frames,
+  // and frames after a terminal server frame are invalid. stdin_eof closes only
+  // stdin; cancel requests cancellation of the execution. Client half-close or
+  // disconnection ends the attachment and requests cancellation of the run.
+  rpc AttachAgentRun(stream AttachAgentRunRequest) returns (stream AttachAgentRunResponse);
   rpc GetRun(GetRunRequest) returns (GetRunResponse);
   rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
   rpc FollowRunLogs(FollowRunLogsRequest) returns (stream RunLogChunk);
@@ -48,12 +71,19 @@ service RunService {
 }
 
 service ExecService {
+  // Executes a non-persistent command and waits for its final exit result.
+  // Cancellation requests cancellation of the command. Exec IDs, when emitted
+  // by streaming forms, are correlation IDs and are not queryable resources.
   rpc Exec(ExecRequest) returns (ExecResponse);
-  // Stable server-stream projection of Exec for non-interactive stream views.
-  // Interactive clients that need stdin, resize, or signal attachment should use
-  // ExecAttach.
-  rpc ExecStream(ExecRequest) returns (stream ExecStreamResponse);
-  rpc ExecAttach(stream ExecAttachRequest) returns (stream ExecAttachResponse);
+  // Executes a non-persistent command and projects output and the same final
+  // ExecResult returned by Exec. Client cancellation cancels the command.
+  rpc StreamExec(ExecRequest) returns (stream StreamExecResponse);
+  // Starts an interactive, non-persistent command. The first client frame must
+  // be start and start may appear exactly once. Frames before start, duplicate
+  // start frames, and frames after a terminal server frame are invalid.
+  // stdin_eof closes only stdin; cancel, half-close, or disconnection requests
+  // cancellation of the command.
+  rpc AttachExec(stream AttachExecRequest) returns (stream AttachExecResponse);
 }
 
 service ImageService {
@@ -188,12 +218,12 @@ enum RunEventKind {
   RUN_EVENT_KIND_STATUS = 4;
 }
 
-enum RunAgentStreamEventType {
-  RUN_AGENT_STREAM_EVENT_TYPE_UNSPECIFIED = 0;
-  RUN_AGENT_STREAM_EVENT_TYPE_STARTED = 1;
-  RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT = 2;
-  RUN_AGENT_STREAM_EVENT_TYPE_STATUS = 3;
-  RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED = 4;
+enum StreamAgentRunEventType {
+  STREAM_AGENT_RUN_EVENT_TYPE_UNSPECIFIED = 0;
+  STREAM_AGENT_RUN_EVENT_TYPE_STARTED = 1;
+  STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT = 2;
+  STREAM_AGENT_RUN_EVENT_TYPE_STATUS = 3;
+  STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED = 4;
 }
 
 enum RunSandboxCleanupPolicy {
@@ -204,11 +234,11 @@ enum RunSandboxCleanupPolicy {
   RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION = 3;
 }
 
-enum ExecStreamEventType {
-  EXEC_STREAM_EVENT_TYPE_UNSPECIFIED = 0;
-  EXEC_STREAM_EVENT_TYPE_STARTED = 1;
-  EXEC_STREAM_EVENT_TYPE_OUTPUT = 2;
-  EXEC_STREAM_EVENT_TYPE_COMPLETED = 3;
+enum StreamExecEventType {
+  STREAM_EXEC_EVENT_TYPE_UNSPECIFIED = 0;
+  STREAM_EXEC_EVENT_TYPE_STARTED = 1;
+  STREAM_EXEC_EVENT_TYPE_OUTPUT = 2;
+  STREAM_EXEC_EVENT_TYPE_COMPLETED = 3;
 }
 
 enum AttachRunMode {
@@ -902,6 +932,8 @@ message RunAgentRequest {
   string scheduler_id = 7;
   string trigger_id = 8;
   string output_schema_json = 9;
+  // Idempotency key scoped by project, agent, and run source. Retries with the
+  // same key resolve to the same persistent Run ID.
   string client_request_id = 10;
   string command = 11;
   RunJupyterSpec jupyter = 12;
@@ -916,8 +948,8 @@ message RunAgentResponse {
   repeated string warnings = 2;
 }
 
-message RunAgentStreamResponse {
-  RunAgentStreamEventType event_type = 1;
+message StreamAgentRunResponse {
+  StreamAgentRunEventType event_type = 1;
   RunSummary run = 2;
   string run_id = 3;
   string chunk = 4;
@@ -927,13 +959,13 @@ message RunAgentStreamResponse {
   TranscriptEvent transcript = 8;
 }
 
-message RunAttachRequest {
+message AttachAgentRunRequest {
   // Frame variants occupy the low-number range. Envelope metadata starts at
   // 15 so future frame variants can be added without moving metadata fields.
   string client_frame_id = 15;
 
   oneof frame {
-    RunAttachStart start = 1;
+    AttachAgentRunStart start = 1;
     AttachStdin stdin = 2;
     AttachStdinEOF stdin_eof = 3;
     AttachResize resize = 4;
@@ -943,7 +975,7 @@ message RunAttachRequest {
   }
 }
 
-message RunAttachResponse {
+message AttachAgentRunResponse {
   // Frame variants occupy the low-number range. Envelope metadata starts at
   // 15 so future frame variants can be added without moving metadata fields.
   string server_frame_id = 15;
@@ -959,7 +991,7 @@ message RunAttachResponse {
   }
 }
 
-message RunAttachStart {
+message AttachAgentRunStart {
   RunAgentRequest request = 1;
   AttachRunMode mode = 2;
   bool attach_stdin = 3;
@@ -1302,9 +1334,9 @@ message ExecResponse {
   ExecResult result = 1;
 }
 
-message ExecStreamResponse {
+message StreamExecResponse {
 
-  ExecStreamEventType event_type = 1;
+  StreamExecEventType event_type = 1;
   string exec_id = 2;
   string sandbox_id = 3;
   string run_id = 4;
@@ -1314,13 +1346,13 @@ message ExecStreamResponse {
   TranscriptEvent transcript = 8;
 }
 
-message ExecAttachRequest {
+message AttachExecRequest {
   // Frame variants occupy the low-number range. Envelope metadata starts at
   // 15 so future frame variants can be added without moving metadata fields.
   string client_frame_id = 15;
 
   oneof frame {
-    ExecAttachStart start = 1;
+    AttachExecStart start = 1;
     AttachStdin stdin = 2;
     AttachStdinEOF stdin_eof = 3;
     AttachResize resize = 4;
@@ -1330,7 +1362,7 @@ message ExecAttachRequest {
   }
 }
 
-message ExecAttachResponse {
+message AttachExecResponse {
   // Frame variants occupy the low-number range. Envelope metadata starts at
   // 15 so future frame variants can be added without moving metadata fields.
   string server_frame_id = 15;
@@ -1346,7 +1378,7 @@ message ExecAttachResponse {
   }
 }
 
-message ExecAttachStart {
+message AttachExecStart {
   ExecRequest request = 1;
   bool attach_stdin = 2;
   bool tty = 3;
@@ -1755,11 +1787,11 @@ message RunJupyterSpec {
   bool expose = 3;
 }
 
-message StartRunRequest {
+message StartAgentRunRequest {
   RunAgentRequest run = 1;
 }
 
-message StartRunResponse {
+message StartAgentRunResponse {
   RunSummary run = 1;
   repeated string warnings = 2;
   bool started = 3;

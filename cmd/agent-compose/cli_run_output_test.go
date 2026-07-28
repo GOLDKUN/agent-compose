@@ -31,7 +31,7 @@ func TestWritePrefixedRunOutputHonorsTimestampFlag(t *testing.T) {
 func TestCLIRunStreamAndDetailEdgeBranches(t *testing.T) {
 	t.Run("stream completes without terminal run", func(t *testing.T) {
 		server := newRunServiceStubServer(t, runServiceStub{
-			runAgentStream: func(context.Context, *connect.Request[agentcomposev2.RunAgentRequest], *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(context.Context, *connect.Request[agentcomposev2.RunAgentRequest], *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				return nil
 			},
 		})
@@ -45,7 +45,7 @@ func TestCLIRunStreamAndDetailEdgeBranches(t *testing.T) {
 
 	t.Run("stream rpc error", func(t *testing.T) {
 		server := newRunServiceStubServer(t, runServiceStub{
-			runAgentStream: func(context.Context, *connect.Request[agentcomposev2.RunAgentRequest], *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(context.Context, *connect.Request[agentcomposev2.RunAgentRequest], *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				return connect.NewError(connect.CodeUnavailable, fmt.Errorf("runner unavailable"))
 			},
 		})
@@ -59,17 +59,17 @@ func TestCLIRunStreamAndDetailEdgeBranches(t *testing.T) {
 
 	t.Run("warnings aggregate and output can be suppressed", func(t *testing.T) {
 		server := newRunServiceStubServer(t, runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 					RunId:     "run-warn",
 					Warnings:  []string{"event warning"},
 					Chunk:     "hidden\n",
 				}); err != nil {
 					return err
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-warn",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-warn",
@@ -103,9 +103,9 @@ func TestCLIRunStreamAndDetailEdgeBranches(t *testing.T) {
 
 	t.Run("output writer error stops stream", func(t *testing.T) {
 		server := newRunServiceStubServer(t, runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 					RunId:     "run-write-error",
 					Chunk:     "cannot write\n",
 				})
@@ -121,9 +121,9 @@ func TestCLIRunStreamAndDetailEdgeBranches(t *testing.T) {
 
 	t.Run("get detail error is wrapped", func(t *testing.T) {
 		server := newRunServiceStubServer(t, runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-detail-missing",
 					Run:       &agentcomposev2.RunSummary{RunId: "run-detail-missing", ProjectId: req.Msg.GetProjectId(), AgentName: req.Msg.GetAgentName(), Status: agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED},
 				})
@@ -152,13 +152,13 @@ agents:
 		var sawRequest bool
 		server := newComposeServiceStubServer(t, composeServiceStubs{
 			run: runServiceStub{
-				runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+				runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 					sawRequest = true
 					if req.Msg.GetPrompt() != "positional prompt" || req.Msg.GetCommand() != "" || req.Msg.GetTriggerId() != "" {
-						t.Fatalf("RunAgentStream request = %#v", req.Msg)
+						t.Fatalf("StreamAgentRun request = %#v", req.Msg)
 					}
-					return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-						EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+					return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+						EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 						RunId:     "run-optional-prompt",
 						Run:       &agentcomposev2.RunSummary{RunId: "run-optional-prompt", ProjectId: req.Msg.GetProjectId(), AgentName: "reviewer", Status: agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED},
 					})
@@ -186,13 +186,13 @@ agents:
 		var sawRequest bool
 		server := newComposeServiceStubServer(t, composeServiceStubs{
 			run: runServiceStub{
-				runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+				runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 					sawRequest = true
 					if req.Msg.GetCommand() != "echo positional" || req.Msg.GetPrompt() != "" || req.Msg.GetTriggerId() != "" {
-						t.Fatalf("RunAgentStream request = %#v", req.Msg)
+						t.Fatalf("StreamAgentRun request = %#v", req.Msg)
 					}
-					return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-						EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+					return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+						EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 						RunId:     "run-optional-command",
 						Run:       &agentcomposev2.RunSummary{RunId: "run-optional-command", ProjectId: req.Msg.GetProjectId(), AgentName: "reviewer", Status: agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED},
 					})
@@ -219,8 +219,8 @@ agents:
 `)
 		server := newComposeServiceStubServer(t, composeServiceStubs{
 			run: runServiceStub{
-				startRun: func(context.Context, *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
-					return connect.NewResponse(&agentcomposev2.StartRunResponse{Started: true}), nil
+				startRun: func(context.Context, *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
+					return connect.NewResponse(&agentcomposev2.StartAgentRunResponse{Started: true}), nil
 				},
 			},
 		})
@@ -241,9 +241,9 @@ agents:
 `)
 		server := newComposeServiceStubServer(t, composeServiceStubs{
 			run: runServiceStub{
-				runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-					return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-						EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+					return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+						EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 						RunId:     "run-interactive-cleanup",
 						Run:       &agentcomposev2.RunSummary{RunId: "run-interactive-cleanup", ProjectId: req.Msg.GetProjectId(), AgentName: "reviewer", Status: agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED, SandboxId: "sandbox-cleanup"},
 					})

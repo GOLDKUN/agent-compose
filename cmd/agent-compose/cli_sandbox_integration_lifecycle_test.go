@@ -24,29 +24,29 @@ agents:
 `)
 	var sawRequest bool
 	server := newRunServiceStubServer(t, runServiceStub{
-		runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+		runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 			sawRequest = true
 			if req.Msg.GetAgentName() != "reviewer" || req.Msg.GetPrompt() != "check this" || req.Msg.GetSandboxId() != "session-reuse" || req.Msg.GetTriggerId() != "" {
-				t.Fatalf("RunAgentStream request = %#v", req.Msg)
+				t.Fatalf("StreamAgentRun request = %#v", req.Msg)
 			}
 			if req.Msg.GetSource() != agentcomposev2.RunSource_RUN_SOURCE_MANUAL || req.Msg.GetCleanupPolicy() != agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING {
-				t.Fatalf("RunAgentStream source/cleanup = %#v", req.Msg)
+				t.Fatalf("StreamAgentRun source/cleanup = %#v", req.Msg)
 			}
-			if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-				EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_STARTED,
+			if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+				EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_STARTED,
 				RunId:     "run-success",
 			}); err != nil {
 				return err
 			}
-			if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-				EventType:  agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+			if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+				EventType:  agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 				RunId:      "run-success",
 				Transcript: &agentcomposev2.TranscriptEvent{Stream: agentcomposev2.StdioStream_STDIO_STREAM_STDOUT, Text: "live output\n"},
 			}); err != nil {
 				return err
 			}
-			return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-				EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+			return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+				EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 				RunId:     "run-success",
 				Run: &agentcomposev2.RunSummary{
 					RunId:     "run-success",
@@ -57,8 +57,8 @@ agents:
 				},
 			})
 		},
-		runAttach: func(context.Context, *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error {
-			t.Fatalf("RunAttach should not be called for non-interactive run --prompt")
+		runAttach: func(context.Context, *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
+			t.Fatalf("AttachAgentRun should not be called for non-interactive run --prompt")
 			return nil
 		},
 		getRun: func(ctx context.Context, req *connect.Request[agentcomposev2.GetRunRequest]) (*connect.Response[agentcomposev2.GetRunResponse], error) {
@@ -78,7 +78,7 @@ agents:
 		t.Fatalf("daemon runner called %d times, want 0", runCount)
 	}
 	if !sawRequest {
-		t.Fatal("RunAgentStream was not called")
+		t.Fatal("StreamAgentRun was not called")
 	}
 
 	for _, tc := range []struct {
@@ -110,25 +110,25 @@ agents:
 	var sessions []string
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				prompts = append(prompts, req.Msg.GetPrompt())
 				sessions = append(sessions, req.Msg.GetSandboxId())
 				if req.Msg.GetCommand() != "" || req.Msg.GetTriggerId() != "" {
-					t.Fatalf("RunAgentStream interactive prompt request = %#v", req.Msg)
+					t.Fatalf("StreamAgentRun interactive prompt request = %#v", req.Msg)
 				}
 				if req.Msg.GetCleanupPolicy() != agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING {
-					t.Fatalf("RunAgentStream cleanup policy = %#v", req.Msg.GetCleanupPolicy())
+					t.Fatalf("StreamAgentRun cleanup policy = %#v", req.Msg.GetCleanupPolicy())
 				}
 				runID := fmt.Sprintf("run-repl-%d", len(prompts))
-				if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType:  agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+				if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType:  agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 					RunId:      runID,
 					Transcript: &agentcomposev2.TranscriptEvent{Text: fmt.Sprintf("prompt %d output\n", len(prompts))},
 				}); err != nil {
 					return err
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     runID,
 					Run: &agentcomposev2.RunSummary{
 						RunId:     runID,
@@ -173,23 +173,23 @@ agents:
 	var sessions []string
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				drivers = append(drivers, req.Msg.GetDriver())
 				prompts = append(prompts, req.Msg.GetPrompt())
 				sessions = append(sessions, req.Msg.GetSandboxId())
 				if req.Msg.GetCommand() != "" || req.Msg.GetTriggerId() != "" {
-					t.Fatalf("RunAgentStream interactive prompt request = %#v", req.Msg)
+					t.Fatalf("StreamAgentRun interactive prompt request = %#v", req.Msg)
 				}
 				runID := fmt.Sprintf("run-driver-repl-%d", len(prompts))
-				if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType:  agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+				if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType:  agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 					RunId:      runID,
 					Transcript: &agentcomposev2.TranscriptEvent{Text: fmt.Sprintf("driver %d output\n", len(prompts))},
 				}); err != nil {
 					return err
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     runID,
 					Run: &agentcomposev2.RunSummary{
 						RunId:     runID,
@@ -236,25 +236,25 @@ agents:
 	var sessions []string
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				commands = append(commands, req.Msg.GetCommand())
 				sessions = append(sessions, req.Msg.GetSandboxId())
 				if req.Msg.GetPrompt() != "" || req.Msg.GetTriggerId() != "" {
-					t.Fatalf("RunAgentStream interactive command request = %#v", req.Msg)
+					t.Fatalf("StreamAgentRun interactive command request = %#v", req.Msg)
 				}
 				if req.Msg.GetCleanupPolicy() != agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING {
-					t.Fatalf("RunAgentStream cleanup policy = %#v", req.Msg.GetCleanupPolicy())
+					t.Fatalf("StreamAgentRun cleanup policy = %#v", req.Msg.GetCleanupPolicy())
 				}
 				runID := fmt.Sprintf("run-command-repl-%d", len(commands))
-				if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType:  agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+				if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType:  agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 					RunId:      runID,
 					Transcript: &agentcomposev2.TranscriptEvent{Text: fmt.Sprintf("command %d output\n", len(commands))},
 				}); err != nil {
 					return err
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     runID,
 					Run: &agentcomposev2.RunSummary{
 						RunId:     runID,
@@ -297,9 +297,9 @@ agents:
 	var removed []string
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-repl-rm",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-repl-rm",
@@ -344,19 +344,19 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				if req.Msg.GetCleanupPolicy() != agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION {
-					t.Fatalf("RunAgentStream cleanup policy = %#v", req.Msg.GetCleanupPolicy())
+					t.Fatalf("StreamAgentRun cleanup policy = %#v", req.Msg.GetCleanupPolicy())
 				}
-				if err := stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_OUTPUT,
+				if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_OUTPUT,
 					RunId:     "run-rm",
 					Chunk:     "done\n",
 				}); err != nil {
 					return err
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-rm",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-rm",
@@ -392,12 +392,12 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				if req.Msg.GetCleanupPolicy() != agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION {
-					t.Fatalf("RunAgentStream cleanup policy = %#v", req.Msg.GetCleanupPolicy())
+					t.Fatalf("StreamAgentRun cleanup policy = %#v", req.Msg.GetCleanupPolicy())
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-rm-detail",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-rm-detail",
@@ -432,12 +432,12 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				if req.Msg.GetCleanupPolicy() != agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION {
-					t.Fatalf("RunAgentStream cleanup policy = %#v", req.Msg.GetCleanupPolicy())
+					t.Fatalf("StreamAgentRun cleanup policy = %#v", req.Msg.GetCleanupPolicy())
 				}
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     "run-rm-error",
 					Run: &agentcomposev2.RunSummary{
 						RunId:     "run-rm-error",

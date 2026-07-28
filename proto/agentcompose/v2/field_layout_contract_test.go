@@ -9,10 +9,10 @@ import (
 
 func TestV2FieldNumbersHaveNoUnexplainedGaps(t *testing.T) {
 	intentionalGaps := map[protoreflect.FullName]map[protoreflect.FieldNumber]struct{}{
-		"agentcompose.v2.RunAttachRequest":   fieldNumberRange(8, 14),
-		"agentcompose.v2.RunAttachResponse":  fieldNumberRange(7, 14),
-		"agentcompose.v2.ExecAttachRequest":  fieldNumberRange(8, 14),
-		"agentcompose.v2.ExecAttachResponse": fieldNumberRange(7, 14),
+		"agentcompose.v2.AttachAgentRunRequest":  fieldNumberRange(8, 14),
+		"agentcompose.v2.AttachAgentRunResponse": fieldNumberRange(7, 14),
+		"agentcompose.v2.AttachExecRequest":      fieldNumberRange(8, 14),
+		"agentcompose.v2.AttachExecResponse":     fieldNumberRange(7, 14),
 	}
 
 	assertMessageNumbersHaveNoGaps(t, File_agentcompose_v2_agentcompose_proto.Messages(), intentionalGaps)
@@ -21,19 +21,19 @@ func TestV2FieldNumbersHaveNoUnexplainedGaps(t *testing.T) {
 
 func TestV2FreezeFieldLayout(t *testing.T) {
 	want := map[protoreflect.FullName]map[protoreflect.Name]protoreflect.FieldNumber{
-		"agentcompose.v2.ProjectScheduler":   {"enabled": 4, "description": 7},
-		"agentcompose.v2.ProjectSpec":        {"agents": 3, "octobus_servers": 7},
-		"agentcompose.v2.RunAgentRequest":    {"env": 5, "payload_json": 16},
-		"agentcompose.v2.ListRunsRequest":    {"scheduler_id": 3, "sandbox_id": 10},
-		"agentcompose.v2.RunSummary":         {"exit_code": 11, "sandbox_short_id": 21},
-		"agentcompose.v2.TranscriptEvent":    {"name": 3, "created_at": 5},
-		"agentcompose.v2.ListImagesResponse": {"store_status": 3},
-		"agentcompose.v2.PruneCachesRequest": {"force": 2},
-		"agentcompose.v2.CacheItem":          {"status": 10, "warnings": 16},
-		"agentcompose.v2.RunAttachRequest":   {"start": 1, "cancel": 7, "client_frame_id": 15},
-		"agentcompose.v2.RunAttachResponse":  {"started": 1, "error": 6, "server_frame_id": 15, "created_at": 16},
-		"agentcompose.v2.ExecAttachRequest":  {"start": 1, "human_message": 7, "client_frame_id": 15},
-		"agentcompose.v2.ExecAttachResponse": {"started": 1, "agent_turn_completed": 6, "server_frame_id": 15, "created_at": 16},
+		"agentcompose.v2.ProjectScheduler":       {"enabled": 4, "description": 7},
+		"agentcompose.v2.ProjectSpec":            {"agents": 3, "octobus_servers": 7},
+		"agentcompose.v2.RunAgentRequest":        {"env": 5, "payload_json": 16},
+		"agentcompose.v2.ListRunsRequest":        {"scheduler_id": 3, "sandbox_id": 10},
+		"agentcompose.v2.RunSummary":             {"exit_code": 11, "sandbox_short_id": 21},
+		"agentcompose.v2.TranscriptEvent":        {"name": 3, "created_at": 5},
+		"agentcompose.v2.ListImagesResponse":     {"store_status": 3},
+		"agentcompose.v2.PruneCachesRequest":     {"force": 2},
+		"agentcompose.v2.CacheItem":              {"status": 10, "warnings": 16},
+		"agentcompose.v2.AttachAgentRunRequest":  {"start": 1, "cancel": 7, "client_frame_id": 15},
+		"agentcompose.v2.AttachAgentRunResponse": {"started": 1, "error": 6, "server_frame_id": 15, "created_at": 16},
+		"agentcompose.v2.AttachExecRequest":      {"start": 1, "human_message": 7, "client_frame_id": 15},
+		"agentcompose.v2.AttachExecResponse":     {"started": 1, "agent_turn_completed": 6, "server_frame_id": 15, "created_at": 16},
 	}
 
 	messages := File_agentcompose_v2_agentcompose_proto.Messages()

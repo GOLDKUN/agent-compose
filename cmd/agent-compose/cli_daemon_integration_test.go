@@ -56,10 +56,10 @@ agents:
 				inspectedRun = req.Msg.GetRunId()
 				return connect.NewResponse(&agentcomposev2.GetRunResponse{Run: testRunDetail(projectID, req.Msg.GetRunId(), "reviewer", sandboxID, agentcomposev2.RunStatus_RUN_STATUS_RUNNING, 0, "ok")}), nil
 			},
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 				runSandbox = req.Msg.GetSandboxId()
-				return stream.Send(&agentcomposev2.RunAgentStreamResponse{
-					EventType: agentcomposev2.RunAgentStreamEventType_RUN_AGENT_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamAgentRunResponse{
+					EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_COMPLETED,
 					RunId:     runID,
 					Run:       run,
 				})
@@ -79,10 +79,10 @@ agents:
 			},
 		},
 		exec: execServiceStub{
-			execStream: func(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error {
+			execStream: func(ctx context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.StreamExecResponse]) error {
 				execSandbox = req.Msg.GetSandboxId()
-				return stream.Send(&agentcomposev2.ExecStreamResponse{
-					EventType: agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_COMPLETED,
+				return stream.Send(&agentcomposev2.StreamExecResponse{
+					EventType: agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_COMPLETED,
 					Result: &agentcomposev2.ExecResult{
 						ExecId:    "exec-short",
 						SandboxId: req.Msg.GetSandboxId(),

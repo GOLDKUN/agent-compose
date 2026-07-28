@@ -60,7 +60,7 @@ func TestRuntimeDriverNotCompiledConnectBoundaries(t *testing.T) {
 		if connect.CodeOf(err) != connect.CodeUnimplemented || !errors.Is(err, driverpkg.ErrRuntimeDriverNotCompiled) {
 			t.Fatalf("Exec error = %v, code=%v; want unimplemented typed error", err, connect.CodeOf(err))
 		}
-		_, err = handler.prepareExecAttach(context.Background(), &agentcomposev2.ExecAttachStart{Request: req})
+		_, err = handler.prepareExecAttach(context.Background(), &agentcomposev2.AttachExecStart{Request: req})
 		if connect.CodeOf(err) != connect.CodeUnimplemented || !errors.Is(err, driverpkg.ErrRuntimeDriverNotCompiled) {
 			t.Fatalf("prepareExecAttach error = %v, code=%v; want unimplemented typed error", err, connect.CodeOf(err))
 		}

@@ -56,11 +56,11 @@ func TestIntegrationCLIRuntimeCommandsSelectStoredProjectByName(t *testing.T) {
 			},
 		},
 		run: runServiceStub{
-			startRun: func(_ context.Context, req *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
+			startRun: func(_ context.Context, req *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
 				if req.Msg.GetRun().GetProjectId() != "project-stored" || req.Msg.GetRun().GetAgentName() != "worker" {
-					t.Fatalf("StartRun request = %#v", req.Msg.GetRun())
+					t.Fatalf("StartAgentRun request = %#v", req.Msg.GetRun())
 				}
-				return connect.NewResponse(&agentcomposev2.StartRunResponse{Run: &agentcomposev2.RunSummary{
+				return connect.NewResponse(&agentcomposev2.StartAgentRunResponse{Run: &agentcomposev2.RunSummary{
 					RunId: "run-stored", ProjectId: "project-stored", ProjectName: "stored-project", AgentName: "worker", Status: agentcomposev2.RunStatus_RUN_STATUS_PENDING,
 				}, Started: true}), nil
 			},
@@ -71,11 +71,11 @@ func TestIntegrationCLIRuntimeCommandsSelectStoredProjectByName(t *testing.T) {
 				return connect.NewResponse(&agentcomposev2.ListRunsResponse{}), nil
 			},
 		},
-		exec: execServiceStub{execStream: func(_ context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.ExecStreamResponse]) error {
+		exec: execServiceStub{execStream: func(_ context.Context, req *connect.Request[agentcomposev2.ExecRequest], stream *connect.ServerStream[agentcomposev2.StreamExecResponse]) error {
 			if req.Msg.GetSandboxId() != "sandbox-stored" {
-				t.Fatalf("ExecStream target = %#v", req.Msg.GetTarget())
+				t.Fatalf("StreamExec target = %#v", req.Msg.GetTarget())
 			}
-			return stream.Send(&agentcomposev2.ExecStreamResponse{EventType: agentcomposev2.ExecStreamEventType_EXEC_STREAM_EVENT_TYPE_COMPLETED, Result: &agentcomposev2.ExecResult{
+			return stream.Send(&agentcomposev2.StreamExecResponse{EventType: agentcomposev2.StreamExecEventType_STREAM_EXEC_EVENT_TYPE_COMPLETED, Result: &agentcomposev2.ExecResult{
 				ExecId: "exec-stored", SandboxId: "sandbox-stored", Success: true,
 			}})
 		}},

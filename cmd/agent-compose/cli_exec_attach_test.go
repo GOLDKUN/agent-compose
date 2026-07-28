@@ -52,11 +52,11 @@ func TestPromptAttachInputPromptUpdatesFromAttachMetadata(t *testing.T) {
 }
 
 func TestRunComposeExecPromptOnceCommand(t *testing.T) {
-	stream := newFakeExecAttachStream([]*agentcomposev2.ExecAttachResponse{
-		{Frame: &agentcomposev2.ExecAttachResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "prompt reply\n"}}},
-		{Frame: &agentcomposev2.ExecAttachResponse_Result{Result: &agentcomposev2.AttachResult{Success: true, Run: &agentcomposev2.RunSummary{RunId: "run-prompt", SandboxId: "sandbox-prompt"}}}},
+	stream := newFakeAttachExecStream([]*agentcomposev2.AttachExecResponse{
+		{Frame: &agentcomposev2.AttachExecResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "prompt reply\n"}}},
+		{Frame: &agentcomposev2.AttachExecResponse_Result{Result: &agentcomposev2.AttachResult{Success: true, Run: &agentcomposev2.RunSummary{RunId: "run-prompt", SandboxId: "sandbox-prompt"}}}},
 	})
-	client := &fakeExecAttachClient{stream: stream}
+	client := &fakeAttachExecClient{stream: stream}
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{Use: "exec"}
 	cmd.SetContext(context.Background())
@@ -80,17 +80,17 @@ func TestRunComposeExecPromptOnceCommand(t *testing.T) {
 	}
 }
 
-func TestCLIExecInteractiveUsesExecAttachClient(t *testing.T) {
-	stream := newFakeExecAttachStream([]*agentcomposev2.ExecAttachResponse{
-		{Frame: &agentcomposev2.ExecAttachResponse_Output{Output: &agentcomposev2.AttachOutput{
+func TestCLIExecInteractiveUsesAttachExecClient(t *testing.T) {
+	stream := newFakeAttachExecStream([]*agentcomposev2.AttachExecResponse{
+		{Frame: &agentcomposev2.AttachExecResponse_Output{Output: &agentcomposev2.AttachOutput{
 			Data:   []byte("attach stdout\n"),
 			Stream: agentcomposev2.StdioStream_STDIO_STREAM_STDOUT,
 		}}},
-		{Frame: &agentcomposev2.ExecAttachResponse_Output{Output: &agentcomposev2.AttachOutput{
+		{Frame: &agentcomposev2.AttachExecResponse_Output{Output: &agentcomposev2.AttachOutput{
 			Data:   []byte("attach stderr\n"),
 			Stream: agentcomposev2.StdioStream_STDIO_STREAM_STDERR,
 		}}},
-		{Frame: &agentcomposev2.ExecAttachResponse_Result{Result: &agentcomposev2.AttachResult{
+		{Frame: &agentcomposev2.AttachExecResponse_Result{Result: &agentcomposev2.AttachResult{
 			Success:  true,
 			ExitCode: 0,
 			ExecResult: &agentcomposev2.ExecResult{
@@ -101,7 +101,7 @@ func TestCLIExecInteractiveUsesExecAttachClient(t *testing.T) {
 			},
 		}}},
 	})
-	client := &fakeExecAttachClient{stream: stream}
+	client := &fakeAttachExecClient{stream: stream}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd := &cobra.Command{Use: "exec"}
@@ -109,7 +109,7 @@ func TestCLIExecInteractiveUsesExecAttachClient(t *testing.T) {
 	cmd.SetIn(strings.NewReader("hello attach\n"))
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
-	err := runComposeExecAttachCommand(cmd, "cli-exec-attach", client, &agentcomposev2.ExecRequest{
+	err := runComposeAttachExecCommand(cmd, "cli-exec-attach", client, &agentcomposev2.ExecRequest{
 		Target:  &agentcomposev2.ExecRequest_SandboxId{SandboxId: "sandbox-attach"},
 		Command: &agentcomposev2.ExecCommand{Command: "cat"},
 	}, composeExecOptions{Interactive: true})
@@ -117,40 +117,40 @@ func TestCLIExecInteractiveUsesExecAttachClient(t *testing.T) {
 		t.Fatalf("exec attach returned error: %v", err)
 	}
 	if client.calls != 1 {
-		t.Fatalf("ExecAttach calls = %d, want 1", client.calls)
+		t.Fatalf("AttachExec calls = %d, want 1", client.calls)
 	}
 	if stdout.String() != "attach stdout\n" || stderr.String() != "attach stderr\n" {
 		t.Fatalf("exec attach stdout/stderr = %q / %q", stdout.String(), stderr.String())
 	}
 	sent := stream.sentFrames()
 	if len(sent) != 3 {
-		t.Fatalf("ExecAttach sent %d frames, want start/stdin/eof: %#v", len(sent), sent)
+		t.Fatalf("AttachExec sent %d frames, want start/stdin/eof: %#v", len(sent), sent)
 	}
 	if start := sent[0].GetStart(); start == nil || !start.GetAttachStdin() || start.GetTty() || start.GetRequest().GetSandboxId() != "sandbox-attach" {
-		t.Fatalf("ExecAttach start = %#v", sent[0])
+		t.Fatalf("AttachExec start = %#v", sent[0])
 	}
 	if sent[0].GetStart().GetMode() != agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND {
-		t.Fatalf("ExecAttach command mode = %s", sent[0].GetStart().GetMode())
+		t.Fatalf("AttachExec command mode = %s", sent[0].GetStart().GetMode())
 	}
 	if string(sent[1].GetStdin().GetData()) != "hello attach\n" {
-		t.Fatalf("ExecAttach stdin = %#v", sent[1])
+		t.Fatalf("AttachExec stdin = %#v", sent[1])
 	}
 	if sent[2].GetStdinEof() == nil || !stream.closedRequest() {
-		t.Fatalf("ExecAttach eof/close eof=%#v closed=%v", sent[2], stream.closedRequest())
+		t.Fatalf("AttachExec eof/close eof=%#v closed=%v", sent[2], stream.closedRequest())
 	}
 }
 
-func TestCLIExecPromptAttachUsesExecAttachClient(t *testing.T) {
-	stream := newFakeExecAttachStream([]*agentcomposev2.ExecAttachResponse{
-		{Frame: &agentcomposev2.ExecAttachResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "hello agent"}}},
-		{Frame: &agentcomposev2.ExecAttachResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-1"}}},
-		{Frame: &agentcomposev2.ExecAttachResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-2"}}},
-		{Frame: &agentcomposev2.ExecAttachResponse_Result{Result: &agentcomposev2.AttachResult{
+func TestCLIExecPromptAttachUsesAttachExecClient(t *testing.T) {
+	stream := newFakeAttachExecStream([]*agentcomposev2.AttachExecResponse{
+		{Frame: &agentcomposev2.AttachExecResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "hello agent"}}},
+		{Frame: &agentcomposev2.AttachExecResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-1"}}},
+		{Frame: &agentcomposev2.AttachExecResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-2"}}},
+		{Frame: &agentcomposev2.AttachExecResponse_Result{Result: &agentcomposev2.AttachResult{
 			Success: true,
 			Run:     &agentcomposev2.RunSummary{RunId: "run-1", SandboxId: "sandbox-attach"},
 		}}},
 	})
-	client := &fakeExecAttachClient{stream: stream}
+	client := &fakeAttachExecClient{stream: stream}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd := &cobra.Command{Use: "exec"}
@@ -184,7 +184,7 @@ func TestCLIExecPromptAttachUsesExecAttachClient(t *testing.T) {
 }
 
 func TestCLIExecPromptAttachDoesNotWaitForOpenStdin(t *testing.T) {
-	stream := newFakeExecAttachStream(nil)
+	stream := newFakeAttachExecStream(nil)
 	stream.recvErr = io.EOF
 	stdin, stdinWriter := io.Pipe()
 	defer func() { _ = stdin.Close() }()
@@ -198,7 +198,7 @@ func TestCLIExecPromptAttachDoesNotWaitForOpenStdin(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runComposeExecPromptAttachCommand(cmd, "cli-exec-prompt", &fakeExecAttachClient{stream: stream}, &agentcomposev2.ExecRequest{
+		done <- runComposeExecPromptAttachCommand(cmd, "cli-exec-prompt", &fakeAttachExecClient{stream: stream}, &agentcomposev2.ExecRequest{
 			Target: &agentcomposev2.ExecRequest_SandboxId{SandboxId: "sandbox-attach"},
 		}, composeExecOptions{Interactive: true, Prompt: "hi"})
 	}()
@@ -223,7 +223,7 @@ func TestCLIExecPromptAttachDoesNotWaitForOpenStdin(t *testing.T) {
 
 func TestCLIExecPromptAttachReceiveErrorDoesNotCloseCallerStdin(t *testing.T) {
 	receiveErr := connect.NewError(connect.CodeUnavailable, errors.New("stream lost"))
-	stream := newFakeExecAttachStream(nil)
+	stream := newFakeAttachExecStream(nil)
 	stream.recvErr = receiveErr
 	stdin, stdinWriter := io.Pipe()
 	defer func() { _ = stdin.Close() }()
@@ -237,7 +237,7 @@ func TestCLIExecPromptAttachReceiveErrorDoesNotCloseCallerStdin(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runComposeExecPromptAttachCommand(cmd, "cli-exec-prompt", &fakeExecAttachClient{stream: stream}, &agentcomposev2.ExecRequest{
+		done <- runComposeExecPromptAttachCommand(cmd, "cli-exec-prompt", &fakeAttachExecClient{stream: stream}, &agentcomposev2.ExecRequest{
 			Target: &agentcomposev2.ExecRequest_SandboxId{SandboxId: "sandbox-attach"},
 		}, composeExecOptions{Interactive: true, Prompt: "hi"})
 	}()
@@ -264,10 +264,10 @@ func TestCLIExecPromptAttachReceiveErrorDoesNotCloseCallerStdin(t *testing.T) {
 }
 
 func TestCLIRunPromptAttachInterruptCancelsStream(t *testing.T) {
-	stream := newFakeRunAttachStream([]*agentcomposev2.RunAttachResponse{
-		{Frame: &agentcomposev2.RunAttachResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-prompt"}}},
+	stream := newFakeAttachAgentRunStream([]*agentcomposev2.AttachAgentRunResponse{
+		{Frame: &agentcomposev2.AttachAgentRunResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: "run-prompt"}}},
 	})
-	client := &fakeRunAttachClient{stream: stream}
+	client := &fakeAttachAgentRunClient{stream: stream}
 	cmd := &cobra.Command{Use: "run"}
 	cmd.SetContext(context.Background())
 	cmd.SetIn(promptErrorReader{err: errPromptInterrupted})
@@ -288,30 +288,30 @@ func TestCLIRunPromptAttachInterruptCancelsStream(t *testing.T) {
 		t.Fatal("run prompt attach context was not canceled after input interruption")
 	}
 	if sent := stream.sentFrames(); len(sent) != 1 || sent[0].GetStart() == nil {
-		t.Fatalf("RunAttach sent frames = %#v, want only start", sent)
+		t.Fatalf("AttachAgentRun sent frames = %#v, want only start", sent)
 	}
 	if stream.closedRequest() {
 		t.Fatal("input interruption must cancel the stream without sending stdin EOF")
 	}
 }
 
-func TestCLIRunInteractiveCommandUsesRunAttachClient(t *testing.T) {
-	stream := newFakeRunAttachStream([]*agentcomposev2.RunAttachResponse{
-		{Frame: &agentcomposev2.RunAttachResponse_Output{Output: &agentcomposev2.AttachOutput{
+func TestCLIRunInteractiveCommandUsesAttachAgentRunClient(t *testing.T) {
+	stream := newFakeAttachAgentRunStream([]*agentcomposev2.AttachAgentRunResponse{
+		{Frame: &agentcomposev2.AttachAgentRunResponse_Output{Output: &agentcomposev2.AttachOutput{
 			Data:   []byte("attach stdout\n"),
 			Stream: agentcomposev2.StdioStream_STDIO_STREAM_STDOUT,
 		}}},
-		{Frame: &agentcomposev2.RunAttachResponse_Output{Output: &agentcomposev2.AttachOutput{
+		{Frame: &agentcomposev2.AttachAgentRunResponse_Output{Output: &agentcomposev2.AttachOutput{
 			Data:   []byte("attach stderr\n"),
 			Stream: agentcomposev2.StdioStream_STDIO_STREAM_STDERR,
 		}}},
-		{Frame: &agentcomposev2.RunAttachResponse_Result{Result: &agentcomposev2.AttachResult{
+		{Frame: &agentcomposev2.AttachAgentRunResponse_Result{Result: &agentcomposev2.AttachResult{
 			Success:  true,
 			ExitCode: 0,
 			Run:      &agentcomposev2.RunSummary{RunId: "run-attach", SandboxId: "sandbox-attach"},
 		}}},
 	})
-	client := &fakeRunAttachClient{stream: stream}
+	client := &fakeAttachAgentRunClient{stream: stream}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd := &cobra.Command{Use: "run"}
@@ -319,7 +319,7 @@ func TestCLIRunInteractiveCommandUsesRunAttachClient(t *testing.T) {
 	cmd.SetIn(strings.NewReader("hello attach\n"))
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
-	err := runComposeRunAttachCommand(cmd, "cli-run-attach", client, &agentcomposev2.RunAgentRequest{
+	err := runComposeAttachAgentRunCommand(cmd, "cli-run-attach", client, &agentcomposev2.RunAgentRequest{
 		ProjectId: "project-1",
 		AgentName: "reviewer",
 		Command:   "cat",
@@ -329,27 +329,27 @@ func TestCLIRunInteractiveCommandUsesRunAttachClient(t *testing.T) {
 		t.Fatalf("run attach returned error: %v", err)
 	}
 	if client.calls != 1 {
-		t.Fatalf("RunAttach calls = %d, want 1", client.calls)
+		t.Fatalf("AttachAgentRun calls = %d, want 1", client.calls)
 	}
 	if stdout.String() != "attach stdout\n" || stderr.String() != "attach stderr\n" {
 		t.Fatalf("run attach stdout/stderr = %q / %q", stdout.String(), stderr.String())
 	}
 	sent := stream.sentFrames()
 	if len(sent) != 3 {
-		t.Fatalf("RunAttach sent %d frames, want start/stdin/eof: %#v", len(sent), sent)
+		t.Fatalf("AttachAgentRun sent %d frames, want start/stdin/eof: %#v", len(sent), sent)
 	}
 	if start := sent[0].GetStart(); start == nil || start.GetMode() != agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND || !start.GetAttachStdin() || start.GetTty() || start.GetRequest().GetCommand() != "cat" {
-		t.Fatalf("RunAttach start = %#v", sent[0])
+		t.Fatalf("AttachAgentRun start = %#v", sent[0])
 	}
 	if string(sent[1].GetStdin().GetData()) != "hello attach\n" {
-		t.Fatalf("RunAttach stdin = %#v", sent[1])
+		t.Fatalf("AttachAgentRun stdin = %#v", sent[1])
 	}
 	if sent[2].GetStdinEof() == nil || !stream.closedRequest() {
-		t.Fatalf("RunAttach eof/close eof=%#v closed=%v", sent[2], stream.closedRequest())
+		t.Fatalf("AttachAgentRun eof/close eof=%#v closed=%v", sent[2], stream.closedRequest())
 	}
 }
 
-func TestExecAttachResultProjectionWithoutExecResult(t *testing.T) {
+func TestAttachExecResultProjectionWithoutExecResult(t *testing.T) {
 	result := execResultFromAttachResult(&agentcomposev2.AttachResult{
 		ExitCode: 7,
 		Success:  false,
@@ -369,71 +369,71 @@ func (r promptErrorReader) Read([]byte) (int, error) {
 	return 0, r.err
 }
 
-type fakeRunAttachClient struct {
-	stream *fakeRunAttachStream
+type fakeAttachAgentRunClient struct {
+	stream *fakeAttachAgentRunStream
 	calls  int
 	ctx    context.Context
 }
 
-func (c *fakeRunAttachClient) RunAttach(ctx context.Context) runAttachStream {
+func (c *fakeAttachAgentRunClient) AttachAgentRun(ctx context.Context) runAttachStream {
 	c.calls++
 	c.ctx = ctx
 	return c.stream
 }
 
-type fakeRunAttachStream struct {
+type fakeAttachAgentRunStream struct {
 	mu        sync.Mutex
-	sent      []*agentcomposev2.RunAttachRequest
-	responses []*agentcomposev2.RunAttachResponse
+	sent      []*agentcomposev2.AttachAgentRunRequest
+	responses []*agentcomposev2.AttachAgentRunResponse
 	recvIndex int
 	closed    bool
 	closedCh  chan struct{}
 }
 
-func newFakeRunAttachStream(responses []*agentcomposev2.RunAttachResponse) *fakeRunAttachStream {
-	return &fakeRunAttachStream{
+func newFakeAttachAgentRunStream(responses []*agentcomposev2.AttachAgentRunResponse) *fakeAttachAgentRunStream {
+	return &fakeAttachAgentRunStream{
 		responses: responses,
 		closedCh:  make(chan struct{}),
 	}
 }
 
-type fakeExecAttachClient struct {
-	stream *fakeExecAttachStream
+type fakeAttachExecClient struct {
+	stream *fakeAttachExecStream
 	calls  int
 }
 
-func (c *fakeExecAttachClient) ExecAttach(context.Context) execAttachStream {
+func (c *fakeAttachExecClient) AttachExec(context.Context) execAttachStream {
 	c.calls++
 	return c.stream
 }
 
-type fakeExecAttachStream struct {
+type fakeAttachExecStream struct {
 	mu        sync.Mutex
-	sent      []*agentcomposev2.ExecAttachRequest
-	responses []*agentcomposev2.ExecAttachResponse
+	sent      []*agentcomposev2.AttachExecRequest
+	responses []*agentcomposev2.AttachExecResponse
 	recvErr   error
 	recvIndex int
 	closed    bool
 	closedCh  chan struct{}
 }
 
-func newFakeExecAttachStream(responses []*agentcomposev2.ExecAttachResponse) *fakeExecAttachStream {
-	return &fakeExecAttachStream{
+func newFakeAttachExecStream(responses []*agentcomposev2.AttachExecResponse) *fakeAttachExecStream {
+	return &fakeAttachExecStream{
 		responses: responses,
 		closedCh:  make(chan struct{}),
 	}
 }
 
-func (s runServiceStub) RunAttach(ctx context.Context, stream *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error {
+func (s runServiceStub) AttachAgentRun(ctx context.Context, stream *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
 	if s.runAttach == nil {
-		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("RunAttach stub is not configured"))
+		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("AttachAgentRun stub is not configured"))
 	}
 	return s.runAttach(ctx, stream)
 }
 
-func (s execServiceStub) ExecAttach(ctx context.Context, stream *connect.BidiStream[agentcomposev2.ExecAttachRequest, agentcomposev2.ExecAttachResponse]) error {
+func (s execServiceStub) AttachExec(ctx context.Context, stream *connect.BidiStream[agentcomposev2.AttachExecRequest, agentcomposev2.AttachExecResponse]) error {
 	if s.execAttach == nil {
-		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("ExecAttach stub is not configured"))
+		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("AttachExec stub is not configured"))
 	}
 	return s.execAttach(ctx, stream)
 }

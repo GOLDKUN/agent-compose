@@ -342,7 +342,7 @@ enum StdioStream {
 }
 ```
 
-`RunAgentStreamResponse`, `ExecStreamResponse`, and `TranscriptEvent` carry a
+`StreamAgentRunResponse`, `StreamExecResponse`, and `TranscriptEvent` carry a
 `stream` field. `STDIO_STREAM_UNSPECIFIED` is treated as stdout by CLI and host
 consumers. The v1 API keeps its historical `is_stderr` fields for compatibility;
 the conversion to that boolean happens only at v1/session compatibility
