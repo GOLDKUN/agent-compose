@@ -1,5 +1,12 @@
 import { resolveCodexPath } from "./codex-path.js";
+import {
+  codexThreadStateMetadata,
+  codexThreadStartWarning,
+  decideCodexThreadResume,
+  hashSystemContext,
+} from "./codex-thread-resume.js";
 import { stringEnv } from "./env.js";
+import { warn } from "./mpi.js";
 import { buildPromptRuntimeOptions } from "./prompt.js";
 import { ClaudeRunner } from "./runners/claude.js";
 import { CodexRunner } from "./runners/codex.js";
@@ -39,6 +46,7 @@ export class CodexInteractiveSession implements InteractiveSession {
   private readonly runner: CodexRunner;
   private readonly writer: BufferedTextWriter;
   private readonly result: AgentResult;
+  private readonly systemContextHash: string;
   private turnCount = 0;
   private thread?: {
     id?: string | null;
@@ -51,6 +59,7 @@ export class CodexInteractiveSession implements InteractiveSession {
   ) {
     this.writer = new BufferedTextWriter();
     this.runner = new CodexRunner(options, this.writer);
+    this.systemContextHash = hashSystemContext(options.systemContext);
     this.result = {
       provider: "codex",
       threadId: "",
@@ -72,11 +81,18 @@ export class CodexInteractiveSession implements InteractiveSession {
         ? { config: { developer_instructions: this.options.systemContext } }
         : {}),
     });
-    this.thread = stored?.threadId
-      ? codex.resumeThread(stored.threadId, this.runner.threadOptions())
+    const resumeDecision = decideCodexThreadResume(stored, this.systemContextHash);
+    this.thread = resumeDecision.action === "resume"
+      ? codex.resumeThread(resumeDecision.threadId, this.runner.threadOptions())
       : codex.startThread(this.runner.threadOptions());
+    if (resumeDecision.action === "start") {
+      const warning = codexThreadStartWarning(resumeDecision.reason);
+      if (warning) {
+        warn(warning);
+      }
+    }
     const thread = this.thread;
-    this.result.threadId = stored?.threadId || thread.id || "";
+    this.result.threadId = resumeDecision.action === "resume" ? resumeDecision.threadId : thread.id || "";
     this.emit("started", {
       provider: "codex",
       threadId: this.result.threadId,
@@ -108,7 +124,7 @@ export class CodexInteractiveSession implements InteractiveSession {
       this.result.finalText = this.result.transcript;
       this.result.finalTextSource = "transcript_fallback";
     }
-    await writeStoredThread(this.options.stateRoot, "codex", this.result.threadId);
+    await this.writeThreadState();
     this.emit("agent_turn_completed", {
       provider: "codex",
       threadId: this.result.threadId,
@@ -122,9 +138,19 @@ export class CodexInteractiveSession implements InteractiveSession {
     this.result.threadId = this.thread?.id || this.result.threadId;
     this.result.transcript = this.runner.transcript();
     if (this.result.threadId) {
-      await writeStoredThread(this.options.stateRoot, "codex", this.result.threadId);
+      await this.writeThreadState();
     }
     return { ...this.result };
+  }
+
+  private async writeThreadState(): Promise<void> {
+    await writeStoredThread(
+      this.options.stateRoot,
+      "codex",
+      this.result.threadId,
+      new Date(),
+      codexThreadStateMetadata(this.systemContextHash),
+    );
   }
 }
 
