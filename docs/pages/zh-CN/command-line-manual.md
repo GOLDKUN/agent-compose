@@ -529,6 +529,7 @@ agent-compose logs --run run_123 --json
 
 ```bash
 agent-compose inspect project
+agent-compose inspect project <project-name|project-id|short-id>
 agent-compose inspect <project|agent|run|sandbox|image|cache-id>
 agent-compose inspect agent <agent>
 agent-compose inspect run <run-id>
@@ -538,6 +539,8 @@ agent-compose inspect cache <cache-id>
 ```
 
 当唯一参数是完整 ID 或十六进制短 ID 时，`inspect` 会通过 daemon 自动识别资源类型。名称仍需使用显式类型形式；短 ID 命中多个资源时，命令会报告歧义及候选资源类型。
+
+对于 `inspect project <project-ref>`，位置参数中的 project ref 优先于 `--project-name` 和 `--file`。CLI 会先按精确 project name 解析，再按完整 ID 或唯一 short ID 解析；如果显式 ref 不存在或存在歧义，命令会直接失败，不会回退到 flag 或当前 Compose 文件选中的 project。不提供位置参数时，`inspect project` 继续使用常规的已部署 project 选择规则。
 
 说明：
 
