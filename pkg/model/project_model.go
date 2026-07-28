@@ -155,10 +155,16 @@ type ProjectAgentRunState struct {
 }
 
 type ProjectListResult struct {
-	Projects   []ProjectRecord
-	TotalCount int
-	HasMore    bool
-	NextOffset int
+	Projects          []ProjectRecord
+	CountsByProjectID map[string]ProjectListCounts
+	TotalCount        int
+	HasMore           bool
+	NextOffset        int
+}
+
+type ProjectListCounts struct {
+	AgentCount     uint32
+	SchedulerCount uint32
 }
 
 type ProjectSandboxRelationFilter struct {

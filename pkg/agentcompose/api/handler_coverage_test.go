@@ -1295,7 +1295,22 @@ func (s *apiProjectRunStore) GetProject(_ context.Context, projectID string) (do
 }
 
 func (s *apiProjectRunStore) ListProjects(_ context.Context, _ domain.ProjectListOptions) (domain.ProjectListResult, error) {
-	return domain.ProjectListResult{Projects: s.projects, TotalCount: len(s.projects)}, nil
+	counts := make(map[string]domain.ProjectListCounts, len(s.projects))
+	for _, project := range s.projects {
+		var projectCounts domain.ProjectListCounts
+		for _, agent := range s.agents {
+			if agent.ProjectID == project.ID && (project.CurrentRevision <= 0 || agent.Revision == project.CurrentRevision) {
+				projectCounts.AgentCount++
+			}
+		}
+		for _, scheduler := range s.schedulers {
+			if scheduler.ProjectID == project.ID && (project.CurrentRevision <= 0 || scheduler.Revision == project.CurrentRevision) {
+				projectCounts.SchedulerCount++
+			}
+		}
+		counts[project.ID] = projectCounts
+	}
+	return domain.ProjectListResult{Projects: s.projects, CountsByProjectID: counts, TotalCount: len(s.projects)}, nil
 }
 
 func (s *apiProjectRunStore) ListProjectAgents(context.Context, string) ([]domain.ProjectAgentRecord, error) {

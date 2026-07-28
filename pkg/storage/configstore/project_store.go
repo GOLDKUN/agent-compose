@@ -180,59 +180,6 @@ func (s *projectStore) GetProject(ctx context.Context, projectID string) (Projec
 	return item, nil
 }
 
-func (s *projectStore) ListProjects(ctx context.Context, options ProjectListOptions) (ProjectListResult, error) {
-	limit := options.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	offset := options.Offset
-	if offset < 0 {
-		offset = 0
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, short_id, source_path, source_json, current_revision, spec_hash, created_at, updated_at, removed_at
-		FROM project ORDER BY updated_at DESC, created_at DESC, id ASC`)
-	if err != nil {
-		return ProjectListResult{}, fmt.Errorf("query projects: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	query := strings.ToLower(strings.TrimSpace(options.Query))
-	matched := make([]ProjectRecord, 0)
-	for rows.Next() {
-		item, err := projects.ScanProject(rows.Scan)
-		if err != nil {
-			return ProjectListResult{}, err
-		}
-		if !options.IncludeRemoved && !item.RemovedAt.IsZero() {
-			continue
-		}
-		if query != "" && !projects.RecordMatchesQuery(item, query) {
-			continue
-		}
-		matched = append(matched, item)
-	}
-	if err := rows.Err(); err != nil {
-		return ProjectListResult{}, fmt.Errorf("iterate projects: %w", err)
-	}
-	total := len(matched)
-	end := offset + limit
-	if offset > total {
-		offset = total
-	}
-	if end > total {
-		end = total
-	}
-	return ProjectListResult{
-		Projects:   matched[offset:end],
-		TotalCount: total,
-		HasMore:    end < total,
-		NextOffset: end,
-	}, nil
-}
-
 func (s *projectStore) GetProjectRevision(ctx context.Context, projectID string, revision int64) (ProjectRevisionRecord, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT project_id, revision, spec_hash, spec_json, created_at
 		FROM project_revision WHERE project_id = ? AND revision = ?`, strings.TrimSpace(projectID), revision)
