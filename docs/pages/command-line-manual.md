@@ -257,6 +257,7 @@ Rules:
 - `run -i/--interactive` must select `--prompt` or `--command`; it cannot be combined with `--json`.
 - Empty REPL lines do not create runs. Enter `/exit` or press Ctrl+D to exit.
 - REPL mode is not TTY/PTY or running stdin passthrough. Each input is one independent `StreamAgentRun` call that reuses the same sandbox.
+- `--sandbox` can reuse only a sandbox owned by the selected project and agent. Cross-project or cross-agent reuse is rejected without modifying or stopping the owner sandbox.
 - Detached runs can be observed with the printed `agent-compose logs --run <run-id> --follow` command, or managed later with `stop` and `logs`.
 - `run -i --prompt` supports providers with reusable provider conversations: Codex, Claude/cc, OpenCode, and Pi. Gemini currently returns unsupported.
 - `StopRun` requests cancellation for active in-daemon runs. Pending/running runs left behind after daemon restart are reconciled to failed with a `daemon interrupted` error.
