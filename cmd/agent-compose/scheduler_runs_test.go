@@ -142,14 +142,15 @@ agents:
 	server := newComposeServiceStubServer(t, composeServiceStubs{project: projectServiceStub{
 		listSchedulerRuns: func(_ context.Context, req *connect.Request[agentcomposev2.ListSchedulerRunsRequest]) (*connect.Response[agentcomposev2.ListSchedulerRunsResponse], error) {
 			requests = append(requests, req.Msg)
-			if req.Msg.GetCursor() == "" {
+			if req.Msg.GetOffset() == 0 {
 				return connect.NewResponse(&agentcomposev2.ListSchedulerRunsResponse{
-					Runs:       []*agentcomposev2.SchedulerRun{{RunId: newRunID, AgentName: "reviewer", TriggerId: "trigger-1", Status: agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SUCCEEDED}},
-					NextCursor: "page-2",
+					Runs:  []*agentcomposev2.SchedulerRun{{RunId: newRunID, AgentName: "reviewer", TriggerId: "trigger-1", Status: agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SUCCEEDED}},
+					Total: 2,
 				}), nil
 			}
 			return connect.NewResponse(&agentcomposev2.ListSchedulerRunsResponse{
-				Runs: []*agentcomposev2.SchedulerRun{{RunId: oldRunID, AgentName: "reviewer", TriggerId: "trigger-1", Status: agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SKIPPED}},
+				Runs:  []*agentcomposev2.SchedulerRun{{RunId: oldRunID, AgentName: "reviewer", TriggerId: "trigger-1", Status: agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SKIPPED}},
+				Total: 2,
 			}), nil
 		},
 	}})
@@ -159,7 +160,7 @@ agents:
 	if exitCode != 0 || stderr != "" || !strings.Contains(stdout, shortOpaqueID(newRunID)) || !strings.Contains(stdout, shortOpaqueID(oldRunID)) || !strings.Contains(stdout, "skipped") {
 		t.Fatalf("scheduler runs code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 	}
-	if len(requests) != 2 || requests[0].GetAgentName() != "reviewer" || requests[0].GetCursor() != "" || requests[1].GetCursor() != "page-2" {
+	if len(requests) != 2 || requests[0].GetAgentName() != "reviewer" || requests[0].GetOffset() != 0 || requests[1].GetOffset() != 1 {
 		t.Fatalf("ListSchedulerRuns requests = %#v", requests)
 	}
 
@@ -168,7 +169,7 @@ agents:
 	if filteredCode != 0 || filteredErr != "" || !strings.Contains(filteredOut, shortOpaqueID(oldRunID)) || strings.Contains(filteredOut, shortOpaqueID(newRunID)) {
 		t.Fatalf("scheduler runs --status skipped code/stdout/stderr = %d / %q / %q", filteredCode, filteredOut, filteredErr)
 	}
-	if len(requests) != 2 || requests[0].GetCursor() != "" || requests[1].GetCursor() != "page-2" {
+	if len(requests) != 2 || requests[0].GetOffset() != 0 || requests[1].GetOffset() != 1 {
 		t.Fatalf("filtered ListSchedulerRuns requests = %#v", requests)
 	}
 	_, pendingErr, _, pendingCode := executeCLICommand("scheduler", "runs", "--host", server.URL, "--file", composePath, "--status", "pending")

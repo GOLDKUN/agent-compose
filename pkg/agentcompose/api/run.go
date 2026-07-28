@@ -33,7 +33,7 @@ func ProjectRunSummaryToProto(run domain.ProjectRunRecord) *agentcomposev2.RunSu
 		ProjectId:       run.ProjectID,
 		ProjectName:     run.ProjectName,
 		ProjectRevision: uint64(run.ProjectRevision),
-		AgentId:         run.ManagedAgentID,
+		AgentId:         run.AgentID,
 		AgentName:       run.AgentName,
 		Source:          ProjectRunSourceToProto(run.Source),
 		SchedulerId:     run.SchedulerID,

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -424,6 +425,56 @@ func TestLogsJSONFollowIsUsageError(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "cannot be combined") {
 		t.Fatalf("logs --json --follow stderr = %q", stderr)
+	}
+}
+
+func TestIntegrationCLILogsRunAndSandboxIsUsageErrorBeforeServiceRequests(t *testing.T) {
+	composePath := writeComposeFile(t, t.TempDir(), `
+name: cli-logs-selector-conflict
+agents:
+  reviewer:
+    provider: codex
+`)
+	var serviceCalls atomic.Int32
+	server := newComposeServiceStubServer(t, composeServiceStubs{
+		project: projectServiceStub{
+			getProject: func(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
+				serviceCalls.Add(1)
+				return connect.NewResponse(&agentcomposev2.GetProjectResponse{
+					Project: testCLIProject(req.Msg.GetProject().GetProjectId(), "cli-logs-selector-conflict", composePath),
+				}), nil
+			},
+		},
+		run: runServiceStub{
+			getRun: func(ctx context.Context, req *connect.Request[agentcomposev2.GetRunRequest]) (*connect.Response[agentcomposev2.GetRunResponse], error) {
+				serviceCalls.Add(1)
+				return connect.NewResponse(&agentcomposev2.GetRunResponse{
+					Run: testRunDetail(req.Msg.GetProjectId(), req.Msg.GetRunId(), "reviewer", "sandbox-conflict", agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED, 0, "unexpected\n"),
+				}), nil
+			},
+			followRunLogs: func(ctx context.Context, req *connect.Request[agentcomposev2.FollowRunLogsRequest], stream *connect.ServerStream[agentcomposev2.RunLogChunk]) error {
+				serviceCalls.Add(1)
+				return stream.Send(&agentcomposev2.RunLogChunk{IsFinal: true, RunStatus: agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED})
+			},
+		},
+	})
+	defer server.Close()
+
+	stdout, stderr, _, exitCode := executeCLICommand(
+		"logs", "--host", server.URL, "--file", composePath,
+		"--run", "run-conflict", "--sandbox", "sandbox-conflict",
+	)
+	if exitCode != exitCodeUsage {
+		t.Fatalf("logs --run --sandbox exit code = %d, want %d", exitCode, exitCodeUsage)
+	}
+	if stdout != "" {
+		t.Fatalf("logs --run --sandbox stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "logs --run cannot be combined with --sandbox") {
+		t.Fatalf("logs --run --sandbox stderr = %q", stderr)
+	}
+	if got := serviceCalls.Load(); got != 0 {
+		t.Fatalf("logs --run --sandbox service calls = %d, want 0", got)
 	}
 }
 

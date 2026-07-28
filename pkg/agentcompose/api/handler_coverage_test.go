@@ -480,7 +480,7 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("expected stopped run sandbox error, got %v", err)
 	}
-	if _, err := handler.resolveProjectRef(ctx, &agentcomposev2.ProjectRef{Name: "Project"}); !errors.Is(err, domain.ErrAmbiguous) {
+	if _, err := handler.resolveProjectRef(ctx, &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}); !errors.Is(err, domain.ErrAmbiguous) {
 		t.Fatalf("expected ambiguous project ref error, got %v", err)
 	}
 }
@@ -494,6 +494,11 @@ func TestExecHandlerSelectorErrors(t *testing.T) {
 	}
 	if _, err := handler.Exec(context.Background(), connect.NewRequest(&agentcomposev2.ExecRequest{Target: &agentcomposev2.ExecRequest_RunId{RunId: "missing"}, Command: &agentcomposev2.ExecCommand{Command: "echo"}})); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("expected run not found, got %v", err)
+	}
+	if _, err := handler.Exec(context.Background(), connect.NewRequest(&agentcomposev2.ExecRequest{
+		Target: &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{ProjectId: "project-1", ProjectName: "Project"}},
+	})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("expected conflicting project selector error, got %v", err)
 	}
 }
 
@@ -695,18 +700,18 @@ func TestExecAttachInputFrameMapping(t *testing.T) {
 func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	ctx := context.Background()
 	store := &apiProjectRunStore{
-		projects: []domain.ProjectRecord{{ID: "project-1", Name: "Project", CurrentRevision: 1}},
+		projects: []domain.ProjectRecord{{ID: "project-1", Name: "Project", SourcePath: "/repo/agent-compose.yml", CurrentRevision: 1}},
 		agents: []domain.ProjectAgentRecord{
-			{ProjectID: "project-1", AgentName: "worker", ManagedAgentID: "agent-1", Revision: 1, Driver: "boxlite", Image: "guest:latest"},
-			{ProjectID: "project-1", AgentName: "worker-2", ManagedAgentID: "agent-2", Revision: 1, Driver: "boxlite", Image: "guest:latest"},
+			{ProjectID: "project-1", AgentName: "worker", ID: "agent-1", Revision: 1, Driver: "boxlite", Image: "guest:latest"},
+			{ProjectID: "project-1", AgentName: "worker-2", ID: "agent-2", Revision: 1, Driver: "boxlite", Image: "guest:latest"},
 		},
 		schedulers: []domain.ProjectSchedulerRecord{
-			{ProjectID: "project-1", SchedulerID: "scheduler-1", AgentName: "worker", ManagedLoaderID: "loader-1", Revision: 1, Enabled: true, SpecJSON: `{"enabled":true,"display_name":"每日巡检","description":"每天汇总巡检结果","script":"run()"}`, RunCount: 3, LatestRunAt: time.Unix(10, 0), LastError: "failed"},
-			{ProjectID: "project-1", SchedulerID: "scheduler-2", AgentName: "worker-2", ManagedLoaderID: "loader-2", Revision: 1, Enabled: true, SpecJSON: `{"enabled":true,"script":"run()"}`},
+			{ProjectID: "project-1", SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Revision: 1, Enabled: true, SpecJSON: `{"enabled":true,"display_name":"每日巡检","description":"每天汇总巡检结果","script":"run()"}`, RunCount: 3, LatestRunAt: time.Unix(10, 0), LastError: "failed"},
+			{ProjectID: "project-1", SchedulerID: "scheduler-2", AgentName: "worker-2", ID: "loader-2", Revision: 1, Enabled: true, SpecJSON: `{"enabled":true,"script":"run()"}`},
 		},
-		loaders: map[string]domain.Loader{
-			"loader-1": {Summary: domain.LoaderSummary{ID: "loader-1", Enabled: false}},
-			"loader-2": {Summary: domain.LoaderSummary{ID: "loader-2", Enabled: true}},
+		loaders: map[string]domain.Scheduler{
+			"loader-1": {Summary: domain.SchedulerSummary{ID: "loader-1", Enabled: false}},
+			"loader-2": {Summary: domain.SchedulerSummary{ID: "loader-2", Enabled: true}},
 		},
 		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: `{"variables":[{"name":"PROJECT_SECRET","value":"project-secret","secret":true}],"mcp_servers":[{"name":"remote","headers":[{"name":"Authorization","value":"mcp-secret","secret":true}]}],"octobus_servers":[{"name":"internal","url":"https://octobus.example","token":"octobus-secret"}],"agents":[{"name":"worker","env":[{"name":"AGENT_SECRET","value":"agent-secret","secret":true}]},{"name":"worker-2"}]}`},
 		agentRunStates: []domain.ProjectAgentRunState{
@@ -719,7 +724,7 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 		runEvents: []domain.ProjectRunEventRecord{{ID: "event-1", RunID: "run-1", Sequence: 1, Kind: domain.ProjectRunEventKindUserMessage, Text: "hello", CreatedAt: time.Unix(1, 0)}},
 	}
 	projectHandler := NewProjectHandler(nil, store, nil)
-	projectResp, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Name: "Project"}, IncludeSpec: true}))
+	projectResp, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}, IncludeSpec: true}))
 	if err != nil {
 		t.Fatalf("GetProject returned error: %v", err)
 	}
@@ -737,6 +742,12 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	if store.agentRunStateCalls != 1 || projectAgent.GetCurrentRun().GetRunningRunCount() != 1 || projectAgent.GetCurrentRun().GetRunningSchedulerRunCount() != 2 || projectAgent.GetLatestRun().GetRunId() != "run-1" || projectAgent.GetHealth() != agentcomposev2.ProjectAgentHealth_PROJECT_AGENT_HEALTH_AT_RISK {
 		t.Fatalf("project agent run enrichment calls=%d agent=%#v", store.agentRunStateCalls, projectAgent)
 	}
+	projectByPath, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_SourcePath{SourcePath: "/repo/./agent-compose.yml"}},
+	}))
+	if err != nil || projectByPath.Msg.GetProject().GetSummary().GetProjectId() != "project-1" {
+		t.Fatalf("GetProject by source path response=%#v err=%v", projectByPath, err)
+	}
 	listProjects, err := projectHandler.ListProjects(ctx, connect.NewRequest(&agentcomposev2.ListProjectsRequest{Query: "Project", Limit: 10}))
 	if err != nil || len(listProjects.Msg.GetProjects()) != 1 {
 		t.Fatalf("ListProjects resp=%#v err=%v", listProjects, err)
@@ -744,18 +755,18 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	if summary := listProjects.Msg.GetProjects()[0]; summary.GetAgentCount() != 2 || summary.GetSchedulerCount() != 2 {
 		t.Fatalf("ListProjects summary counts = agents %d schedulers %d", summary.GetAgentCount(), summary.GetSchedulerCount())
 	}
-	scheduler, err := projectHandler.GetScheduler(ctx, connect.NewRequest(&agentcomposev2.GetSchedulerRequest{Project: &agentcomposev2.ProjectRef{ProjectId: "project-1"}, AgentName: "worker"}))
+	scheduler, err := projectHandler.GetScheduler(ctx, connect.NewRequest(&agentcomposev2.GetSchedulerRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}}, AgentName: "worker"}))
 	if err != nil || scheduler.Msg.GetScheduler().GetSchedulerId() != "scheduler-1" || scheduler.Msg.GetScheduler().GetDisplayName() != "每日巡检" || scheduler.Msg.GetSpec().GetScript() != "run()" || scheduler.Msg.GetSpec().GetDescription() != "每天汇总巡检结果" {
 		t.Fatalf("GetScheduler resp=%#v err=%v", scheduler, err)
 	}
 	firstSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 1}))
-	if err != nil || len(firstSchedulers.Msg.GetSchedulers()) != 1 || firstSchedulers.Msg.GetNextCursor() == "" {
+	if err != nil || len(firstSchedulers.Msg.GetSchedulers()) != 1 || firstSchedulers.Msg.GetTotal() != 2 {
 		t.Fatalf("ListSchedulers first page=%#v err=%v", firstSchedulers, err)
 	}
 	if summary := firstSchedulers.Msg.GetSchedulers()[0]; summary.GetEnabled() || summary.GetRunCount() != 3 || !summary.GetLatestRunAt().AsTime().Equal(time.Unix(10, 0)) || summary.GetLastError() != "failed" || summary.GetDisplayName() != "每日巡检" || summary.GetDescription() != "每天汇总巡检结果" {
 		t.Fatalf("ListSchedulers summary=%#v", summary)
 	}
-	secondSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 1, Cursor: firstSchedulers.Msg.GetNextCursor()}))
+	secondSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 1, Offset: 1}))
 	if err != nil || len(secondSchedulers.Msg.GetSchedulers()) != 1 || secondSchedulers.Msg.GetSchedulers()[0].GetSchedulerId() != "scheduler-2" {
 		t.Fatalf("ListSchedulers second page=%#v err=%v", secondSchedulers, err)
 	}
@@ -764,9 +775,9 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	if err != nil || len(missingLoaderSchedulers.Msg.GetSchedulers()) != 2 || !missingLoaderSchedulers.Msg.GetSchedulers()[1].GetEnabled() {
 		t.Fatalf("ListSchedulers missing loader fallback=%#v err=%v", missingLoaderSchedulers, err)
 	}
-	store.loaders["loader-2"] = domain.Loader{Summary: domain.LoaderSummary{ID: "loader-2", Enabled: true}}
+	store.loaders["loader-2"] = domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-2", Enabled: true}}
 	store.projects = append(store.projects, domain.ProjectRecord{ID: "project-2", Name: "Project"})
-	if _, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Name: "Project"}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("expected ambiguous project error, got %v", err)
 	}
 	store.projects = store.projects[:1]
@@ -1271,7 +1282,7 @@ type apiProjectRunStore struct {
 	agentRunStateCalls int
 	runs               map[string]domain.ProjectRunRecord
 	runEvents          []domain.ProjectRunEventRecord
-	loaders            map[string]domain.Loader
+	loaders            map[string]domain.Scheduler
 }
 
 func (s *apiProjectRunStore) GetProject(_ context.Context, projectID string) (domain.ProjectRecord, error) {
@@ -1295,18 +1306,14 @@ func (s *apiProjectRunStore) ListProjectSchedulers(context.Context, string) ([]d
 	return s.schedulers, nil
 }
 
-func (s *apiProjectRunStore) ListProjectSchedulersPage(_ context.Context, query, afterKey string, limit int) ([]domain.ProjectSchedulerRecord, error) {
-	var items []domain.ProjectSchedulerRecord
-	for _, scheduler := range s.schedulers {
-		key := scheduler.ProjectID + "\x00" + scheduler.AgentName + "\x00" + scheduler.SchedulerID
-		if key > afterKey {
-			items = append(items, scheduler)
-		}
-	}
-	if len(items) > limit {
-		items = items[:limit]
-	}
-	return items, nil
+func (s *apiProjectRunStore) ListProjectSchedulersPage(_ context.Context, query string, offset, limit int) ([]domain.ProjectSchedulerRecord, error) {
+	items := append([]domain.ProjectSchedulerRecord(nil), s.schedulers...)
+	start := min(max(offset, 0), len(items))
+	return items[start:min(start+limit, len(items))], nil
+}
+
+func (s *apiProjectRunStore) CountProjectSchedulers(context.Context, string) (int, error) {
+	return len(s.schedulers), nil
 }
 
 func (s *apiProjectRunStore) GetProjectRevision(context.Context, string, int64) (domain.ProjectRevisionRecord, error) {
@@ -1320,19 +1327,19 @@ func (s *apiProjectRunStore) GetProjectAgent(context.Context, string, string) (d
 	return s.agents[0], nil
 }
 
-func (s *apiProjectRunStore) GetManagedAgentDefinition(context.Context, string) (runs.ManagedAgentDefinition, error) {
-	return runs.ManagedAgentDefinition{ID: "agent-1", Enabled: true, ManagedProjectID: "project-1", ManagedAgentName: "worker"}, nil
+func (s *apiProjectRunStore) GetManagedAgentDefinition(context.Context, string) (domain.AgentDefinition, error) {
+	return domain.AgentDefinition{ID: "agent-1", Enabled: true, ProjectID: "project-1", AgentName: "worker"}, nil
 }
 
-func (s *apiProjectRunStore) GetLoader(_ context.Context, loaderID string) (domain.Loader, error) {
+func (s *apiProjectRunStore) GetScheduler(_ context.Context, loaderID string) (domain.Scheduler, error) {
 	loader, ok := s.loaders[loaderID]
 	if !ok {
-		return domain.Loader{}, sql.ErrNoRows
+		return domain.Scheduler{}, sql.ErrNoRows
 	}
 	return loader, nil
 }
 
-func (s *apiProjectRunStore) SetLoaderEnabled(_ context.Context, loaderID string, enabled bool) error {
+func (s *apiProjectRunStore) SetSchedulerEnabled(_ context.Context, loaderID string, enabled bool) error {
 	loader, ok := s.loaders[loaderID]
 	if !ok {
 		return sql.ErrNoRows
@@ -1342,11 +1349,11 @@ func (s *apiProjectRunStore) SetLoaderEnabled(_ context.Context, loaderID string
 	return nil
 }
 
-func (s *apiProjectRunStore) SetLoaderTriggerEnabled(context.Context, string, string, bool) error {
+func (s *apiProjectRunStore) SetSchedulerTriggerEnabled(context.Context, string, string, bool) error {
 	return nil
 }
 
-func (s *apiProjectRunStore) ListLoaderEvents(context.Context, string, int) ([]domain.LoaderEvent, error) {
+func (s *apiProjectRunStore) ListSchedulerEvents(context.Context, string, int) ([]domain.SchedulerEvent, error) {
 	return nil, nil
 }
 
@@ -1436,6 +1443,17 @@ func (s *apiProjectRunStore) ListProjectRunEvents(_ context.Context, runID strin
 	return items, nil
 }
 
+func (s *apiProjectRunStore) ListProjectRunEventsPage(ctx context.Context, runID string, offset, limit int) ([]domain.ProjectRunEventRecord, error) {
+	items, err := s.ListProjectRunEvents(ctx, runID, 0, int(^uint(0)>>1))
+	start := min(max(offset, 0), len(items))
+	return items[start:min(start+limit, len(items))], err
+}
+
+func (s *apiProjectRunStore) CountProjectRunEvents(ctx context.Context, runID string) (int, error) {
+	items, err := s.ListProjectRunEvents(ctx, runID, 0, int(^uint(0)>>1))
+	return len(items), err
+}
+
 func (s *apiProjectRunStore) HasProjectRunEvents(_ context.Context, runID string) (bool, error) {
 	for _, event := range s.runEvents {
 		if event.RunID == runID {
@@ -1480,4 +1498,15 @@ func (s *apiProjectRunStore) ListProjectRunEventsForSandbox(_ context.Context, s
 		items = items[:limit]
 	}
 	return items, nil
+}
+
+func (s *apiProjectRunStore) ListProjectRunEventsForSandboxPage(ctx context.Context, sandboxID string, offset, limit int) ([]domain.ProjectRunEventRecord, error) {
+	items, err := s.ListProjectRunEventsForSandbox(ctx, sandboxID, time.Time{}, "", 0, int(^uint(0)>>1))
+	start := min(max(offset, 0), len(items))
+	return items[start:min(start+limit, len(items))], err
+}
+
+func (s *apiProjectRunStore) CountProjectRunEventsForSandbox(ctx context.Context, sandboxID string) (int, error) {
+	items, err := s.ListProjectRunEventsForSandbox(ctx, sandboxID, time.Time{}, "", 0, int(^uint(0)>>1))
+	return len(items), err
 }

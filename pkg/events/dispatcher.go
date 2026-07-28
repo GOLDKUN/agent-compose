@@ -21,7 +21,7 @@ type Store interface {
 }
 
 type Bus interface {
-	Publish(domain.LoaderTopicEvent) bool
+	Publish(domain.SchedulerTopicEvent) bool
 }
 
 type Dispatcher struct {
@@ -107,7 +107,7 @@ func (d *Dispatcher) publishOne(ctx context.Context, item domain.TopicEventRecor
 		return true
 	}
 	d.setInFlight(item.ID)
-	if ok := d.bus.Publish(domain.LoaderTopicEvent{
+	if ok := d.bus.Publish(domain.SchedulerTopicEvent{
 		EventID:   item.ID,
 		Topic:     item.Topic,
 		Source:    item.Source,

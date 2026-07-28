@@ -8,29 +8,30 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 type ProjectSchedulerRunRuntime interface {
-	RunScheduler(context.Context, loaders.SchedulerRunRequest) (domain.LoaderRunSummary, error)
-	StartSchedulerRun(context.Context, loaders.SchedulerRunRequest) (domain.LoaderRunSummary, error)
-	GetSchedulerRun(context.Context, string, string) (domain.LoaderRunSummary, error)
-	StopSchedulerRun(context.Context, string, string, string) (domain.LoaderRunSummary, bool, error)
+	RunScheduler(context.Context, schedulers.SchedulerRunRequest) (domain.SchedulerRunSummary, error)
+	StartSchedulerRun(context.Context, schedulers.SchedulerRunRequest) (domain.SchedulerRunSummary, error)
+	GetSchedulerRun(context.Context, string, string) (domain.SchedulerRunSummary, error)
+	StopSchedulerRun(context.Context, string, string, string) (domain.SchedulerRunSummary, bool, error)
 }
 
 type ProjectSchedulerRunStore interface {
-	GetLoaderRunForLoaders(context.Context, []string, string) (domain.LoaderRunSummary, error)
-	ListLoaderRunsPage(context.Context, loaders.LoaderRunPageFilter) ([]domain.LoaderRunSummary, error)
+	GetSchedulerRunForSchedulers(context.Context, []string, string) (domain.SchedulerRunSummary, error)
+	ListSchedulerRunsPage(context.Context, schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error)
+	CountSchedulerRunsPage(context.Context, schedulers.SchedulerRunPageFilter) (int, error)
 }
 
 type ProjectSchedulerRunSandboxStore interface {
-	ListLoaderRunSandboxIDs(context.Context, []loaders.LoaderRunKey) (map[loaders.LoaderRunKey][]string, error)
+	ListSchedulerRunSandboxIDs(context.Context, []schedulers.SchedulerRunKey) (map[schedulers.SchedulerRunKey][]string, error)
 }
 
 type ProjectSchedulerRunSandboxLookupStore interface {
-	BatchGetLatestLoaderRunsBySandboxIDs(context.Context, []string, []string) (map[string]domain.LoaderRunSummary, error)
+	BatchGetLatestSchedulerRunsBySandboxIDs(context.Context, []string, []string) (map[string]domain.SchedulerRunSummary, error)
 }
 
 const maxSchedulerRunBatchSandboxIDs = 500
@@ -54,7 +55,7 @@ func (h *ProjectHandler) InvokeScheduler(ctx context.Context, req *connect.Reque
 	if h.invocations == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler invocation controller is required"))
 	}
-	result, err := h.invocations.InvokeScheduler(ctx, scheduler.ManagedLoaderID, payloadJSON)
+	result, err := h.invocations.InvokeScheduler(ctx, scheduler.ID, payloadJSON)
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -77,8 +78,8 @@ func (h *ProjectHandler) RunScheduler(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, err
 	}
-	run, err := runtime.RunScheduler(ctx, loaders.SchedulerRunRequest{
-		LoaderID:    scheduler.ManagedLoaderID,
+	run, err := runtime.RunScheduler(ctx, schedulers.SchedulerRunRequest{
+		SchedulerID: scheduler.ID,
 		TriggerID:   req.Msg.GetTriggerId(),
 		PayloadJSON: payloadJSON,
 	})
@@ -104,8 +105,8 @@ func (h *ProjectHandler) StartSchedulerRun(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, err
 	}
-	run, err := runtime.StartSchedulerRun(ctx, loaders.SchedulerRunRequest{
-		LoaderID:    scheduler.ManagedLoaderID,
+	run, err := runtime.StartSchedulerRun(ctx, schedulers.SchedulerRunRequest{
+		SchedulerID: scheduler.ID,
 		TriggerID:   req.Msg.GetTriggerId(),
 		PayloadJSON: payloadJSON,
 	})
@@ -124,74 +125,68 @@ func (h *ProjectHandler) GetSchedulerRun(ctx context.Context, req *connect.Reque
 }
 
 func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Request[agentcomposev2.ListSchedulerRunsRequest]) (*connect.Response[agentcomposev2.ListSchedulerRunsResponse], error) {
-	project, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
+	_, schedulerRecords, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	limit, err := schedulerRunPageLimit(req.Msg.GetLimit())
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
 	if err != nil {
-		return nil, ConnectErrorForDomain(err)
+		return nil, err
 	}
 	status, err := schedulerRunStatusFilter(req.Msg.GetStatus())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
 	triggerID := strings.TrimSpace(req.Msg.GetTriggerId())
-	cursor, err := decodeSchedulerRunCursor(req.Msg.GetCursor(), project.ID, project.CurrentRevision, req.Msg.GetAgentName(), triggerID, status)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	loaderIDs := make([]string, 0, len(schedulers))
-	byLoaderID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
-	for _, scheduler := range schedulers {
-		loaderID := strings.TrimSpace(scheduler.ManagedLoaderID)
-		if loaderID == "" {
+	schedulerIDs := make([]string, 0, len(schedulerRecords))
+	bySchedulerID := make(map[string]domain.ProjectSchedulerRecord, len(schedulerRecords))
+	for _, scheduler := range schedulerRecords {
+		schedulerID := strings.TrimSpace(scheduler.ID)
+		if schedulerID == "" {
 			continue
 		}
-		loaderIDs = append(loaderIDs, loaderID)
-		byLoaderID[loaderID] = scheduler
+		schedulerIDs = append(schedulerIDs, schedulerID)
+		bySchedulerID[schedulerID] = scheduler
 	}
 	store, err := h.schedulerRunStore()
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	runs, err := store.ListLoaderRunsPage(ctx, loaders.LoaderRunPageFilter{
-		LoaderIDs:       loaderIDs,
-		RequireTrigger:  true,
-		TriggerID:       triggerID,
-		Status:          status,
-		BeforeStartedAt: cursor.StartedAt,
-		BeforeLoaderID:  cursor.LoaderID,
-		BeforeRunID:     cursor.RunID,
-		Limit:           limit + 1,
+	runs, err := store.ListSchedulerRunsPage(ctx, schedulers.SchedulerRunPageFilter{
+		SchedulerIDs:   schedulerIDs,
+		RequireTrigger: true,
+		TriggerID:      triggerID,
+		Status:         status,
+		Offset:         offset,
+		Limit:          limit,
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	end := min(limit, len(runs))
-	response := &agentcomposev2.ListSchedulerRunsResponse{Runs: make([]*agentcomposev2.SchedulerRun, 0, end)}
-	keys := make([]loaders.LoaderRunKey, 0, end)
-	for _, run := range runs[:end] {
-		keys = append(keys, loaders.LoaderRunKey{LoaderID: run.LoaderID, RunID: run.ID})
+	total, err := store.CountSchedulerRunsPage(ctx, schedulers.SchedulerRunPageFilter{SchedulerIDs: schedulerIDs, RequireTrigger: true, TriggerID: triggerID, Status: status})
+	if err != nil {
+		return nil, ConnectErrorForDomain(err)
 	}
-	sandboxIDs := make(map[loaders.LoaderRunKey][]string)
+	response := &agentcomposev2.ListSchedulerRunsResponse{Runs: make([]*agentcomposev2.SchedulerRun, 0, len(runs)), Total: uint32(total)}
+	keys := make([]schedulers.SchedulerRunKey, 0, len(runs))
+	for _, run := range runs {
+		keys = append(keys, schedulers.SchedulerRunKey{SchedulerID: run.SchedulerID, RunID: run.ID})
+	}
+	sandboxIDs := make(map[schedulers.SchedulerRunKey][]string)
 	if sandboxStore, ok := h.store.(ProjectSchedulerRunSandboxStore); ok {
-		sandboxIDs, err = sandboxStore.ListLoaderRunSandboxIDs(ctx, keys)
+		sandboxIDs, err = sandboxStore.ListSchedulerRunSandboxIDs(ctx, keys)
 		if err != nil {
 			return nil, ConnectErrorForDomain(err)
 		}
 	}
-	for _, run := range runs[:end] {
-		scheduler, ok := byLoaderID[run.LoaderID]
+	for _, run := range runs {
+		scheduler, ok := bySchedulerID[run.SchedulerID]
 		if !ok {
 			continue
 		}
 		item := schedulerRunToProto(run, scheduler)
-		item.SandboxIds = sandboxIDs[loaders.LoaderRunKey{LoaderID: run.LoaderID, RunID: run.ID}]
+		item.SandboxIds = sandboxIDs[schedulers.SchedulerRunKey{SchedulerID: run.SchedulerID, RunID: run.ID}]
 		response.Runs = append(response.Runs, item)
-	}
-	if len(runs) > limit {
-		response.NextCursor = encodeSchedulerRunCursor(project.ID, project.CurrentRevision, req.Msg.GetAgentName(), triggerID, status, runs[limit-1])
 	}
 	return connect.NewResponse(response), nil
 }
@@ -200,7 +195,7 @@ func (h *ProjectHandler) BatchGetLatestSchedulerRuns(ctx context.Context, req *c
 	if len(req.Msg.GetSandboxIds()) > maxSchedulerRunBatchSandboxIDs {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d sandbox ids may be queried", maxSchedulerRunBatchSandboxIDs))
 	}
-	_, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), "")
+	_, schedulerRecords, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), "")
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -213,8 +208,8 @@ func (h *ProjectHandler) BatchGetLatestSchedulerRuns(ctx context.Context, req *c
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler run sandbox lookup store is required"))
 	}
-	loaderIDs, schedulersByLoaderID := schedulerLoaderIndex(schedulers)
-	runsBySandboxID, err := store.BatchGetLatestLoaderRunsBySandboxIDs(ctx, loaderIDs, sandboxIDs)
+	schedulerIDs, schedulersBySchedulerID := schedulerRecordIndex(schedulerRecords)
+	runsBySandboxID, err := store.BatchGetLatestSchedulerRunsBySandboxIDs(ctx, schedulerIDs, sandboxIDs)
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -224,7 +219,7 @@ func (h *ProjectHandler) BatchGetLatestSchedulerRuns(ctx context.Context, req *c
 			response.Results = append(response.Results, &agentcomposev2.SandboxSchedulerRun{SandboxId: sandboxID})
 			continue
 		}
-		scheduler, found := schedulersByLoaderID[run.LoaderID]
+		scheduler, found := schedulersBySchedulerID[run.SchedulerID]
 		if !found {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler run sandbox lookup references an unknown project scheduler"))
 		}
@@ -259,7 +254,7 @@ func (h *ProjectHandler) StopSchedulerRun(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, err
 	}
-	run, requested, err := runtime.StopSchedulerRun(ctx, scheduler.ManagedLoaderID, resolved.ID, req.Msg.GetReason())
+	run, requested, err := runtime.StopSchedulerRun(ctx, scheduler.ID, resolved.ID, req.Msg.GetReason())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -271,53 +266,53 @@ func schedulerRunStatusFilter(status agentcomposev2.SchedulerRunStatus) (string,
 	case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_UNSPECIFIED:
 		return "", nil
 	case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_RUNNING:
-		return domain.LoaderRunStatusRunning, nil
+		return domain.SchedulerRunStatusRunning, nil
 	case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SUCCEEDED:
-		return domain.LoaderRunStatusSucceeded, nil
+		return domain.SchedulerRunStatusSucceeded, nil
 	case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_FAILED:
-		return domain.LoaderRunStatusFailed, nil
+		return domain.SchedulerRunStatusFailed, nil
 	case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_CANCELED:
-		return domain.LoaderRunStatusCanceled, nil
+		return domain.SchedulerRunStatusCanceled, nil
 	case agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SKIPPED:
-		return domain.LoaderRunStatusSkipped, nil
+		return domain.SchedulerRunStatusSkipped, nil
 	default:
 		return "", domain.ClassifyError(domain.ErrInvalidArgument, "invalid scheduler run status", nil)
 	}
 }
 
-func (h *ProjectHandler) resolveProjectSchedulerRun(ctx context.Context, ref *agentcomposev2.ProjectRef, rawRunID string) (domain.ProjectRecord, domain.ProjectSchedulerRecord, domain.LoaderRunSummary, error) {
+func (h *ProjectHandler) resolveProjectSchedulerRun(ctx context.Context, ref *agentcomposev2.ProjectRef, rawRunID string) (domain.ProjectRecord, domain.ProjectSchedulerRecord, domain.SchedulerRunSummary, error) {
 	project, err := h.resolveProjectRef(ctx, ref)
 	if err != nil {
-		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.LoaderRunSummary{}, err
+		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, err
 	}
 	runID := strings.TrimSpace(rawRunID)
 	if runID == "" {
-		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.LoaderRunSummary{}, domain.ClassifyError(domain.ErrRequired, "scheduler run id is required", nil)
+		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, domain.ClassifyError(domain.ErrRequired, "scheduler run id is required", nil)
 	}
 	schedulers, err := h.currentProjectSchedulers(ctx, project)
 	if err != nil {
-		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.LoaderRunSummary{}, err
+		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, err
 	}
-	loaderIDs := make([]string, 0, len(schedulers))
+	schedulerIDs := make([]string, 0, len(schedulers))
 	for _, scheduler := range schedulers {
-		if strings.TrimSpace(scheduler.ManagedLoaderID) != "" {
-			loaderIDs = append(loaderIDs, scheduler.ManagedLoaderID)
+		if strings.TrimSpace(scheduler.ID) != "" {
+			schedulerIDs = append(schedulerIDs, scheduler.ID)
 		}
 	}
 	store, err := h.schedulerRunStore()
 	if err != nil {
-		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.LoaderRunSummary{}, err
+		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, err
 	}
-	run, err := store.GetLoaderRunForLoaders(ctx, loaderIDs, runID)
+	run, err := store.GetSchedulerRunForSchedulers(ctx, schedulerIDs, runID)
 	if err != nil {
-		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.LoaderRunSummary{}, err
+		return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, err
 	}
 	for _, scheduler := range schedulers {
-		if scheduler.ManagedLoaderID == run.LoaderID {
+		if scheduler.ID == run.SchedulerID {
 			return project, scheduler, run, nil
 		}
 	}
-	return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.LoaderRunSummary{}, domain.ResourceError(domain.ErrNotFound, "scheduler run", runID, fmt.Sprintf("scheduler run %s not found", runID), nil)
+	return domain.ProjectRecord{}, domain.ProjectSchedulerRecord{}, domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrNotFound, "scheduler run", runID, fmt.Sprintf("scheduler run %s not found", runID), nil)
 }
 
 func (h *ProjectHandler) resolveProjectSchedulerRunTargets(ctx context.Context, ref *agentcomposev2.ProjectRef, rawAgentName string) (domain.ProjectRecord, []domain.ProjectSchedulerRecord, error) {
@@ -373,14 +368,4 @@ func normalizeSchedulerRunPayload(raw string) (string, error) {
 		return "", domain.ClassifyError(domain.ErrInvalidArgument, "payload_json must contain valid JSON", err)
 	}
 	return payloadJSON, nil
-}
-
-func schedulerRunPageLimit(raw uint32) (int, error) {
-	if raw == 0 {
-		return 100, nil
-	}
-	if raw > 500 {
-		return 0, domain.ClassifyError(domain.ErrInvalidArgument, "limit must be between 1 and 500", nil)
-	}
-	return int(raw), nil
 }

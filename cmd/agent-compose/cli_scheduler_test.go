@@ -322,9 +322,9 @@ agents:
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}
-	agentID, err := domain.StableManagedAgentID(projectID, "reviewer")
+	agentID, err := domain.StableProjectAgentID(projectID, "reviewer")
 	if err != nil {
-		t.Fatalf("StableManagedAgentID returned error: %v", err)
+		t.Fatalf("StableProjectAgentID returned error: %v", err)
 	}
 	schedulerID, err := domain.StableProjectSchedulerID(projectID, "reviewer", "")
 	if err != nil {
@@ -375,9 +375,9 @@ func TestComposeUpUsesDistinctStableTriggerIDs(t *testing.T) {
 		t.Fatalf("trigger display changes = %#v, want 2", changes)
 	}
 	for index, name := range []string{"hourly", "startup"} {
-		wantID, err := domain.StableManagedTriggerID(projectID, "reviewer", "", name, index)
+		wantID, err := domain.StableSchedulerTriggerID(projectID, "reviewer", "", name, index)
 		if err != nil {
-			t.Fatalf("StableManagedTriggerID(%q) returned error: %v", name, err)
+			t.Fatalf("StableSchedulerTriggerID(%q) returned error: %v", name, err)
 		}
 		if changes[index].Name != name || changes[index].ID != shortOpaqueID(wantID) {
 			t.Fatalf("trigger display change[%d] = %#v, want name %q id %q", index, changes[index], name, shortOpaqueID(wantID))
@@ -731,9 +731,9 @@ agents:
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}
-	triggerID, err := domain.StableManagedTriggerID(projectID, "reviewer", "", "nightly", 0)
+	triggerID, err := domain.StableSchedulerTriggerID(projectID, "reviewer", "", "nightly", 0)
 	if err != nil {
-		t.Fatalf("StableManagedTriggerID returned error: %v", err)
+		t.Fatalf("StableSchedulerTriggerID returned error: %v", err)
 	}
 	shortOut, shortErr, _, shortCode := executeCLICommand("scheduler", "inspect", "--host", server.URL, "--file", composePath, "--scheduler", "reviewer", shortOpaqueID(triggerID))
 	if shortCode != 0 || shortErr != "" || !strings.Contains(shortOut, "name: nightly") {

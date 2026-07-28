@@ -14,8 +14,8 @@ import (
 	"agent-compose/pkg/internal/testutil"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/storage/sandboxstore"
 
 	"github.com/samber/do/v2"
 )
@@ -147,7 +147,7 @@ func TestSandboxDriverStartSandboxVMSavesRuntimeState(t *testing.T) {
 		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -196,11 +196,11 @@ func TestSandboxDriverRecreatesOnlyAfterIntentionalRuntimeRelease(t *testing.T) 
 		BoxliteHome: filepath.Join(root, "boxlite"), DefaultImage: "guest:latest", GuestWorkspacePath: "/workspace",
 		JupyterProxyBasePath: "/agent-compose/session", SandboxStartTimeout: 2 * time.Second, SandboxStopTimeout: time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
-	sandbox, err := store.CreateSandboxWithOptions(ctx, "released", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeManual, nil, nil, nil, sessionstore.CreateSandboxOptions{
+	sandbox, err := store.CreateSandboxWithOptions(ctx, "released", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeManual, nil, nil, nil, sandboxstore.CreateSandboxOptions{
 		StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove,
 	})
 	if err != nil {
@@ -239,7 +239,7 @@ func TestSandboxDriverRecreatesOnlyAfterIntentionalRuntimeRelease(t *testing.T) 
 	if err != nil || vmState.BoxID != "new-runtime" || !vmState.StoppedAt.IsZero() {
 		t.Fatalf("saved VM state=%#v err=%v", vmState, err)
 	}
-	record, err := sessions.ReadOwnershipRecord(config.SandboxRoot, sandbox.Summary.ID)
+	record, err := sandboxes.ReadOwnershipRecord(config.SandboxRoot, sandbox.Summary.ID)
 	if err != nil || record.RuntimeID != sandbox.Summary.RuntimeRef {
 		t.Fatalf("runtime ownership=%#v err=%v", record, err)
 	}
@@ -434,7 +434,7 @@ func TestSandboxDriverStopSandboxVMAddsDockerStopContextMargin(t *testing.T) {
 		SandboxStartTimeout: 2 * time.Second,
 		SandboxStopTimeout:  2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -473,7 +473,7 @@ func TestSandboxDriverStopPreservesFacadeTokensUntilRemove(t *testing.T) {
 		SandboxStartTimeout: 2 * time.Second,
 		SandboxStopTimeout:  2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestSandboxDriverResumeReusesRuntimeWithoutRefreshingStartupEnv(t *testing.
 		SandboxStartTimeout: 2 * time.Second,
 		SandboxStopTimeout:  2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -588,7 +588,7 @@ func TestSandboxDriverResumeRecordsAttemptBeforeRuntimeFailure(t *testing.T) {
 		RuntimeDriver: driverpkg.RuntimeDriverBoxlite, BoxliteHome: filepath.Join(root, "boxlite"), DefaultImage: "guest:latest",
 		GuestWorkspacePath: "/workspace", SandboxStartTimeout: 2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -634,7 +634,7 @@ func TestSandboxDriverStartSandboxVMUsesPreparedAgentEnvironmentWithoutAddingPro
 		GuestWorkspacePath:  "/workspace",
 		SandboxStartTimeout: 2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}

@@ -9,12 +9,12 @@ import (
 )
 
 func TestParseAgentAndCommandExecResultWorkflows(t *testing.T) {
-	agentPayload := AgentResultPrefix + `{"provider":"codex","threadId":"agent-thread","stopReason":"done","finalText":"final","transcript":"transcript"}`
+	agentPayload := AgentResultPrefix + `{"provider":"codex","threadId":"agent-thread","stopReason":"done","finalText":"final","finalTextSource":"provider_message","transcript":"transcript"}`
 	agent, err := ParseAgentExecResult("codex", domain.ExecResult{Stdout: "logs\n" + agentPayload, ExitCode: 0, Success: true})
 	if err != nil {
 		t.Fatalf("ParseAgentExecResult returned error: %v", err)
 	}
-	if agent.Agent != "codex" || agent.ThreadID != "agent-thread" || agent.DisplayOutput != "transcript" {
+	if agent.Agent != "codex" || agent.ThreadID != "agent-thread" || agent.DisplayOutput != "transcript" || agent.FinalTextSource != domain.AgentFinalTextSourceProviderMessage {
 		t.Fatalf("agent result = %#v", agent)
 	}
 	if _, err := ParseAgentExecResult("codex", domain.ExecResult{Stderr: strings.Repeat("x", 300)}); err == nil || !strings.Contains(err.Error(), "...") {
@@ -51,6 +51,31 @@ func TestParseAgentAndCommandExecResultWorkflows(t *testing.T) {
 	}
 	if _, err := ParseCommandExecResult(domain.ExecResult{Stdout: "noise"}); err == nil {
 		t.Fatalf("expected missing command payload error")
+	}
+}
+
+func TestParseAgentExecResultClassifiesFinalTextFallback(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    string
+		wantSource domain.AgentFinalTextSource
+	}{
+		{name: "explicit provider message", payload: `{"finalText":"answer","finalTextSource":"provider_message","transcript":"answer"}`, wantSource: domain.AgentFinalTextSourceProviderMessage},
+		{name: "explicit transcript fallback", payload: `{"finalText":"$ command\\noutput","finalTextSource":"transcript_fallback","transcript":"$ command\\noutput"}`, wantSource: domain.AgentFinalTextSourceTranscriptFallback},
+		{name: "legacy transcript fallback", payload: `{"finalText":"$ command\\noutput","transcript":"$ command\\noutput"}`, wantSource: domain.AgentFinalTextSourceTranscriptFallback},
+		{name: "legacy distinct final", payload: `{"finalText":"answer","transcript":"$ command\\noutput\\nanswer"}`, wantSource: domain.AgentFinalTextSourceProviderMessage},
+		{name: "unknown source", payload: `{"finalText":"answer","finalTextSource":"future_source","transcript":"activity\\nanswer"}`, wantSource: domain.AgentFinalTextSourceTranscriptFallback},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseAgentExecResult("codex", domain.ExecResult{Stdout: AgentResultPrefix + tt.payload, Success: true})
+			if err != nil {
+				t.Fatalf("ParseAgentExecResult returned error: %v", err)
+			}
+			if result.FinalTextSource != tt.wantSource {
+				t.Fatalf("final text source = %q, want %q", result.FinalTextSource, tt.wantSource)
+			}
+		})
 	}
 }
 

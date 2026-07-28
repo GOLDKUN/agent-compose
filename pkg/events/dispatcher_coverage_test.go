@@ -140,11 +140,11 @@ func (s *dispatcherCoverageStore) MarkEventNoSubscriber(context.Context, string,
 }
 
 type dispatcherCoverageBus struct {
-	events    []domain.LoaderTopicEvent
+	events    []domain.SchedulerTopicEvent
 	publishOK bool
 }
 
-func (b *dispatcherCoverageBus) Publish(event domain.LoaderTopicEvent) bool {
+func (b *dispatcherCoverageBus) Publish(event domain.SchedulerTopicEvent) bool {
 	if b.publishOK == false && len(b.events) > 0 {
 		return false
 	}

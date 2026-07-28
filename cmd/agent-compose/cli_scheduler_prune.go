@@ -25,7 +25,7 @@ type composeSchedulerPruneOptions struct {
 
 type composeSchedulerPruneStats struct {
 	Runs              uint64 `json:"runs"`
-	LoaderEvents      uint64 `json:"loader_events"`
+	SchedulerEvents   uint64 `json:"loader_events"`
 	EventDeliveries   uint64 `json:"event_deliveries"`
 	EventSandboxLinks uint64 `json:"event_sandbox_links"`
 	ArtifactDirs      uint64 `json:"artifact_dirs"`
@@ -33,10 +33,10 @@ type composeSchedulerPruneStats struct {
 }
 
 type composeSchedulerPruneResidue struct {
-	LoaderID string `json:"loader_id"`
-	RunID    string `json:"run_id"`
-	Path     string `json:"path"`
-	Error    string `json:"error"`
+	SchedulerID string `json:"loader_id"`
+	RunID       string `json:"run_id"`
+	Path        string `json:"path"`
+	Error       string `json:"error"`
 }
 
 type composeSchedulerPruneOutput struct {
@@ -95,7 +95,7 @@ func runComposeSchedulerPruneCommand(cmd interface {
 		return commandExitError{Code: exitCodeUsage, Err: err}
 	}
 	response, err := clients.project.PruneSchedulerRuns(cmd.Context(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
-		Project:          &agentcomposev2.ProjectRef{ProjectId: projectID},
+		Project:          &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 		AgentName:        agentName,
 		TriggerId:        triggerID,
 		Status:           statuses,
@@ -138,13 +138,13 @@ func parseSchedulerRunPruneStatuses(value string) ([]agentcomposev2.SchedulerRun
 		}
 		var status agentcomposev2.SchedulerRunStatus
 		switch name {
-		case model.LoaderRunStatusSucceeded:
+		case model.SchedulerRunStatusSucceeded:
 			status = agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SUCCEEDED
-		case model.LoaderRunStatusFailed:
+		case model.SchedulerRunStatusFailed:
 			status = agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_FAILED
-		case model.LoaderRunStatusCanceled:
+		case model.SchedulerRunStatusCanceled:
 			status = agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_CANCELED
-		case model.LoaderRunStatusSkipped:
+		case model.SchedulerRunStatusSkipped:
 			status = agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_SKIPPED
 		default:
 			return nil, nil, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("scheduler prune --status must contain only succeeded, failed, canceled, or skipped")}
@@ -169,10 +169,10 @@ func composeSchedulerPruneOutputFromResponse(response *agentcomposev2.PruneSched
 	}
 	for _, residue := range response.GetResidues() {
 		output.Residues = append(output.Residues, composeSchedulerPruneResidue{
-			LoaderID: displayOpaqueID(residue.GetLoaderId()),
-			RunID:    displayOpaqueID(residue.GetRunId()),
-			Path:     residue.GetPath(),
-			Error:    residue.GetError(),
+			SchedulerID: displayOpaqueID(residue.GetLoaderId()),
+			RunID:       displayOpaqueID(residue.GetRunId()),
+			Path:        residue.GetPath(),
+			Error:       residue.GetError(),
 		})
 	}
 	return output
@@ -184,7 +184,7 @@ func composeSchedulerPruneStatsFromProto(stats *agentcomposev2.SchedulerRunPrune
 	}
 	return composeSchedulerPruneStats{
 		Runs:              stats.GetRuns(),
-		LoaderEvents:      stats.GetLoaderEvents(),
+		SchedulerEvents:   stats.GetLoaderEvents(),
 		EventDeliveries:   stats.GetEventDeliveries(),
 		EventSandboxLinks: stats.GetEventSandboxLinks(),
 		ArtifactDirs:      stats.GetArtifactDirs(),
@@ -215,7 +215,7 @@ func writeComposeSchedulerPruneOutput(out io.Writer, asJSON bool, output compose
 		label = "Removed related"
 	}
 	if _, err := fmt.Fprintf(out, "%s: %d loader event(s), %d event delivery row(s), %d event sandbox link(s), %d artifact dir(s), %d artifact byte(s).\n",
-		label, related.LoaderEvents, related.EventDeliveries, related.EventSandboxLinks, related.ArtifactDirs, related.ArtifactBytes); err != nil {
+		label, related.SchedulerEvents, related.EventDeliveries, related.EventSandboxLinks, related.ArtifactDirs, related.ArtifactBytes); err != nil {
 		return err
 	}
 	if output.DryRun && removable > 0 {

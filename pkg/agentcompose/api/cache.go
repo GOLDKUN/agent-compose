@@ -42,9 +42,14 @@ func (h *CacheHandler) ListCaches(ctx context.Context, req *connect.Request[agen
 	if err != nil {
 		return nil, ConnectErrorForRuntimeCache(err)
 	}
+	items, total, err := paginateList(RuntimeCacheItemsToProto(result.Items), req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
+	}
 	return connect.NewResponse(&agentcomposev2.ListCachesResponse{
-		Caches:   RuntimeCacheItemsToProto(result.Items),
+		Caches:   items,
 		Warnings: result.Warnings,
+		Total:    total,
 	}), nil
 }
 

@@ -21,7 +21,7 @@ import (
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -57,10 +57,10 @@ type ExecHandler struct {
 	projects  ExecProjectStore
 	runtime   ExecRuntimeResolver
 	runAttach ExecRunAttachDelegate
-	locks     *sessions.LifecycleLocks
+	locks     *sandboxes.LifecycleLocks
 }
 
-func (h *ExecHandler) WithLifecycleLocks(locks *sessions.LifecycleLocks) *ExecHandler {
+func (h *ExecHandler) WithLifecycleLocks(locks *sandboxes.LifecycleLocks) *ExecHandler {
 	h.locks = locks
 	return h
 }
@@ -678,10 +678,18 @@ func (h *ExecHandler) resolveExecTargetSandbox(ctx context.Context, req *agentco
 	if selector == nil {
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("exec target is required"))
 	}
-	project, err := h.resolveProjectRef(ctx, &agentcomposev2.ProjectRef{
-		ProjectId: selector.GetProjectId(),
-		Name:      selector.GetProjectName(),
-	})
+	projectID := strings.TrimSpace(selector.GetProjectId())
+	projectName := strings.TrimSpace(selector.GetProjectName())
+	if projectID != "" && projectName != "" {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id and project_name are mutually exclusive"))
+	}
+	projectRef := &agentcomposev2.ProjectRef{}
+	if projectID != "" {
+		projectRef.Selector = &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}
+	} else if projectName != "" {
+		projectRef.Selector = &agentcomposev2.ProjectRef_Name{Name: projectName}
+	}
+	project, err := h.resolveProjectRef(ctx, projectRef)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", connect.NewError(connect.CodeNotFound, err)
@@ -766,41 +774,7 @@ func appendExecTranscriptChunk(path string, chunk domain.ExecChunk) error {
 }
 
 func (h *ExecHandler) resolveProjectRef(ctx context.Context, ref *agentcomposev2.ProjectRef) (domain.ProjectRecord, error) {
-	if ref == nil {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project ref is required", nil)
-	}
-	if projectID := strings.TrimSpace(ref.GetProjectId()); projectID != "" {
-		return h.projects.GetProject(ctx, projectID)
-	}
-	name := strings.TrimSpace(ref.GetName())
-	sourcePath := strings.TrimSpace(ref.GetSourcePath())
-	if name != "" && sourcePath != "" {
-		projectID, err := domain.StableProjectID(name, sourcePath)
-		if err != nil {
-			return domain.ProjectRecord{}, err
-		}
-		return h.projects.GetProject(ctx, projectID)
-	}
-	if name == "" {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project id or name is required", nil)
-	}
-	result, err := h.projects.ListProjects(ctx, domain.ProjectListOptions{Query: name, Limit: 200})
-	if err != nil {
-		return domain.ProjectRecord{}, err
-	}
-	var matches []domain.ProjectRecord
-	for _, project := range result.Projects {
-		if project.Name == name {
-			matches = append(matches, project)
-		}
-	}
-	if len(matches) == 0 {
-		return domain.ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", name, fmt.Sprintf("project %s not found", name), sql.ErrNoRows)
-	}
-	if len(matches) > 1 {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrAmbiguous, fmt.Sprintf("project name %s is ambiguous; use project_id or source_path", name), nil)
-	}
-	return matches[0], nil
+	return resolveProjectReference(ctx, h.projects, ref)
 }
 
 func ExecEnvMap(items []*agentcomposev2.EnvVarSpec) map[string]string {

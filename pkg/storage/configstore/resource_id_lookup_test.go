@@ -28,10 +28,10 @@ func TestFindResourceIDsReturnsStoredPrefixCandidates(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `INSERT INTO project(id, name) VALUES(?, ?)`, projectID, "demo"); err != nil {
 		t.Fatalf("insert project: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO project_agent(id, name, short_id, project_id, agent_name, managed_agent_id) VALUES(?, ?, ?, ?, ?, ?)`, agentID, "reviewer", prefix, projectID, "reviewer", agentID); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO project_agent(id, name, short_id, project_id, agent_name, created_at, updated_at) VALUES(?, ?, ?, ?, ?, 1, 1)`, agentID, "reviewer", prefix, projectID, "reviewer"); err != nil {
 		t.Fatalf("insert agent: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO project_run(run_id, project_id, project_name, agent_name) VALUES(?, ?, ?, ?)`, runID, projectID, "demo", "reviewer"); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO project_run(run_id, project_id, project_name, agent_name, agent_id, created_at, updated_at) VALUES(?, ?, ?, ?, ?, 1, 1)`, runID, projectID, "demo", "reviewer", agentID); err != nil {
 		t.Fatalf("insert run: %v", err)
 	}
 

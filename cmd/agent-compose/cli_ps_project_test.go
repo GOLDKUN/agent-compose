@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +13,39 @@ import (
 
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
+
+func TestCLIPSRejectsInvalidStatusBeforeDaemonRequests(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requestCount++
+	}))
+	t.Cleanup(server.Close)
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "ps single invalid", args: []string{"ps", "--status", "definitely-invalid"}},
+		{name: "sandbox list mixed invalid", args: []string{"sandbox", "ls", "--status", "running,definitely-invalid", "--json"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := append(append([]string(nil), tt.args...), "--host", server.URL, "--project-name", "status-validation")
+			stdout, stderr, _, exitCode := executeCLICommand(args...)
+			if exitCode != exitCodeUsage || stdout != "" {
+				t.Fatalf("code/stdout/stderr = %d / %q / %q; want usage with empty stdout", exitCode, stdout, stderr)
+			}
+			for _, want := range []string{`invalid --status "definitely-invalid"`, "pending, running, stopped, failed, or deleting"} {
+				if !strings.Contains(stderr, want) {
+					t.Fatalf("stderr = %q, want %q", stderr, want)
+				}
+			}
+		})
+	}
+	if requestCount != 0 {
+		t.Fatalf("invalid status triggered %d daemon request(s), want 0", requestCount)
+	}
+}
 
 func TestIntegrationCLIPSSelectsStoredProjectByNameWithoutComposeFile(t *testing.T) {
 	for _, command := range [][]string{{"ps"}, {"sandbox", "ls"}} {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -132,14 +133,14 @@ func TestV2SandboxWatchEventProjection(t *testing.T) {
 	cell := domain.NotebookCell{ID: "cell-1", Output: "done", CreatedAt: now}
 	event := domain.SandboxEvent{ID: "event-1", Type: "agent.completed", CreatedAt: now}
 	tests := []struct {
-		input sessions.WatchEvent
+		input sandboxes.WatchEvent
 		want  agentcomposev2.SandboxWatchEventType
 	}{
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeSandboxUpdated, Sandbox: &domain.SandboxSummary{ID: "sandbox-1"}}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_SANDBOX_UPDATED},
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeCellStarted, Cell: &cell}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_STARTED},
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeCellOutput, CellID: "cell-1", Chunk: "part"}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_OUTPUT},
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeCellCompleted, Cell: &cell}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_COMPLETED},
-		{input: sessions.WatchEvent{EventType: sessions.WatchEventTypeEventAdded, Event: &event}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_EVENT_ADDED},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeSandboxUpdated, Sandbox: &domain.SandboxSummary{ID: "sandbox-1"}}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_SANDBOX_UPDATED},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeCellStarted, Cell: &cell}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_STARTED},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeCellOutput, CellID: "cell-1", Chunk: "part"}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_OUTPUT},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeCellCompleted, Cell: &cell}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_COMPLETED},
+		{input: sandboxes.WatchEvent{EventType: sandboxes.WatchEventTypeEventAdded, Event: &event}, want: agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_EVENT_ADDED},
 	}
 	for _, test := range tests {
 		if got := sandboxWatchEventToV2(test.input); got.GetEventType() != test.want {
@@ -166,7 +167,7 @@ func TestV2SandboxLifecycleIsIdempotentAndRejectsInvalidState(t *testing.T) {
 	}
 }
 
-func TestV2ListSandboxesEmptyPageWithHasMoreDoesNotPanic(t *testing.T) {
+func TestV2ListSandboxesEmptyPageReturnsTotal(t *testing.T) {
 	// A page whose indexed rows were all ghosts comes back empty with HasMore set.
 	// The cursor must not be built from the (empty) page, which would panic.
 	store := &characterizationSandboxStore{listResults: []domain.SandboxListResult{
@@ -181,33 +182,30 @@ func TestV2ListSandboxesEmptyPageWithHasMoreDoesNotPanic(t *testing.T) {
 	if len(resp.Msg.GetSandboxes()) != 0 {
 		t.Fatalf("expected empty page, got %d sandboxes", len(resp.Msg.GetSandboxes()))
 	}
-	if resp.Msg.GetNextCursor() != "" {
-		t.Fatalf("empty page must not emit a cursor, got %q", resp.Msg.GetNextCursor())
+	if resp.Msg.GetTotal() != 5 {
+		t.Fatalf("total = %d, want 5", resp.Msg.GetTotal())
 	}
 }
 
-func TestV2ListSandboxesUsesOpaquePagination(t *testing.T) {
+func TestV2ListSandboxesUsesOffsetPagination(t *testing.T) {
 	firstID := identity.NewID(identity.ResourceSandbox, "characterization", "list-first")
 	secondID := identity.NewID(identity.ResourceSandbox, "characterization", "list-second")
 	firstUpdatedAt := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
 	store := &characterizationSandboxStore{listResults: []domain.SandboxListResult{
-		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: firstID, UpdatedAt: firstUpdatedAt}}}, HasMore: true},
-		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: secondID, UpdatedAt: firstUpdatedAt.Add(-time.Second)}}}},
+		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: firstID, UpdatedAt: firstUpdatedAt}}}, TotalCount: 2},
+		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: secondID, UpdatedAt: firstUpdatedAt.Add(-time.Second)}}}, TotalCount: 2},
 	}}
 	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
 	first, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Limit: 1}))
-	if err != nil || first.Msg.GetSandboxes()[0].GetSandboxId() != firstID || first.Msg.GetNextCursor() == "" {
+	if err != nil || first.Msg.GetSandboxes()[0].GetSandboxId() != firstID || first.Msg.GetTotal() != 2 {
 		t.Fatalf("first ListSandboxes() = %#v, err=%v", first, err)
 	}
-	second, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Limit: 1, Cursor: first.Msg.GetNextCursor()}))
-	if err != nil || second.Msg.GetSandboxes()[0].GetSandboxId() != secondID || second.Msg.GetNextCursor() != "" {
+	second, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Limit: 1, Offset: 1}))
+	if err != nil || second.Msg.GetSandboxes()[0].GetSandboxId() != secondID || second.Msg.GetTotal() != 2 {
 		t.Fatalf("second ListSandboxes() = %#v, err=%v", second, err)
 	}
-	if len(store.listOptions) != 2 || store.listOptions[1].BeforeID != firstID || !store.listOptions[1].BeforeUpdatedAt.Equal(firstUpdatedAt) {
+	if len(store.listOptions) != 2 || store.listOptions[1].Offset != 1 {
 		t.Fatalf("list options = %#v", store.listOptions)
-	}
-	if _, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Cursor: "invalid"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("invalid token code=%v err=%v", connect.CodeOf(err), err)
 	}
 }
 
@@ -216,7 +214,7 @@ func TestV2ListSandboxesPassesProjectAndStatusFiltersToStore(t *testing.T) {
 	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
 
 	_, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{
-		ProjectId: " project-a ", Status: []string{"running", "stopped"},
+		ProjectId: " project-a ", Status: []string{" running ", "", "STOPPED", "running"},
 	}))
 	if err != nil {
 		t.Fatalf("ListSandboxes() error = %v", err)
@@ -225,8 +223,25 @@ func TestV2ListSandboxesPassesProjectAndStatusFiltersToStore(t *testing.T) {
 		t.Fatalf("list options count = %d, want 1", len(store.listOptions))
 	}
 	options := store.listOptions[0]
-	if options.ProjectID != "project-a" || !slices.Equal(options.VMStatuses, []string{"running", "stopped"}) {
+	if options.ProjectID != "project-a" || !slices.Equal(options.VMStatuses, []string{domain.VMStatusRunning, domain.VMStatusStopped}) {
 		t.Fatalf("list options = %#v", options)
+	}
+}
+
+func TestV2ListSandboxesRejectsInvalidStatusBeforeStore(t *testing.T) {
+	for _, statuses := range [][]string{{"definitely-invalid"}, {"running", "definitely-invalid"}} {
+		t.Run(strings.Join(statuses, ","), func(t *testing.T) {
+			store := &characterizationSandboxStore{}
+			handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+
+			_, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Status: statuses}))
+			if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), `invalid sandbox status "definitely-invalid"`) {
+				t.Fatalf("ListSandboxes() code/error = %v / %v", connect.CodeOf(err), err)
+			}
+			if len(store.listOptions) != 0 {
+				t.Fatalf("invalid status reached store with options %#v", store.listOptions)
+			}
+		})
 	}
 }
 

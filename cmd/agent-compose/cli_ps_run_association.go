@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
@@ -30,7 +31,7 @@ func latestSchedulerRunsBySandbox(ctx context.Context, clients cliServiceClients
 	for start := 0; start < len(targetSandboxIDs); start += schedulerRunLookupBatchSize {
 		end := min(start+schedulerRunLookupBatchSize, len(targetSandboxIDs))
 		response, err := clients.project.BatchGetLatestSchedulerRuns(ctx, connect.NewRequest(&agentcomposev2.BatchGetLatestSchedulerRunsRequest{
-			Project: &agentcomposev2.ProjectRef{ProjectId: projectID}, SandboxIds: targetSandboxIDs[start:end],
+			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}}, SandboxIds: targetSandboxIDs[start:end],
 		}))
 		if err != nil {
 			return nil, commandExitErrorForConnect(err)
@@ -76,8 +77,10 @@ func legacySchedulerAgentForProject(tags map[string]string, project *agentcompos
 		return ""
 	}
 	for _, scheduler := range project.GetSchedulers() {
-		managedLoaderID, err := domain.StableManagedLoaderID(projectID, scheduler.GetAgentName(), "")
-		if err == nil && loaderID == managedLoaderID {
+		agentName := strings.TrimSpace(scheduler.GetAgentName())
+		schedulerID, err := domain.StableProjectSchedulerID(projectID, agentName, "")
+		legacyLoaderID := identity.NewID(identity.ResourceLoader, projectID, agentName, "default")
+		if err == nil && (loaderID == schedulerID || loaderID == legacyLoaderID) {
 			return strings.TrimSpace(scheduler.GetAgentName())
 		}
 	}

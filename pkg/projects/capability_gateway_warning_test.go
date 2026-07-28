@@ -26,10 +26,10 @@ func TestGlobalCapabilityGatewayWarning(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			normalized := normalizedProjectWithCapsets(t, tt.capsetIDs)
 			controller := NewController(ControllerDependencies{
-				Config:  &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
-				Store:   &controllerCoverageStore{},
-				Loaders: controllerCoverageLoaderValidator{},
-				Gateway: staticCapabilityGatewaySource{settings: tt.gateway},
+				Config:     &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
+				Store:      &controllerCoverageStore{},
+				Schedulers: controllerCoverageLoaderValidator{},
+				Gateway:    staticCapabilityGatewaySource{settings: tt.gateway},
 			})
 
 			validation, err := controller.ValidateProject(context.Background(), normalized, nil)

@@ -14,7 +14,7 @@ func TestPrepareProjectRunKeepsGlobalEnvOutOfSandboxProviderOverrides(t *testing
 		revision: domain.ProjectRevisionRecord{
 			ProjectID: "project-1",
 			Revision:  1,
-			SpecJSON:  `{"variables":[{"name":"PROJECT_VALUE","value":"project"}],"agents":[{"name":"worker"}]}`,
+			SpecJSON:  `{"variables":[{"name":"PROJECT_VALUE","value":"project"}],"agents":[{"name":"worker","env":[{"name":"AGENT_VALUE","value":"agent"}]}]}`,
 		},
 		agent: domain.AgentDefinition{
 			ID:       "agent-1",
@@ -29,7 +29,7 @@ func TestPrepareProjectRunKeepsGlobalEnvOutOfSandboxProviderOverrides(t *testing
 		ProjectID:       "project-1",
 		ProjectRevision: 1,
 		AgentName:       "worker",
-		ManagedAgentID:  "agent-1",
+		AgentID:         "agent-1",
 	}, []*agentcomposev2.EnvVarSpec{{Name: "REQUEST_VALUE", Value: "request"}})
 	if err != nil {
 		t.Fatalf("PrepareProjectRun returned error: %v", err)

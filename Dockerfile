@@ -89,8 +89,8 @@ RUN ln -sf /app/agent-compose /usr/local/bin/agent-compose
 COPY --from=boxlite-build /out/runtime /app/boxlite/runtime
 COPY --from=microsandbox-fetch /out /app/microsandbox
 RUN test -x /app/agent-compose && \
-	command -v qemu-img >/dev/null && \
-	mkfs.ext4 2>&1 | grep -Fq -- '[-d root-directory' && \
+    command -v qemu-img >/dev/null && \
+    mkfs.ext4 2>&1 | grep -Fq -- '[-d root-directory' && \
     test -x /app/boxlite/runtime/boxlite-guest && \
     test -x /app/boxlite/runtime/boxlite-shim && \
     test -x /app/microsandbox/bin/msb && \

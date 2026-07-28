@@ -147,10 +147,10 @@ func indexCapabilitySandbox(tokens map[string]capproxy.SandboxBinding, tokensByS
 	}
 	scope := capabilities.GuideScopeFromSandbox(sandbox)
 	binding := capproxy.SandboxBinding{
-		SandboxID:        sandbox.Summary.ID,
-		ManagedProjectID: scope.ManagedProjectID,
-		ManagedAgentID:   scope.ManagedAgentID,
-		CapsetIDs:        capsetIDs,
+		SandboxID: sandbox.Summary.ID,
+		ProjectID: scope.ProjectID,
+		AgentID:   scope.AgentID,
+		CapsetIDs: capsetIDs,
 	}
 	tokens[token] = binding
 	tokenSet := tokensBySandbox[sandbox.Summary.ID]

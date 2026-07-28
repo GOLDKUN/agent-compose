@@ -86,6 +86,17 @@ env_file:
 
 变量冲突时，后声明的 env 文件覆盖先声明的文件，启动 CLI 时已有的进程环境覆盖所有 env 文件。Project 环境文件只参与 `agent-compose.yml` 渲染，不会改变 `--host`、认证等 CLI 连接配置。
 
+### Daemon 数据库并发
+
+daemon 在启动 migration 期间只使用一个 SQLite 连接。migration 成功后，文件型
+数据库默认最多使用四个运行期连接，使 WAL reader 可以和 writer 并发推进。可以将
+`SQLITE_MAX_OPEN_CONNS` 设置为 `1` 到 `32` 之间的整数来覆盖该限制。无论配置值
+是多少，内存 SQLite 数据库始终限制为一个连接。
+
+增大连接数可以允许更多数据库操作并发执行，但不会增加 SQLite writer 数量：WAL
+仍然只允许一个活跃 writer。因此，只有在连接等待指标表明确有需要，并且已经用部署
+环境的写入负载验证后，才应设置高于默认值的连接数。
+
 ## 常见工作流
 
 本地开发：
@@ -282,7 +293,7 @@ agent-compose ps
 agent-compose ps -a
 agent-compose ps --all
 agent-compose ps --status running
-agent-compose ps --status exited,error
+agent-compose ps --status stopped,failed
 agent-compose ps --verbose
 agent-compose ps --json
 ```
@@ -293,7 +304,7 @@ agent-compose ps --json
 | --- | --- |
 | `-a, --all` | 显示当前 project 中所有状态的 sandbox。 |
 | `--verbose` | 显示更多列。 |
-| `--status <status>[,<status>...]` | 按状态过滤。 |
+| `--status <status>[,<status>...]` | 按 `pending`、`running`、`stopped`、`failed` 或 `deleting` 过滤；逗号分隔的每个非空值都必须合法。 |
 
 默认输出字段：
 
@@ -319,7 +330,7 @@ agent-compose sandbox rm <sandbox>
 agent-compose sandbox rm --force <sandbox>
 agent-compose sandbox prune
 agent-compose sandbox prune --older-than 7d
-agent-compose sandbox prune --status error --json
+agent-compose sandbox prune --status failed --json
 agent-compose sandbox prune --agent worker --driver microsandbox --force
 agent-compose sandbox prune --include-orphans
 ```
@@ -456,6 +467,8 @@ agent-compose exec <sandbox> --prompt "..."
 | `--agent <agent>` | 兼容旧目标选择参数，会输出 deprecated warning；新命令应使用 `exec <sandbox>`。 |
 | `--run <run-id>` | 兼容旧目标选择参数，会输出 deprecated warning；新命令应使用 `exec <sandbox>`。 |
 
+位置参数 `<sandbox>` 与已弃用的 `--run` 目标互斥。如果同时提供，`exec` 会在解析任一目标或发送执行请求之前返回用法错误。
+
 示例：
 
 ```bash
@@ -496,6 +509,8 @@ agent-compose logs -t
 | `--agent <agent>` | 按 agent 过滤。 |
 | `--run <run-id>` | 按 run 过滤。 |
 | `--sandbox <sandbox>` | 按 sandbox 过滤。 |
+
+`--run` 和 `--sandbox` 是互斥的资源选择器。同时指定二者会返回用法错误，且不会发送日志请求。
 
 示例：
 

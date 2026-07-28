@@ -11,8 +11,8 @@ import (
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 )
 
 func TestControllerValidateApplyDryRunAndResolveWorkflows(t *testing.T) {
@@ -60,9 +60,9 @@ agents:
 		},
 	}
 	controller := NewController(ControllerDependencies{
-		Config:  &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
-		Store:   store,
-		Loaders: controllerCoverageLoaderValidator{},
+		Config:     &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
+		Store:      store,
+		Schedulers: controllerCoverageLoaderValidator{},
 	})
 	normalized := NormalizedProject{Spec: normalizedSpec, SpecHash: hash, SourcePath: "/repo/agent-compose.yaml"}
 	validation, err := controller.ValidateProject(ctx, normalized, nil)
@@ -85,11 +85,11 @@ agents:
 	if missingSpec, err := controller.ValidateProject(ctx, NormalizedProject{}, nil); err != nil || missingSpec.Valid {
 		t.Fatalf("ValidateProject missing spec=%#v err=%v", missingSpec, err)
 	}
-	if _, err := controller.ResolveProjectRef(ctx, ProjectRef{Name: "coverage-project"}); !errors.Is(err, domain.ErrAmbiguous) {
+	if _, err := controller.ResolveProjectRef(ctx, ProjectRefByName("coverage-project")); !errors.Is(err, domain.ErrAmbiguous) {
 		t.Fatalf("expected ambiguous project error, got %v", err)
 	}
 	store.projects = []domain.ProjectRecord{{ID: "project-1", Name: "coverage-project", SourcePath: "/repo"}}
-	resolved, err := controller.ResolveProjectRef(ctx, ProjectRef{Name: "coverage-project"})
+	resolved, err := controller.ResolveProjectRef(ctx, ProjectRefByName("coverage-project"))
 	if err != nil || resolved.ID != "project-1" {
 		t.Fatalf("ResolveProjectRef resolved=%#v err=%v", resolved, err)
 	}
@@ -109,7 +109,7 @@ func TestControllerRemoveProjectMarksProjectRemovedAndIsIdempotent(t *testing.T)
 		Sandboxes: controllerCoverageSessionStore{},
 		Volumes:   volumeManager,
 	})
-	removed, err := controller.RemoveProject(ctx, RemoveRequest{Project: ProjectRef{ProjectID: "project-1"}})
+	removed, err := controller.RemoveProject(ctx, RemoveRequest{Project: ProjectRefByID("project-1")})
 	if err != nil {
 		t.Fatalf("RemoveProject returned error: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestControllerRemoveProjectMarksProjectRemovedAndIsIdempotent(t *testing.T)
 		t.Fatalf("RemoveProject volume cleanup = %#v", volumeManager.removedProjects)
 	}
 
-	repeated, err := controller.RemoveProject(ctx, RemoveRequest{Project: ProjectRef{ProjectID: "project-1"}})
+	repeated, err := controller.RemoveProject(ctx, RemoveRequest{Project: ProjectRefByID("project-1")})
 	if err != nil {
 		t.Fatalf("repeated RemoveProject returned error: %v", err)
 	}
@@ -134,39 +134,39 @@ func TestControllerRemoveProjectMarksProjectRemovedAndIsIdempotent(t *testing.T)
 }
 
 func TestManagedSchedulerErrorHelpersCoverage(t *testing.T) {
-	plain := &managedSchedulerBuildError{message: "missing script"}
+	plain := &projectSchedulerBuildError{message: "missing script"}
 	if plain.Error() != "missing script" {
 		t.Fatalf("plain build error = %q", plain.Error())
 	}
-	withPath := &managedSchedulerBuildError{path: "agents.worker.scheduler.script", message: "invalid script"}
+	withPath := &projectSchedulerBuildError{path: "agents.worker.scheduler.script", message: "invalid script"}
 	if withPath.Error() != "agents.worker.scheduler.script: invalid script" {
 		t.Fatalf("path build error = %q", withPath.Error())
 	}
-	if issue := managedSchedulerBuildIssue(withPath); issue.Path != withPath.path || issue.Message != withPath.message {
+	if issue := projectSchedulerBuildIssue(withPath); issue.Path != withPath.path || issue.Message != withPath.message {
 		t.Fatalf("managed scheduler build issue = %#v", issue)
 	}
-	if issue := managedSchedulerBuildIssue(errors.New("boom")); issue.Path != "schedulers" || issue.Message != "boom" {
+	if issue := projectSchedulerBuildIssue(errors.New("boom")); issue.Path != "schedulers" || issue.Message != "boom" {
 		t.Fatalf("fallback scheduler build issue = %#v", issue)
 	}
 
 	var cleaned bool
-	cleanupFailedManagedScheduler(context.Background(), ReconcileSchedulerOptions{
-		CleanupFailedManagedScheduler: func(_ context.Context, scheduler domain.ProjectSchedulerRecord, loaderID string) {
+	cleanupFailedScheduler(context.Background(), ReconcileSchedulerOptions{
+		CleanupFailedScheduler: func(_ context.Context, scheduler domain.ProjectSchedulerRecord, loaderID string) {
 			cleaned = scheduler.SchedulerID == "scheduler-1" && loaderID == "loader-1"
 		},
 	}, domain.ProjectSchedulerRecord{SchedulerID: "scheduler-1"}, "loader-1")
 	if !cleaned {
-		t.Fatal("cleanupFailedManagedScheduler did not invoke callback")
+		t.Fatal("cleanupFailedScheduler did not invoke callback")
 	}
-	cleanupFailedManagedScheduler(context.Background(), ReconcileSchedulerOptions{}, domain.ProjectSchedulerRecord{}, "")
+	cleanupFailedScheduler(context.Background(), ReconcileSchedulerOptions{}, domain.ProjectSchedulerRecord{}, "")
 }
 
 func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	ctx := context.Background()
 	project := domain.ProjectRecord{ID: "project-1", Name: "Down Project"}
 	schedulerStore := &downCoverageStore{items: []domain.ProjectSchedulerRecord{
-		{ProjectID: project.ID, SchedulerID: "scheduler-disabled", AgentName: "idle", ManagedLoaderID: "loader-idle", Enabled: false},
-		{ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ManagedLoaderID: "loader-1", Enabled: true},
+		{ProjectID: project.ID, SchedulerID: "scheduler-disabled", AgentName: "idle", ID: "loader-idle", Enabled: false},
+		{ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Enabled: true},
 	}}
 	sessionStore := downCoverageSessions{sessions: []*domain.Sandbox{
 		nil,
@@ -181,13 +181,7 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	changes, err := DownProject(ctx, project, DownOptions{
 		Store:     schedulerStore,
 		Sandboxes: sessionStore,
-		DisableManagedLoader: func(_ context.Context, loaderID, projectID, schedulerID string) error {
-			if loaderID != "loader-1" || projectID != project.ID || schedulerID != "scheduler-1" {
-				t.Fatalf("DisableManagedLoader args = %q/%q/%q", loaderID, projectID, schedulerID)
-			}
-			return nil
-		},
-		RefreshLoaders: func(context.Context) error {
+		RefreshSchedulers: func(context.Context) error {
 			refreshed = true
 			return nil
 		},
@@ -214,27 +208,19 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 		t.Fatalf("SandboxHasTag returned unexpected values")
 	}
 
-	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{}); err == nil {
-		t.Fatalf("DisableProjectManagedSchedulers without store returned nil error")
+	if _, err := DisableProjectSchedulers(ctx, project, DownOptions{}); err == nil {
+		t.Fatalf("DisableProjectSchedulers without store returned nil error")
 	}
-	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{Store: &downCoverageStore{listErr: errors.New("list failed")}}); err == nil {
-		t.Fatalf("DisableProjectManagedSchedulers list error returned nil error")
+	if _, err := DisableProjectSchedulers(ctx, project, DownOptions{Store: &downCoverageStore{listErr: errors.New("list failed")}}); err == nil {
+		t.Fatalf("DisableProjectSchedulers list error returned nil error")
 	}
-	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{
-		Store: &downCoverageStore{items: []domain.ProjectSchedulerRecord{{ProjectID: project.ID, SchedulerID: "scheduler-1", ManagedLoaderID: "loader-1", Enabled: true}}},
-		DisableManagedLoader: func(context.Context, string, string, string) error {
-			return errors.New("disable failed")
-		},
-	}); err == nil {
-		t.Fatalf("DisableProjectManagedSchedulers managed loader error returned nil error")
-	}
-	if _, err := DisableProjectManagedSchedulers(ctx, project, DownOptions{
+	if _, err := DisableProjectSchedulers(ctx, project, DownOptions{
 		Store: &downCoverageStore{items: []domain.ProjectSchedulerRecord{{ProjectID: project.ID, SchedulerID: "scheduler-1", Enabled: true}}},
-		RefreshLoaders: func(context.Context) error {
+		RefreshSchedulers: func(context.Context) error {
 			return errors.New("refresh failed")
 		},
 	}); err == nil {
-		t.Fatalf("DisableProjectManagedSchedulers refresh error returned nil error")
+		t.Fatalf("DisableProjectSchedulers refresh error returned nil error")
 	}
 	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{}); err == nil {
 		t.Fatalf("StopProjectRunningSandboxes without sandboxes returned nil error")
@@ -261,8 +247,8 @@ func TestE2EControllerValidateApplyDryRunAndResolveWorkflows(t *testing.T) {
 
 type controllerCoverageLoaderValidator struct{}
 
-func (controllerCoverageLoaderValidator) Validate(context.Context, string, string) (loaders.LoaderValidationResult, error) {
-	return loaders.LoaderValidationResult{Triggers: []domain.LoaderTrigger{{ID: "daily", Kind: domain.LoaderTriggerKindCron, Enabled: true, SpecJSON: `{"expr":"0 0 * * *"}`}}}, nil
+func (controllerCoverageLoaderValidator) Validate(context.Context, string, string) (schedulers.SchedulerValidationResult, error) {
+	return schedulers.SchedulerValidationResult{Triggers: []domain.SchedulerTrigger{{ID: "daily", Kind: domain.SchedulerTriggerKindCron, Enabled: true, SpecJSON: `{"expr":"0 0 * * *"}`}}}, nil
 }
 
 func (controllerCoverageLoaderValidator) Refresh(context.Context) error {
@@ -372,20 +358,12 @@ func (s *controllerCoverageStore) SetProjectSchedulerEnabled(context.Context, st
 	return domain.ProjectSchedulerRecord{}, nil
 }
 
-func (s *controllerCoverageStore) GetLoaderIfExists(context.Context, string) (domain.Loader, bool, error) {
-	return domain.Loader{}, false, nil
+func (s *controllerCoverageStore) GetScheduler(context.Context, string) (domain.Scheduler, error) {
+	return domain.Scheduler{}, sql.ErrNoRows
 }
 
-func (s *controllerCoverageStore) UpsertManagedLoader(context.Context, domain.Loader) (domain.Loader, error) {
-	return domain.Loader{}, nil
-}
-
-func (s *controllerCoverageStore) ReplaceLoaderTriggers(context.Context, string, []domain.LoaderTrigger) ([]domain.LoaderTrigger, error) {
+func (s *controllerCoverageStore) ReplaceSchedulerTriggers(context.Context, string, []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
 	return nil, nil
-}
-
-func (s *controllerCoverageStore) SetLoaderEnabled(context.Context, string, bool) error {
-	return nil
 }
 
 type controllerCoverageSessionStore struct{}

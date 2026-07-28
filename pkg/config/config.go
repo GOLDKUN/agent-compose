@@ -44,6 +44,7 @@ type Config struct {
 	DbAddr                     string
 	DbName                     string
 	DbTimeout                  time.Duration
+	SQLiteMaxOpenConns         int
 	DataRoot                   string
 	SandboxRoot                string
 	SandboxRootExplicit        bool
@@ -65,7 +66,7 @@ type Config struct {
 	CodexStreamIdleTimeout     time.Duration
 	RuntimeBaseURL             string
 	AgentTimeout               time.Duration
-	LoaderRunTimeout           time.Duration
+	SchedulerRunTimeout        time.Duration
 	RuntimeDriver              string
 	BoxliteHome                string
 	BoxliteRuntimeDir          string
@@ -127,12 +128,17 @@ func NewConfig(di do.Injector) (*Config, error) {
 			logger.Info("dbTimeout updated", "dbTimeout", dbTimeout)
 		}
 	}
+	sqliteMaxOpenConns, err := sqliteMaxOpenConnsFromEnvironment()
+	if err != nil {
+		return nil, err
+	}
 
 	sandboxRootExplicit := strings.TrimSpace(os.Getenv("SANDBOX_ROOT")) != "" || strings.TrimSpace(os.Getenv("SESSION_ROOT")) != ""
 	sandboxRoot, err := envWithLegacy(logger, "SANDBOX_ROOT", "SESSION_ROOT")
 	if err != nil {
 		return nil, err
 	}
+	sandboxRoot = strings.TrimSpace(sandboxRoot)
 	if sandboxRoot == "" {
 		legacyRoot := filepath.Join(dataRoot, "sessions")
 		if nonEmpty, inspectErr := pathHasEntries(legacyRoot); inspectErr != nil {
@@ -199,14 +205,14 @@ func NewConfig(di do.Injector) (*Config, error) {
 			imagePullTimeout = parsed
 		}
 	}
-	loaderRunTimeout := 20 * time.Minute
+	schedulerRunTimeout := 20 * time.Minute
 	if raw := os.Getenv("LOADER_RUN_TIMEOUT"); raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
 			logger.Warn("failed to parse LOADER_RUN_TIMEOUT", "value", raw, "error", err)
 		} else if parsed <= 0 {
 			logger.Warn("ignored non-positive LOADER_RUN_TIMEOUT", "value", raw)
 		} else {
-			loaderRunTimeout = parsed
+			schedulerRunTimeout = parsed
 		}
 	}
 	runtimeDriver := os.Getenv("RUNTIME_DRIVER")
@@ -449,6 +455,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		DbAddr:                     dbPath,
 		DbName:                     dbName,
 		DbTimeout:                  dbTimeout,
+		SQLiteMaxOpenConns:         sqliteMaxOpenConns,
 		DataRoot:                   dataRoot,
 		SandboxRoot:                sandboxRoot,
 		SandboxRootExplicit:        sandboxRootExplicit,
@@ -470,7 +477,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		CodexStreamIdleTimeout:     codexRuntime.streamIdleTimeout,
 		RuntimeBaseURL:             runtimeBaseURL,
 		AgentTimeout:               agentTimeout,
-		LoaderRunTimeout:           loaderRunTimeout,
+		SchedulerRunTimeout:        schedulerRunTimeout,
 		RuntimeDriver:              runtimeDriver,
 		BoxliteHome:                boxliteHome,
 		BoxliteRuntimeDir:          boxliteRuntimeDir,

@@ -7,17 +7,18 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 type ProjectSchedulerEventStore interface {
-	ListLoaderEventsPage(context.Context, loaders.LoaderEventPageFilter) ([]domain.LoaderEvent, error)
+	ListSchedulerEventsPage(context.Context, schedulers.SchedulerEventPageFilter) ([]domain.SchedulerEvent, error)
+	CountSchedulerEventsPage(context.Context, schedulers.SchedulerEventPageFilter) (int, error)
 }
 
 func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *connect.Request[agentcomposev2.ListProjectSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListProjectSchedulerEventsResponse], error) {
-	project, schedulers, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
+	_, schedulerRecords, err := h.resolveProjectSchedulerRunTargets(ctx, req.Msg.GetProject(), req.Msg.GetAgentName())
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -35,62 +36,57 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 		if triggerID != "" && triggerID != run.TriggerID {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scheduler run does not belong to trigger %q", triggerID))
 		}
-		agentName = runScheduler.AgentName
 		triggerID = run.TriggerID
 		runID = run.ID
-		schedulers = []domain.ProjectSchedulerRecord{runScheduler}
+		schedulerRecords = []domain.ProjectSchedulerRecord{runScheduler}
 	}
-	limit, err := schedulerRunPageLimit(req.Msg.GetLimit())
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
 	if err != nil {
-		return nil, ConnectErrorForDomain(err)
+		return nil, err
 	}
-	cursor, err := decodeProjectSchedulerEventCursor(req.Msg.GetCursor(), project.ID, project.CurrentRevision, agentName, triggerID, runID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	loaderIDs := make([]string, 0, len(schedulers))
-	byLoaderID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
-	for _, scheduler := range schedulers {
-		loaderID := strings.TrimSpace(scheduler.ManagedLoaderID)
-		if loaderID == "" {
+	schedulerIDs := make([]string, 0, len(schedulerRecords))
+	bySchedulerID := make(map[string]domain.ProjectSchedulerRecord, len(schedulerRecords))
+	for _, scheduler := range schedulerRecords {
+		schedulerID := strings.TrimSpace(scheduler.ID)
+		if schedulerID == "" {
 			continue
 		}
-		loaderIDs = append(loaderIDs, loaderID)
-		byLoaderID[loaderID] = scheduler
+		schedulerIDs = append(schedulerIDs, schedulerID)
+		bySchedulerID[schedulerID] = scheduler
 	}
 	store, ok := h.store.(ProjectSchedulerEventStore)
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scheduler event store is required"))
 	}
-	events, err := store.ListLoaderEventsPage(ctx, loaders.LoaderEventPageFilter{
-		LoaderIDs:       loaderIDs,
-		RequireTrigger:  true,
-		TriggerID:       triggerID,
-		RunID:           runID,
-		BeforeCreatedAt: cursor.CreatedAt,
-		BeforeLoaderID:  cursor.LoaderID,
-		BeforeEventID:   cursor.EventID,
-		Limit:           limit + 1,
+	events, err := store.ListSchedulerEventsPage(ctx, schedulers.SchedulerEventPageFilter{
+		SchedulerIDs:   schedulerIDs,
+		RequireTrigger: true,
+		TriggerID:      triggerID,
+		RunID:          runID,
+		Offset:         offset,
+		Limit:          limit,
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	end := min(limit, len(events))
-	response := &agentcomposev2.ListProjectSchedulerEventsResponse{Events: make([]*agentcomposev2.SchedulerEvent, 0, end)}
-	for _, event := range events[:end] {
-		scheduler, ok := byLoaderID[event.LoaderID]
+	total, err := store.CountSchedulerEventsPage(ctx, schedulers.SchedulerEventPageFilter{
+		SchedulerIDs: schedulerIDs, RequireTrigger: true, TriggerID: triggerID, RunID: runID,
+	})
+	if err != nil {
+		return nil, ConnectErrorForDomain(err)
+	}
+	response := &agentcomposev2.ListProjectSchedulerEventsResponse{Events: make([]*agentcomposev2.SchedulerEvent, 0, len(events)), Total: uint32(total)}
+	for _, event := range events {
+		scheduler, ok := bySchedulerID[event.SchedulerID]
 		if !ok {
 			continue
 		}
 		response.Events = append(response.Events, schedulerEventToProto(event, scheduler))
 	}
-	if len(events) > limit {
-		response.NextCursor = encodeProjectSchedulerEventCursor(project.ID, project.CurrentRevision, agentName, triggerID, runID, events[limit-1])
-	}
 	return connect.NewResponse(response), nil
 }
 
-func schedulerEventToProto(event domain.LoaderEvent, scheduler domain.ProjectSchedulerRecord) *agentcomposev2.SchedulerEvent {
+func schedulerEventToProto(event domain.SchedulerEvent, scheduler domain.ProjectSchedulerRecord) *agentcomposev2.SchedulerEvent {
 	return &agentcomposev2.SchedulerEvent{
 		Id:                  event.ID,
 		Type:                event.Type,

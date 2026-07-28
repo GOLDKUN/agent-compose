@@ -47,13 +47,12 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	revision, _, err := store.SaveProjectRevision(ctx, domain.ProjectRevisionRecord{
 		ProjectID: project.ID,
 		SpecHash:  "regression-spec",
-		SpecJSON:  `{"agents":[]}`,
+		SpecJSON:  `{"name":"Scheduler run regression","agents":[{"name":"reviewer","enabled":true,"scheduler":{"enabled":true,"sandbox_policy":"sticky","concurrency_policy":"skip","script":"function main() {}"}}]}`,
 	})
 	if err != nil {
 		t.Fatalf("create project revision: %v", err)
 	}
 	const (
-		loaderID    = "loader-regression"
 		schedulerID = "scheduler-regression"
 		agentName   = "reviewer"
 		targetRunID = "run-target-beyond-500"
@@ -69,42 +68,22 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	}); err != nil {
 		t.Fatalf("create project agent: %v", err)
 	}
-	if _, err := store.UpsertManagedLoader(ctx, domain.Loader{
-		Summary: domain.LoaderSummary{
-			ID:                 loaderID,
-			Name:               "Regression scheduler",
-			Runtime:            domain.LoaderRuntimeScheduler,
-			ManagedProjectID:   project.ID,
-			ManagedRevision:    revision.Revision,
-			ManagedAgentName:   agentName,
-			ManagedSchedulerID: schedulerID,
-		},
-		Script: "function main() {}",
-	}); err != nil {
-		t.Fatalf("create managed loader: %v", err)
-	}
 	if _, err := store.UpsertProjectScheduler(ctx, domain.ProjectSchedulerRecord{
-		ProjectID:       project.ID,
-		SchedulerID:     schedulerID,
-		AgentName:       agentName,
-		ManagedLoaderID: loaderID,
-		Revision:        revision.Revision,
-		Enabled:         true,
-		TriggerCount:    1,
-		SpecJSON:        `{"id":"scheduler-regression"}`,
+		ID: schedulerID, ProjectID: project.ID, SchedulerID: schedulerID, AgentName: agentName,
+		Revision: revision.Revision, Enabled: true, TriggerCount: 1, SpecJSON: `{"id":"scheduler-regression"}`,
 	}); err != nil {
 		t.Fatalf("create project scheduler: %v", err)
 	}
 
 	startedAt := time.UnixMilli(1_720_000_000_000).UTC()
-	if err := store.CreateLoaderRun(ctx, domain.LoaderRunSummary{
-		ID: targetRunID, LoaderID: loaderID, TriggerID: "trigger-regression",
-		Status: domain.LoaderRunStatusSucceeded, StartedAt: startedAt,
+	if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{
+		ID: targetRunID, SchedulerID: schedulerID, TriggerID: "trigger-regression",
+		Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt,
 	}); err != nil {
 		t.Fatalf("create target scheduler run: %v", err)
 	}
-	if err := store.AddLoaderEvent(ctx, domain.LoaderEvent{
-		ID: "event-target", LoaderID: loaderID, RunID: targetRunID,
+	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
+		ID: "event-target", SchedulerID: schedulerID, RunID: targetRunID,
 		TriggerID: "trigger-regression", Type: "loader.agent.completed",
 		LinkedSandboxID: targetID, CreatedAt: startedAt,
 	}); err != nil {
@@ -112,9 +91,9 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	}
 	for index := 0; index < 501; index++ {
 		runID := fmt.Sprintf("run-newer-%03d", index)
-		if err := store.CreateLoaderRun(ctx, domain.LoaderRunSummary{
-			ID: runID, LoaderID: loaderID, TriggerID: "trigger-regression",
-			Status: domain.LoaderRunStatusSucceeded, StartedAt: startedAt.Add(time.Duration(index+1) * time.Second),
+		if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{
+			ID: runID, SchedulerID: schedulerID, TriggerID: "trigger-regression",
+			Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt.Add(time.Duration(index+1) * time.Second),
 		}); err != nil {
 			t.Fatalf("create newer scheduler run %s: %v", runID, err)
 		}
@@ -127,7 +106,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	client := agentcomposev2connect.NewProjectServiceClient(server.Client(), server.URL)
-	projectRef := &agentcomposev2.ProjectRef{ProjectId: project.ID}
+	projectRef := &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: project.ID}}
 
 	page, err := client.ListSchedulerRuns(ctx, connect.NewRequest(&agentcomposev2.ListSchedulerRunsRequest{
 		Project: projectRef,
@@ -136,8 +115,9 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 	if err != nil {
 		t.Fatalf("list first 500 scheduler runs: %v", err)
 	}
-	if len(page.Msg.GetRuns()) != 500 || page.Msg.GetNextCursor() == "" {
-		t.Fatalf("first page has %d runs and cursor %q, want 500 runs and a next cursor", len(page.Msg.GetRuns()), page.Msg.GetNextCursor())
+	const totalRuns = 502
+	if len(page.Msg.GetRuns()) != 500 || page.Msg.GetTotal() != totalRuns {
+		t.Fatalf("first page has %d runs and total %d, want 500 runs and total %d", len(page.Msg.GetRuns()), page.Msg.GetTotal(), totalRuns)
 	}
 	for _, run := range page.Msg.GetRuns() {
 		if run.GetRunId() == targetRunID {

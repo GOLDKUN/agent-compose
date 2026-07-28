@@ -427,6 +427,41 @@ agents:
 	}
 }
 
+func TestConfigCommandQuietRejectsDuplicateSchedulerTriggerNames(t *testing.T) {
+	composePath := writeComposeFile(t, filepath.Join(t.TempDir(), "duplicate-trigger-project"), `
+name: duplicate-trigger-repro
+agents:
+  runner:
+    provider: codex
+    scheduler:
+      triggers:
+        - name: duplicate
+          interval: 1m
+        - name: duplicate
+          interval: 2m
+`)
+
+	stdout, stderr, runCount, exitCode := executeCLICommand("config", "--quiet", "--file", composePath)
+	if exitCode != exitCodeUsage {
+		t.Fatalf("config --quiet exit code = %d, want %d; stderr=%q", exitCode, exitCodeUsage, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("config --quiet stdout = %q, want empty", stdout)
+	}
+	for _, want := range []string{
+		composePath,
+		"agents.runner.scheduler.triggers[1].name",
+		`duplicate scheduler trigger name "duplicate"`,
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("config --quiet stderr %q does not contain %q", stderr, want)
+		}
+	}
+	if runCount != 0 {
+		t.Fatalf("daemon runner called %d times, want 0", runCount)
+	}
+}
+
 func TestIntegrationCLIListProjectsTextVerboseAndJSON(t *testing.T) {
 	requests := 0
 	server := newComposeServiceStubServer(t, composeServiceStubs{
@@ -446,9 +481,7 @@ func TestIntegrationCLIListProjectsTextVerboseAndJSON(t *testing.T) {
 							SchedulerCount:  1,
 							UpdatedAt:       mustProtoTimestamp("2026-07-03T10:00:00Z"),
 						}},
-						TotalCount: 2,
-						HasMore:    true,
-						NextOffset: 1,
+						Total: 2,
 					}), nil
 				case 1:
 					return connect.NewResponse(&agentcomposev2.ListProjectsResponse{
@@ -462,7 +495,7 @@ func TestIntegrationCLIListProjectsTextVerboseAndJSON(t *testing.T) {
 							SchedulerCount:  0,
 							UpdatedAt:       mustProtoTimestamp("2026-07-03T11:00:00Z"),
 						}},
-						TotalCount: 2,
+						Total: 2,
 					}), nil
 				default:
 					t.Fatalf("ListProjects unexpected offset = %d", req.Msg.GetOffset())
@@ -501,7 +534,7 @@ func TestIntegrationCLIListProjectsTextVerboseAndJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOut), &decoded); err != nil {
 		t.Fatalf("ls JSON decode failed: %v\n%s", err, jsonOut)
 	}
-	if decoded.TotalCount != 2 || len(decoded.Projects) != 2 {
+	if decoded.Total != 2 || len(decoded.Projects) != 2 {
 		t.Fatalf("ls JSON = %#v", decoded)
 	}
 	if decoded.Projects[0].Name != "reviewer" || decoded.Projects[0].AgentCount != 2 || decoded.Projects[0].SchedulerCount != 1 || decoded.Projects[0].ServiceCount != nil {
@@ -528,9 +561,7 @@ func TestIntegrationCLIListProjectsPaginationFlags(t *testing.T) {
 						SourcePath:      "/path/to/page/agent-compose.yml",
 						CurrentRevision: 7,
 					}},
-					TotalCount: 31,
-					HasMore:    true,
-					NextOffset: 30,
+					Total: 31,
 				}), nil
 			},
 		},
@@ -545,7 +576,7 @@ func TestIntegrationCLIListProjectsPaginationFlags(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
 		t.Fatalf("ls pagination JSON decode failed: %v\n%s", err, stdout)
 	}
-	if requests != 1 || decoded.TotalCount != 31 || !decoded.HasMore || decoded.NextOffset != 30 || len(decoded.Projects) != 1 {
+	if requests != 1 || decoded.Total != 31 || len(decoded.Projects) != 1 {
 		t.Fatalf("ls pagination requests/output = %d / %#v", requests, decoded)
 	}
 }

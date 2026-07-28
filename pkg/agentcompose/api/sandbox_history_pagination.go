@@ -1,0 +1,60 @@
+package api
+
+import (
+	"sort"
+	"strings"
+	"time"
+
+	domain "agent-compose/pkg/model"
+	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+)
+
+type sandboxHistoryEntry struct {
+	cell      *domain.NotebookCell
+	event     *domain.SandboxEvent
+	createdAt time.Time
+	kind      string
+	id        string
+}
+
+func paginateSandboxHistory(cells []domain.NotebookCell, events []domain.SandboxEvent, offset, limit uint32) (*agentcomposev2.ListSandboxHistoryResponse, error) {
+	entries := make([]sandboxHistoryEntry, 0, len(cells)+len(events))
+	for index := range cells {
+		cell := &cells[index]
+		entries = append(entries, sandboxHistoryEntry{cell: cell, createdAt: cell.CreatedAt, kind: "cell", id: strings.TrimSpace(cell.ID)})
+	}
+	for index := range events {
+		event := &events[index]
+		entries = append(entries, sandboxHistoryEntry{event: event, createdAt: event.CreatedAt, kind: "event", id: strings.TrimSpace(event.ID)})
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		if !entries[i].createdAt.Equal(entries[j].createdAt) {
+			return entries[i].createdAt.After(entries[j].createdAt)
+		}
+		if entries[i].kind != entries[j].kind {
+			return entries[i].kind < entries[j].kind
+		}
+		return entries[i].id > entries[j].id
+	})
+	page, total, err := paginateList(entries, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+	response := &agentcomposev2.ListSandboxHistoryResponse{LegacyHistory: true, Total: total}
+	for _, entry := range page {
+		if entry.cell != nil {
+			cell := entry.cell
+			response.Cells = append(response.Cells, &agentcomposev2.SandboxHistoryCell{
+				Id: cell.ID, Type: cell.Type, Source: cell.Source, Stdout: cell.Stdout, Stderr: cell.Stderr,
+				Output: cell.Output, ExitCode: int32(cell.ExitCode), Success: cell.Success, Running: cell.Running,
+				CreatedAt: sandboxHistoryTimestamp(cell.CreatedAt), Agent: cell.Agent, AgentThreadId: cell.AgentThreadID, StopReason: cell.StopReason,
+			})
+			continue
+		}
+		event := entry.event
+		response.Events = append(response.Events, &agentcomposev2.SandboxHistoryEvent{
+			Id: event.ID, Type: event.Type, Level: event.Level, Message: event.Message, CreatedAt: sandboxHistoryTimestamp(event.CreatedAt),
+		})
+	}
+	return response, nil
+}

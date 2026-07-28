@@ -25,16 +25,24 @@ func (h *CapabilityV2Handler) GetCapabilityStatus(ctx context.Context, _ *connec
 	target := strings.TrimSpace(h.provider.ProxyTarget()) != ""
 	return connect.NewResponse(&agentcomposev2.CapabilityStatusResponse{Configured: status.Configured, Ok: status.OK, Status: status.Status, ServiceCount: status.ServiceCount, Error: status.Error, RuntimeConfigured: listen && target, ProxyListenConfigured: listen, ProxyTargetConfigured: target}), nil
 }
-func (h *CapabilityV2Handler) ListCapabilitySets(ctx context.Context, _ *connect.Request[agentcomposev2.ListCapabilitySetsRequest]) (*connect.Response[agentcomposev2.ListCapabilitySetsResponse], error) {
+func (h *CapabilityV2Handler) ListCapabilitySets(ctx context.Context, req *connect.Request[agentcomposev2.ListCapabilitySetsRequest]) (*connect.Response[agentcomposev2.ListCapabilitySetsResponse], error) {
 	items, err := h.provider.ListCapsets(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
-	response := &agentcomposev2.ListCapabilitySetsResponse{}
+	enabled := items[:0]
 	for _, item := range items {
 		if item.Enabled {
-			response.Capsets = append(response.Capsets, &agentcomposev2.CapabilitySet{Id: item.ID, Name: item.Name, Description: item.Description, Enabled: true})
+			enabled = append(enabled, item)
 		}
+	}
+	page, total, err := paginateList(enabled, req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
+	}
+	response := &agentcomposev2.ListCapabilitySetsResponse{Total: total}
+	for _, item := range page {
+		response.Capsets = append(response.Capsets, &agentcomposev2.CapabilitySet{Id: item.ID, Name: item.Name, Description: item.Description, Enabled: true})
 	}
 	return connect.NewResponse(response), nil
 }

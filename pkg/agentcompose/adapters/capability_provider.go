@@ -18,7 +18,7 @@ type ProjectOctoBusServerResolver interface {
 }
 
 func (p *projectAwareCapabilityProvider) CapabilityGuideForScope(ctx context.Context, scope capabilities.GuideScope, declaration string) ([]byte, error) {
-	target, err := p.targets.ResolveOctoBusServer(ctx, scope.ManagedProjectID, scope.ManagedAgentID, declaration)
+	target, err := p.targets.ResolveOctoBusServer(ctx, scope.ProjectID, scope.AgentID, declaration)
 	if err != nil {
 		return nil, err
 	}

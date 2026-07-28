@@ -2,6 +2,7 @@ package projects
 
 import (
 	"agent-compose/pkg/identity"
+	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
@@ -42,11 +43,8 @@ func ScanProjectAgent(scan func(dest ...any) error) (domain.ProjectAgentRecord, 
 	var schedulerEnabled int
 	var createdAtRaw any
 	var updatedAtRaw any
-	if err := scan(&item.ID, &item.Name, &item.ShortID, &item.ProjectID, &item.AgentName, &item.ManagedAgentID, &item.Revision, &item.Provider, &item.Model, &item.Image, &item.Driver, &schedulerEnabled, &item.SpecJSON, &createdAtRaw, &updatedAtRaw); err != nil {
+	if err := scan(&item.ID, &item.Name, &item.ShortID, &item.ProjectID, &item.AgentName, &item.Revision, &item.Provider, &item.Model, &item.Image, &item.Driver, &schedulerEnabled, &item.SpecJSON, &createdAtRaw, &updatedAtRaw); err != nil {
 		return domain.ProjectAgentRecord{}, fmt.Errorf("scan project agent: %w", err)
-	}
-	if item.ID == "" {
-		item.ID = item.ManagedAgentID
 	}
 	if item.Name == "" {
 		item.Name = item.AgentName
@@ -65,7 +63,7 @@ func ScanProjectScheduler(scan func(dest ...any) error) (domain.ProjectScheduler
 	var enabled int
 	var createdAtRaw any
 	var updatedAtRaw any
-	if err := scan(&item.ID, &item.ShortID, &item.ProjectID, &item.SchedulerID, &item.AgentName, &item.ManagedLoaderID, &item.Revision, &enabled, &item.TriggerCount, &item.SpecJSON, &createdAtRaw, &updatedAtRaw); err != nil {
+	if err := scan(&item.ID, &item.ShortID, &item.ProjectID, &item.SchedulerID, &item.AgentName, &item.Revision, &enabled, &item.TriggerCount, &item.SpecJSON, &createdAtRaw, &updatedAtRaw); err != nil {
 		return domain.ProjectSchedulerRecord{}, fmt.Errorf("scan project scheduler: %w", err)
 	}
 	if item.ID == "" {
@@ -86,7 +84,7 @@ func ScanProjectSchedulerPage(scan func(dest ...any) error) (domain.ProjectSched
 	var createdAtRaw any
 	var updatedAtRaw any
 	var latestRunAtRaw any
-	if err := scan(&item.ID, &item.ShortID, &item.ProjectID, &item.SchedulerID, &item.AgentName, &item.ManagedLoaderID, &item.Revision, &enabled, &item.TriggerCount, &item.SpecJSON, &createdAtRaw, &updatedAtRaw, &item.RunCount, &latestRunAtRaw, &item.LastError); err != nil {
+	if err := scan(&item.ID, &item.ShortID, &item.ProjectID, &item.SchedulerID, &item.AgentName, &item.Revision, &enabled, &item.TriggerCount, &item.SpecJSON, &createdAtRaw, &updatedAtRaw, &item.RunCount, &latestRunAtRaw, &item.LastError); err != nil {
 		return domain.ProjectSchedulerRecord{}, fmt.Errorf("scan project scheduler page: %w", err)
 	}
 	if item.ID == "" {
@@ -104,18 +102,20 @@ func ScanProjectSchedulerPage(scan func(dest ...any) error) (domain.ProjectSched
 
 func ScanProjectRun(scan func(dest ...any) error) (domain.ProjectRunRecord, error) {
 	var item domain.ProjectRunRecord
+	var schedulerRunID sql.NullString
 	var startedAtRaw any
 	var completedAtRaw any
 	var createdAtRaw any
 	var updatedAtRaw any
 	if err := scan(
-		&item.RunID, &item.ProjectID, &item.ProjectName, &item.ProjectRevision, &item.AgentName, &item.ManagedAgentID, &item.Source, &item.SchedulerID, &item.TriggerID, &item.Status,
+		&item.RunID, &item.ProjectID, &item.ProjectName, &item.ProjectRevision, &item.AgentName, &item.AgentID, &item.Source, &item.SchedulerID, &schedulerRunID, &item.TriggerID, &item.Status,
 		&item.SandboxID, &item.ExitCode, &item.Error, &item.Prompt, &item.Output, &item.ResultJSON, &item.LogsPath, &item.ArtifactsDir, &item.CleanupError, &item.Driver, &item.ImageRef,
 		&startedAtRaw, &completedAtRaw, &item.DurationMs, &createdAtRaw, &updatedAtRaw,
 	); err != nil {
 		return domain.ProjectRunRecord{}, fmt.Errorf("scan project run: %w", err)
 	}
 	item.StartedAt = parseStoredUnixTimeAuto(AsInt64Time(startedAtRaw))
+	item.SchedulerRunID = schedulerRunID.String
 	item.CompletedAt = parseStoredUnixTimeAuto(AsInt64Time(completedAtRaw))
 	item.CreatedAt = parseStoredTime(createdAtRaw)
 	item.UpdatedAt = parseStoredTime(updatedAtRaw)
@@ -211,7 +211,7 @@ func ParseInt64String(value string) (int64, bool) {
 }
 
 func SelectProjectRunSQL() string {
-	return `SELECT run_id, project_id, project_name, project_revision, agent_name, managed_agent_id, source, scheduler_id, trigger_id, status,
+	return `SELECT run_id, project_id, project_name, project_revision, agent_name, agent_id, source, scheduler_id, scheduler_run_id, trigger_id, status,
 		sandbox_id, exit_code, error, prompt, output, result_json, logs_path, artifacts_dir, cleanup_error, driver, image_ref,
 		started_at, completed_at, duration_ms, created_at, updated_at FROM project_run`
 }

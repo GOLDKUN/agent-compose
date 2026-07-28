@@ -13,7 +13,7 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 )
 
 type Store interface {
@@ -90,5 +90,5 @@ func newJupyterProxyTransport() *http.Transport {
 }
 
 func JupyterTargetReachable(proxyState domain.ProxyState, timeout time.Duration) bool {
-	return sessions.JupyterTargetReachable(proxyState, timeout)
+	return sandboxes.JupyterTargetReachable(proxyState, timeout)
 }

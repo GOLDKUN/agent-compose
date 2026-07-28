@@ -1152,10 +1152,18 @@ func normalizeSchedulerSpec(path string, scheduler *SchedulerSpec, options Norma
 			}
 		}
 	}
+	seenTriggerNames := make(map[string]struct{}, len(scheduler.Triggers))
 	for i, trigger := range scheduler.Triggers {
-		normalizedTrigger, err := normalizeTriggerSpec(fmt.Sprintf("%s.triggers[%d]", path, i), trigger)
+		triggerPath := fmt.Sprintf("%s.triggers[%d]", path, i)
+		normalizedTrigger, err := normalizeTriggerSpec(triggerPath, trigger)
 		if err != nil {
 			return nil, err
+		}
+		if normalizedTrigger.Name != "" {
+			if _, ok := seenTriggerNames[normalizedTrigger.Name]; ok {
+				return nil, &ValidationError{Path: triggerPath + ".name", Message: fmt.Sprintf("duplicate scheduler trigger name %q", normalizedTrigger.Name)}
+			}
+			seenTriggerNames[normalizedTrigger.Name] = struct{}{}
 		}
 		normalized.Triggers = append(normalized.Triggers, normalizedTrigger)
 	}

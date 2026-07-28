@@ -10,7 +10,7 @@ import (
 )
 
 // AgentOctoBusServers decodes the project OctoBus servers selected for a
-// managed agent. Empty configuration is valid for legacy definitions.
+// project agent. Empty configuration means that no servers were selected.
 func AgentOctoBusServers(definition domain.AgentDefinition) (map[string]compose.NormalizedOctoBusServerSpec, error) {
 	raw := strings.TrimSpace(definition.ConfigJSON)
 	if raw == "" || raw == "{}" {

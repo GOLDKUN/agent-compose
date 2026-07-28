@@ -90,6 +90,20 @@ Without `env_file`, the CLI first looks for `.env` in the project directory, the
 
 Later files override earlier files, and the environment inherited by the CLI overrides every env file. Project env files are only used to render `agent-compose.yml`; they do not change CLI connection settings such as `--host` or authentication.
 
+### Daemon database concurrency
+
+The daemon uses one SQLite connection while applying startup migrations. After
+migration succeeds, a file-backed database uses up to four runtime connections
+by default so WAL readers can make progress alongside a writer. Set
+`SQLITE_MAX_OPEN_CONNS` to an integer from `1` through `32` to override that
+limit. In-memory SQLite databases always remain limited to one connection,
+regardless of the configured value.
+
+Increasing the limit enables more concurrent database operations but does not
+create additional SQLite writers: WAL still permits only one active writer.
+Values above the default should therefore be justified by observed connection
+wait time and tested under the deployment's write workload.
+
 ## Common Workflows
 
 Local development:
@@ -282,7 +296,7 @@ agent-compose ps
 agent-compose ps -a
 agent-compose ps --all
 agent-compose ps --status running
-agent-compose ps --status exited,error
+agent-compose ps --status stopped,failed
 agent-compose ps --verbose
 agent-compose ps --json
 ```
@@ -291,7 +305,7 @@ agent-compose ps --json
 | --- | --- |
 | `-a, --all` | Show current project sandboxes in all statuses. |
 | `--verbose` | Show additional columns. |
-| `--status <status>[,<status>...]` | Filter by sandbox status. |
+| `--status <status>[,<status>...]` | Filter by `pending`, `running`, `stopped`, `failed`, or `deleting`. Every non-empty comma-separated value must be valid. |
 
 Default columns:
 
@@ -317,7 +331,7 @@ agent-compose sandbox rm <sandbox>
 agent-compose sandbox rm --force <sandbox>
 agent-compose sandbox prune
 agent-compose sandbox prune --older-than 7d
-agent-compose sandbox prune --status error --json
+agent-compose sandbox prune --status failed --json
 agent-compose sandbox prune --agent worker --driver microsandbox --force
 agent-compose sandbox prune --include-orphans
 ```
@@ -450,6 +464,8 @@ agent-compose exec <sandbox> --prompt "..."
 | `--agent <agent>` | Deprecated target selection option; use `exec <sandbox>` instead. |
 | `--run <run-id>` | Deprecated target selection option; use `exec <sandbox>` instead. |
 
+The positional `<sandbox>` target and deprecated `--run` target are mutually exclusive. If both are provided, `exec` exits with a usage error before resolving either target or sending an execution request.
+
 Examples:
 
 ```bash
@@ -488,6 +504,8 @@ agent-compose logs -t
 | `--agent <agent>` | Filter by agent. |
 | `--run <run-id>` | Filter by run id. |
 | `--sandbox <sandbox>` | Filter by sandbox. |
+
+`--run` and `--sandbox` are mutually exclusive resource selectors. Combining them is a usage error, and no log request is sent.
 
 Examples:
 

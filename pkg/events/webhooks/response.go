@@ -60,14 +60,14 @@ func EventSandboxesResponseFor(item domain.TopicEventRecord, links []domain.Even
 	}
 	for _, link := range links {
 		resp.Sandboxes = append(resp.Sandboxes, EventSandboxJSON{
-			SandboxID:     link.SandboxID,
-			Relation:      link.Relation,
-			LoaderID:      link.LoaderID,
-			RunID:         link.RunID,
-			TriggerID:     link.TriggerID,
-			LoaderEventID: link.LoaderEventID,
-			EventID:       link.EventID,
-			CreatedAt:     link.CreatedAt.UTC().Format(time.RFC3339Nano),
+			SandboxID:        link.SandboxID,
+			Relation:         link.Relation,
+			SchedulerID:      link.SchedulerID,
+			RunID:            link.RunID,
+			TriggerID:        link.TriggerID,
+			SchedulerEventID: link.SchedulerEventID,
+			EventID:          link.EventID,
+			CreatedAt:        link.CreatedAt.UTC().Format(time.RFC3339Nano),
 		})
 	}
 	return resp
@@ -81,14 +81,14 @@ func EventRunsResponseFor(item domain.TopicEventRecord, deliveries []domain.Even
 	}
 	for _, delivery := range deliveries {
 		resp.Runs = append(resp.Runs, EventRunJSON{
-			EventID:   delivery.EventID,
-			LoaderID:  delivery.LoaderID,
-			RunID:     delivery.RunID,
-			TriggerID: delivery.TriggerID,
-			Status:    delivery.Status,
-			Error:     delivery.Error,
-			CreatedAt: delivery.CreatedAt.UTC().Format(time.RFC3339Nano),
-			UpdatedAt: delivery.UpdatedAt.UTC().Format(time.RFC3339Nano),
+			EventID:     delivery.EventID,
+			SchedulerID: delivery.SchedulerID,
+			RunID:       delivery.RunID,
+			TriggerID:   delivery.TriggerID,
+			Status:      delivery.Status,
+			Error:       delivery.Error,
+			CreatedAt:   delivery.CreatedAt.UTC().Format(time.RFC3339Nano),
+			UpdatedAt:   delivery.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		})
 	}
 	return resp

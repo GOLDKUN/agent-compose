@@ -15,7 +15,7 @@ import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/skills"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 type AgentDefinitionStore interface {
@@ -24,7 +24,7 @@ type AgentDefinitionStore interface {
 
 type AgentRunner struct {
 	config   *appconfig.Config
-	store    *sessionstore.Store
+	store    *sandboxstore.Store
 	configDB *configstore.ConfigStore
 	agents   AgentDefinitionStore
 	runtimes RuntimeProvider
@@ -42,7 +42,7 @@ func facadeStoreFor(configDB *configstore.ConfigStore) runtimefacade.FacadeStore
 	return configDB
 }
 
-func NewAgentRunner(config *appconfig.Config, store *sessionstore.Store, configDB *configstore.ConfigStore, agents AgentDefinitionStore, runtimes RuntimeProvider) *AgentRunner {
+func NewAgentRunner(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, agents AgentDefinitionStore, runtimes RuntimeProvider) *AgentRunner {
 	return &AgentRunner{config: config, store: store, configDB: configDB, agents: agents, runtimes: runtimes}
 }
 

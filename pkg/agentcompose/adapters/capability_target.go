@@ -46,13 +46,13 @@ func NewProjectOctoBusTargetResolver(agents AgentDefinitionStore) *ProjectOctoBu
 	return &ProjectOctoBusTargetResolver{agents: agents}
 }
 
-// ResolveOctoBusServer reads the current managed agent definition on every
+// ResolveOctoBusServer reads the current project agent definition on every
 // call. Project re-apply therefore updates running sandboxes consistently with
-// the existing managed agent configuration behavior.
-func (r *ProjectOctoBusTargetResolver) ResolveOctoBusServer(ctx context.Context, managedProjectID, managedAgentID, declaration string) (ResolvedProjectOctoBusServer, error) {
-	managedProjectID = strings.TrimSpace(managedProjectID)
-	managedAgentID = strings.TrimSpace(managedAgentID)
-	if managedProjectID == "" || managedAgentID == "" {
+// the existing project agent configuration behavior.
+func (r *ProjectOctoBusTargetResolver) ResolveOctoBusServer(ctx context.Context, projectID, projectAgentID, declaration string) (ResolvedProjectOctoBusServer, error) {
+	projectID = strings.TrimSpace(projectID)
+	projectAgentID = strings.TrimSpace(projectAgentID)
+	if projectID == "" || projectAgentID == "" {
 		return ResolvedProjectOctoBusServer{}, status.Error(codes.FailedPrecondition, "project capability scope is unavailable")
 	}
 	parsed, err := capability.ParseCapsetDeclaration(declaration)
@@ -62,7 +62,7 @@ func (r *ProjectOctoBusTargetResolver) ResolveOctoBusServer(ctx context.Context,
 	if r == nil || r.agents == nil {
 		return ResolvedProjectOctoBusServer{}, status.Error(codes.Unavailable, "project capability configuration is unavailable")
 	}
-	definition, err := r.agents.GetAgentDefinition(ctx, managedAgentID)
+	definition, err := r.agents.GetAgentDefinition(ctx, projectAgentID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return ResolvedProjectOctoBusServer{}, status.Error(codes.NotFound, "managed agent capability configuration was not found")
@@ -72,7 +72,7 @@ func (r *ProjectOctoBusTargetResolver) ResolveOctoBusServer(ctx context.Context,
 			cause:  err,
 		}
 	}
-	if strings.TrimSpace(definition.ManagedProjectID) != managedProjectID || strings.TrimSpace(definition.ID) != managedAgentID {
+	if strings.TrimSpace(definition.ProjectID) != projectID || strings.TrimSpace(definition.ID) != projectAgentID {
 		return ResolvedProjectOctoBusServer{}, status.Error(codes.PermissionDenied, "managed agent capability scope does not match sandbox")
 	}
 	servers, err := capabilities.AgentOctoBusServers(definition)
@@ -90,7 +90,7 @@ func (r *ProjectOctoBusTargetResolver) ResolveOctoBusServer(ctx context.Context,
 }
 
 func (r *ProjectOctoBusTargetResolver) ResolveCapabilityTarget(ctx context.Context, binding capproxy.SandboxBinding, declaration string) (capproxy.Target, error) {
-	resolved, err := r.ResolveOctoBusServer(ctx, binding.ManagedProjectID, binding.ManagedAgentID, declaration)
+	resolved, err := r.ResolveOctoBusServer(ctx, binding.ProjectID, binding.AgentID, declaration)
 	if err != nil {
 		return capproxy.Target{}, err
 	}

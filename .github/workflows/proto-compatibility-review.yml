@@ -1,0 +1,38 @@
+name: Refresh Protobuf compatibility approval
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+# Share the required workflow's group so a review submitted while Buf is still
+# running waits for that run to finish before requesting a new attempt.
+concurrency:
+  group: proto-compatibility-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  refresh-proto-breaking-approval:
+    name: Refresh Protobuf compatibility approval
+    if: github.event.action == 'dismissed' || github.event.review.state == 'approved' || github.event.review.state == 'changes_requested'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rerun compatibility check for current commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          run_id=$(gh api \
+            "repos/$GH_REPO/actions/workflows/proto-compatibility.yml/runs?event=pull_request&head_sha=$PR_HEAD_SHA&per_page=20" \
+            --jq '.workflow_runs | sort_by(.created_at) | last | .id // empty')
+          if [[ -z $run_id ]]; then
+            echo "no Protobuf compatibility run found for PR #$PR_NUMBER at $PR_HEAD_SHA" >&2
+            exit 1
+          fi
+          gh api --method POST "repos/$GH_REPO/actions/runs/$run_id/rerun"

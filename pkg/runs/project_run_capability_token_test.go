@@ -8,7 +8,7 @@ import (
 	"agent-compose/pkg/capabilities"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -26,11 +26,11 @@ func (i *recordingCapabilitySandboxIndexer) RevokeSandbox(sandboxID string) {
 }
 
 type projectRunRemovalStub struct {
-	result sessions.RemovalResult
+	result sandboxes.RemovalResult
 	err    error
 }
 
-func (s projectRunRemovalStub) Remove(context.Context, string, bool) (sessions.RemovalResult, error) {
+func (s projectRunRemovalStub) Remove(context.Context, string, bool) (sandboxes.RemovalResult, error) {
 	return s.result, s.err
 }
 
@@ -111,12 +111,12 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 	t.Run("remove revokes only after confirmed removal", func(t *testing.T) {
 		for _, tc := range []struct {
 			name    string
-			result  sessions.RemovalResult
+			result  sandboxes.RemovalResult
 			err     error
 			wantRev bool
 		}{
-			{name: "success", result: sessions.RemovalResult{Removed: true}, wantRev: true},
-			{name: "incomplete", result: sessions.RemovalResult{}},
+			{name: "success", result: sandboxes.RemovalResult{Removed: true}, wantRev: true},
+			{name: "incomplete", result: sandboxes.RemovalResult{}},
 			{name: "failure", err: errors.New("remove failed")},
 		} {
 			t.Run(tc.name, func(t *testing.T) {

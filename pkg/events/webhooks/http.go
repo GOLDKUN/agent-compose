@@ -18,7 +18,6 @@ import (
 type Store interface {
 	FindEventByIdempotencyKey(context.Context, string, string) (domain.TopicEventRecord, bool, error)
 	CreateEvent(context.Context, domain.TopicEventRecord) (domain.TopicEventRecord, error)
-	UpdateEventPayload(context.Context, string, string) error
 	GetEvent(context.Context, string) (domain.TopicEventRecord, error)
 	ListEvents(context.Context, domain.TopicEventFilter) ([]domain.TopicEventRecord, error)
 	ListDescendantEventIDs(context.Context, string, int) ([]string, error)
@@ -145,25 +144,6 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 			return c.JSON(http.StatusConflict, map[string]string{"error": "idempotency key conflicts with existing payload"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to store webhook event"})
-	}
-	if created.ID != eventID {
-		return c.JSON(http.StatusAccepted, AcceptedResponse{
-			Accepted:      true,
-			Topic:         created.Topic,
-			EventID:       created.ID,
-			Sequence:      created.Sequence,
-			CorrelationID: created.CorrelationID,
-		})
-	}
-	if created.Sequence != 0 {
-		payload = BuildPayload(c.Request(), created.ID, created.Sequence, topic, created.CorrelationID, created.IdempotencyKey, source, body)
-		payloadJSON, err = h.marshalJSONCompact(payload)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to encode webhook payload"})
-		}
-		if err := h.store().UpdateEventPayload(c.Request().Context(), created.ID, payloadJSON); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to store webhook event payload"})
-		}
 	}
 	return c.JSON(http.StatusAccepted, AcceptedResponse{
 		Accepted:      true,

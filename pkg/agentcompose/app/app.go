@@ -26,14 +26,14 @@ import (
 	"agent-compose/pkg/events/webhooks"
 	"agent-compose/pkg/imagecache"
 	"agent-compose/pkg/llms"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
 	"agent-compose/pkg/resources"
 	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 	storagesqlite "agent-compose/pkg/storage/sqlite"
 	"agent-compose/pkg/volumes"
 	"agent-compose/pkg/workspaces"
@@ -53,7 +53,7 @@ func Register(di do.Injector) {
 }
 
 func RegisterDependencies(di do.Injector) {
-	do.Provide(di, func(do.Injector) (*sessions.LifecycleLocks, error) { return sessions.NewLifecycleLocks(), nil })
+	do.Provide(di, func(do.Injector) (*sandboxes.LifecycleLocks, error) { return sandboxes.NewLifecycleLocks(), nil })
 	do.Provide(di, NewDatabase)
 	do.Provide(di, NewConfigStore)
 	do.Provide(di, NewSandboxStore)
@@ -69,21 +69,21 @@ func RegisterDependencies(di do.Injector) {
 	do.Provide(di, NewResourceLocator)
 	do.Provide(di, NewVolumeManager)
 	do.Provide(di, NewCapProxyServer)
-	do.Provide(di, loaders.NewBus)
-	do.Provide(di, sessions.NewStreamBroker)
+	do.Provide(di, schedulers.NewBus)
+	do.Provide(di, sandboxes.NewStreamBroker)
 	do.Provide(di, NewRunLogHub)
 	do.Provide(di, NewEventDispatcher)
 	do.Provide(di, NewDashboardOverviewAggregator)
 	do.Provide(di, NewDashboardOverviewHub)
-	do.Provide(di, loaders.NewLoaderEngine)
+	do.Provide(di, schedulers.NewSchedulerEngine)
 	do.Provide(di, NewSandboxDriver)
 	do.Provide(di, NewCellExecutor)
 	do.Provide(di, NewAgentRunner)
 	do.Provide(di, NewAgentExecutor)
-	do.Provide(di, NewLoaderCommandExecutor)
-	do.Provide(di, NewLoaderSandboxRunner)
+	do.Provide(di, NewSchedulerCommandExecutor)
+	do.Provide(di, NewSchedulerSandboxRunner)
 	do.Provide(di, NewSandboxRPCBridge)
-	do.Provide(di, NewLoaderController)
+	do.Provide(di, NewSchedulerController)
 	do.Provide(di, NewRunController)
 	do.Provide(di, NewSandboxRunTargetResolver)
 	do.Provide(di, NewSandboxRemovalCoordinator)
@@ -98,7 +98,7 @@ func RegisterRoutes(di do.Injector) {
 	projectHandler := api.NewProjectHandler(
 		projectControllerDelegate{controller: do.MustInvoke[*projects.Controller](di)},
 		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[*loaders.Controller](di),
+		do.MustInvoke[*schedulers.Controller](di),
 	)
 	path, handler := agentcomposev2connect.NewProjectServiceHandler(projectHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))
@@ -111,13 +111,13 @@ func RegisterRoutes(di do.Injector) {
 	app.Any(path+"*", echo.WrapHandler(handler))
 	execHandler := api.NewExecHandler(
 		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		func(session *domain.Sandbox) (api.ExecRuntime, error) {
 			return do.MustInvoke[adapters.RuntimeProvider](di).ForSession(session)
 		},
 		runDelegate,
-	).WithLifecycleLocks(do.MustInvoke[*sessions.LifecycleLocks](di))
+	).WithLifecycleLocks(do.MustInvoke[*sandboxes.LifecycleLocks](di))
 	path, handler = agentcomposev2connect.NewExecServiceHandler(execHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))
 	imageHandler := api.NewImageHandler(do.MustInvoke[*adapters.ImageBackends](di))
@@ -131,7 +131,7 @@ func RegisterRoutes(di do.Injector) {
 	app.Any(path+"*", echo.WrapHandler(handler))
 	sandboxHandler := api.NewSandboxHandler(
 		do.MustInvoke[*adapters.SandboxRPCBridge](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*adapters.SandboxDriver](di),
 		do.MustInvoke[*dashboard.Hub](di),
 		func(session *domain.Sandbox) (api.SandboxStatsRuntime, error) {
@@ -145,7 +145,7 @@ func RegisterRoutes(di do.Injector) {
 			}
 			return statsRuntime, nil
 		},
-	).WithRunTargetResolver(do.MustInvoke[*runs.SandboxRunTargetResolver](di)).WithRemovalCoordinator(do.MustInvoke[*sessions.RemovalCoordinator](di))
+	).WithRunTargetResolver(do.MustInvoke[*runs.SandboxRunTargetResolver](di)).WithRemovalCoordinator(do.MustInvoke[*sandboxes.RemovalCoordinator](di))
 	path, handler = agentcomposev2connect.NewSandboxServiceHandler(sandboxHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))
 	path, handler = agentcomposev2connect.NewSettingsServiceHandler(api.NewSettingsV2Handler(do.MustInvoke[*appconfig.Config](di), do.MustInvoke[*configstore.ConfigStore](di)))
@@ -174,35 +174,35 @@ type sandboxRemovalTargetResolver struct {
 	resolver *runs.SandboxRunTargetResolver
 }
 
-func (r sandboxRemovalTargetResolver) ResolveSandboxTargets(ctx context.Context, sandboxes []*domain.Sandbox) (map[string]sessions.SandboxOwnershipTarget, error) {
-	resolved, err := r.resolver.ResolveBatch(ctx, sandboxes)
+func (r sandboxRemovalTargetResolver) ResolveSandboxTargets(ctx context.Context, items []*domain.Sandbox) (map[string]sandboxes.SandboxOwnershipTarget, error) {
+	resolved, err := r.resolver.ResolveBatch(ctx, items)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]sessions.SandboxOwnershipTarget, len(resolved))
+	out := make(map[string]sandboxes.SandboxOwnershipTarget, len(resolved))
 	for id, target := range resolved {
-		out[id] = sessions.SandboxOwnershipTarget{ProjectID: target.ProjectID, AgentName: target.AgentName}
+		out[id] = sandboxes.SandboxOwnershipTarget{ProjectID: target.ProjectID, AgentName: target.AgentName}
 	}
 	return out, nil
 }
 
-func NewSandboxRemovalCoordinator(di do.Injector) (*sessions.RemovalCoordinator, error) {
+func NewSandboxRemovalCoordinator(di do.Injector) (*sandboxes.RemovalCoordinator, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
-	return &sessions.RemovalCoordinator{
+	return &sandboxes.RemovalCoordinator{
 		SandboxRoot: config.SandboxRoot,
-		Store:       do.MustInvoke[*sessionstore.Store](di),
+		Store:       do.MustInvoke[*sandboxstore.Store](di),
 		Runtime:     do.MustInvoke[*adapters.SandboxDriver](di),
 		Targets: sandboxRemovalTargetResolver{
 			resolver: do.MustInvoke[*runs.SandboxRunTargetResolver](di),
 		},
 		Residues: adapters.NewRuntimeResidueManager(config, do.MustInvoke[*adapters.SandboxDriver](di)),
-		Locks:    do.MustInvoke[*sessions.LifecycleLocks](di),
+		Locks:    do.MustInvoke[*sandboxes.LifecycleLocks](di),
 	}, nil
 }
 
 func NewCleanupRunner(di do.Injector) (*cleanup.Runner, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
-	store := do.MustInvoke[*sessionstore.Store](di)
+	store := do.MustInvoke[*sandboxstore.Store](di)
 	imageCache, err := imagecache.New(imagecache.Config{
 		Root: config.ImageCacheRoot, DefaultRegistry: config.ImageRegistry,
 		InsecureRegistries: config.ImageInsecureRegistries,
@@ -214,7 +214,7 @@ func NewCleanupRunner(di do.Injector) (*cleanup.Runner, error) {
 	return &cleanup.Runner{
 		Interval: config.CleanupInterval,
 		Policies: []cleanup.Policy{
-			{TTL: config.WorkspaceCleanupTTL, Cleaner: &sessions.WorkspaceCleaner{Store: store, Locks: do.MustInvoke[*sessions.LifecycleLocks](di)}},
+			{TTL: config.WorkspaceCleanupTTL, Cleaner: &sandboxes.WorkspaceCleaner{Store: store, Locks: do.MustInvoke[*sandboxes.LifecycleLocks](di)}},
 			{TTL: config.ImageCacheCleanupTTL, Cleaner: &adapters.ImageCacheCleaner{Cache: imageCache, Sandboxes: store, SandboxRoot: config.SandboxRoot}},
 		},
 	}, nil
@@ -225,22 +225,19 @@ func StartBackground(di do.Injector) error {
 	// sandbox store. Do this before resolving or starting any component that can
 	// create a sandbox, so the initial cleanup pass cannot race registration.
 	runner := do.MustInvoke[*cleanup.Runner](di)
-	for _, warning := range do.MustInvoke[*sessions.RemovalCoordinator](di).Recover(do.MustInvoke[context.Context](di)) {
+	for _, warning := range do.MustInvoke[*sandboxes.RemovalCoordinator](di).Recover(do.MustInvoke[context.Context](di)) {
 		slog.Warn("failed to recover sandbox deletion", "warning", warning)
 	}
 	for _, warning := range do.MustInvoke[*adapters.SandboxRPCBridge](di).RecoverStoppedRuntimeReleases(do.MustInvoke[context.Context](di)) {
 		slog.Warn("failed to recover stopped runtime release", "warning", warning)
 	}
-	if err := syncLegacyDefaultProject(do.MustInvoke[context.Context](di), do.MustInvoke[*projects.Controller](di)); err != nil {
-		slog.Warn("failed to sync legacy v1 agents into the default project", "error", err)
-	}
 	ctx := do.MustInvoke[context.Context](di)
 	if err := startBackgroundManagers(
 		ctx,
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[*adapters.SandboxRPCBridge](di),
-		do.MustInvoke[*loaders.Controller](di),
+		do.MustInvoke[*schedulers.Controller](di),
 		do.MustInvoke[*events.Dispatcher](di),
 		do.MustInvoke[*capproxy.Server](di),
 		do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
@@ -274,7 +271,7 @@ func NewImageBackends(di do.Injector) (*adapters.ImageBackends, error) {
 
 func NewCacheController(di do.Injector) (*cache.Controller, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
-	_ = do.MustInvoke[*sessionstore.Store](di)
+	_ = do.MustInvoke[*sandboxstore.Store](di)
 	_ = do.MustInvoke[*configstore.ConfigStore](di)
 
 	imageCacheRoot := strings.TrimSpace(config.ImageCacheRoot)
@@ -313,7 +310,7 @@ type ownershipMaterializedDependencies struct {
 }
 
 func (p ownershipMaterializedDependencies) MaterializedDependencies(_ context.Context) ([]cache.MaterializedDependency, []string, error) {
-	records, warnings := sessions.ListOwnershipRecords(p.sandboxRoot)
+	records, warnings := sandboxes.ListOwnershipRecords(p.sandboxRoot)
 	var dependencies []cache.MaterializedDependency
 	for _, record := range records {
 		for _, dependency := range record.CacheDependencies {
@@ -330,7 +327,7 @@ func NewResourceLocator(di do.Injector) (*resources.Locator, error) {
 	backends := do.MustInvoke[*adapters.ImageBackends](di)
 	return resources.NewLocator(
 		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		backends.Auto,
 		do.MustInvoke[*cache.Controller](di),
 	), nil
@@ -340,7 +337,7 @@ func NewVolumeManager(di do.Injector) (*volumes.Manager, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
 	store := do.MustInvoke[*configstore.ConfigStore](di)
 	manager := volumes.NewManager(store, volumes.NewLocalDriver(config))
-	manager.Sandboxes = do.MustInvoke[*sessionstore.Store](di)
+	manager.Sandboxes = do.MustInvoke[*sandboxstore.Store](di)
 	return manager, nil
 }
 
@@ -355,7 +352,7 @@ func NewLLMClient(di do.Injector) (*adapters.LLMClient, error) {
 func NewSandboxDriver(di do.Injector) (*adapters.SandboxDriver, error) {
 	return adapters.NewSandboxDriver(
 		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[adapters.RuntimeProvider](di),
 	), nil
@@ -364,16 +361,16 @@ func NewSandboxDriver(di do.Injector) (*adapters.SandboxDriver, error) {
 func NewCellExecutor(di do.Injector) (*adapters.CellExecutor, error) {
 	return adapters.NewCellExecutor(
 		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[adapters.RuntimeProvider](di),
-		do.MustInvoke[*sessions.StreamBroker](di),
+		do.MustInvoke[*sandboxes.StreamBroker](di),
 	), nil
 }
 
 func NewAgentRunner(di do.Injector) (*adapters.AgentRunner, error) {
 	return adapters.NewAgentRunner(
 		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[adapters.RuntimeProvider](di),
@@ -383,36 +380,36 @@ func NewAgentRunner(di do.Injector) (*adapters.AgentRunner, error) {
 func NewAgentExecutor(di do.Injector) (*adapters.AgentExecutor, error) {
 	return adapters.NewAgentExecutor(
 		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sessionstore.Store](di),
-		do.MustInvoke[*sessions.StreamBroker](di),
+		do.MustInvoke[*sandboxstore.Store](di),
+		do.MustInvoke[*sandboxes.StreamBroker](di),
 		do.MustInvoke[*adapters.AgentRunner](di),
 	), nil
 }
 
-func NewLoaderCommandExecutor(di do.Injector) (*adapters.LoaderCommandExecutor, error) {
-	return adapters.NewLoaderCommandExecutor(
+func NewSchedulerCommandExecutor(di do.Injector) (*adapters.SchedulerCommandExecutor, error) {
+	return adapters.NewSchedulerCommandExecutor(
 		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[adapters.RuntimeProvider](di),
-		do.MustInvoke[*sessions.StreamBroker](di),
+		do.MustInvoke[*sandboxes.StreamBroker](di),
 	), nil
 }
 
-func NewLoaderSandboxRunner(di do.Injector) (*adapters.LoaderSandboxRunner, error) {
-	return adapters.NewLoaderSandboxRunner(
+func NewSchedulerSandboxRunner(di do.Injector) (*adapters.SchedulerSandboxRunner, error) {
+	return adapters.NewSchedulerSandboxRunner(
 		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[workspaces.WorkspaceEnsurer](di),
 		do.MustInvoke[*adapters.SandboxDriver](di),
 		do.MustInvoke[capabilities.Provider](di),
 		do.MustInvoke[*volumes.Manager](di),
-		do.MustInvoke[*sessions.StreamBroker](di),
-		do.MustInvoke[*loaders.Bus](di),
+		do.MustInvoke[*sandboxes.StreamBroker](di),
+		do.MustInvoke[*schedulers.Bus](di),
 		do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
 		do.MustInvoke[*adapters.AgentExecutor](di),
-		do.MustInvoke[*sessions.LifecycleLocks](di),
+		do.MustInvoke[*sandboxes.LifecycleLocks](di),
 	), nil
 }
 
@@ -420,18 +417,18 @@ func NewSandboxRPCBridge(di do.Injector) (*adapters.SandboxRPCBridge, error) {
 	dashboard, _ := do.Invoke[*dashboard.Hub](di)
 	return adapters.NewSandboxRPCBridge(
 		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[workspaces.WorkspaceEnsurer](di),
 		do.MustInvoke[*adapters.SandboxDriver](di),
 		do.MustInvoke[adapters.RuntimeProvider](di),
-		do.MustInvoke[*loaders.Bus](di),
-		do.MustInvoke[*sessions.StreamBroker](di),
+		do.MustInvoke[*schedulers.Bus](di),
+		do.MustInvoke[*sandboxes.StreamBroker](di),
 		do.MustInvoke[capabilities.Provider](di),
 		do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
 		dashboard,
 		do.MustInvoke[*adapters.AgentExecutor](di),
-		do.MustInvoke[*sessions.LifecycleLocks](di),
+		do.MustInvoke[*sandboxes.LifecycleLocks](di),
 	), nil
 }
 
@@ -440,7 +437,7 @@ func NewDatabase(di do.Injector) (*storagesqlite.Database, error) {
 	if err := os.MkdirAll(config.DataRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("create agent-compose data root: %w", err)
 	}
-	return storagesqlite.Open(config.DbAddr, config.DbTimeout)
+	return storagesqlite.OpenWithMaxOpenConns(config.DbAddr, config.DbTimeout, config.EffectiveSQLiteMaxOpenConns())
 }
 
 func NewConfigStore(di do.Injector) (*configstore.ConfigStore, error) {
@@ -448,11 +445,11 @@ func NewConfigStore(di do.Injector) (*configstore.ConfigStore, error) {
 	return configstore.FromDB(database.DB()), nil
 }
 
-func NewSandboxStore(di do.Injector) (*sessionstore.Store, error) {
+func NewSandboxStore(di do.Injector) (*sandboxstore.Store, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
 	database := do.MustInvoke[*storagesqlite.Database](di)
 	resolver := sandboxProjectProjectionResolver{resolver: do.MustInvoke[*runs.SandboxRunTargetResolver](di)}
-	return sessionstore.NewWithDatabase(config, database.DB(), resolver)
+	return sandboxstore.NewWithDatabase(config, database.DB(), resolver)
 }
 
 type sandboxProjectProjectionResolver struct {
@@ -475,7 +472,7 @@ func NewWorkspaceProvisioner(di do.Injector) (*workspaces.Provisioner, error) {
 	return workspaces.NewProvisioner(
 		do.MustInvoke[*appconfig.Config](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[*sessionstore.Store](di),
+		do.MustInvoke[*sandboxstore.Store](di),
 	), nil
 }
 
@@ -493,14 +490,14 @@ func NewProjectOctoBusTargetResolver(di do.Injector) (*adapters.ProjectOctoBusTa
 }
 
 func NewCapabilitySandboxResolver(di do.Injector) (*adapters.CapabilitySandboxResolver, error) {
-	return adapters.NewCapabilitySandboxResolver(do.MustInvoke[*sessionstore.Store](di)), nil
+	return adapters.NewCapabilitySandboxResolver(do.MustInvoke[*sandboxstore.Store](di)), nil
 }
 
 func NewEventDispatcher(di do.Injector) (*events.Dispatcher, error) {
 	return events.NewDispatcher(
 		do.MustInvoke[context.Context](di),
 		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[*loaders.Bus](di),
+		do.MustInvoke[*schedulers.Bus](di),
 	), nil
 }
 
@@ -516,7 +513,7 @@ func (c capabilityRuntimeConfig) CapProxyListen() string {
 }
 
 func NewDashboardOverviewAggregator(di do.Injector) (*dashboard.Aggregator, error) {
-	return dashboard.NewAggregator(do.MustInvoke[*sessionstore.Store](di), do.MustInvoke[*configstore.ConfigStore](di)), nil
+	return dashboard.NewAggregator(do.MustInvoke[*sandboxstore.Store](di), do.MustInvoke[*configstore.ConfigStore](di)), nil
 }
 
 func NewDashboardOverviewHub(di do.Injector) (*dashboard.Hub, error) {
@@ -528,12 +525,12 @@ func NewRunLogHub(do.Injector) (*runs.RunLogHub, error) {
 }
 
 func registerProxyRoutes(app *echo.Echo, di do.Injector) {
-	sessions := do.MustInvoke[*adapters.SandboxRPCBridge](di)
+	bridge := do.MustInvoke[*adapters.SandboxRPCBridge](di)
 	proxy.RegisterJupyterRoutes(app, proxy.JupyterOptions{
 		BasePath: do.MustInvoke[*appconfig.Config](di).JupyterProxyBasePath,
-		Store:    do.MustInvoke[*sessionstore.Store](di),
-		EnsureReady: func(ctx context.Context, sessionID string) (domain.ProxyState, error) {
-			return sessions.EnsureSessionProxyReady(ctx, sessionID)
+		Store:    do.MustInvoke[*sandboxstore.Store](di),
+		EnsureReady: func(ctx context.Context, sandboxID string) (domain.ProxyState, error) {
+			return bridge.EnsureSessionProxyReady(ctx, sandboxID)
 		},
 	})
 }
@@ -565,7 +562,7 @@ func registerRuntimeLLMFacadeRoutes(app *echo.Echo, di do.Injector) {
 	configDB := do.MustInvoke[*configstore.ConfigStore](di)
 	proxy.RegisterRuntimeLLMFacadeRoutes(app, proxy.RuntimeLLMOptions{
 		Tokens:    configDB,
-		Sandboxes: do.MustInvoke[*sessionstore.Store](di),
+		Sandboxes: do.MustInvoke[*sandboxstore.Store](di),
 		ResolveTarget: func(ctx context.Context, requestedModel, providerID string) (llms.ResolvedTarget, error) {
 			return llms.ResolveRuntimeLLMTarget(ctx, config, configDB, requestedModel, providerID)
 		},

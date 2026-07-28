@@ -118,7 +118,7 @@ agents:
 	projectClient := agentcomposev2connect.NewProjectServiceClient(client, "http://agent-compose")
 	scheduler := waitForManagedHelloScheduler(t, projectClient)
 	detail, err := projectClient.GetScheduler(context.Background(), connect.NewRequest(&agentcomposev2.GetSchedulerRequest{
-		Project:   &agentcomposev2.ProjectRef{ProjectId: scheduler.GetProjectId()},
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: scheduler.GetProjectId()}},
 		AgentName: scheduler.GetAgentName(),
 	}))
 	if err != nil {
@@ -285,7 +285,7 @@ func waitForScheduledHelloRun(t *testing.T, projectClient agentcomposev2connect.
 	var lastErr error
 	for time.Now().Before(deadline) {
 		eventsResp, err := projectClient.ListSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.ListSchedulerEventsRequest{
-			Project:   &agentcomposev2.ProjectRef{ProjectId: scheduler.GetProjectId()},
+			Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: scheduler.GetProjectId()}},
 			AgentName: scheduler.GetAgentName(),
 			Limit:     100,
 		}))

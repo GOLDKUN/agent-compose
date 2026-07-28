@@ -17,7 +17,7 @@ import (
 	testutil "agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/sources"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/workspaces"
 )
 
@@ -299,7 +299,7 @@ func TestIntegrationSandboxRPCBridgeRuntimeStartFailureRetryPreservesReadyWorksp
 }
 
 type integrationProvisioningRecordingStore struct {
-	store *sessionstore.Store
+	store *sandboxstore.Store
 
 	mu       sync.Mutex
 	statuses map[string][]string

@@ -87,7 +87,7 @@ func resolveComposeRuntimeProjectRef(cli cliOptions) (string, string, *agentcomp
 func resolveComposeRuntimeProjectSelectionForCLI(cli cliOptions) (composeRuntimeProjectSelection, error) {
 	projectName := strings.TrimSpace(cli.ProjectName)
 	if projectName != "" {
-		return composeRuntimeProjectSelection{requestedName: projectName, ref: &agentcomposev2.ProjectRef{Name: projectName}}, nil
+		return composeRuntimeProjectSelection{requestedName: projectName, ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: projectName}}}, nil
 	}
 	composePath, normalized, projectID, err := resolveComposeProject(cli)
 	if err != nil {
@@ -96,7 +96,7 @@ func resolveComposeRuntimeProjectSelectionForCLI(cli cliOptions) (composeRuntime
 	return composeRuntimeProjectSelection{
 		composePath:   composePath,
 		requestedName: normalized.Name,
-		ref:           &agentcomposev2.ProjectRef{ProjectId: projectID},
+		ref:           &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
 		localSpec:     normalized,
 	}, nil
 }

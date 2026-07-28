@@ -59,6 +59,7 @@ export class GeminiRunner {
       threadId: "",
       stopReason: "completed",
       finalText: "",
+      finalTextSource: "none",
       transcript: "",
       stderr: "",
     };
@@ -128,7 +129,11 @@ export class GeminiRunner {
         continue;
       }
       if (eventType === "result") {
-        result.finalText = extractText(event?.response) || extractText(event?.result) || result.finalText;
+        const finalText = extractText(event?.response) || extractText(event?.result);
+        if (finalText) {
+          result.finalText = finalText;
+          result.finalTextSource = "provider_message";
+        }
         result.stopReason = event?.error ? "error" : "completed";
       }
     }
@@ -144,6 +149,7 @@ export class GeminiRunner {
     result.transcript = this.writer.transcript();
     if (!result.finalText && result.transcript) {
       result.finalText = result.transcript;
+      result.finalTextSource = "transcript_fallback";
     }
     return result;
   }

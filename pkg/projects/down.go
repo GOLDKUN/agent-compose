@@ -31,16 +31,15 @@ type DownSandboxStore interface {
 }
 
 type DownOptions struct {
-	Store                DownStore
-	Sandboxes            DownSandboxStore
-	DisableManagedLoader func(ctx context.Context, loaderID, projectID, schedulerID string) error
-	RefreshLoaders       func(ctx context.Context) error
-	StopSandbox          func(ctx context.Context, sandbox *domain.Sandbox) error
+	Store             DownStore
+	Sandboxes         DownSandboxStore
+	RefreshSchedulers func(ctx context.Context) error
+	StopSandbox       func(ctx context.Context, sandbox *domain.Sandbox) error
 }
 
 func DownProject(ctx context.Context, project domain.ProjectRecord, options DownOptions) ([]DownChange, error) {
 	var changes []DownChange
-	schedulerChanges, err := DisableProjectManagedSchedulers(ctx, project, options)
+	schedulerChanges, err := DisableProjectSchedulers(ctx, project, options)
 	if err != nil {
 		return changes, err
 	}
@@ -53,7 +52,7 @@ func DownProject(ctx context.Context, project domain.ProjectRecord, options Down
 	return changes, nil
 }
 
-func DisableProjectManagedSchedulers(ctx context.Context, project domain.ProjectRecord, options DownOptions) ([]DownChange, error) {
+func DisableProjectSchedulers(ctx context.Context, project domain.ProjectRecord, options DownOptions) ([]DownChange, error) {
 	if options.Store == nil {
 		return nil, fmt.Errorf("project store is required")
 	}
@@ -70,11 +69,6 @@ func DisableProjectManagedSchedulers(ctx context.Context, project domain.Project
 		if err != nil {
 			return changes, fmt.Errorf("disable project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 		}
-		if options.DisableManagedLoader != nil {
-			if err := options.DisableManagedLoader(ctx, scheduler.ManagedLoaderID, project.ID, scheduler.SchedulerID); err != nil {
-				return changes, fmt.Errorf("disable managed loader %s: %w", scheduler.ManagedLoaderID, err)
-			}
-		}
 		changes = append(changes, DownChange{
 			Action:       DownChangeUpdated,
 			ResourceType: "project_scheduler",
@@ -82,18 +76,18 @@ func DisableProjectManagedSchedulers(ctx context.Context, project domain.Project
 			Name:         disabled.AgentName,
 			Message:      "disabled by project down",
 		})
-		if scheduler.ManagedLoaderID != "" {
+		if scheduler.ID != "" {
 			changes = append(changes, DownChange{
 				Action:       DownChangeUpdated,
 				ResourceType: "loader",
-				ResourceID:   scheduler.ManagedLoaderID,
+				ResourceID:   scheduler.ID,
 				Name:         scheduler.AgentName,
 				Message:      "disabled by project down",
 			})
 		}
 	}
-	if len(changes) > 0 && options.RefreshLoaders != nil {
-		if err := options.RefreshLoaders(ctx); err != nil {
+	if len(changes) > 0 && options.RefreshSchedulers != nil {
+		if err := options.RefreshSchedulers(ctx); err != nil {
 			return changes, fmt.Errorf("refresh loader manager after project down: %w", err)
 		}
 	}

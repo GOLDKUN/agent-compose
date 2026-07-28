@@ -47,7 +47,6 @@ func NormalizeAgentRecord(agent domain.ProjectAgentRecord) (domain.ProjectAgentR
 	agent.ShortID = strings.TrimSpace(agent.ShortID)
 	agent.ProjectID = strings.TrimSpace(agent.ProjectID)
 	agent.AgentName = strings.TrimSpace(agent.AgentName)
-	agent.ManagedAgentID = strings.TrimSpace(agent.ManagedAgentID)
 	agent.Provider = strings.TrimSpace(agent.Provider)
 	agent.Model = strings.TrimSpace(agent.Model)
 	agent.Image = strings.TrimSpace(agent.Image)
@@ -59,18 +58,12 @@ func NormalizeAgentRecord(agent domain.ProjectAgentRecord) (domain.ProjectAgentR
 	if agent.Name == "" {
 		agent.Name = agent.AgentName
 	}
-	if agent.ManagedAgentID == "" {
-		managedAgentID, err := domain.StableManagedAgentID(agent.ProjectID, agent.AgentName)
+	if agent.ID == "" {
+		agentID, err := domain.StableProjectAgentID(agent.ProjectID, agent.AgentName)
 		if err != nil {
 			return domain.ProjectAgentRecord{}, err
 		}
-		agent.ManagedAgentID = managedAgentID
-	}
-	if agent.ID == "" {
-		agent.ID = agent.ManagedAgentID
-	}
-	if agent.ManagedAgentID == "" {
-		agent.ManagedAgentID = agent.ID
+		agent.ID = agentID
 	}
 	if agent.ShortID == "" {
 		agent.ShortID = identity.ShortID(agent.ID)
@@ -93,33 +86,26 @@ func NormalizeSchedulerRecord(scheduler domain.ProjectSchedulerRecord) (domain.P
 	scheduler.ProjectID = strings.TrimSpace(scheduler.ProjectID)
 	scheduler.SchedulerID = strings.TrimSpace(scheduler.SchedulerID)
 	scheduler.AgentName = strings.TrimSpace(scheduler.AgentName)
-	scheduler.ManagedLoaderID = strings.TrimSpace(scheduler.ManagedLoaderID)
 	scheduler.SpecJSON = strings.TrimSpace(scheduler.SpecJSON)
 	if scheduler.ProjectID == "" || scheduler.AgentName == "" {
 		return domain.ProjectSchedulerRecord{}, fmt.Errorf("project id and agent name are required")
 	}
-	if scheduler.SchedulerID == "" {
+	if scheduler.ID == "" {
+		scheduler.ID = scheduler.SchedulerID
+	}
+	if scheduler.ID == "" {
 		schedulerID, err := domain.StableProjectSchedulerID(scheduler.ProjectID, scheduler.AgentName, "")
 		if err != nil {
 			return domain.ProjectSchedulerRecord{}, err
 		}
-		scheduler.SchedulerID = schedulerID
+		scheduler.ID = schedulerID
 	}
-	if scheduler.ID == "" {
-		scheduler.ID = scheduler.SchedulerID
-	}
-	if scheduler.SchedulerID == "" {
-		scheduler.SchedulerID = scheduler.ID
-	}
+	// SchedulerID is the public name for the native scheduler identity. Keep the
+	// two model fields aligned while the database retains its compatibility
+	// scheduler_id column.
+	scheduler.SchedulerID = scheduler.ID
 	if scheduler.ShortID == "" {
 		scheduler.ShortID = identity.ShortID(scheduler.ID)
-	}
-	if scheduler.ManagedLoaderID == "" {
-		loaderID, err := domain.StableManagedLoaderID(scheduler.ProjectID, scheduler.AgentName, "")
-		if err != nil {
-			return domain.ProjectSchedulerRecord{}, err
-		}
-		scheduler.ManagedLoaderID = loaderID
 	}
 	if scheduler.Revision < 0 {
 		return domain.ProjectSchedulerRecord{}, fmt.Errorf("project scheduler revision cannot be negative")
@@ -141,9 +127,10 @@ func NormalizeRunRecord(run domain.ProjectRunRecord) (domain.ProjectRunRecord, e
 	run.ProjectID = strings.TrimSpace(run.ProjectID)
 	run.ProjectName = strings.TrimSpace(run.ProjectName)
 	run.AgentName = strings.TrimSpace(run.AgentName)
-	run.ManagedAgentID = strings.TrimSpace(run.ManagedAgentID)
+	run.AgentID = strings.TrimSpace(run.AgentID)
 	run.Source = strings.TrimSpace(run.Source)
 	run.SchedulerID = strings.TrimSpace(run.SchedulerID)
+	run.SchedulerRunID = strings.TrimSpace(run.SchedulerRunID)
 	run.TriggerID = strings.TrimSpace(run.TriggerID)
 	run.Status = NormalizeRunStatus(run.Status)
 	run.SandboxID = strings.TrimSpace(run.SandboxID)

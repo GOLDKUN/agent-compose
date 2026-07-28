@@ -15,7 +15,7 @@ func TestAggregatorAndHubWorkflows(t *testing.T) {
 		{Summary: domain.SandboxSummary{ID: "pending", VMStatus: domain.VMStatusPending}},
 		{Summary: domain.SandboxSummary{ID: "failed", VMStatus: domain.VMStatusFailed}},
 	}}
-	runs := dashboardRunStore{runs: []domain.LoaderRunSummary{{ID: "run", Status: "running"}, {ID: "skip", Status: "skipped"}}}
+	runs := dashboardRunStore{runs: []domain.SchedulerRunSummary{{ID: "run", Status: "running"}, {ID: "skip", Status: "skipped"}}}
 	aggregator := NewAggregator(store, runs)
 	aggregator.SetClock(func() time.Time { return time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC) })
 	overview, err := aggregator.Build(ctx)
@@ -97,10 +97,10 @@ func (s dashboardSandboxStore) ListSandboxes(context.Context, domain.SandboxList
 }
 
 type dashboardRunStore struct {
-	runs []domain.LoaderRunSummary
+	runs []domain.SchedulerRunSummary
 	err  error
 }
 
-func (s dashboardRunStore) ListRecentLoaderRuns(context.Context, int) ([]domain.LoaderRunSummary, error) {
+func (s dashboardRunStore) ListRecentSchedulerRuns(context.Context, int) ([]domain.SchedulerRunSummary, error) {
 	return s.runs, s.err
 }

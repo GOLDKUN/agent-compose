@@ -13,7 +13,7 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestAgentExecutorExecuteAgentRequestPersistsCellAndEvents(t *testing.T) {
@@ -31,7 +31,7 @@ func TestAgentExecutorExecuteAgentRequestPersistsCellAndEvents(t *testing.T) {
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -87,6 +87,28 @@ func TestAgentExecutorExecuteAgentRequestPersistsCellAndEvents(t *testing.T) {
 	}
 }
 
+func TestAgentAssistantMessageExcludesTranscriptFallback(t *testing.T) {
+	transcript := "$ command\ntool output"
+	if got := agentAssistantMessage(domain.AgentRunResult{
+		Agent:           "codex",
+		FinalText:       transcript,
+		FinalTextSource: domain.AgentFinalTextSourceTranscriptFallback,
+		Transcript:      transcript,
+		Success:         true,
+	}); got != "" {
+		t.Fatalf("fallback summary = %q, want empty", got)
+	}
+	if got := agentAssistantMessage(domain.AgentRunResult{
+		Agent:           "codex",
+		FinalText:       "final answer",
+		FinalTextSource: domain.AgentFinalTextSourceProviderMessage,
+		Transcript:      transcript + "\nfinal answer",
+		Success:         true,
+	}); got != "final answer" {
+		t.Fatalf("provider summary = %q", got)
+	}
+}
+
 func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -102,7 +124,7 @@ func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -177,7 +199,7 @@ func TestAgentExecutorPersistsFailedCellWhenStreamCallbackFails(t *testing.T) {
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}

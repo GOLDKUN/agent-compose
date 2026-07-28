@@ -41,7 +41,6 @@ type ProjectAgentRecord struct {
 	ShortID          string    `json:"short_id,omitempty"`
 	ProjectID        string    `json:"project_id"`
 	AgentName        string    `json:"agent_name"`
-	ManagedAgentID   string    `json:"managed_agent_id,omitempty"`
 	Revision         int64     `json:"revision"`
 	Provider         string    `json:"provider,omitempty"`
 	Model            string    `json:"model,omitempty"`
@@ -54,21 +53,20 @@ type ProjectAgentRecord struct {
 }
 
 type ProjectSchedulerRecord struct {
-	ID              string    `json:"id,omitempty"`
-	ShortID         string    `json:"short_id,omitempty"`
-	ProjectID       string    `json:"project_id"`
-	SchedulerID     string    `json:"scheduler_id"`
-	AgentName       string    `json:"agent_name"`
-	ManagedLoaderID string    `json:"managed_loader_id,omitempty"`
-	Revision        int64     `json:"revision"`
-	Enabled         bool      `json:"enabled"`
-	TriggerCount    int       `json:"trigger_count"`
-	SpecJSON        string    `json:"spec_json"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	RunCount        int       `json:"run_count,omitempty"`
-	LatestRunAt     time.Time `json:"latest_run_at,omitempty"`
-	LastError       string    `json:"last_error,omitempty"`
+	ID           string    `json:"id,omitempty"`
+	ShortID      string    `json:"short_id,omitempty"`
+	ProjectID    string    `json:"project_id"`
+	SchedulerID  string    `json:"scheduler_id"`
+	AgentName    string    `json:"agent_name"`
+	Revision     int64     `json:"revision"`
+	Enabled      bool      `json:"enabled"`
+	TriggerCount int       `json:"trigger_count"`
+	SpecJSON     string    `json:"spec_json"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	RunCount     int       `json:"run_count,omitempty"`
+	LatestRunAt  time.Time `json:"latest_run_at,omitempty"`
+	LastError    string    `json:"last_error,omitempty"`
 }
 
 type ProjectRunRecord struct {
@@ -77,9 +75,10 @@ type ProjectRunRecord struct {
 	ProjectName     string    `json:"project_name,omitempty"`
 	ProjectRevision int64     `json:"project_revision"`
 	AgentName       string    `json:"agent_name,omitempty"`
-	ManagedAgentID  string    `json:"managed_agent_id,omitempty"`
+	AgentID         string    `json:"managed_agent_id,omitempty"`
 	Source          string    `json:"source,omitempty"`
 	SchedulerID     string    `json:"scheduler_id,omitempty"`
+	SchedulerRunID  string    `json:"-"`
 	TriggerID       string    `json:"trigger_id,omitempty"`
 	Status          string    `json:"status"`
 	SandboxID       string    `json:"sandbox_id,omitempty"`

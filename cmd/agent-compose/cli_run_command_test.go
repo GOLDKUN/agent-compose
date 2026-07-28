@@ -45,6 +45,22 @@ func TestRunHelpHidesOptionalModeFlagSentinel(t *testing.T) {
 	}
 }
 
+func TestRunHelpDescribesRemoveOnCompletion(t *testing.T) {
+	stdout, stderr, runCount, exitCode := executeCLICommand("run", "--help")
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("run --help code/stderr = %d / %q", exitCode, stderr)
+	}
+	if runCount != 0 {
+		t.Fatalf("daemon runner called %d times, want 0", runCount)
+	}
+	if !strings.Contains(stdout, "Remove a newly created sandbox after run completion") {
+		t.Fatalf("run --help does not describe completion-based sandbox removal:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Remove the sandbox after a successful run") {
+		t.Fatalf("run --help still limits sandbox removal to successful runs:\n%s", stdout)
+	}
+}
+
 func TestResolveAgentComposeSocketForCLIFallsBackToVarRun(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
 
@@ -103,6 +119,16 @@ agents:
 			name: "driver with sandbox id",
 			args: []string{"run", "--host", server.URL, "--file", composePath, "reviewer", "--sandbox", "sandbox-1", "--driver", "docker", "--prompt", "check"},
 			want: "run --driver cannot be combined with --sandbox",
+		},
+		{
+			name: "remove with keep running",
+			args: []string{"run", "--host", server.URL, "--file", composePath, "reviewer", "--rm", "--keep-running", "--prompt", "check"},
+			want: "run --rm cannot be combined with --keep-running",
+		},
+		{
+			name: "keep running with remove",
+			args: []string{"run", "--host", server.URL, "--file", composePath, "reviewer", "--keep-running", "--rm", "--prompt", "check"},
+			want: "run --rm cannot be combined with --keep-running",
 		},
 		{
 			name: "command and prompt flags",

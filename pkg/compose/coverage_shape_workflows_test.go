@@ -30,6 +30,7 @@ func TestIntegrationComposeParseNormalizeAndOutputWorkflows(t *testing.T) {
 	t.Run("scheduler script with triggers", TestNormalizeRejectsSchedulerScriptWithTriggers)
 	t.Run("scheduler script URL with triggers", TestNormalizeRejectsSchedulerScriptURLWithTriggers)
 	t.Run("scheduler triggers", TestNormalizePreservesSchedulerTriggersWithoutScript)
+	t.Run("scheduler trigger name uniqueness", TestNormalizeSchedulerTriggerNameUniqueness)
 	t.Run("invalid trigger payloads", TestNormalizeRejectsInvalidTriggerPayloads)
 	t.Run("trigger without kind", TestNormalizeRejectsTriggerWithoutKind)
 	t.Run("duplicate agent keys", TestParseRejectsDuplicateAgentKeys)

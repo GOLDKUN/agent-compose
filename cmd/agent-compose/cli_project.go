@@ -39,10 +39,8 @@ func listProjectsPage(ctx context.Context, client agentcomposev2connect.ProjectS
 	}
 	msg := resp.Msg
 	output := composeProjectListOutput{
-		Projects:   make([]composeProjectListItem, 0, len(msg.GetProjects())),
-		TotalCount: msg.GetTotalCount(),
-		HasMore:    msg.GetHasMore(),
-		NextOffset: msg.GetNextOffset(),
+		Projects: make([]composeProjectListItem, 0, len(msg.GetProjects())),
+		Total:    msg.GetTotal(),
 	}
 	for _, project := range msg.GetProjects() {
 		output.Projects = append(output.Projects, composeProjectListItemFromSummary(project))
@@ -54,7 +52,7 @@ func listAllProjects(ctx context.Context, client agentcomposev2connect.ProjectSe
 	const pageSize uint32 = 200
 	var output composeProjectListOutput
 	for {
-		offset := output.NextOffset
+		offset := uint32(len(output.Projects))
 		resp, err := client.ListProjects(ctx, connect.NewRequest(&agentcomposev2.ListProjectsRequest{
 			Offset: offset,
 			Limit:  pageSize,
@@ -63,20 +61,17 @@ func listAllProjects(ctx context.Context, client agentcomposev2connect.ProjectSe
 			return composeProjectListOutput{}, err
 		}
 		msg := resp.Msg
-		output.TotalCount = msg.GetTotalCount()
-		output.HasMore = msg.GetHasMore()
-		output.NextOffset = msg.GetNextOffset()
+		output.Total = msg.GetTotal()
 		for _, project := range msg.GetProjects() {
 			output.Projects = append(output.Projects, composeProjectListItemFromSummary(project))
 		}
-		if !msg.GetHasMore() {
+		if uint32(len(output.Projects)) >= msg.GetTotal() {
 			break
 		}
-		if msg.GetNextOffset() == offset {
+		if len(msg.GetProjects()) == 0 {
 			return composeProjectListOutput{}, fmt.Errorf("project list pagination did not advance")
 		}
 	}
-	output.HasMore = false
 	return output, nil
 }
 
@@ -128,10 +123,8 @@ type composeDownOutput struct {
 }
 
 type composeProjectListOutput struct {
-	Projects   []composeProjectListItem `json:"projects"`
-	TotalCount uint32                   `json:"total_count"`
-	HasMore    bool                     `json:"has_more"`
-	NextOffset uint32                   `json:"next_offset"`
+	Projects []composeProjectListItem `json:"projects"`
+	Total    uint32                   `json:"total"`
 }
 
 type composeProjectListItem struct {

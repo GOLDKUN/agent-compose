@@ -32,7 +32,7 @@ agents:
 	sessions := []*agentcomposev2.Sandbox{
 		testCLISessionSummary("session-running", "RUNNING", "project-cli-ps", "reviewer", "run-running"),
 		testCLISessionSummary("session-stopped", "STOPPED", "project-cli-ps", "worker", "run-stopped"),
-		testCLISessionSummary("session-error", "ERROR", "foreign-project", "", ""),
+		testCLISessionSummary("session-error", "FAILED", "foreign-project", "", ""),
 		testCLISessionSummary("session-foreign", "RUNNING", "foreign-project", "reviewer", "run-foreign"),
 	}
 	runs := []*agentcomposev2.RunSummary{
@@ -138,7 +138,7 @@ agents:
 		t.Fatalf("ps --all output %q contains foreign sandbox", allOut)
 	}
 
-	statusOut, statusErr, _, statusCode := executeCLICommand("ps", "--host", server.URL, "--file", composePath, "--status", "error")
+	statusOut, statusErr, _, statusCode := executeCLICommand("ps", "--host", server.URL, "--file", composePath, "--status", "failed")
 	if statusCode != 0 || statusErr != "" {
 		t.Fatalf("ps --status code/stderr = %d / %q", statusCode, statusErr)
 	}

@@ -42,9 +42,6 @@ func RegisterRuntimeLLMFacadeRoutes(app *echo.Echo, opts RuntimeLLMOptions) {
 	app.POST("/api/runtime/sandboxes/:sandbox_id/llm/openai/v1/responses", handler.handleResponses)
 	app.POST("/api/runtime/sandboxes/:sandbox_id/llm/openai/v1/chat/completions", handler.handleChatCompletions)
 	app.POST("/api/runtime/sandboxes/:sandbox_id/llm/anthropic/v1/messages", handler.handleAnthropicMessages)
-	app.POST("/api/runtime/sessions/:session_id/llm/openai/v1/responses", handler.handleResponses)
-	app.POST("/api/runtime/sessions/:session_id/llm/openai/v1/chat/completions", handler.handleChatCompletions)
-	app.POST("/api/runtime/sessions/:session_id/llm/anthropic/v1/messages", handler.handleAnthropicMessages)
 }
 
 type runtimeLLMHandler struct {
@@ -67,7 +64,7 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 	if h.opts.Tokens == nil || h.opts.Sandboxes == nil || h.opts.ResolveTarget == nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "llm facade dependencies are required"})
 	}
-	sandboxID := strings.TrimSpace(firstNonEmpty(c.Param("sandbox_id"), c.Param("session_id")))
+	sandboxID := strings.TrimSpace(c.Param("sandbox_id"))
 	rawToken := llms.RuntimeFacadeToken(c.Request().Header)
 	if sandboxID == "" || rawToken == "" {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "llm facade token is required"})

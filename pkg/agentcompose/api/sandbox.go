@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,7 +17,7 @@ import (
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sessions"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -48,7 +46,7 @@ type SandboxProxyStateStore interface {
 }
 
 type SandboxWatchSource interface {
-	SubscribeSandbox(string) (<-chan sessions.WatchEvent, func())
+	SubscribeSandbox(string) (<-chan sandboxes.WatchEvent, func())
 }
 
 type SandboxStatsRuntime interface {
@@ -62,8 +60,8 @@ type SandboxRuntimeRemover interface {
 }
 
 type SandboxRemovalCoordinator interface {
-	Remove(context.Context, string, bool) (sessions.RemovalResult, error)
-	Prune(context.Context, sessions.PruneRequest) (sessions.PruneResult, error)
+	Remove(context.Context, string, bool) (sandboxes.RemovalResult, error)
+	Prune(context.Context, sandboxes.PruneRequest) (sandboxes.PruneResult, error)
 }
 
 type SandboxDashboardNotifier interface {
@@ -91,7 +89,7 @@ type SandboxHandler struct {
 	delegate   SandboxLifecycleDelegate
 	store      SandboxStore
 	remover    SandboxRuntimeRemover
-	reconciler SessionRuntimeReconciler
+	reconciler SandboxRuntimeReconciler
 	dashboard  SandboxDashboardNotifier
 	stats      SandboxStatsRuntimeResolver
 	runTargets SandboxRunTargetResolver
@@ -110,7 +108,7 @@ func (h *SandboxHandler) WithRunTargetResolver(resolver SandboxRunTargetResolver
 
 func NewSandboxHandler(delegate SandboxLifecycleDelegate, store SandboxStore, remover SandboxRuntimeRemover, dashboard SandboxDashboardNotifier, stats ...SandboxStatsRuntimeResolver) *SandboxHandler {
 	handler := &SandboxHandler{delegate: delegate, store: store, remover: remover, dashboard: dashboard}
-	if reconciler, ok := delegate.(SessionRuntimeReconciler); ok {
+	if reconciler, ok := delegate.(SandboxRuntimeReconciler); ok {
 		handler.reconciler = reconciler
 	}
 	if len(stats) > 0 {
@@ -156,42 +154,31 @@ func (h *SandboxHandler) populateSandboxNotebookURL(sandbox *domain.Sandbox, res
 }
 
 func (h *SandboxHandler) ListSandboxes(ctx context.Context, req *connect.Request[agentcomposev2.ListSandboxesRequest]) (*connect.Response[agentcomposev2.ListSandboxesResponse], error) {
-	limit := int(req.Msg.GetLimit())
-	if limit == 0 {
-		limit = 100
-	}
-	if limit < 1 || limit > 500 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("limit must be between 1 and 500"))
-	}
-	cursor, err := decodeSandboxCursor(req.Msg.GetCursor())
+	offset, limit, err := listPagination(req.Msg.GetOffset(), req.Msg.GetLimit())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
+	}
+	statuses, err := domain.NormalizeSandboxVMStatuses(req.Msg.GetStatus())
+	if err != nil {
+		return nil, ConnectErrorForDomain(err)
 	}
 	store, ok := h.store.(SandboxListStore)
 	if !ok {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sandbox list store is required"))
 	}
 	result, err := store.ListSandboxes(ctx, domain.SandboxListOptions{
-		ProjectID:       strings.TrimSpace(req.Msg.GetProjectId()),
-		VMStatuses:      append([]string(nil), req.Msg.GetStatus()...),
-		Limit:           limit,
-		BeforeUpdatedAt: cursor.UpdatedAt,
-		BeforeID:        cursor.SandboxID,
+		ProjectID:  strings.TrimSpace(req.Msg.GetProjectId()),
+		VMStatuses: statuses,
+		Offset:     offset,
+		Limit:      limit,
 	})
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	response := &agentcomposev2.ListSandboxesResponse{Sandboxes: make([]*agentcomposev2.Sandbox, 0, len(result.Sandboxes))}
+	response := &agentcomposev2.ListSandboxesResponse{Sandboxes: make([]*agentcomposev2.Sandbox, 0, len(result.Sandboxes)), Total: uint32(result.TotalCount)}
 	targets := h.resolveSandboxTargets(ctx, result.Sandboxes)
 	for _, sandbox := range result.Sandboxes {
 		response.Sandboxes = append(response.Sandboxes, sandboxToV2WithTarget(sandbox, targets[sandbox.Summary.ID]))
-	}
-	// A page can come back empty while HasMore is true when every indexed row on
-	// it was a ghost (its directory vanished and was pruned during the list).
-	// Guard the cursor access so that case cannot panic the handler.
-	if result.HasMore && len(result.Sandboxes) > 0 {
-		last := result.Sandboxes[len(result.Sandboxes)-1]
-		response.NextCursor = encodeSandboxCursor(last.Summary.UpdatedAt, last.Summary.ID)
 	}
 	return connect.NewResponse(response), nil
 }
@@ -216,18 +203,9 @@ func (h *SandboxHandler) ListSandboxHistory(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	response := &agentcomposev2.ListSandboxHistoryResponse{LegacyHistory: true}
-	for _, cell := range cells {
-		response.Cells = append(response.Cells, &agentcomposev2.SandboxHistoryCell{
-			Id: cell.ID, Type: cell.Type, Source: cell.Source, Stdout: cell.Stdout, Stderr: cell.Stderr,
-			Output: cell.Output, ExitCode: int32(cell.ExitCode), Success: cell.Success, Running: cell.Running,
-			CreatedAt: sandboxHistoryTimestamp(cell.CreatedAt), Agent: cell.Agent, AgentThreadId: cell.AgentThreadID, StopReason: cell.StopReason,
-		})
-	}
-	for _, event := range events {
-		response.Events = append(response.Events, &agentcomposev2.SandboxHistoryEvent{
-			Id: event.ID, Type: event.Type, Level: event.Level, Message: event.Message, CreatedAt: sandboxHistoryTimestamp(event.CreatedAt),
-		})
+	response, err := paginateSandboxHistory(cells, events, req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, err
 	}
 	return connect.NewResponse(response), nil
 }
@@ -266,32 +244,32 @@ func (h *SandboxHandler) WatchSandbox(ctx context.Context, req *connect.Request[
 	}
 }
 
-func sandboxWatchEventToV2(event sessions.WatchEvent) *agentcomposev2.WatchSandboxResponse {
+func sandboxWatchEventToV2(event sandboxes.WatchEvent) *agentcomposev2.WatchSandboxResponse {
 	response := &agentcomposev2.WatchSandboxResponse{CellId: event.CellID, Chunk: event.Chunk, Stream: StdioStreamToProto(event.Stream)}
 	switch event.EventType {
-	case sessions.WatchEventTypeSandboxUpdated:
+	case sandboxes.WatchEventTypeSandboxUpdated:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_SANDBOX_UPDATED
 		if event.Sandbox != nil {
 			response.Sandbox = sandboxToV2(&domain.Sandbox{Summary: *event.Sandbox})
 		}
-	case sessions.WatchEventTypeCellStarted:
+	case sandboxes.WatchEventTypeCellStarted:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_STARTED
 		response.Cell = sandboxHistoryCellToV2(event.Cell)
-	case sessions.WatchEventTypeCellOutput:
+	case sandboxes.WatchEventTypeCellOutput:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_OUTPUT
-	case sessions.WatchEventTypeCellCompleted:
+	case sandboxes.WatchEventTypeCellCompleted:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_CELL_COMPLETED
 		response.Cell = sandboxHistoryCellToV2(event.Cell)
-	case sessions.WatchEventTypeEventAdded:
+	case sandboxes.WatchEventTypeEventAdded:
 		response.EventType = agentcomposev2.SandboxWatchEventType_SANDBOX_WATCH_EVENT_TYPE_EVENT_ADDED
 		response.Event = sandboxHistoryEventToV2(event.Event)
 	}
 	return response
 }
 
-func (h *SandboxHandler) sandboxWatchEventToV2(ctx context.Context, event sessions.WatchEvent) *agentcomposev2.WatchSandboxResponse {
+func (h *SandboxHandler) sandboxWatchEventToV2(ctx context.Context, event sandboxes.WatchEvent) *agentcomposev2.WatchSandboxResponse {
 	response := sandboxWatchEventToV2(event)
-	if event.EventType == sessions.WatchEventTypeSandboxUpdated && event.Sandbox != nil {
+	if event.EventType == sandboxes.WatchEventTypeSandboxUpdated && event.Sandbox != nil {
 		response.Sandbox = h.sandboxToV2(ctx, &domain.Sandbox{Summary: *event.Sandbox})
 	}
 	return response
@@ -448,31 +426,6 @@ func (h *SandboxHandler) resolveSandboxTargets(ctx context.Context, sandboxes []
 	return targets
 }
 
-type sandboxPageCursor struct {
-	UpdatedAt time.Time `json:"updated_at"`
-	SandboxID string    `json:"sandbox_id"`
-}
-
-func encodeSandboxCursor(updatedAt time.Time, sandboxID string) string {
-	data, _ := json.Marshal(sandboxPageCursor{UpdatedAt: updatedAt.UTC(), SandboxID: sandboxID})
-	return base64.RawURLEncoding.EncodeToString(data)
-}
-
-func decodeSandboxCursor(token string) (sandboxPageCursor, error) {
-	if strings.TrimSpace(token) == "" {
-		return sandboxPageCursor{}, nil
-	}
-	decoded, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return sandboxPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	var cursor sandboxPageCursor
-	if json.Unmarshal(decoded, &cursor) != nil || cursor.UpdatedAt.IsZero() || strings.TrimSpace(cursor.SandboxID) == "" {
-		return sandboxPageCursor{}, fmt.Errorf("invalid cursor")
-	}
-	return cursor, nil
-}
-
 func (h *SandboxHandler) RemoveSandbox(ctx context.Context, req *connect.Request[agentcomposev2.RemoveSandboxRequest]) (*connect.Response[agentcomposev2.RemoveSandboxResponse], error) {
 	sandboxID := strings.TrimSpace(req.Msg.GetSandboxId())
 	if err := validateSandboxID(sandboxID); err != nil {
@@ -481,10 +434,10 @@ func (h *SandboxHandler) RemoveSandbox(ctx context.Context, req *connect.Request
 	if h.removal != nil {
 		result, err := h.removal.Remove(ctx, sandboxID, req.Msg.GetForce())
 		if err != nil {
-			if errors.Is(err, sessions.ErrSandboxRunning) {
+			if errors.Is(err, sandboxes.ErrSandboxRunning) {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
-			if errors.Is(err, sessions.ErrOwnershipUnknown) || errors.Is(err, sessions.ErrUnsafeResidue) {
+			if errors.Is(err, sandboxes.ErrOwnershipUnknown) || errors.Is(err, sandboxes.ErrUnsafeResidue) {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 			return nil, ConnectErrorForDomain(err)
@@ -543,7 +496,7 @@ func (h *SandboxHandler) PruneSandboxes(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.removal.Prune(ctx, sessions.PruneRequest{
+	result, err := h.removal.Prune(ctx, sandboxes.PruneRequest{
 		ProjectID: strings.TrimSpace(req.Msg.GetProjectId()), Statuses: append([]string(nil), req.Msg.GetStatus()...),
 		AgentName: strings.TrimSpace(req.Msg.GetAgentName()), Driver: strings.TrimSpace(req.Msg.GetDriver()),
 		OlderThan: olderThan, IncludeOrphans: req.Msg.GetIncludeOrphans(), Force: req.Msg.GetForce(),
@@ -557,11 +510,11 @@ func (h *SandboxHandler) PruneSandboxes(ctx context.Context, req *connect.Reques
 	}), nil
 }
 
-func sandboxPruneCandidatesToProto(items []sessions.PruneCandidate) []*agentcomposev2.SandboxPruneCandidate {
+func sandboxPruneCandidatesToProto(items []sandboxes.PruneCandidate) []*agentcomposev2.SandboxPruneCandidate {
 	out := make([]*agentcomposev2.SandboxPruneCandidate, 0, len(items))
 	for _, item := range items {
 		kind := agentcomposev2.SandboxPruneCandidateKind_SANDBOX_PRUNE_CANDIDATE_KIND_SANDBOX_RECORD
-		if item.Kind == sessions.PruneCandidateRuntimeResidue {
+		if item.Kind == sandboxes.PruneCandidateRuntimeResidue {
 			kind = agentcomposev2.SandboxPruneCandidateKind_SANDBOX_PRUNE_CANDIDATE_KIND_RUNTIME_RESIDUE
 		}
 		candidate := &agentcomposev2.SandboxPruneCandidate{

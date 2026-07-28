@@ -477,9 +477,9 @@ agents:
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}
-	agentID, err := domain.StableManagedAgentID(projectID, "reviewer")
+	agentID, err := domain.StableProjectAgentID(projectID, "reviewer")
 	if err != nil {
-		t.Fatalf("StableManagedAgentID returned error: %v", err)
+		t.Fatalf("StableProjectAgentID returned error: %v", err)
 	}
 	stdout, stderr, _, exitCode := executeCLICommand("run", "--host", server.URL, "--file", composePath, identity.ShortID(agentID), "--command", "echo command")
 	if exitCode != 0 || stderr != "command stderr\n" || stdout != "command stdout\n" {

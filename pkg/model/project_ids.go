@@ -19,7 +19,7 @@ func StableProjectID(name, sourcePath string) (string, error) {
 	return identity.NewID(identity.ResourceProject, name, NormalizeProjectSourcePath(sourcePath)), nil
 }
 
-func StableManagedAgentID(projectID, agentName string) (string, error) {
+func StableProjectAgentID(projectID, agentName string) (string, error) {
 	projectID = strings.TrimSpace(projectID)
 	agentName = strings.TrimSpace(agentName)
 	if projectID == "" || agentName == "" {
@@ -50,26 +50,7 @@ func StableProjectSchedulerID(projectID, agentName, schedulerName string) (strin
 	return identity.NewID(identity.ResourceScheduler, projectID, agentName, schedulerName), nil
 }
 
-func StableManagedLoaderID(projectID, agentName, schedulerName string) (string, error) {
-	projectID = strings.TrimSpace(projectID)
-	agentName = strings.TrimSpace(agentName)
-	schedulerName = strings.TrimSpace(schedulerName)
-	if schedulerName == "" {
-		schedulerName = "default"
-	}
-	if projectID == "" || agentName == "" {
-		return "", fmt.Errorf("project id and agent name are required")
-	}
-	if !IsProjectStableIdentifier(agentName) {
-		return "", fmt.Errorf("agent name %q is not a stable identifier", agentName)
-	}
-	if !IsProjectStableIdentifier(schedulerName) {
-		return "", fmt.Errorf("scheduler name %q is not a stable identifier", schedulerName)
-	}
-	return identity.NewID(identity.ResourceLoader, projectID, agentName, schedulerName), nil
-}
-
-func StableManagedTriggerID(projectID, agentName, schedulerName, triggerName string, triggerIndex int) (string, error) {
+func StableSchedulerTriggerID(projectID, agentName, schedulerName, triggerName string, triggerIndex int) (string, error) {
 	projectID = strings.TrimSpace(projectID)
 	agentName = strings.TrimSpace(agentName)
 	schedulerName = strings.TrimSpace(schedulerName)

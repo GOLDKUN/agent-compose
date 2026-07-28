@@ -56,6 +56,7 @@ export class CodexInteractiveSession implements InteractiveSession {
       threadId: "",
       stopReason: "completed",
       finalText: "",
+      finalTextSource: "none",
       transcript: "",
       stderr: "",
     };
@@ -90,6 +91,8 @@ export class CodexInteractiveSession implements InteractiveSession {
       this.writer.beginTurn();
     }
     this.turnCount++;
+    this.result.finalText = "";
+    this.result.finalTextSource = "none";
     const { events } = await this.thread.runStreamed(
       message,
       this.options.outputSchema ? { outputSchema: this.options.outputSchema } : undefined,
@@ -103,12 +106,14 @@ export class CodexInteractiveSession implements InteractiveSession {
     this.result.transcript = this.runner.transcript();
     if (!this.result.finalText && this.result.transcript) {
       this.result.finalText = this.result.transcript;
+      this.result.finalTextSource = "transcript_fallback";
     }
     await writeStoredThread(this.options.stateRoot, "codex", this.result.threadId);
     this.emit("agent_turn_completed", {
       provider: "codex",
       threadId: this.result.threadId,
       finalText: this.result.finalText,
+      finalTextSource: this.result.finalTextSource,
     });
   }
 
@@ -116,9 +121,6 @@ export class CodexInteractiveSession implements InteractiveSession {
     this.result.stopReason = stopReason;
     this.result.threadId = this.thread?.id || this.result.threadId;
     this.result.transcript = this.runner.transcript();
-    if (!this.result.finalText && this.result.transcript) {
-      this.result.finalText = this.result.transcript;
-    }
     if (this.result.threadId) {
       await writeStoredThread(this.options.stateRoot, "codex", this.result.threadId);
     }
@@ -150,6 +152,7 @@ class PromptRunnerInteractiveSession implements InteractiveSession {
       threadId: "",
       stopReason: "completed",
       finalText: "",
+      finalTextSource: "none",
       transcript: "",
       stderr: "",
     };
@@ -177,12 +180,14 @@ class PromptRunnerInteractiveSession implements InteractiveSession {
     this.result.threadId = turnResult.threadId || this.result.threadId;
     this.result.stopReason = turnResult.stopReason;
     this.result.finalText = turnResult.finalText;
+    this.result.finalTextSource = turnResult.finalTextSource;
     this.result.transcript = turnResult.transcript;
     this.result.stderr = turnResult.stderr;
     this.emit("agent_turn_completed", {
       provider: this.provider,
       threadId: this.result.threadId,
       finalText: this.result.finalText,
+      finalTextSource: this.result.finalTextSource,
       stopReason: this.result.stopReason,
     });
   }

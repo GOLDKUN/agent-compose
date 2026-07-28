@@ -13,8 +13,8 @@ import (
 	"github.com/samber/do/v2"
 
 	"agent-compose/pkg/identity"
-	"agent-compose/pkg/loaders"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
 )
 
@@ -81,10 +81,10 @@ agents:
 	}
 	project := projects.Projects[0]
 	schedulers, err := store.ListProjectSchedulers(ctx, project.ID)
-	if err != nil || len(schedulers) != 1 || schedulers[0].ManagedLoaderID == "" {
+	if err != nil || len(schedulers) != 1 || schedulers[0].ID == "" {
 		t.Fatalf("list project schedulers=%#v err=%v", schedulers, err)
 	}
-	triggerID, err := domain.StableManagedTriggerID(project.ID, "reviewer", "", "nightly", 0)
+	triggerID, err := domain.StableSchedulerTriggerID(project.ID, "reviewer", "", "nightly", 0)
 	if err != nil {
 		t.Fatalf("stable trigger id: %v", err)
 	}
@@ -112,17 +112,17 @@ func (f *schedulerPruneE2EFixture) seedHistory(t *testing.T, dataRoot string) {
 	t.Helper()
 	ctx := context.Background()
 	completedAt := time.Now().UTC().Add(-time.Hour)
-	f.artifactDir = filepath.Join(dataRoot, "loaders", f.scheduler.ManagedLoaderID, "runs", f.runID)
-	if err := f.store.CreateLoaderRun(ctx, domain.LoaderRunSummary{
-		ID: f.runID, LoaderID: f.scheduler.ManagedLoaderID, TriggerID: f.triggerID,
-		TriggerKind: domain.LoaderTriggerKindCron, TriggerSource: "manual", Status: domain.LoaderRunStatusSucceeded,
+	f.artifactDir = filepath.Join(dataRoot, "schedulers", f.scheduler.ID, "runs", f.runID)
+	if err := f.store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{
+		ID: f.runID, SchedulerID: f.scheduler.ID, TriggerID: f.triggerID,
+		TriggerKind: domain.SchedulerTriggerKindCron, TriggerSource: "manual", Status: domain.SchedulerRunStatusSucceeded,
 		StartedAt: completedAt.Add(-time.Minute), CompletedAt: completedAt, DurationMs: 60_000,
 		ResultJSON: `{"ok":true}`, PayloadJSON: `{"source":"e2e"}`, ArtifactsDir: f.artifactDir,
 	}); err != nil {
 		t.Fatalf("create loader run: %v", err)
 	}
-	if err := f.store.AddLoaderEvent(ctx, domain.LoaderEvent{
-		ID: "loader-event-scheduler-prune-e2e", LoaderID: f.scheduler.ManagedLoaderID, RunID: f.runID, TriggerID: f.triggerID,
+	if err := f.store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
+		ID: "loader-event-scheduler-prune-e2e", SchedulerID: f.scheduler.ID, RunID: f.runID, TriggerID: f.triggerID,
 		Type: "loader.run.completed", Level: "info", Message: "scheduler prune e2e completed", CreatedAt: completedAt,
 	}); err != nil {
 		t.Fatalf("add loader event: %v", err)
@@ -134,14 +134,14 @@ func (f *schedulerPruneE2EFixture) seedHistory(t *testing.T, dataRoot string) {
 		t.Fatalf("create topic event: %v", err)
 	}
 	if err := f.store.UpsertEventDelivery(ctx, domain.EventDelivery{
-		EventID: f.eventID, LoaderID: f.scheduler.ManagedLoaderID, TriggerID: f.triggerID, RunID: f.runID,
+		EventID: f.eventID, SchedulerID: f.scheduler.ID, TriggerID: f.triggerID, RunID: f.runID,
 		Status: domain.EventDeliveryStatusRunSucceeded, CreatedAt: completedAt, UpdatedAt: completedAt,
 	}); err != nil {
 		t.Fatalf("add event delivery: %v", err)
 	}
 	if err := f.store.AddEventSandboxLink(ctx, domain.EventSandboxLink{
 		EventID: f.eventID, SandboxID: identity.NewRandomID(identity.ResourceSandbox), Relation: "used",
-		LoaderID: f.scheduler.ManagedLoaderID, RunID: f.runID, TriggerID: f.triggerID, CreatedAt: completedAt,
+		SchedulerID: f.scheduler.ID, RunID: f.runID, TriggerID: f.triggerID, CreatedAt: completedAt,
 	}); err != nil {
 		t.Fatalf("add event sandbox link: %v", err)
 	}
@@ -174,7 +174,7 @@ func (f schedulerPruneE2EFixture) prune(t *testing.T, force bool) composeSchedul
 
 func (f schedulerPruneE2EFixture) wantStats() composeSchedulerPruneStats {
 	return composeSchedulerPruneStats{
-		Runs: 1, LoaderEvents: 1, EventDeliveries: 1, EventSandboxLinks: 1,
+		Runs: 1, SchedulerEvents: 1, EventDeliveries: 1, EventSandboxLinks: 1,
 		ArtifactDirs: 1, ArtifactBytes: f.artifactLen,
 	}
 }
@@ -182,7 +182,7 @@ func (f schedulerPruneE2EFixture) wantStats() composeSchedulerPruneStats {
 func (f schedulerPruneE2EFixture) assertHistoryVisible(t *testing.T) {
 	t.Helper()
 	runs := f.schedulerRuns(t)
-	if len(runs.Runs) != 1 || runs.Runs[0].RunID != f.runID || runs.Runs[0].TriggerID != f.triggerID || runs.Runs[0].Status != domain.LoaderRunStatusSucceeded {
+	if len(runs.Runs) != 1 || runs.Runs[0].RunID != f.runID || runs.Runs[0].TriggerID != f.triggerID || runs.Runs[0].Status != domain.SchedulerRunStatusSucceeded {
 		t.Fatalf("scheduler runs=%#v", runs.Runs)
 	}
 	logs := f.schedulerLogs(t)
@@ -199,7 +199,7 @@ func (f schedulerPruneE2EFixture) assertHistoryVisible(t *testing.T) {
 func (f schedulerPruneE2EFixture) assertPersisted(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := f.store.GetLoaderRun(ctx, f.scheduler.ManagedLoaderID, f.runID); err != nil {
+	if _, err := f.store.GetSchedulerRun(ctx, f.scheduler.ID, f.runID); err != nil {
 		t.Fatalf("loader run missing after dry-run: %v", err)
 	}
 	if _, err := os.Stat(f.artifactDir); err != nil {
@@ -211,7 +211,7 @@ func (f schedulerPruneE2EFixture) assertPersisted(t *testing.T) {
 func (f schedulerPruneE2EFixture) assertHistoryRemoved(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := f.store.GetLoaderRun(ctx, f.scheduler.ManagedLoaderID, f.runID); err == nil {
+	if _, err := f.store.GetSchedulerRun(ctx, f.scheduler.ID, f.runID); err == nil {
 		t.Fatal("loader run still exists after forced prune")
 	}
 	if _, err := os.Stat(f.artifactDir); !os.IsNotExist(err) {
@@ -238,8 +238,8 @@ func (f schedulerPruneE2EFixture) assertHistoryRemoved(t *testing.T) {
 func (f schedulerPruneE2EFixture) assertRelationCounts(t *testing.T, want int) {
 	t.Helper()
 	ctx := context.Background()
-	events, err := f.store.ListLoaderEventsPage(ctx, loaders.LoaderEventPageFilter{
-		LoaderIDs: []string{f.scheduler.ManagedLoaderID}, RunID: f.runID, Limit: 10,
+	events, err := f.store.ListSchedulerEventsPage(ctx, schedulers.SchedulerEventPageFilter{
+		SchedulerIDs: []string{f.scheduler.ID}, RunID: f.runID, Limit: 10,
 	})
 	if err != nil || len(events) != want {
 		t.Fatalf("loader events=%#v err=%v, want %d", events, err, want)

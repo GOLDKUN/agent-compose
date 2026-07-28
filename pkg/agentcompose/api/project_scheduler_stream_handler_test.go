@@ -17,15 +17,15 @@ import (
 func TestStreamSchedulerRunsBatchesAndCompletes(t *testing.T) {
 	store, _, handler := newSchedulerRunHandlerFixture()
 	startedAt := time.Unix(500, 0).UTC()
-	store.runs = []domain.LoaderRunSummary{
-		{ID: "run-3", LoaderID: store.scheduler.ManagedLoaderID, TriggerID: "trigger-1", Status: domain.LoaderRunStatusSucceeded, StartedAt: startedAt.Add(2 * time.Second)},
-		{ID: "run-2", LoaderID: store.scheduler.ManagedLoaderID, TriggerID: "trigger-1", Status: domain.LoaderRunStatusSucceeded, StartedAt: startedAt.Add(time.Second)},
-		{ID: "run-1", LoaderID: store.scheduler.ManagedLoaderID, TriggerID: "trigger-1", Status: domain.LoaderRunStatusSucceeded, StartedAt: startedAt},
+	store.runs = []domain.SchedulerRunSummary{
+		{ID: "run-3", SchedulerID: store.scheduler.ID, TriggerID: "trigger-1", Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt.Add(2 * time.Second)},
+		{ID: "run-2", SchedulerID: store.scheduler.ID, TriggerID: "trigger-1", Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt.Add(time.Second)},
+		{ID: "run-1", SchedulerID: store.scheduler.ID, TriggerID: "trigger-1", Status: domain.SchedulerRunStatusSucceeded, StartedAt: startedAt},
 	}
 	client, closeServer := schedulerStreamTestClient(t, handler)
 	defer closeServer()
 	stream, err := client.StreamSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.StreamSchedulerRunsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, BatchSize: 1, Limit: 2,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, BatchSize: 1, Limit: 2,
 	}))
 	if err != nil {
 		t.Fatalf("StreamSchedulerRuns returned error: %v", err)
@@ -47,15 +47,15 @@ func TestStreamSchedulerRunsBatchesAndCompletes(t *testing.T) {
 func TestStreamProjectSchedulerEventsTailsInDisplayOrder(t *testing.T) {
 	store, _, handler := newSchedulerRunHandlerFixture()
 	createdAt := time.Unix(600, 0).UTC()
-	store.events = []domain.LoaderEvent{
-		{ID: "event-3", LoaderID: store.scheduler.ManagedLoaderID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt.Add(2 * time.Second)},
-		{ID: "event-2", LoaderID: store.scheduler.ManagedLoaderID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt.Add(time.Second)},
-		{ID: "event-1", LoaderID: store.scheduler.ManagedLoaderID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt},
+	store.events = []domain.SchedulerEvent{
+		{ID: "event-3", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt.Add(2 * time.Second)},
+		{ID: "event-2", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt.Add(time.Second)},
+		{ID: "event-1", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1", Type: "loader.log", CreatedAt: createdAt},
 	}
 	client, closeServer := schedulerStreamTestClient(t, handler)
 	defer closeServer()
 	stream, err := client.StreamProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.StreamProjectSchedulerEventsRequest{
-		Project: &agentcomposev2.ProjectRef{ProjectId: store.project.ID}, BatchSize: 1, Tail: 2,
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, BatchSize: 1, Tail: 2,
 	}))
 	if err != nil {
 		t.Fatalf("StreamProjectSchedulerEvents returned error: %v", err)

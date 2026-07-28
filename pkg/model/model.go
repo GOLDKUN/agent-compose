@@ -525,13 +525,26 @@ type ExecSpec struct {
 }
 
 type AgentRunResult struct {
-	Agent         string
-	DisplayOutput string
-	FinalText     string
-	JSONText      string
-	Transcript    string
-	Success       bool
-	ExitCode      int
-	ThreadID      string
-	StopReason    string
+	Agent           string
+	DisplayOutput   string
+	FinalText       string
+	FinalTextSource AgentFinalTextSource
+	JSONText        string
+	Transcript      string
+	Success         bool
+	ExitCode        int
+	ThreadID        string
+	StopReason      string
 }
+
+// AgentFinalTextSource identifies how an agent result obtained FinalText.
+type AgentFinalTextSource string
+
+const (
+	// AgentFinalTextSourceNone means the provider produced no final text.
+	AgentFinalTextSourceNone AgentFinalTextSource = "none"
+	// AgentFinalTextSourceProviderMessage means FinalText came from a provider assistant-message event.
+	AgentFinalTextSourceProviderMessage AgentFinalTextSource = "provider_message"
+	// AgentFinalTextSourceTranscriptFallback means FinalText is a compatibility fallback containing the transcript.
+	AgentFinalTextSourceTranscriptFallback AgentFinalTextSource = "transcript_fallback"
+)

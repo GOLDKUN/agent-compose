@@ -13,14 +13,14 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestReconcilePendingSessionStateMarksStaleStartupFailed(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	config := &appconfig.Config{DataRoot: root, SandboxRoot: filepath.Join(root, "sandboxes"), RuntimeDriver: driverpkg.RuntimeDriverBoxlite}
-	store, err := sessionstore.NewWithConfig(config)
+	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
@@ -92,11 +92,15 @@ func TestReconcilePersistedProjectRunsMarksInterruptedRunsFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertProject returned error: %v", err)
 	}
+	agent, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{ProjectID: project.ID, AgentName: "worker"})
+	if err != nil {
+		t.Fatalf("UpsertProjectAgent returned error: %v", err)
+	}
 	for _, run := range []domain.ProjectRunRecord{
-		{RunID: "run-pending", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusPending},
-		{RunID: "run-running", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusRunning},
-		{RunID: "run-succeeded", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusSucceeded, Error: "keep"},
-		{RunID: "run-canceled", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusCanceled, Error: "keep canceled"},
+		{RunID: "run-pending", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", AgentID: agent.ID, Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusPending},
+		{RunID: "run-running", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", AgentID: agent.ID, Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusRunning},
+		{RunID: "run-succeeded", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", AgentID: agent.ID, Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusSucceeded, Error: "keep"},
+		{RunID: "run-canceled", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", AgentID: agent.ID, Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusCanceled, Error: "keep canceled"},
 	} {
 		if _, err := store.CreateProjectRun(ctx, run); err != nil {
 			t.Fatalf("CreateProjectRun(%s) returned error: %v", run.RunID, err)
@@ -127,7 +131,7 @@ func TestReconcilePersistedProjectRunsMarksInterruptedRunsFailed(t *testing.T) {
 		}
 	}
 	if _, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{
-		RunID: "run-fresh", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusRunning,
+		RunID: "run-fresh", ProjectID: project.ID, ProjectName: project.Name, AgentName: "worker", AgentID: agent.ID, Source: domain.ProjectRunSourceManual, Status: domain.ProjectRunStatusRunning,
 	}); err != nil {
 		t.Fatalf("CreateProjectRun(run-fresh) returned error: %v", err)
 	}

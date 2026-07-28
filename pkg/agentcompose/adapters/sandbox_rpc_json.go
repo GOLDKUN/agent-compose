@@ -11,14 +11,10 @@ import (
 
 type sandboxRPCIDRequest struct {
 	SandboxID string `json:"sandboxId"`
-	SessionID string `json:"sessionId"`
 }
 
 func (r sandboxRPCIDRequest) ID() string {
-	if strings.TrimSpace(r.SandboxID) != "" {
-		return strings.TrimSpace(r.SandboxID)
-	}
-	return strings.TrimSpace(r.SessionID)
+	return strings.TrimSpace(r.SandboxID)
 }
 
 type sandboxRPCCreateRequest struct {
@@ -33,7 +29,7 @@ type sandboxRPCCreateRequest struct {
 }
 
 type sandboxRPCListRequest struct {
-	SessionType   string `json:"sessionType"`
+	SandboxType   string `json:"sandboxType"`
 	TriggerSource string `json:"triggerSourceQuery"`
 	Title         string `json:"titleQuery"`
 	Workspace     string `json:"workspaceQuery"`
@@ -48,6 +44,10 @@ type sandboxRPCListRequest struct {
 }
 
 func (r sandboxRPCListRequest) Options() (domain.SandboxListOptions, error) {
+	vmStatus, err := domain.NormalizeSandboxVMStatus(r.VMStatus)
+	if err != nil {
+		return domain.SandboxListOptions{}, err
+	}
 	createdFrom, err := sandboxRPCOptionalTime(r.CreatedFrom, "createdFrom")
 	if err != nil {
 		return domain.SandboxListOptions{}, err
@@ -65,8 +65,8 @@ func (r sandboxRPCListRequest) Options() (domain.SandboxListOptions, error) {
 		return domain.SandboxListOptions{}, err
 	}
 	return domain.SandboxListOptions{
-		SandboxType: r.SessionType, TriggerSourceQuery: r.TriggerSource, TitleQuery: r.Title,
-		WorkspaceQuery: r.Workspace, Driver: r.Driver, VMStatus: r.VMStatus,
+		SandboxType: r.SandboxType, TriggerSourceQuery: r.TriggerSource, TitleQuery: r.Title,
+		WorkspaceQuery: r.Workspace, Driver: r.Driver, VMStatus: vmStatus,
 		CreatedFrom: createdFrom, CreatedTo: createdTo, UpdatedFrom: updatedFrom, UpdatedTo: updatedTo,
 		Offset: int(r.Offset), Limit: int(r.Limit),
 	}, nil
@@ -85,7 +85,7 @@ func sandboxRPCOptionalTime(value, field string) (time.Time, error) {
 }
 
 type sandboxRPCResponse struct {
-	Session *sandboxRPCDetail `json:"session,omitempty"`
+	Sandbox *sandboxRPCDetail `json:"sandbox,omitempty"`
 }
 
 type sandboxRPCDetail struct {
@@ -96,7 +96,7 @@ type sandboxRPCDetail struct {
 }
 
 type sandboxRPCSummary struct {
-	SessionID     string              `json:"sessionId"`
+	SandboxID     string              `json:"sandboxId"`
 	Title         string              `json:"title,omitempty"`
 	Driver        string              `json:"driver,omitempty"`
 	VMStatus      string              `json:"vmStatus,omitempty"`
@@ -112,14 +112,14 @@ type sandboxRPCSummary struct {
 }
 
 type sandboxRPCListResponse struct {
-	Sessions   []*sandboxRPCSummary `json:"sessions,omitempty"`
+	Sandboxes  []*sandboxRPCSummary `json:"sandboxes,omitempty"`
 	TotalCount uint32               `json:"totalCount,omitempty"`
 	HasMore    bool                 `json:"hasMore,omitempty"`
 	NextOffset uint32               `json:"nextOffset,omitempty"`
 }
 
 type sandboxRPCProxyResponse struct {
-	SessionID   string `json:"sessionId"`
+	SandboxID   string `json:"sandboxId"`
 	ProxyPath   string `json:"proxyPath,omitempty"`
 	NotebookURL string `json:"notebookUrl,omitempty"`
 	Driver      string `json:"driver,omitempty"`
@@ -145,7 +145,7 @@ func sandboxRPCSummaryFromDomain(summary *domain.SandboxSummary) *sandboxRPCSumm
 		return nil
 	}
 	return &sandboxRPCSummary{
-		SessionID: summary.ID, Title: summary.Title, Driver: summary.Driver, VMStatus: summary.VMStatus,
+		SandboxID: summary.ID, Title: summary.Title, Driver: summary.Driver, VMStatus: summary.VMStatus,
 		WorkspacePath: summary.WorkspacePath, ProxyPath: summary.ProxyPath,
 		CreatedAt: summary.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: summary.UpdatedAt.Format(time.RFC3339Nano),
 		CellCount: uint32(summary.CellCount), EventCount: uint32(summary.EventCount), Tags: summary.Tags,
@@ -160,7 +160,7 @@ func decodeSandboxRPCJSON(raw string, target any) error {
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return fmt.Errorf("decode session rpc request: %w", err)
+		return fmt.Errorf("decode sandbox rpc request: %w", err)
 	}
 	return nil
 }
@@ -168,7 +168,7 @@ func decodeSandboxRPCJSON(raw string, target any) error {
 func encodeSandboxRPCJSON(value any) (string, error) {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return "", fmt.Errorf("encode session rpc response: %w", err)
+		return "", fmt.Errorf("encode sandbox rpc response: %w", err)
 	}
 	return string(data), nil
 }

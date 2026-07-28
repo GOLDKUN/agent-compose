@@ -9,7 +9,7 @@ import (
 
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sessionstore"
+	"agent-compose/pkg/storage/sandboxstore"
 	storagesqlite "agent-compose/pkg/storage/sqlite"
 )
 
@@ -27,13 +27,13 @@ func OpenConfigStore(t testing.TB, di do.Injector) (*configstore.ConfigStore, er
 
 // OpenStores opens config and sandbox stores over one migrated test database.
 // Both stores and the database are closed automatically with the test.
-func OpenStores(t testing.TB, config *appconfig.Config) (*configstore.ConfigStore, *sessionstore.Store, error) {
+func OpenStores(t testing.TB, config *appconfig.Config) (*configstore.ConfigStore, *sandboxstore.Store, error) {
 	t.Helper()
 	database, err := openDatabase(t, config)
 	if err != nil {
 		return nil, nil, err
 	}
-	sandboxes, err := sessionstore.NewWithDatabase(config, database.DB())
+	sandboxes, err := sandboxstore.NewWithDatabase(config, database.DB())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -50,7 +50,7 @@ func openDatabase(t testing.TB, config *appconfig.Config) (*storagesqlite.Databa
 	if err := os.MkdirAll(config.DataRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("create test data root: %w", err)
 	}
-	database, err := storagesqlite.Open(config.DbAddr, config.DbTimeout)
+	database, err := storagesqlite.OpenWithMaxOpenConns(config.DbAddr, config.DbTimeout, config.EffectiveSQLiteMaxOpenConns())
 	if err != nil {
 		return nil, err
 	}
