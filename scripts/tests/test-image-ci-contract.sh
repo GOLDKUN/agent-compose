@@ -440,6 +440,8 @@ if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
     'configurable Arch Linux base image'
   require_regex "$archlinux_guest_source" 'pacman[[:space:]]+-Syu' \
     'Arch Linux package installation'
+  require_regex "$archlinux_guest_source" 'cat[[:space:]]+/etc/pacman\.d/mirrorlist' \
+    'Arch Linux package mirror fallback'
   require_regex "$archlinux_guest_source" 'nodejs-lts-jod' \
     'Node.js 22 LTS in Arch Linux guest image'
   forbid_regex "$archlinux_guest_source" '^[[:space:]]*base-devel[[:space:]]*\\' \
