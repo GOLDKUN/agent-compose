@@ -33,6 +33,8 @@ jobs:
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
       - name: Install Task
         run: go install github.com/go-task/task/v3/cmd/task@v3.40.1
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
       - name: Run lint
         run: task lint
 
@@ -45,6 +47,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
+      - name: Generate Protobuf sources
+        run: buf generate
       - run: go test ./cmd/... ./pkg/...
 
   installer-build:
@@ -86,6 +92,10 @@ jobs:
           cache-dependency-path: |
             runtime/agent-compose-runtime-sdk/package-lock.json
             runtime/javascript/package-lock.json
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
+      - name: Generate Protobuf sources
+        run: buf generate
       - name: Install runtime coverage dependencies
         run: |
           for directory in runtime/agent-compose-runtime-sdk runtime/javascript; do
@@ -166,6 +176,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
+      - name: Generate Protobuf sources
+        run: buf generate
       - name: Assert Darwin Docker-only profile
         env:
           TARGET_ARCH: ${{ matrix.arch }}
@@ -218,6 +232,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
+      - name: Generate Protobuf sources
+        run: buf generate
       - name: Build native Darwin binary
         id: build
         run: |
@@ -262,6 +280,8 @@ jobs:
           cache: true
       - name: Install Task
         run: go install github.com/go-task/task/v3/cmd/task@v3.40.1
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
       - name: Assert Linux full profile
         env:
           TARGET_ARCH: ${{ matrix.platform.arch }}
