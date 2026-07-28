@@ -971,7 +971,7 @@ const (
 	CacheDomain_CACHE_DOMAIN_OCI_IMAGE_STORE          CacheDomain = 1
 	CacheDomain_CACHE_DOMAIN_MATERIALIZED_IMAGE_CACHE CacheDomain = 2
 	CacheDomain_CACHE_DOMAIN_RUNTIME_DERIVED_CACHE    CacheDomain = 3
-	CacheDomain_CACHE_DOMAIN_SKILL_ARTIFACT_CACHE     CacheDomain = 5
+	CacheDomain_CACHE_DOMAIN_SKILL_ARTIFACT_CACHE     CacheDomain = 4
 )
 
 // Enum value maps for CacheDomain.
@@ -981,14 +981,14 @@ var (
 		1: "CACHE_DOMAIN_OCI_IMAGE_STORE",
 		2: "CACHE_DOMAIN_MATERIALIZED_IMAGE_CACHE",
 		3: "CACHE_DOMAIN_RUNTIME_DERIVED_CACHE",
-		5: "CACHE_DOMAIN_SKILL_ARTIFACT_CACHE",
+		4: "CACHE_DOMAIN_SKILL_ARTIFACT_CACHE",
 	}
 	CacheDomain_value = map[string]int32{
 		"CACHE_DOMAIN_UNSPECIFIED":              0,
 		"CACHE_DOMAIN_OCI_IMAGE_STORE":          1,
 		"CACHE_DOMAIN_MATERIALIZED_IMAGE_CACHE": 2,
 		"CACHE_DOMAIN_RUNTIME_DERIVED_CACHE":    3,
-		"CACHE_DOMAIN_SKILL_ARTIFACT_CACHE":     5,
+		"CACHE_DOMAIN_SKILL_ARTIFACT_CACHE":     4,
 	}
 )
 
@@ -2737,10 +2737,10 @@ type ProjectScheduler struct {
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
 	SchedulerId   string                 `protobuf:"bytes,3,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
-	Enabled       bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	TriggerCount  uint32                 `protobuf:"varint,6,opt,name=trigger_count,json=triggerCount,proto3" json:"trigger_count,omitempty"`
-	DisplayName   string                 `protobuf:"bytes,7,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	Description   string                 `protobuf:"bytes,8,opt,name=description,proto3" json:"description,omitempty"`
+	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	TriggerCount  uint32                 `protobuf:"varint,5,opt,name=trigger_count,json=triggerCount,proto3" json:"trigger_count,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,6,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Description   string                 `protobuf:"bytes,7,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5208,11 +5208,11 @@ type ProjectSpec struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Variables      []*EnvVarSpec          `protobuf:"bytes,2,rep,name=variables,proto3" json:"variables,omitempty"`
-	Agents         []*AgentSpec           `protobuf:"bytes,4,rep,name=agents,proto3" json:"agents,omitempty"`
-	Volumes        []*ProjectVolumeSpec   `protobuf:"bytes,6,rep,name=volumes,proto3" json:"volumes,omitempty"`
-	Workspaces     []*NamedWorkspaceSpec  `protobuf:"bytes,7,rep,name=workspaces,proto3" json:"workspaces,omitempty"`
-	McpServers     []*MCPServerSpec       `protobuf:"bytes,8,rep,name=mcp_servers,json=mcpServers,proto3" json:"mcp_servers,omitempty"`
-	OctobusServers []*OctoBusServerSpec   `protobuf:"bytes,9,rep,name=octobus_servers,json=octobusServers,proto3" json:"octobus_servers,omitempty"`
+	Agents         []*AgentSpec           `protobuf:"bytes,3,rep,name=agents,proto3" json:"agents,omitempty"`
+	Volumes        []*ProjectVolumeSpec   `protobuf:"bytes,4,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	Workspaces     []*NamedWorkspaceSpec  `protobuf:"bytes,5,rep,name=workspaces,proto3" json:"workspaces,omitempty"`
+	McpServers     []*MCPServerSpec       `protobuf:"bytes,6,rep,name=mcp_servers,json=mcpServers,proto3" json:"mcp_servers,omitempty"`
+	OctobusServers []*OctoBusServerSpec   `protobuf:"bytes,7,rep,name=octobus_servers,json=octobusServers,proto3" json:"octobus_servers,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -6678,18 +6678,18 @@ type RunAgentRequest struct {
 	AgentName        string                  `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
 	Prompt           string                  `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	Source           RunSource               `protobuf:"varint,4,opt,name=source,proto3,enum=agentcompose.v2.RunSource" json:"source,omitempty"`
-	Env              []*EnvVarSpec           `protobuf:"bytes,6,rep,name=env,proto3" json:"env,omitempty"`
-	CleanupPolicy    RunSandboxCleanupPolicy `protobuf:"varint,7,opt,name=cleanup_policy,json=cleanupPolicy,proto3,enum=agentcompose.v2.RunSandboxCleanupPolicy" json:"cleanup_policy,omitempty"`
-	SchedulerId      string                  `protobuf:"bytes,8,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
-	TriggerId        string                  `protobuf:"bytes,9,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
-	OutputSchemaJson string                  `protobuf:"bytes,10,opt,name=output_schema_json,json=outputSchemaJson,proto3" json:"output_schema_json,omitempty"`
-	ClientRequestId  string                  `protobuf:"bytes,11,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	Command          string                  `protobuf:"bytes,12,opt,name=command,proto3" json:"command,omitempty"`
-	Jupyter          *RunJupyterSpec         `protobuf:"bytes,13,opt,name=jupyter,proto3" json:"jupyter,omitempty"`
-	Driver           string                  `protobuf:"bytes,14,opt,name=driver,proto3" json:"driver,omitempty"`
-	SandboxId        string                  `protobuf:"bytes,15,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
-	Volumes          []*VolumeMountSpec      `protobuf:"bytes,16,rep,name=volumes,proto3" json:"volumes,omitempty"`
-	PayloadJson      string                  `protobuf:"bytes,17,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
+	Env              []*EnvVarSpec           `protobuf:"bytes,5,rep,name=env,proto3" json:"env,omitempty"`
+	CleanupPolicy    RunSandboxCleanupPolicy `protobuf:"varint,6,opt,name=cleanup_policy,json=cleanupPolicy,proto3,enum=agentcompose.v2.RunSandboxCleanupPolicy" json:"cleanup_policy,omitempty"`
+	SchedulerId      string                  `protobuf:"bytes,7,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
+	TriggerId        string                  `protobuf:"bytes,8,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
+	OutputSchemaJson string                  `protobuf:"bytes,9,opt,name=output_schema_json,json=outputSchemaJson,proto3" json:"output_schema_json,omitempty"`
+	ClientRequestId  string                  `protobuf:"bytes,10,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
+	Command          string                  `protobuf:"bytes,11,opt,name=command,proto3" json:"command,omitempty"`
+	Jupyter          *RunJupyterSpec         `protobuf:"bytes,12,opt,name=jupyter,proto3" json:"jupyter,omitempty"`
+	Driver           string                  `protobuf:"bytes,13,opt,name=driver,proto3" json:"driver,omitempty"`
+	SandboxId        string                  `protobuf:"bytes,14,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Volumes          []*VolumeMountSpec      `protobuf:"bytes,15,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	PayloadJson      string                  `protobuf:"bytes,16,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -6989,8 +6989,10 @@ func (x *RunAgentStreamResponse) GetTranscript() *TranscriptEvent {
 }
 
 type RunAttachRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientFrameId string                 `protobuf:"bytes,15,opt,name=client_frame_id,json=clientFrameId,proto3" json:"client_frame_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Frame variants occupy the low-number range. Envelope metadata starts at
+	// 15 so future frame variants can be added without moving metadata fields.
+	ClientFrameId string `protobuf:"bytes,15,opt,name=client_frame_id,json=clientFrameId,proto3" json:"client_frame_id,omitempty"`
 	// Types that are valid to be assigned to Frame:
 	//
 	//	*RunAttachRequest_Start
@@ -7159,7 +7161,9 @@ func (*RunAttachRequest_HumanMessage) isRunAttachRequest_Frame() {}
 func (*RunAttachRequest_Cancel) isRunAttachRequest_Frame() {}
 
 type RunAttachResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Frame variants occupy the low-number range. Envelope metadata starts at
+	// 15 so future frame variants can be added without moving metadata fields.
 	ServerFrameId string                 `protobuf:"bytes,15,opt,name=server_frame_id,json=serverFrameId,proto3" json:"server_frame_id,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// Types that are valid to be assigned to Frame:
@@ -7400,9 +7404,9 @@ type TranscriptEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Stream        StdioStream            `protobuf:"varint,1,opt,name=stream,proto3,enum=agentcompose.v2.StdioStream" json:"stream,omitempty"`
 	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	PayloadJson   string                 `protobuf:"bytes,5,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	PayloadJson   string                 `protobuf:"bytes,4,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7572,16 +7576,16 @@ type ListRunsRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId   string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	AgentName   string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	SchedulerId string                 `protobuf:"bytes,4,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
-	Status      RunStatus              `protobuf:"varint,5,opt,name=status,proto3,enum=agentcompose.v2.RunStatus" json:"status,omitempty"`
-	Source      RunSource              `protobuf:"varint,6,opt,name=source,proto3,enum=agentcompose.v2.RunSource" json:"source,omitempty"`
-	StartedFrom string                 `protobuf:"bytes,7,opt,name=started_from,json=startedFrom,proto3" json:"started_from,omitempty"`
-	StartedTo   string                 `protobuf:"bytes,8,opt,name=started_to,json=startedTo,proto3" json:"started_to,omitempty"`
+	SchedulerId string                 `protobuf:"bytes,3,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
+	Status      RunStatus              `protobuf:"varint,4,opt,name=status,proto3,enum=agentcompose.v2.RunStatus" json:"status,omitempty"`
+	Source      RunSource              `protobuf:"varint,5,opt,name=source,proto3,enum=agentcompose.v2.RunSource" json:"source,omitempty"`
+	StartedFrom string                 `protobuf:"bytes,6,opt,name=started_from,json=startedFrom,proto3" json:"started_from,omitempty"`
+	StartedTo   string                 `protobuf:"bytes,7,opt,name=started_to,json=startedTo,proto3" json:"started_to,omitempty"`
 	// Number of matching resources to skip. Values at or above total return an empty page.
-	Offset uint32 `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`
+	Offset uint32 `protobuf:"varint,8,opt,name=offset,proto3" json:"offset,omitempty"`
 	// Maximum resources to return. Zero uses the server default; values above 500 are rejected.
-	Limit         uint32 `protobuf:"varint,10,opt,name=limit,proto3" json:"limit,omitempty"`
-	SandboxId     string `protobuf:"bytes,11,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Limit         uint32 `protobuf:"varint,9,opt,name=limit,proto3" json:"limit,omitempty"`
+	SandboxId     string `protobuf:"bytes,10,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9772,17 +9776,17 @@ type RunSummary struct {
 	SchedulerId     string                 `protobuf:"bytes,8,opt,name=scheduler_id,json=schedulerId,proto3" json:"scheduler_id,omitempty"`
 	TriggerId       string                 `protobuf:"bytes,9,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
 	Status          RunStatus              `protobuf:"varint,10,opt,name=status,proto3,enum=agentcompose.v2.RunStatus" json:"status,omitempty"`
-	ExitCode        int32                  `protobuf:"varint,12,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
-	Error           string                 `protobuf:"bytes,13,opt,name=error,proto3" json:"error,omitempty"`
-	StartedAt       *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	CompletedAt     *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
-	DurationMs      int64                  `protobuf:"varint,16,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Warnings        []string               `protobuf:"bytes,19,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	SandboxId       string                 `protobuf:"bytes,20,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
-	RunShortId      string                 `protobuf:"bytes,21,opt,name=run_short_id,json=runShortId,proto3" json:"run_short_id,omitempty"`
-	SandboxShortId  string                 `protobuf:"bytes,22,opt,name=sandbox_short_id,json=sandboxShortId,proto3" json:"sandbox_short_id,omitempty"`
+	ExitCode        int32                  `protobuf:"varint,11,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Error           string                 `protobuf:"bytes,12,opt,name=error,proto3" json:"error,omitempty"`
+	StartedAt       *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	CompletedAt     *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	DurationMs      int64                  `protobuf:"varint,15,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Warnings        []string               `protobuf:"bytes,18,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	SandboxId       string                 `protobuf:"bytes,19,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	RunShortId      string                 `protobuf:"bytes,20,opt,name=run_short_id,json=runShortId,proto3" json:"run_short_id,omitempty"`
+	SandboxShortId  string                 `protobuf:"bytes,21,opt,name=sandbox_short_id,json=sandboxShortId,proto3" json:"sandbox_short_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -10475,8 +10479,10 @@ func (x *ExecStreamResponse) GetTranscript() *TranscriptEvent {
 }
 
 type ExecAttachRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientFrameId string                 `protobuf:"bytes,15,opt,name=client_frame_id,json=clientFrameId,proto3" json:"client_frame_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Frame variants occupy the low-number range. Envelope metadata starts at
+	// 15 so future frame variants can be added without moving metadata fields.
+	ClientFrameId string `protobuf:"bytes,15,opt,name=client_frame_id,json=clientFrameId,proto3" json:"client_frame_id,omitempty"`
 	// Types that are valid to be assigned to Frame:
 	//
 	//	*ExecAttachRequest_Start
@@ -10645,7 +10651,9 @@ func (*ExecAttachRequest_Cancel) isExecAttachRequest_Frame() {}
 func (*ExecAttachRequest_HumanMessage) isExecAttachRequest_Frame() {}
 
 type ExecAttachResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Frame variants occupy the low-number range. Envelope metadata starts at
+	// 15 so future frame variants can be added without moving metadata fields.
 	ServerFrameId string                 `protobuf:"bytes,15,opt,name=server_frame_id,json=serverFrameId,proto3" json:"server_frame_id,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// Types that are valid to be assigned to Frame:
@@ -11885,7 +11893,7 @@ type ListImagesResponse struct {
 	Images []*Image               `protobuf:"bytes,1,rep,name=images,proto3" json:"images,omitempty"`
 	// Total matching resources before offset and limit are applied.
 	Total         uint32            `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
-	StoreStatus   *ImageStoreStatus `protobuf:"bytes,5,opt,name=store_status,json=storeStatus,proto3" json:"store_status,omitempty"`
+	StoreStatus   *ImageStoreStatus `protobuf:"bytes,3,opt,name=store_status,json=storeStatus,proto3" json:"store_status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -12831,7 +12839,7 @@ func (x *InspectCacheResponse) GetWarnings() []string {
 type PruneCachesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filter        *CacheFilter           `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
-	Force         bool                   `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
+	Force         bool                   `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13095,13 +13103,13 @@ type CacheItem struct {
 	ImageId        string                 `protobuf:"bytes,7,opt,name=image_id,json=imageId,proto3" json:"image_id,omitempty"`
 	ImageRef       string                 `protobuf:"bytes,8,opt,name=image_ref,json=imageRef,proto3" json:"image_ref,omitempty"`
 	ResolvedRef    string                 `protobuf:"bytes,9,opt,name=resolved_ref,json=resolvedRef,proto3" json:"resolved_ref,omitempty"`
-	Status         CacheStatus            `protobuf:"varint,12,opt,name=status,proto3,enum=agentcompose.v2.CacheStatus" json:"status,omitempty"`
-	Removable      bool                   `protobuf:"varint,13,opt,name=removable,proto3" json:"removable,omitempty"`
-	BlockedReasons []string               `protobuf:"bytes,14,rep,name=blocked_reasons,json=blockedReasons,proto3" json:"blocked_reasons,omitempty"`
-	LastUsedAt     *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
-	LastUsedSource string                 `protobuf:"bytes,16,opt,name=last_used_source,json=lastUsedSource,proto3" json:"last_used_source,omitempty"`
-	References     []*CacheReference      `protobuf:"bytes,17,rep,name=references,proto3" json:"references,omitempty"`
-	Warnings       []string               `protobuf:"bytes,18,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	Status         CacheStatus            `protobuf:"varint,10,opt,name=status,proto3,enum=agentcompose.v2.CacheStatus" json:"status,omitempty"`
+	Removable      bool                   `protobuf:"varint,11,opt,name=removable,proto3" json:"removable,omitempty"`
+	BlockedReasons []string               `protobuf:"bytes,12,rep,name=blocked_reasons,json=blockedReasons,proto3" json:"blocked_reasons,omitempty"`
+	LastUsedAt     *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
+	LastUsedSource string                 `protobuf:"bytes,14,opt,name=last_used_source,json=lastUsedSource,proto3" json:"last_used_source,omitempty"`
+	References     []*CacheReference      `protobuf:"bytes,15,rep,name=references,proto3" json:"references,omitempty"`
+	Warnings       []string               `protobuf:"bytes,16,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -18051,10 +18059,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\n" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12!\n" +
 	"\fscheduler_id\x18\x03 \x01(\tR\vschedulerId\x12\x18\n" +
-	"\aenabled\x18\x05 \x01(\bR\aenabled\x12#\n" +
-	"\rtrigger_count\x18\x06 \x01(\rR\ftriggerCount\x12!\n" +
-	"\fdisplay_name\x18\a \x01(\tR\vdisplayName\x12 \n" +
-	"\vdescription\x18\b \x01(\tR\vdescription\"k\n" +
+	"\aenabled\x18\x04 \x01(\bR\aenabled\x12#\n" +
+	"\rtrigger_count\x18\x05 \x01(\rR\ftriggerCount\x12!\n" +
+	"\fdisplay_name\x18\x06 \x01(\tR\vdisplayName\x12 \n" +
+	"\vdescription\x18\a \x01(\tR\vdescription\"k\n" +
 	"\x13GetSchedulerRequest\x125\n" +
 	"\aproject\x18\x01 \x01(\v2\x1b.agentcompose.v2.ProjectRefR\aproject\x12\x1d\n" +
 	"\n" +
@@ -18280,14 +18288,14 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\vProjectSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
 	"\tvariables\x18\x02 \x03(\v2\x1b.agentcompose.v2.EnvVarSpecR\tvariables\x122\n" +
-	"\x06agents\x18\x04 \x03(\v2\x1a.agentcompose.v2.AgentSpecR\x06agents\x12<\n" +
-	"\avolumes\x18\x06 \x03(\v2\".agentcompose.v2.ProjectVolumeSpecR\avolumes\x12C\n" +
+	"\x06agents\x18\x03 \x03(\v2\x1a.agentcompose.v2.AgentSpecR\x06agents\x12<\n" +
+	"\avolumes\x18\x04 \x03(\v2\".agentcompose.v2.ProjectVolumeSpecR\avolumes\x12C\n" +
 	"\n" +
-	"workspaces\x18\a \x03(\v2#.agentcompose.v2.NamedWorkspaceSpecR\n" +
+	"workspaces\x18\x05 \x03(\v2#.agentcompose.v2.NamedWorkspaceSpecR\n" +
 	"workspaces\x12?\n" +
-	"\vmcp_servers\x18\b \x03(\v2\x1e.agentcompose.v2.MCPServerSpecR\n" +
+	"\vmcp_servers\x18\x06 \x03(\v2\x1e.agentcompose.v2.MCPServerSpecR\n" +
 	"mcpServers\x12K\n" +
-	"\x0foctobus_servers\x18\t \x03(\v2\".agentcompose.v2.OctoBusServerSpecR\x0eoctobusServers\"f\n" +
+	"\x0foctobus_servers\x18\a \x03(\v2\".agentcompose.v2.OctoBusServerSpecR\x0eoctobusServers\"f\n" +
 	"\x12NamedWorkspaceSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
 	"\tworkspace\x18\x02 \x01(\v2\x1e.agentcompose.v2.WorkspaceSpecR\tworkspace\"\xce\x06\n" +
@@ -18424,21 +18432,21 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12\x16\n" +
 	"\x06prompt\x18\x03 \x01(\tR\x06prompt\x122\n" +
 	"\x06source\x18\x04 \x01(\x0e2\x1a.agentcompose.v2.RunSourceR\x06source\x12-\n" +
-	"\x03env\x18\x06 \x03(\v2\x1b.agentcompose.v2.EnvVarSpecR\x03env\x12O\n" +
-	"\x0ecleanup_policy\x18\a \x01(\x0e2(.agentcompose.v2.RunSandboxCleanupPolicyR\rcleanupPolicy\x12!\n" +
-	"\fscheduler_id\x18\b \x01(\tR\vschedulerId\x12\x1d\n" +
+	"\x03env\x18\x05 \x03(\v2\x1b.agentcompose.v2.EnvVarSpecR\x03env\x12O\n" +
+	"\x0ecleanup_policy\x18\x06 \x01(\x0e2(.agentcompose.v2.RunSandboxCleanupPolicyR\rcleanupPolicy\x12!\n" +
+	"\fscheduler_id\x18\a \x01(\tR\vschedulerId\x12\x1d\n" +
 	"\n" +
-	"trigger_id\x18\t \x01(\tR\ttriggerId\x12,\n" +
-	"\x12output_schema_json\x18\n" +
-	" \x01(\tR\x10outputSchemaJson\x12*\n" +
-	"\x11client_request_id\x18\v \x01(\tR\x0fclientRequestId\x12\x18\n" +
-	"\acommand\x18\f \x01(\tR\acommand\x129\n" +
-	"\ajupyter\x18\r \x01(\v2\x1f.agentcompose.v2.RunJupyterSpecR\ajupyter\x12\x16\n" +
-	"\x06driver\x18\x0e \x01(\tR\x06driver\x12\x1d\n" +
+	"trigger_id\x18\b \x01(\tR\ttriggerId\x12,\n" +
+	"\x12output_schema_json\x18\t \x01(\tR\x10outputSchemaJson\x12*\n" +
+	"\x11client_request_id\x18\n" +
+	" \x01(\tR\x0fclientRequestId\x12\x18\n" +
+	"\acommand\x18\v \x01(\tR\acommand\x129\n" +
+	"\ajupyter\x18\f \x01(\v2\x1f.agentcompose.v2.RunJupyterSpecR\ajupyter\x12\x16\n" +
+	"\x06driver\x18\r \x01(\tR\x06driver\x12\x1d\n" +
 	"\n" +
-	"sandbox_id\x18\x0f \x01(\tR\tsandboxId\x12:\n" +
-	"\avolumes\x18\x10 \x03(\v2 .agentcompose.v2.VolumeMountSpecR\avolumes\x12!\n" +
-	"\fpayload_json\x18\x11 \x01(\tR\vpayloadJson\"\\\n" +
+	"sandbox_id\x18\x0e \x01(\tR\tsandboxId\x12:\n" +
+	"\avolumes\x18\x0f \x03(\v2 .agentcompose.v2.VolumeMountSpecR\avolumes\x12!\n" +
+	"\fpayload_json\x18\x10 \x01(\tR\vpayloadJson\"\\\n" +
 	"\x10RunAgentResponse\x12,\n" +
 	"\x03run\x18\x01 \x01(\v2\x1a.agentcompose.v2.RunDetailR\x03run\x12\x1a\n" +
 	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"\x8c\x03\n" +
@@ -18486,10 +18494,10 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x0fTranscriptEvent\x124\n" +
 	"\x06stream\x18\x01 \x01(\x0e2\x1c.agentcompose.v2.StdioStreamR\x06stream\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\x12!\n" +
-	"\fpayload_json\x18\x05 \x01(\tR\vpayloadJson\x129\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12!\n" +
+	"\fpayload_json\x18\x04 \x01(\tR\vpayloadJson\x129\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"E\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"E\n" +
 	"\rGetRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1d\n" +
 	"\n" +
@@ -18501,17 +18509,17 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12!\n" +
-	"\fscheduler_id\x18\x04 \x01(\tR\vschedulerId\x122\n" +
-	"\x06status\x18\x05 \x01(\x0e2\x1a.agentcompose.v2.RunStatusR\x06status\x122\n" +
-	"\x06source\x18\x06 \x01(\x0e2\x1a.agentcompose.v2.RunSourceR\x06source\x12!\n" +
-	"\fstarted_from\x18\a \x01(\tR\vstartedFrom\x12\x1d\n" +
+	"\fscheduler_id\x18\x03 \x01(\tR\vschedulerId\x122\n" +
+	"\x06status\x18\x04 \x01(\x0e2\x1a.agentcompose.v2.RunStatusR\x06status\x122\n" +
+	"\x06source\x18\x05 \x01(\x0e2\x1a.agentcompose.v2.RunSourceR\x06source\x12!\n" +
+	"\fstarted_from\x18\x06 \x01(\tR\vstartedFrom\x12\x1d\n" +
 	"\n" +
-	"started_to\x18\b \x01(\tR\tstartedTo\x12\x16\n" +
-	"\x06offset\x18\t \x01(\rR\x06offset\x12\x14\n" +
-	"\x05limit\x18\n" +
-	" \x01(\rR\x05limit\x12\x1d\n" +
+	"started_to\x18\a \x01(\tR\tstartedTo\x12\x16\n" +
+	"\x06offset\x18\b \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\t \x01(\rR\x05limit\x12\x1d\n" +
 	"\n" +
-	"sandbox_id\x18\v \x01(\tR\tsandboxId\"Y\n" +
+	"sandbox_id\x18\n" +
+	" \x01(\tR\tsandboxId\"Y\n" +
 	"\x10ListRunsResponse\x12/\n" +
 	"\x04runs\x18\x01 \x03(\v2\x1b.agentcompose.v2.RunSummaryR\x04runs\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\rR\x05total\"\xec\x01\n" +
@@ -18722,23 +18730,23 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"trigger_id\x18\t \x01(\tR\ttriggerId\x122\n" +
 	"\x06status\x18\n" +
 	" \x01(\x0e2\x1a.agentcompose.v2.RunStatusR\x06status\x12\x1b\n" +
-	"\texit_code\x18\f \x01(\x05R\bexitCode\x12\x14\n" +
-	"\x05error\x18\r \x01(\tR\x05error\x129\n" +
+	"\texit_code\x18\v \x01(\x05R\bexitCode\x12\x14\n" +
+	"\x05error\x18\f \x01(\tR\x05error\x129\n" +
 	"\n" +
-	"started_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12=\n" +
-	"\fcompleted_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt\x12\x1f\n" +
-	"\vduration_ms\x18\x10 \x01(\x03R\n" +
+	"started_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12=\n" +
+	"\fcompleted_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt\x12\x1f\n" +
+	"\vduration_ms\x18\x0f \x01(\x03R\n" +
 	"durationMs\x129\n" +
 	"\n" +
-	"created_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"created_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1a\n" +
-	"\bwarnings\x18\x13 \x03(\tR\bwarnings\x12\x1d\n" +
+	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1a\n" +
+	"\bwarnings\x18\x12 \x03(\tR\bwarnings\x12\x1d\n" +
 	"\n" +
-	"sandbox_id\x18\x14 \x01(\tR\tsandboxId\x12 \n" +
-	"\frun_short_id\x18\x15 \x01(\tR\n" +
+	"sandbox_id\x18\x13 \x01(\tR\tsandboxId\x12 \n" +
+	"\frun_short_id\x18\x14 \x01(\tR\n" +
 	"runShortId\x12(\n" +
-	"\x10sandbox_short_id\x18\x16 \x01(\tR\x0esandboxShortId\"\xcb\x02\n" +
+	"\x10sandbox_short_id\x18\x15 \x01(\tR\x0esandboxShortId\"\xcb\x02\n" +
 	"\tRunDetail\x125\n" +
 	"\asummary\x18\x01 \x01(\v2\x1b.agentcompose.v2.RunSummaryR\asummary\x12\x16\n" +
 	"\x06prompt\x18\x02 \x01(\tR\x06prompt\x12\x16\n" +
@@ -18907,7 +18915,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x12ListImagesResponse\x12.\n" +
 	"\x06images\x18\x01 \x03(\v2\x16.agentcompose.v2.ImageR\x06images\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\rR\x05total\x12D\n" +
-	"\fstore_status\x18\x05 \x01(\v2!.agentcompose.v2.ImageStoreStatusR\vstoreStatus\"\xa2\x01\n" +
+	"\fstore_status\x18\x03 \x01(\v2!.agentcompose.v2.ImageStoreStatusR\vstoreStatus\"\xa2\x01\n" +
 	"\x10PullImageRequest\x12\x1b\n" +
 	"\timage_ref\x18\x01 \x01(\tR\bimageRef\x125\n" +
 	"\x05store\x18\x02 \x01(\x0e2\x1f.agentcompose.v2.ImageStoreKindR\x05store\x12:\n" +
@@ -18983,7 +18991,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"`\n" +
 	"\x12PruneCachesRequest\x124\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1c.agentcompose.v2.CacheFilterR\x06filter\x12\x14\n" +
-	"\x05force\x18\x03 \x01(\bR\x05force\"\xd0\x01\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\"\xd0\x01\n" +
 	"\x13PruneCachesResponse\x12\x17\n" +
 	"\adry_run\x18\x01 \x01(\bR\x06dryRun\x124\n" +
 	"\amatched\x18\x02 \x03(\v2\x1a.agentcompose.v2.CacheItemR\amatched\x12\x18\n" +
@@ -19010,16 +19018,17 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\bimage_id\x18\a \x01(\tR\aimageId\x12\x1b\n" +
 	"\timage_ref\x18\b \x01(\tR\bimageRef\x12!\n" +
 	"\fresolved_ref\x18\t \x01(\tR\vresolvedRef\x124\n" +
-	"\x06status\x18\f \x01(\x0e2\x1c.agentcompose.v2.CacheStatusR\x06status\x12\x1c\n" +
-	"\tremovable\x18\r \x01(\bR\tremovable\x12'\n" +
-	"\x0fblocked_reasons\x18\x0e \x03(\tR\x0eblockedReasons\x12<\n" +
-	"\flast_used_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"\x06status\x18\n" +
+	" \x01(\x0e2\x1c.agentcompose.v2.CacheStatusR\x06status\x12\x1c\n" +
+	"\tremovable\x18\v \x01(\bR\tremovable\x12'\n" +
+	"\x0fblocked_reasons\x18\f \x03(\tR\x0eblockedReasons\x12<\n" +
+	"\flast_used_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"lastUsedAt\x12(\n" +
-	"\x10last_used_source\x18\x10 \x01(\tR\x0elastUsedSource\x12?\n" +
+	"\x10last_used_source\x18\x0e \x01(\tR\x0elastUsedSource\x12?\n" +
 	"\n" +
-	"references\x18\x11 \x03(\v2\x1f.agentcompose.v2.CacheReferenceR\n" +
+	"references\x18\x0f \x03(\v2\x1f.agentcompose.v2.CacheReferenceR\n" +
 	"references\x12\x1a\n" +
-	"\bwarnings\x18\x12 \x03(\tR\bwarnings\"\xd5\x01\n" +
+	"\bwarnings\x18\x10 \x03(\tR\bwarnings\"\xd5\x01\n" +
 	"\x0eCacheReference\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
@@ -19509,7 +19518,7 @@ const file_agentcompose_v2_agentcompose_proto_rawDesc = "" +
 	"\x1cCACHE_DOMAIN_OCI_IMAGE_STORE\x10\x01\x12)\n" +
 	"%CACHE_DOMAIN_MATERIALIZED_IMAGE_CACHE\x10\x02\x12&\n" +
 	"\"CACHE_DOMAIN_RUNTIME_DERIVED_CACHE\x10\x03\x12%\n" +
-	"!CACHE_DOMAIN_SKILL_ARTIFACT_CACHE\x10\x05*\x88\x01\n" +
+	"!CACHE_DOMAIN_SKILL_ARTIFACT_CACHE\x10\x04*\x88\x01\n" +
 	"\x14CacheReferencePolicy\x12&\n" +
 	"\"CACHE_REFERENCE_POLICY_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCACHE_REFERENCE_POLICY_REQUIRED\x10\x01\x12#\n" +
