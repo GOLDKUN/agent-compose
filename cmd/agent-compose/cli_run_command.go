@@ -107,7 +107,7 @@ func runComposeUpCommand(cmd *cobra.Command, cli cliOptions) error {
 			ComposePath: composePath,
 			ProjectDir:  filepath.Dir(composePath),
 		},
-		ExpectedSpecHash: specHash,
+		SubmittedSpecHash: specHash,
 	}))
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("apply project %s: %w", normalized.Name, err))

@@ -37,7 +37,7 @@ func TestAppProjectControllerHelperCoverage(t *testing.T) {
 		}},
 	}
 	normalized, issues, err := normalizeProjectRequest(validSpec, &agentcomposev2.ProjectSource{ProjectDir: "/repo"}, "mismatch")
-	if err != nil || normalized.Spec == nil || len(issues) != 1 || issues[0].Path != "expected_spec_hash" {
+	if err != nil || normalized.Spec == nil || len(issues) != 1 || issues[0].Path != "submitted_spec_hash" {
 		t.Fatalf("normalizeProjectRequest mismatch normalized=%#v issues=%#v err=%v", normalized, issues, err)
 	}
 	normalized, issues, err = normalizeProjectRequest(validSpec, &agentcomposev2.ProjectSource{ComposePath: "/repo/custom.yml"}, "")
