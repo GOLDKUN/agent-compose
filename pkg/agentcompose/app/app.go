@@ -254,12 +254,22 @@ func StartBackground(di do.Injector) error {
 }
 
 func StopBackground(ctx context.Context, di do.Injector) error {
+	components := make([]backgroundComponent, 0, 2)
+	var setupErrors []error
+
 	recovery, recoveryErr := do.Invoke[*sandboxes.DeletionRecovery](di)
+	if recoveryErr != nil {
+		setupErrors = append(setupErrors, fmt.Errorf("resolve sandbox deletion recovery: %w", recoveryErr))
+	} else {
+		components = append(components, backgroundComponent{name: "sandbox deletion recovery", shutdown: recovery.Shutdown})
+	}
 	runner, runnerErr := do.Invoke[*cleanup.Runner](di)
-	return stopBackgroundComponents(ctx, []backgroundComponent{
-		{name: "sandbox deletion recovery", shutdown: recovery.Shutdown},
-		{name: "cleanup runner", shutdown: runner.Shutdown},
-	}, recoveryErr, runnerErr)
+	if runnerErr != nil {
+		setupErrors = append(setupErrors, fmt.Errorf("resolve cleanup runner: %w", runnerErr))
+	} else {
+		components = append(components, backgroundComponent{name: "cleanup runner", shutdown: runner.Shutdown})
+	}
+	return stopBackgroundComponents(ctx, components, setupErrors...)
 }
 
 func NewCapProxyServer(di do.Injector) (*capproxy.Server, error) {

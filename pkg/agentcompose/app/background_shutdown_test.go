@@ -6,6 +6,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/samber/do/v2"
+
+	"agent-compose/pkg/cleanup"
+	"agent-compose/pkg/sandboxes"
 )
 
 func TestStopBackgroundComponentsCancelsComponentsConcurrently(t *testing.T) {
@@ -54,6 +59,28 @@ func TestStopBackgroundComponentsJoinsSetupAndShutdownErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "stop cleanup runner") {
 		t.Fatalf("stop error = %q, want component context", err)
+	}
+}
+
+func TestStopBackgroundSkipsComponentsThatFailToResolve(t *testing.T) {
+	recoveryErr := errors.New("recovery setup failed")
+	runnerErr := errors.New("cleanup setup failed")
+	di := do.New()
+	do.Provide(di, func(do.Injector) (*sandboxes.DeletionRecovery, error) {
+		return nil, recoveryErr
+	})
+	do.Provide(di, func(do.Injector) (*cleanup.Runner, error) {
+		return nil, runnerErr
+	})
+
+	err := StopBackground(context.Background(), di)
+	if !errors.Is(err, recoveryErr) || !errors.Is(err, runnerErr) {
+		t.Fatalf("StopBackground error = %v, want both setup failures", err)
+	}
+	for _, want := range []string{"resolve sandbox deletion recovery", "resolve cleanup runner"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("StopBackground error = %q, want %q", err, want)
+		}
 	}
 }
 
