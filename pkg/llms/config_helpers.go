@@ -152,7 +152,7 @@ func NormalizeAPIEndpointForProtocol(raw, protocol string) string {
 		return parsed.String()
 	}
 	cleanPath := strings.TrimRight(parsed.Path, "/")
-	if normalizedProtocol == APIProtocolChatCompletions && (cleanPath == "/v1" || strings.HasSuffix(cleanPath, "/openai/v1")) {
+	if normalizedProtocol == APIProtocolChatCompletions && strings.HasSuffix(cleanPath, "/v1") {
 		parsed.Path = pathpkg.Join(parsed.Path, "/chat/completions")
 		return parsed.String()
 	}
@@ -164,7 +164,7 @@ func NormalizeAPIEndpointForProtocol(raw, protocol string) string {
 		parsed.Path = pathpkg.Join(parsed.Path, "/v1/responses")
 		return parsed.String()
 	}
-	if normalizedProtocol == APIProtocolResponses && (cleanPath == "/v1" || strings.HasSuffix(cleanPath, "/openai/v1")) {
+	if normalizedProtocol == APIProtocolResponses && strings.HasSuffix(cleanPath, "/v1") {
 		parsed.Path = pathpkg.Join(parsed.Path, "/responses")
 		return parsed.String()
 	}
