@@ -52,12 +52,13 @@ func TestCacheHandlerListCachesMapsFilterAndResponse(t *testing.T) {
 	}
 }
 
-func TestCacheDomainFourRemainsReserved(t *testing.T) {
-	if got := int32(agentcomposev2.CacheDomain_CACHE_DOMAIN_SKILL_ARTIFACT_CACHE); got != 5 {
-		t.Fatalf("skill cache domain number = %d, want 5", got)
+func TestCacheDomainFourMapsToSkillArtifactAfterFreeze(t *testing.T) {
+	got, err := RuntimeCacheDomainFromProto(agentcomposev2.CacheDomain(4))
+	if err != nil {
+		t.Fatalf("map compact skill cache domain number: %v", err)
 	}
-	if _, err := RuntimeCacheDomainFromProto(agentcomposev2.CacheDomain(4)); err == nil {
-		t.Fatal("reserved sandbox cache domain number 4 was accepted")
+	if got != cache.DomainSkillArtifactCache {
+		t.Fatalf("cache domain number 4 = %q, want %q", got, cache.DomainSkillArtifactCache)
 	}
 }
 
