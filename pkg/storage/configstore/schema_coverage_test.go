@@ -585,7 +585,7 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if runs, err := store.ListRecentSchedulerRuns(ctx, 0); err != nil || len(runs) != 1 {
 		t.Fatalf("ListRecentSchedulerRuns default limit runs=%#v err=%v", runs, err)
 	}
-	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "event-1", SchedulerID: loader.Summary.ID, RunID: run.ID, Type: "loader.test", Level: "info", CreatedAt: time.Now().UTC()}); err != nil {
+	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "event-1", SchedulerID: loader.Summary.ID, RunID: run.ID, Type: "scheduler.test", Level: "info", CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("AddSchedulerEvent returned error: %v", err)
 	}
 	if events, err := store.ListSchedulerEvents(ctx, loader.Summary.ID, 10); err != nil || len(events) != 1 {

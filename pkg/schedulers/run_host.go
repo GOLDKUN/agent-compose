@@ -114,10 +114,10 @@ func NewRuntimeHost(deps RunHostDependencies, scheduler domain.Scheduler, execut
 }
 
 // Runtime host events are persisted and payloads are consumed by existing
-// clients. Keep loader.* event types and loaderId/loaderRunId keys unchanged;
-// scheduler is only the internal domain terminology.
+// clients. Keep loaderId/loaderRunId payload keys unchanged even though
+// scheduler events use the scheduler.* prefix.
 func (h *RuntimeHost) Log(ctx context.Context, message string, payload any) error {
-	return h.addSchedulerEvent(ctx, "loader.log", "info", message, payload, "", "", "")
+	return h.addSchedulerEvent(ctx, "scheduler.log", "info", message, payload, "", "", "")
 }
 
 func (h *RuntimeHost) PublishEvent(ctx context.Context, topic string, payloadJSON string) (domain.TopicEventRecord, error) {
@@ -134,7 +134,7 @@ func (h *RuntimeHost) PublishEvent(ctx context.Context, topic string, payloadJSO
 	}
 	created, err := h.deps.Store.CreateEvent(ctx, published.Record)
 	if err != nil {
-		_ = h.addSchedulerEvent(ctx, "loader.event.publish.failed", "error", err.Error(), map[string]any{"topic": published.Record.Topic}, "", "", "")
+		_ = h.addSchedulerEvent(ctx, "scheduler.event.publish.failed", "error", err.Error(), map[string]any{"topic": published.Record.Topic}, "", "", "")
 		return domain.TopicEventRecord{}, err
 	}
 	if sequenced, err := UpdatePublishedTopicEventSequence(published, created.Sequence); err == nil {
@@ -142,7 +142,7 @@ func (h *RuntimeHost) PublishEvent(ctx context.Context, topic string, payloadJSO
 		created.PayloadJSON = sequenced.PayloadJSON
 		created.PayloadHash = sequenced.PayloadHash
 	}
-	_ = h.addSchedulerEvent(ctx, "loader.event.published", "info", "loader event published", map[string]any{
+	_ = h.addSchedulerEvent(ctx, "scheduler.event.published", "info", "scheduler event published", map[string]any{
 		"eventId":       created.ID,
 		"sequence":      created.Sequence,
 		"topic":         created.Topic,
@@ -176,11 +176,11 @@ func (h *RuntimeHost) CallSandboxRPC(ctx context.Context, method, requestJSON st
 	responseJSON, err := h.deps.SandboxRPC.CallJSONWithSource(ctx, method, requestJSON, domain.SandboxTypeScript+":"+h.scheduler.Summary.ID)
 	linkedSandboxID := h.linkedSandboxID(method, requestJSON, responseJSON)
 	if err != nil {
-		event, _ := h.addSchedulerEventRecord(ctx, "loader.sandbox.rpc.failed", "error", firstHostNonEmpty(err.Error(), fmt.Sprintf("%s failed", method)), map[string]any{"method": method, "requestJson": requestJSON}, linkedSandboxID, "", "")
+		event, _ := h.addSchedulerEventRecord(ctx, "scheduler.sandbox.rpc.failed", "error", firstHostNonEmpty(err.Error(), fmt.Sprintf("%s failed", method)), map[string]any{"method": method, "requestJson": requestJSON}, linkedSandboxID, "", "")
 		h.addEventSandboxLink(ctx, event, linkedSandboxID, "sandbox_rpc_failed")
 		return "", err
 	}
-	event, _ := h.addSchedulerEventRecord(ctx, "loader.sandbox.rpc.completed", "info", fmt.Sprintf("%s completed", method), map[string]any{"method": method, "requestJson": requestJSON, "responseJson": responseJSON}, linkedSandboxID, "", "")
+	event, _ := h.addSchedulerEventRecord(ctx, "scheduler.sandbox.rpc.completed", "info", fmt.Sprintf("%s completed", method), map[string]any{"method": method, "requestJson": requestJSON, "responseJson": responseJSON}, linkedSandboxID, "", "")
 	h.addEventSandboxLink(ctx, event, linkedSandboxID, "sandbox_rpc_completed")
 	return responseJSON, nil
 }
@@ -195,7 +195,7 @@ func (h *RuntimeHost) Agent(ctx context.Context, prompt string, request domain.S
 		return domain.SchedulerAgentResult{}, err
 	}
 	if eventType != "" {
-		_ = h.addLinkedSchedulerEvent(ctx, eventType, "info", "loader sandbox ready", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
+		_ = h.addLinkedSchedulerEvent(ctx, eventType, "info", "scheduler sandbox ready", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
 	}
 
 	agentConfig := execution.AgentConfig{Provider: domain.NormalizeAgentKind(request.Agent)}
@@ -248,19 +248,19 @@ func (h *RuntimeHost) Agent(ctx context.Context, prompt string, request domain.S
 		ExitCode:      cell.ExitCode,
 	}
 	level := "info"
-	eventName := "loader.agent.completed"
+	eventName := "scheduler.agent.completed"
 	if execErr != nil {
 		level = "error"
-		eventName = "loader.agent.failed"
+		eventName = "scheduler.agent.failed"
 		result.Text = firstHostNonEmpty(result.Text, execErr.Error())
 	}
 	_ = h.addLinkedSchedulerEvent(ctx, eventName, level, firstHostNonEmpty(result.Text, fmt.Sprintf("%s completed", result.Agent)), result, result.SandboxID, result.CellID, result.AgentThreadID)
 	h.publishAgentCompleted(result, nil)
 	if shutdownErr := h.deps.Sessions.Shutdown(ctx, session.Summary.ID); shutdownErr != nil {
 		slog.Warn("failed to stop loader sandbox after agent run", "loader_id", h.scheduler.Summary.ID, "sandbox_id", session.Summary.ID, "error", shutdownErr)
-		_ = h.addLinkedSchedulerEvent(ctx, "loader.sandbox.stop_failed", "error", shutdownErr.Error(), map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
+		_ = h.addLinkedSchedulerEvent(ctx, "scheduler.sandbox.stop_failed", "error", shutdownErr.Error(), map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
 	} else {
-		_ = h.addLinkedSchedulerEvent(ctx, "loader.sandbox.stopped", "info", "loader sandbox stopped after agent run", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
+		_ = h.addLinkedSchedulerEvent(ctx, "scheduler.sandbox.stopped", "info", "scheduler sandbox stopped after agent run", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
 	}
 	if execErr != nil {
 		return result, execErr
@@ -284,24 +284,24 @@ func (h *RuntimeHost) Command(ctx context.Context, request domain.SchedulerComma
 	}
 	session, eventType, err := h.ensureCommandSession(ctx, agentRequest, cleanupSession)
 	if err != nil {
-		_ = h.addSchedulerEvent(ctx, "loader.command.failed", "error", err.Error(), CommandEventPayload(request, domain.SchedulerCommandResult{}), "", "", "")
+		_ = h.addSchedulerEvent(ctx, "scheduler.command.failed", "error", err.Error(), CommandEventPayload(request, domain.SchedulerCommandResult{}), "", "", "")
 		return domain.SchedulerCommandResult{}, err
 	}
 	if eventType != "" {
-		_ = h.addLinkedSchedulerEvent(ctx, eventType, "info", "loader command sandbox ready", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
+		_ = h.addLinkedSchedulerEvent(ctx, eventType, "info", "scheduler command sandbox ready", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
 	}
 	h.trackCommandSession(session.Summary.ID, cleanupSession)
 
 	result, err := h.deps.CommandExecutor.ExecuteSchedulerCommand(ctx, session, request)
 	if err != nil {
-		_ = h.addLinkedSchedulerEvent(ctx, "loader.command.failed", "error", err.Error(), CommandEventPayload(request, result), result.SandboxID, result.CellID, "")
+		_ = h.addLinkedSchedulerEvent(ctx, "scheduler.command.failed", "error", err.Error(), CommandEventPayload(request, result), result.SandboxID, result.CellID, "")
 		return result, err
 	}
 	level := "info"
 	if !result.Success {
 		level = "error"
 	}
-	_ = h.addLinkedSchedulerEvent(ctx, "loader.command.completed", level, firstHostNonEmpty(result.Output, result.Stdout, result.Stderr, "loader command completed"), CommandEventPayload(request, result), result.SandboxID, result.CellID, "")
+	_ = h.addLinkedSchedulerEvent(ctx, "scheduler.command.completed", level, firstHostNonEmpty(result.Output, result.Stdout, result.Stderr, "scheduler command completed"), CommandEventPayload(request, result), result.SandboxID, result.CellID, "")
 	return result, nil
 }
 
@@ -311,10 +311,10 @@ func (h *RuntimeHost) LLM(ctx context.Context, prompt string, request domain.Sch
 	}
 	result, err := h.deps.LLM.Generate(ctx, prompt, request.Model, request.OutputSchema)
 	if err != nil {
-		_ = h.addSchedulerEvent(ctx, "loader.llm.failed", "error", err.Error(), map[string]any{"model": strings.TrimSpace(request.Model)}, "", "", "")
+		_ = h.addSchedulerEvent(ctx, "scheduler.llm.failed", "error", err.Error(), map[string]any{"model": strings.TrimSpace(request.Model)}, "", "", "")
 		return domain.SchedulerLLMResult{}, err
 	}
-	_ = h.addSchedulerEvent(ctx, "loader.llm.completed", "info", firstHostNonEmpty(result.Text, "llm completed"), result, "", "", "")
+	_ = h.addSchedulerEvent(ctx, "scheduler.llm.completed", "info", firstHostNonEmpty(result.Text, "llm completed"), result, "", "", "")
 	return result, nil
 }
 
@@ -325,10 +325,10 @@ func (h *RuntimeHost) CleanupCommandSessions(ctx context.Context) {
 	for _, sessionID := range sessionIDs {
 		if err := h.deps.Sessions.Shutdown(ctx, sessionID); err != nil {
 			slog.Warn("failed to stop loader command sandbox after run", "loader_id", h.scheduler.Summary.ID, "sandbox_id", sessionID, "error", err)
-			_ = h.addLinkedSchedulerEvent(ctx, "loader.sandbox.stop_failed", "error", err.Error(), map[string]any{"sandboxId": sessionID}, sessionID, "", "")
+			_ = h.addLinkedSchedulerEvent(ctx, "scheduler.sandbox.stop_failed", "error", err.Error(), map[string]any{"sandboxId": sessionID}, sessionID, "", "")
 			continue
 		}
-		_ = h.addLinkedSchedulerEvent(ctx, "loader.sandbox.stopped", "info", "loader command sandbox stopped after run", map[string]any{"sandboxId": sessionID}, sessionID, "", "")
+		_ = h.addLinkedSchedulerEvent(ctx, "scheduler.sandbox.stopped", "info", "scheduler command sandbox stopped after run", map[string]any{"sandboxId": sessionID}, sessionID, "", "")
 	}
 }
 

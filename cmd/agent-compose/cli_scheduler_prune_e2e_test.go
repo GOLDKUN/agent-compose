@@ -123,7 +123,7 @@ func (f *schedulerPruneE2EFixture) seedHistory(t *testing.T, dataRoot string) {
 	}
 	if err := f.store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
 		ID: "loader-event-scheduler-prune-e2e", SchedulerID: f.scheduler.ID, RunID: f.runID, TriggerID: f.triggerID,
-		Type: "loader.run.completed", Level: "info", Message: "scheduler prune e2e completed", CreatedAt: completedAt,
+		Type: "scheduler.run.completed", Level: "info", Message: "scheduler prune e2e completed", CreatedAt: completedAt,
 	}); err != nil {
 		t.Fatalf("add loader event: %v", err)
 	}

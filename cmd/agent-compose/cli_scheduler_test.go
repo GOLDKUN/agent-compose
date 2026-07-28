@@ -467,8 +467,8 @@ agents:
 			},
 			listProjectSchedulerEvents: func(context.Context, *connect.Request[agentcomposev2.ListProjectSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListProjectSchedulerEventsResponse], error) {
 				return connect.NewResponse(&agentcomposev2.ListProjectSchedulerEventsResponse{Events: []*agentcomposev2.SchedulerEvent{
-					{Id: "event-2", RunId: runID, AgentName: "reviewer", TriggerId: "nightly", Type: "loader.agent.activity", Level: "info", Message: "done", CreatedAt: timestamppb.New(time.Date(2026, 7, 15, 1, 0, 2, 0, time.UTC))},
-					{Id: "event-1", RunId: runID, AgentName: "reviewer", TriggerId: "nightly", Type: "loader.status", Level: "info", Message: "started", CreatedAt: timestamppb.New(time.Date(2026, 7, 15, 1, 0, 0, 0, time.UTC))},
+					{Id: "event-2", RunId: runID, AgentName: "reviewer", TriggerId: "nightly", Type: "scheduler.agent.activity", Level: "info", Message: "done", CreatedAt: timestamppb.New(time.Date(2026, 7, 15, 1, 0, 2, 0, time.UTC))},
+					{Id: "event-1", RunId: runID, AgentName: "reviewer", TriggerId: "nightly", Type: "scheduler.status", Level: "info", Message: "started", CreatedAt: timestamppb.New(time.Date(2026, 7, 15, 1, 0, 0, 0, time.UTC))},
 				}}), nil
 			},
 		},

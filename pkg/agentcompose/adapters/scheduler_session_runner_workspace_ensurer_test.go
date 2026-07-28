@@ -99,8 +99,8 @@ func TestLoaderSandboxRunnerEnsureUsesWorkspaceEnsurerBeforeGuideAndDriver(t *te
 	if err != nil {
 		t.Fatalf("Ensure returned error: %v", err)
 	}
-	if eventType != "loader.sandbox.created" {
-		t.Fatalf("Ensure event type = %q, want loader.sandbox.created", eventType)
+	if eventType != "scheduler.sandbox.created" {
+		t.Fatalf("Ensure event type = %q, want scheduler.sandbox.created", eventType)
 	}
 	if len(ensurer.calls) != 1 || ensurer.initialIDs[0] != sandbox.Summary.ID {
 		t.Fatalf("workspace Ensure calls = %#v ids=%#v, want sandbox %q once", ensurer.calls, ensurer.initialIDs, sandbox.Summary.ID)
@@ -286,7 +286,7 @@ func TestLoaderSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadOrResume returned error: %v", err)
 		}
-		if eventType != "loader.sandbox.resumed" || resumed.Summary.VMStatus != domain.VMStatusRunning {
+		if eventType != "scheduler.sandbox.resumed" || resumed.Summary.VMStatus != domain.VMStatusRunning {
 			t.Fatalf("resumed event/status = %q/%q", eventType, resumed.Summary.VMStatus)
 		}
 		if len(ensurer.calls) != 1 || ensurer.initialIDs[0] != stopped.Summary.ID || ensurer.calls[0] != driver.startSessions[0] {
@@ -624,8 +624,8 @@ func TestLoaderSandboxRunnerStickyWorkspaceConfigChangeCreatesReplacement(t *tes
 	if err != nil {
 		t.Fatalf("Ensure after workspace update returned error: %v", err)
 	}
-	if replacement.Summary.ID == first.Summary.ID || eventType != "loader.sandbox.created" {
-		t.Fatalf("replacement sandbox/event = %q/%q, want a new sandbox/loader.sandbox.created", replacement.Summary.ID, eventType)
+	if replacement.Summary.ID == first.Summary.ID || eventType != "scheduler.sandbox.created" {
+		t.Fatalf("replacement sandbox/event = %q/%q, want a new sandbox/scheduler.sandbox.created", replacement.Summary.ID, eventType)
 	}
 	if replacement.Workspace == nil || replacement.Workspace.ConfigJSON != workspace.ConfigJSON {
 		t.Fatalf("replacement workspace = %#v, want updated %#v", replacement.Workspace, workspace)
@@ -687,8 +687,8 @@ func TestLoaderSandboxRunnerStickyRunningConfigChangeCreatesReplacement(t *testi
 	if err != nil {
 		t.Fatalf("Ensure after Scheduler update returned error: %v", err)
 	}
-	if replacement.Summary.ID == first.Summary.ID || eventType != "loader.sandbox.created" {
-		t.Fatalf("replacement sandbox/event = %q/%q, want a new sandbox/loader.sandbox.created", replacement.Summary.ID, eventType)
+	if replacement.Summary.ID == first.Summary.ID || eventType != "scheduler.sandbox.created" {
+		t.Fatalf("replacement sandbox/event = %q/%q, want a new sandbox/scheduler.sandbox.created", replacement.Summary.ID, eventType)
 	}
 	if got := domain.SandboxEnvMap(replacement.EnvItems)["BUG_VALUE"]; got != "B" {
 		t.Fatalf("replacement BUG_VALUE = %q, want B", got)
@@ -751,8 +751,8 @@ func TestLoaderSandboxRunnerStickyStoppedConfigChangeDoesNotResume(t *testing.T)
 	if err != nil {
 		t.Fatalf("Ensure after Scheduler update returned error: %v", err)
 	}
-	if replacement.Summary.ID == first.Summary.ID || eventType != "loader.sandbox.created" {
-		t.Fatalf("replacement sandbox/event = %q/%q, want a new sandbox/loader.sandbox.created", replacement.Summary.ID, eventType)
+	if replacement.Summary.ID == first.Summary.ID || eventType != "scheduler.sandbox.created" {
+		t.Fatalf("replacement sandbox/event = %q/%q, want a new sandbox/scheduler.sandbox.created", replacement.Summary.ID, eventType)
 	}
 	if len(driver.startCalls) != 2 || driver.startCalls[0] != first.Summary.ID || driver.startCalls[1] != replacement.Summary.ID {
 		t.Fatalf("driver start calls = %#v, want create/create without old resume", driver.startCalls)

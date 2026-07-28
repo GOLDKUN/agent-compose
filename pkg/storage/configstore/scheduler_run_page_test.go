@@ -143,7 +143,7 @@ func TestLoaderRunPageFiltersTriggerRunsBeforeLimitAndBatchesSandboxes(t *testin
 		t.Fatalf("filtered runs=%#v err=%v", filtered, err)
 	}
 	for index, sandboxID := range []string{"sandbox-b", "sandbox-a", "sandbox-a"} {
-		if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{SchedulerID: "loader-a", ID: fmt.Sprintf("event-%d", index), RunID: "run-success", TriggerID: "trigger-a", Type: "loader.test", LinkedSandboxID: sandboxID, CreatedAt: startedAt}); err != nil {
+		if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{SchedulerID: "loader-a", ID: fmt.Sprintf("event-%d", index), RunID: "run-success", TriggerID: "trigger-a", Type: "scheduler.test", LinkedSandboxID: sandboxID, CreatedAt: startedAt}); err != nil {
 			t.Fatalf("add event: %v", err)
 		}
 	}
@@ -185,7 +185,7 @@ func TestBatchGetLatestLoaderRunsBySandboxIDsSelectsLatestTriggerRun(t *testing.
 		if err := store.CreateSchedulerRun(ctx, run); err != nil {
 			t.Fatalf("create run %s: %v", run.ID, err)
 		}
-		if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{SchedulerID: run.SchedulerID, ID: "event-" + run.ID, RunID: run.ID, TriggerID: run.TriggerID, Type: "loader.test", LinkedSandboxID: "sandbox-a", CreatedAt: run.StartedAt}); err != nil {
+		if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{SchedulerID: run.SchedulerID, ID: "event-" + run.ID, RunID: run.ID, TriggerID: run.TriggerID, Type: "scheduler.test", LinkedSandboxID: "sandbox-a", CreatedAt: run.StartedAt}); err != nil {
 			t.Fatalf("add event for run %s: %v", run.ID, err)
 		}
 	}

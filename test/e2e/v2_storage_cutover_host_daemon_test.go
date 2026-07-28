@@ -282,7 +282,7 @@ func migratedRunSandboxID(t *testing.T, ctx context.Context, client agentcompose
 		if sandboxID := strings.TrimSpace(event.GetLinkedSandboxId()); sandboxID != "" {
 			linked[sandboxID] = struct{}{}
 		}
-		if event.GetType() == "loader.command.completed" && event.GetLevel() == "info" {
+		if event.GetType() == "scheduler.command.completed" && event.GetLevel() == "info" {
 			completed = true
 		}
 	}

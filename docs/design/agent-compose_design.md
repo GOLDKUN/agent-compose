@@ -862,9 +862,9 @@ other creation paths:
 5. Prepare managed capability, runtime, state, and home resources.
 6. Start runtime through the driver.
 7. Mark sandbox as `RUNNING`.
-8. Record sandbox-created state. Loader lifecycle events use
-   `loader.sandbox.*`; the historical `agent-compose.session.*` topic prefix is
-   retained only where the v1 compatibility event bus still emits it.
+8. Record sandbox-created state. Scheduler lifecycle events use
+   `scheduler.sandbox.*`; the historical `agent-compose.session.*` topic prefix
+   is retained only where the v1 compatibility event bus still emits it.
 
 `ResumeSession` is the v1-compatible resume method. It loads the same sandbox,
 runs the shared Provisioner, and starts its runtime; a `ready` workspace is left
