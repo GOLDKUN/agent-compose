@@ -308,7 +308,7 @@ func composeSchedulerRunOutputFromProto(run *agentcomposev2.SchedulerRun, projec
 		SchedulerShortID:   shortOpaqueID(run.GetSchedulerId()),
 		TriggerID:          displayOpaqueID(run.GetTriggerId()),
 		TriggerShortID:     shortOpaqueID(run.GetTriggerId()),
-		TriggerKind:        run.GetTriggerKind(),
+		TriggerKind:        triggerKindText(run.GetTriggerKind()),
 		TriggerSource:      run.GetTriggerSource(),
 		Status:             schedulerRunStatusText(run.GetStatus()),
 		StartedAt:          formatProtoTimestamp(run.GetStartedAt()),

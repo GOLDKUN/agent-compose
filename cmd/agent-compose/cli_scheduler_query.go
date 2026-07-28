@@ -268,7 +268,7 @@ func schedulerRuntimeRunItem(schedulerID, loaderID string, run *agentcomposev2.S
 		SchedulerID:     firstNonEmptyString(run.GetSchedulerId(), schedulerID),
 		ManagedLoaderID: loaderID,
 		TriggerID:       run.GetTriggerId(),
-		TriggerKind:     run.GetTriggerKind(),
+		TriggerKind:     triggerKindText(run.GetTriggerKind()),
 		TriggerSource:   run.GetTriggerSource(),
 		Status:          schedulerRunStatusText(run.GetStatus()),
 		SandboxIDs:      append([]string(nil), run.GetSandboxIds()...),
