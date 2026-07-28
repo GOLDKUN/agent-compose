@@ -240,8 +240,8 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				t.Fatalf("RunAgentStream should not be called for positional trigger")
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				t.Fatalf("StreamAgentRun should not be called for positional trigger")
 				return nil
 			},
 		},
@@ -268,8 +268,8 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				t.Fatalf("RunAgentStream should not be called for positional trigger")
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				t.Fatalf("StreamAgentRun should not be called for positional trigger")
 				return nil
 			},
 		},

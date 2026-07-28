@@ -14,7 +14,7 @@ import (
 )
 
 func startDetachedRun(cmd *cobra.Command, cli cliOptions, projectName string, client agentcomposev2connect.RunServiceClient, req *agentcomposev2.RunAgentRequest) error {
-	resp, err := client.StartRun(cmd.Context(), connect.NewRequest(&agentcomposev2.StartRunRequest{Run: req}))
+	resp, err := client.StartAgentRun(cmd.Context(), connect.NewRequest(&agentcomposev2.StartAgentRunRequest{Run: req}))
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("start run project %s agent %s: %w", projectName, req.GetAgentName(), err))
 	}

@@ -123,13 +123,15 @@ const (
 	ProjectServiceSetSchedulerTriggerEnabledProcedure = "/agentcompose.v2.ProjectService/SetSchedulerTriggerEnabled"
 	// RunServiceRunAgentProcedure is the fully-qualified name of the RunService's RunAgent RPC.
 	RunServiceRunAgentProcedure = "/agentcompose.v2.RunService/RunAgent"
-	// RunServiceStartRunProcedure is the fully-qualified name of the RunService's StartRun RPC.
-	RunServiceStartRunProcedure = "/agentcompose.v2.RunService/StartRun"
-	// RunServiceRunAgentStreamProcedure is the fully-qualified name of the RunService's RunAgentStream
+	// RunServiceStartAgentRunProcedure is the fully-qualified name of the RunService's StartAgentRun
 	// RPC.
-	RunServiceRunAgentStreamProcedure = "/agentcompose.v2.RunService/RunAgentStream"
-	// RunServiceRunAttachProcedure is the fully-qualified name of the RunService's RunAttach RPC.
-	RunServiceRunAttachProcedure = "/agentcompose.v2.RunService/RunAttach"
+	RunServiceStartAgentRunProcedure = "/agentcompose.v2.RunService/StartAgentRun"
+	// RunServiceStreamAgentRunProcedure is the fully-qualified name of the RunService's StreamAgentRun
+	// RPC.
+	RunServiceStreamAgentRunProcedure = "/agentcompose.v2.RunService/StreamAgentRun"
+	// RunServiceAttachAgentRunProcedure is the fully-qualified name of the RunService's AttachAgentRun
+	// RPC.
+	RunServiceAttachAgentRunProcedure = "/agentcompose.v2.RunService/AttachAgentRun"
 	// RunServiceGetRunProcedure is the fully-qualified name of the RunService's GetRun RPC.
 	RunServiceGetRunProcedure = "/agentcompose.v2.RunService/GetRun"
 	// RunServiceListRunsProcedure is the fully-qualified name of the RunService's ListRuns RPC.
@@ -147,10 +149,10 @@ const (
 	RunServiceListSandboxRunEventsProcedure = "/agentcompose.v2.RunService/ListSandboxRunEvents"
 	// ExecServiceExecProcedure is the fully-qualified name of the ExecService's Exec RPC.
 	ExecServiceExecProcedure = "/agentcompose.v2.ExecService/Exec"
-	// ExecServiceExecStreamProcedure is the fully-qualified name of the ExecService's ExecStream RPC.
-	ExecServiceExecStreamProcedure = "/agentcompose.v2.ExecService/ExecStream"
-	// ExecServiceExecAttachProcedure is the fully-qualified name of the ExecService's ExecAttach RPC.
-	ExecServiceExecAttachProcedure = "/agentcompose.v2.ExecService/ExecAttach"
+	// ExecServiceStreamExecProcedure is the fully-qualified name of the ExecService's StreamExec RPC.
+	ExecServiceStreamExecProcedure = "/agentcompose.v2.ExecService/StreamExec"
+	// ExecServiceAttachExecProcedure is the fully-qualified name of the ExecService's AttachExec RPC.
+	ExecServiceAttachExecProcedure = "/agentcompose.v2.ExecService/AttachExec"
 	// ImageServiceListImagesProcedure is the fully-qualified name of the ImageService's ListImages RPC.
 	ImageServiceListImagesProcedure = "/agentcompose.v2.ImageService/ListImages"
 	// ImageServicePullImageProcedure is the fully-qualified name of the ImageService's PullImage RPC.
@@ -275,8 +277,16 @@ type ProjectServiceClient interface {
 	ListSchedulerEvents(context.Context, *connect.Request[v2.ListSchedulerEventsRequest]) (*connect.Response[v2.ListSchedulerEventsResponse], error)
 	ListProjectSchedulerEvents(context.Context, *connect.Request[v2.ListProjectSchedulerEventsRequest]) (*connect.Response[v2.ListProjectSchedulerEventsResponse], error)
 	StreamProjectSchedulerEvents(context.Context, *connect.Request[v2.StreamProjectSchedulerEventsRequest]) (*connect.ServerStreamForClient[v2.StreamProjectSchedulerEventsResponse], error)
+	// Invokes the scheduler directly and returns its value without creating a
+	// persistent SchedulerRun. Cancellation cancels the invocation.
 	InvokeScheduler(context.Context, *connect.Request[v2.InvokeSchedulerRequest]) (*connect.Response[v2.InvokeSchedulerResponse], error)
+	// Creates a persistent SchedulerRun and waits for it to reach a terminal
+	// state. The returned run is queryable with GetSchedulerRun and
+	// ListSchedulerRuns. Cancellation requests cancellation of the execution.
 	RunScheduler(context.Context, *connect.Request[v2.RunSchedulerRequest]) (*connect.Response[v2.RunSchedulerResponse], error)
+	// Creates a persistent SchedulerRun and returns after submission, without
+	// waiting for a terminal state. Disconnecting after submission does not
+	// cancel the run; use StopSchedulerRun to cancel it.
 	StartSchedulerRun(context.Context, *connect.Request[v2.StartSchedulerRunRequest]) (*connect.Response[v2.StartSchedulerRunResponse], error)
 	GetSchedulerRun(context.Context, *connect.Request[v2.GetSchedulerRunRequest]) (*connect.Response[v2.GetSchedulerRunResponse], error)
 	ListSchedulerRuns(context.Context, *connect.Request[v2.ListSchedulerRunsRequest]) (*connect.Response[v2.ListSchedulerRunsResponse], error)
@@ -583,8 +593,16 @@ type ProjectServiceHandler interface {
 	ListSchedulerEvents(context.Context, *connect.Request[v2.ListSchedulerEventsRequest]) (*connect.Response[v2.ListSchedulerEventsResponse], error)
 	ListProjectSchedulerEvents(context.Context, *connect.Request[v2.ListProjectSchedulerEventsRequest]) (*connect.Response[v2.ListProjectSchedulerEventsResponse], error)
 	StreamProjectSchedulerEvents(context.Context, *connect.Request[v2.StreamProjectSchedulerEventsRequest], *connect.ServerStream[v2.StreamProjectSchedulerEventsResponse]) error
+	// Invokes the scheduler directly and returns its value without creating a
+	// persistent SchedulerRun. Cancellation cancels the invocation.
 	InvokeScheduler(context.Context, *connect.Request[v2.InvokeSchedulerRequest]) (*connect.Response[v2.InvokeSchedulerResponse], error)
+	// Creates a persistent SchedulerRun and waits for it to reach a terminal
+	// state. The returned run is queryable with GetSchedulerRun and
+	// ListSchedulerRuns. Cancellation requests cancellation of the execution.
 	RunScheduler(context.Context, *connect.Request[v2.RunSchedulerRequest]) (*connect.Response[v2.RunSchedulerResponse], error)
+	// Creates a persistent SchedulerRun and returns after submission, without
+	// waiting for a terminal state. Disconnecting after submission does not
+	// cancel the run; use StopSchedulerRun to cancel it.
 	StartSchedulerRun(context.Context, *connect.Request[v2.StartSchedulerRunRequest]) (*connect.Response[v2.StartSchedulerRunResponse], error)
 	GetSchedulerRun(context.Context, *connect.Request[v2.GetSchedulerRunRequest]) (*connect.Response[v2.GetSchedulerRunResponse], error)
 	ListSchedulerRuns(context.Context, *connect.Request[v2.ListSchedulerRunsRequest]) (*connect.Response[v2.ListSchedulerRunsResponse], error)
@@ -880,13 +898,28 @@ func (UnimplementedProjectServiceHandler) SetSchedulerTriggerEnabled(context.Con
 
 // RunServiceClient is a client for the agentcompose.v2.RunService service.
 type RunServiceClient interface {
+	// Creates a persistent Agent Run and waits for it to reach a terminal state.
+	// The final RunDetail is equivalent to GetRun for the returned run ID. Client
+	// cancellation requests cancellation of the execution and its cleanup policy
+	// still applies.
 	RunAgent(context.Context, *connect.Request[v2.RunAgentRequest]) (*connect.Response[v2.RunAgentResponse], error)
-	StartRun(context.Context, *connect.Request[v2.StartRunRequest]) (*connect.Response[v2.StartRunResponse], error)
-	// Stable server-stream projection of RunAgent for non-interactive stream views.
-	// Interactive clients that need stdin, resize, signal, or multi-turn prompt
-	// attachment should use RunAttach.
-	RunAgentStream(context.Context, *connect.Request[v2.RunAgentRequest]) (*connect.ServerStreamForClient[v2.RunAgentStreamResponse], error)
-	RunAttach(context.Context) *connect.BidiStreamForClient[v2.RunAttachRequest, v2.RunAttachResponse]
+	// Creates or reuses a persistent Agent Run and returns after submission.
+	// started is true only when this call returns a non-terminal run that has been
+	// scheduled for background execution. A false value means the returned run
+	// was already terminal; it never means that submission failed. Disconnecting
+	// after submission does not cancel the run; use StopRun to cancel it.
+	StartAgentRun(context.Context, *connect.Request[v2.StartAgentRunRequest]) (*connect.Response[v2.StartAgentRunResponse], error)
+	// Creates a persistent Agent Run and projects started, output, status, and
+	// completed events for non-interactive clients. The completed run has the same
+	// terminal state and common fields as RunAgent/GetRun. Client cancellation
+	// requests cancellation of the execution and its cleanup policy still applies.
+	StreamAgentRun(context.Context, *connect.Request[v2.RunAgentRequest]) (*connect.ServerStreamForClient[v2.StreamAgentRunResponse], error)
+	// Starts an interactive Agent Run. The first client frame must be start and
+	// start may appear exactly once. Frames before start, duplicate start frames,
+	// and frames after a terminal server frame are invalid. stdin_eof closes only
+	// stdin; cancel requests cancellation of the execution. Client half-close or
+	// disconnection ends the attachment and requests cancellation of the run.
+	AttachAgentRun(context.Context) *connect.BidiStreamForClient[v2.AttachAgentRunRequest, v2.AttachAgentRunResponse]
 	GetRun(context.Context, *connect.Request[v2.GetRunRequest]) (*connect.Response[v2.GetRunResponse], error)
 	ListRuns(context.Context, *connect.Request[v2.ListRunsRequest]) (*connect.Response[v2.ListRunsResponse], error)
 	FollowRunLogs(context.Context, *connect.Request[v2.FollowRunLogsRequest]) (*connect.ServerStreamForClient[v2.RunLogChunk], error)
@@ -912,22 +945,22 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("RunAgent")),
 			connect.WithClientOptions(opts...),
 		),
-		startRun: connect.NewClient[v2.StartRunRequest, v2.StartRunResponse](
+		startAgentRun: connect.NewClient[v2.StartAgentRunRequest, v2.StartAgentRunResponse](
 			httpClient,
-			baseURL+RunServiceStartRunProcedure,
-			connect.WithSchema(runServiceMethods.ByName("StartRun")),
+			baseURL+RunServiceStartAgentRunProcedure,
+			connect.WithSchema(runServiceMethods.ByName("StartAgentRun")),
 			connect.WithClientOptions(opts...),
 		),
-		runAgentStream: connect.NewClient[v2.RunAgentRequest, v2.RunAgentStreamResponse](
+		streamAgentRun: connect.NewClient[v2.RunAgentRequest, v2.StreamAgentRunResponse](
 			httpClient,
-			baseURL+RunServiceRunAgentStreamProcedure,
-			connect.WithSchema(runServiceMethods.ByName("RunAgentStream")),
+			baseURL+RunServiceStreamAgentRunProcedure,
+			connect.WithSchema(runServiceMethods.ByName("StreamAgentRun")),
 			connect.WithClientOptions(opts...),
 		),
-		runAttach: connect.NewClient[v2.RunAttachRequest, v2.RunAttachResponse](
+		attachAgentRun: connect.NewClient[v2.AttachAgentRunRequest, v2.AttachAgentRunResponse](
 			httpClient,
-			baseURL+RunServiceRunAttachProcedure,
-			connect.WithSchema(runServiceMethods.ByName("RunAttach")),
+			baseURL+RunServiceAttachAgentRunProcedure,
+			connect.WithSchema(runServiceMethods.ByName("AttachAgentRun")),
 			connect.WithClientOptions(opts...),
 		),
 		getRun: connect.NewClient[v2.GetRunRequest, v2.GetRunResponse](
@@ -972,9 +1005,9 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 // runServiceClient implements RunServiceClient.
 type runServiceClient struct {
 	runAgent             *connect.Client[v2.RunAgentRequest, v2.RunAgentResponse]
-	startRun             *connect.Client[v2.StartRunRequest, v2.StartRunResponse]
-	runAgentStream       *connect.Client[v2.RunAgentRequest, v2.RunAgentStreamResponse]
-	runAttach            *connect.Client[v2.RunAttachRequest, v2.RunAttachResponse]
+	startAgentRun        *connect.Client[v2.StartAgentRunRequest, v2.StartAgentRunResponse]
+	streamAgentRun       *connect.Client[v2.RunAgentRequest, v2.StreamAgentRunResponse]
+	attachAgentRun       *connect.Client[v2.AttachAgentRunRequest, v2.AttachAgentRunResponse]
 	getRun               *connect.Client[v2.GetRunRequest, v2.GetRunResponse]
 	listRuns             *connect.Client[v2.ListRunsRequest, v2.ListRunsResponse]
 	followRunLogs        *connect.Client[v2.FollowRunLogsRequest, v2.RunLogChunk]
@@ -988,19 +1021,19 @@ func (c *runServiceClient) RunAgent(ctx context.Context, req *connect.Request[v2
 	return c.runAgent.CallUnary(ctx, req)
 }
 
-// StartRun calls agentcompose.v2.RunService.StartRun.
-func (c *runServiceClient) StartRun(ctx context.Context, req *connect.Request[v2.StartRunRequest]) (*connect.Response[v2.StartRunResponse], error) {
-	return c.startRun.CallUnary(ctx, req)
+// StartAgentRun calls agentcompose.v2.RunService.StartAgentRun.
+func (c *runServiceClient) StartAgentRun(ctx context.Context, req *connect.Request[v2.StartAgentRunRequest]) (*connect.Response[v2.StartAgentRunResponse], error) {
+	return c.startAgentRun.CallUnary(ctx, req)
 }
 
-// RunAgentStream calls agentcompose.v2.RunService.RunAgentStream.
-func (c *runServiceClient) RunAgentStream(ctx context.Context, req *connect.Request[v2.RunAgentRequest]) (*connect.ServerStreamForClient[v2.RunAgentStreamResponse], error) {
-	return c.runAgentStream.CallServerStream(ctx, req)
+// StreamAgentRun calls agentcompose.v2.RunService.StreamAgentRun.
+func (c *runServiceClient) StreamAgentRun(ctx context.Context, req *connect.Request[v2.RunAgentRequest]) (*connect.ServerStreamForClient[v2.StreamAgentRunResponse], error) {
+	return c.streamAgentRun.CallServerStream(ctx, req)
 }
 
-// RunAttach calls agentcompose.v2.RunService.RunAttach.
-func (c *runServiceClient) RunAttach(ctx context.Context) *connect.BidiStreamForClient[v2.RunAttachRequest, v2.RunAttachResponse] {
-	return c.runAttach.CallBidiStream(ctx)
+// AttachAgentRun calls agentcompose.v2.RunService.AttachAgentRun.
+func (c *runServiceClient) AttachAgentRun(ctx context.Context) *connect.BidiStreamForClient[v2.AttachAgentRunRequest, v2.AttachAgentRunResponse] {
+	return c.attachAgentRun.CallBidiStream(ctx)
 }
 
 // GetRun calls agentcompose.v2.RunService.GetRun.
@@ -1035,13 +1068,28 @@ func (c *runServiceClient) ListSandboxRunEvents(ctx context.Context, req *connec
 
 // RunServiceHandler is an implementation of the agentcompose.v2.RunService service.
 type RunServiceHandler interface {
+	// Creates a persistent Agent Run and waits for it to reach a terminal state.
+	// The final RunDetail is equivalent to GetRun for the returned run ID. Client
+	// cancellation requests cancellation of the execution and its cleanup policy
+	// still applies.
 	RunAgent(context.Context, *connect.Request[v2.RunAgentRequest]) (*connect.Response[v2.RunAgentResponse], error)
-	StartRun(context.Context, *connect.Request[v2.StartRunRequest]) (*connect.Response[v2.StartRunResponse], error)
-	// Stable server-stream projection of RunAgent for non-interactive stream views.
-	// Interactive clients that need stdin, resize, signal, or multi-turn prompt
-	// attachment should use RunAttach.
-	RunAgentStream(context.Context, *connect.Request[v2.RunAgentRequest], *connect.ServerStream[v2.RunAgentStreamResponse]) error
-	RunAttach(context.Context, *connect.BidiStream[v2.RunAttachRequest, v2.RunAttachResponse]) error
+	// Creates or reuses a persistent Agent Run and returns after submission.
+	// started is true only when this call returns a non-terminal run that has been
+	// scheduled for background execution. A false value means the returned run
+	// was already terminal; it never means that submission failed. Disconnecting
+	// after submission does not cancel the run; use StopRun to cancel it.
+	StartAgentRun(context.Context, *connect.Request[v2.StartAgentRunRequest]) (*connect.Response[v2.StartAgentRunResponse], error)
+	// Creates a persistent Agent Run and projects started, output, status, and
+	// completed events for non-interactive clients. The completed run has the same
+	// terminal state and common fields as RunAgent/GetRun. Client cancellation
+	// requests cancellation of the execution and its cleanup policy still applies.
+	StreamAgentRun(context.Context, *connect.Request[v2.RunAgentRequest], *connect.ServerStream[v2.StreamAgentRunResponse]) error
+	// Starts an interactive Agent Run. The first client frame must be start and
+	// start may appear exactly once. Frames before start, duplicate start frames,
+	// and frames after a terminal server frame are invalid. stdin_eof closes only
+	// stdin; cancel requests cancellation of the execution. Client half-close or
+	// disconnection ends the attachment and requests cancellation of the run.
+	AttachAgentRun(context.Context, *connect.BidiStream[v2.AttachAgentRunRequest, v2.AttachAgentRunResponse]) error
 	GetRun(context.Context, *connect.Request[v2.GetRunRequest]) (*connect.Response[v2.GetRunResponse], error)
 	ListRuns(context.Context, *connect.Request[v2.ListRunsRequest]) (*connect.Response[v2.ListRunsResponse], error)
 	FollowRunLogs(context.Context, *connect.Request[v2.FollowRunLogsRequest], *connect.ServerStream[v2.RunLogChunk]) error
@@ -1063,22 +1111,22 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("RunAgent")),
 		connect.WithHandlerOptions(opts...),
 	)
-	runServiceStartRunHandler := connect.NewUnaryHandler(
-		RunServiceStartRunProcedure,
-		svc.StartRun,
-		connect.WithSchema(runServiceMethods.ByName("StartRun")),
+	runServiceStartAgentRunHandler := connect.NewUnaryHandler(
+		RunServiceStartAgentRunProcedure,
+		svc.StartAgentRun,
+		connect.WithSchema(runServiceMethods.ByName("StartAgentRun")),
 		connect.WithHandlerOptions(opts...),
 	)
-	runServiceRunAgentStreamHandler := connect.NewServerStreamHandler(
-		RunServiceRunAgentStreamProcedure,
-		svc.RunAgentStream,
-		connect.WithSchema(runServiceMethods.ByName("RunAgentStream")),
+	runServiceStreamAgentRunHandler := connect.NewServerStreamHandler(
+		RunServiceStreamAgentRunProcedure,
+		svc.StreamAgentRun,
+		connect.WithSchema(runServiceMethods.ByName("StreamAgentRun")),
 		connect.WithHandlerOptions(opts...),
 	)
-	runServiceRunAttachHandler := connect.NewBidiStreamHandler(
-		RunServiceRunAttachProcedure,
-		svc.RunAttach,
-		connect.WithSchema(runServiceMethods.ByName("RunAttach")),
+	runServiceAttachAgentRunHandler := connect.NewBidiStreamHandler(
+		RunServiceAttachAgentRunProcedure,
+		svc.AttachAgentRun,
+		connect.WithSchema(runServiceMethods.ByName("AttachAgentRun")),
 		connect.WithHandlerOptions(opts...),
 	)
 	runServiceGetRunHandler := connect.NewUnaryHandler(
@@ -1121,12 +1169,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		switch r.URL.Path {
 		case RunServiceRunAgentProcedure:
 			runServiceRunAgentHandler.ServeHTTP(w, r)
-		case RunServiceStartRunProcedure:
-			runServiceStartRunHandler.ServeHTTP(w, r)
-		case RunServiceRunAgentStreamProcedure:
-			runServiceRunAgentStreamHandler.ServeHTTP(w, r)
-		case RunServiceRunAttachProcedure:
-			runServiceRunAttachHandler.ServeHTTP(w, r)
+		case RunServiceStartAgentRunProcedure:
+			runServiceStartAgentRunHandler.ServeHTTP(w, r)
+		case RunServiceStreamAgentRunProcedure:
+			runServiceStreamAgentRunHandler.ServeHTTP(w, r)
+		case RunServiceAttachAgentRunProcedure:
+			runServiceAttachAgentRunHandler.ServeHTTP(w, r)
 		case RunServiceGetRunProcedure:
 			runServiceGetRunHandler.ServeHTTP(w, r)
 		case RunServiceListRunsProcedure:
@@ -1152,16 +1200,16 @@ func (UnimplementedRunServiceHandler) RunAgent(context.Context, *connect.Request
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.RunService.RunAgent is not implemented"))
 }
 
-func (UnimplementedRunServiceHandler) StartRun(context.Context, *connect.Request[v2.StartRunRequest]) (*connect.Response[v2.StartRunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.RunService.StartRun is not implemented"))
+func (UnimplementedRunServiceHandler) StartAgentRun(context.Context, *connect.Request[v2.StartAgentRunRequest]) (*connect.Response[v2.StartAgentRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.RunService.StartAgentRun is not implemented"))
 }
 
-func (UnimplementedRunServiceHandler) RunAgentStream(context.Context, *connect.Request[v2.RunAgentRequest], *connect.ServerStream[v2.RunAgentStreamResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.RunService.RunAgentStream is not implemented"))
+func (UnimplementedRunServiceHandler) StreamAgentRun(context.Context, *connect.Request[v2.RunAgentRequest], *connect.ServerStream[v2.StreamAgentRunResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.RunService.StreamAgentRun is not implemented"))
 }
 
-func (UnimplementedRunServiceHandler) RunAttach(context.Context, *connect.BidiStream[v2.RunAttachRequest, v2.RunAttachResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.RunService.RunAttach is not implemented"))
+func (UnimplementedRunServiceHandler) AttachAgentRun(context.Context, *connect.BidiStream[v2.AttachAgentRunRequest, v2.AttachAgentRunResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.RunService.AttachAgentRun is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) GetRun(context.Context, *connect.Request[v2.GetRunRequest]) (*connect.Response[v2.GetRunResponse], error) {
@@ -1190,12 +1238,19 @@ func (UnimplementedRunServiceHandler) ListSandboxRunEvents(context.Context, *con
 
 // ExecServiceClient is a client for the agentcompose.v2.ExecService service.
 type ExecServiceClient interface {
+	// Executes a non-persistent command and waits for its final exit result.
+	// Cancellation requests cancellation of the command. Exec IDs, when emitted
+	// by streaming forms, are correlation IDs and are not queryable resources.
 	Exec(context.Context, *connect.Request[v2.ExecRequest]) (*connect.Response[v2.ExecResponse], error)
-	// Stable server-stream projection of Exec for non-interactive stream views.
-	// Interactive clients that need stdin, resize, or signal attachment should use
-	// ExecAttach.
-	ExecStream(context.Context, *connect.Request[v2.ExecRequest]) (*connect.ServerStreamForClient[v2.ExecStreamResponse], error)
-	ExecAttach(context.Context) *connect.BidiStreamForClient[v2.ExecAttachRequest, v2.ExecAttachResponse]
+	// Executes a non-persistent command and projects output and the same final
+	// ExecResult returned by Exec. Client cancellation cancels the command.
+	StreamExec(context.Context, *connect.Request[v2.ExecRequest]) (*connect.ServerStreamForClient[v2.StreamExecResponse], error)
+	// Starts an interactive, non-persistent command. The first client frame must
+	// be start and start may appear exactly once. Frames before start, duplicate
+	// start frames, and frames after a terminal server frame are invalid.
+	// stdin_eof closes only stdin; cancel, half-close, or disconnection requests
+	// cancellation of the command.
+	AttachExec(context.Context) *connect.BidiStreamForClient[v2.AttachExecRequest, v2.AttachExecResponse]
 }
 
 // NewExecServiceClient constructs a client for the agentcompose.v2.ExecService service. By default,
@@ -1215,16 +1270,16 @@ func NewExecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(execServiceMethods.ByName("Exec")),
 			connect.WithClientOptions(opts...),
 		),
-		execStream: connect.NewClient[v2.ExecRequest, v2.ExecStreamResponse](
+		streamExec: connect.NewClient[v2.ExecRequest, v2.StreamExecResponse](
 			httpClient,
-			baseURL+ExecServiceExecStreamProcedure,
-			connect.WithSchema(execServiceMethods.ByName("ExecStream")),
+			baseURL+ExecServiceStreamExecProcedure,
+			connect.WithSchema(execServiceMethods.ByName("StreamExec")),
 			connect.WithClientOptions(opts...),
 		),
-		execAttach: connect.NewClient[v2.ExecAttachRequest, v2.ExecAttachResponse](
+		attachExec: connect.NewClient[v2.AttachExecRequest, v2.AttachExecResponse](
 			httpClient,
-			baseURL+ExecServiceExecAttachProcedure,
-			connect.WithSchema(execServiceMethods.ByName("ExecAttach")),
+			baseURL+ExecServiceAttachExecProcedure,
+			connect.WithSchema(execServiceMethods.ByName("AttachExec")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -1233,8 +1288,8 @@ func NewExecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 // execServiceClient implements ExecServiceClient.
 type execServiceClient struct {
 	exec       *connect.Client[v2.ExecRequest, v2.ExecResponse]
-	execStream *connect.Client[v2.ExecRequest, v2.ExecStreamResponse]
-	execAttach *connect.Client[v2.ExecAttachRequest, v2.ExecAttachResponse]
+	streamExec *connect.Client[v2.ExecRequest, v2.StreamExecResponse]
+	attachExec *connect.Client[v2.AttachExecRequest, v2.AttachExecResponse]
 }
 
 // Exec calls agentcompose.v2.ExecService.Exec.
@@ -1242,24 +1297,31 @@ func (c *execServiceClient) Exec(ctx context.Context, req *connect.Request[v2.Ex
 	return c.exec.CallUnary(ctx, req)
 }
 
-// ExecStream calls agentcompose.v2.ExecService.ExecStream.
-func (c *execServiceClient) ExecStream(ctx context.Context, req *connect.Request[v2.ExecRequest]) (*connect.ServerStreamForClient[v2.ExecStreamResponse], error) {
-	return c.execStream.CallServerStream(ctx, req)
+// StreamExec calls agentcompose.v2.ExecService.StreamExec.
+func (c *execServiceClient) StreamExec(ctx context.Context, req *connect.Request[v2.ExecRequest]) (*connect.ServerStreamForClient[v2.StreamExecResponse], error) {
+	return c.streamExec.CallServerStream(ctx, req)
 }
 
-// ExecAttach calls agentcompose.v2.ExecService.ExecAttach.
-func (c *execServiceClient) ExecAttach(ctx context.Context) *connect.BidiStreamForClient[v2.ExecAttachRequest, v2.ExecAttachResponse] {
-	return c.execAttach.CallBidiStream(ctx)
+// AttachExec calls agentcompose.v2.ExecService.AttachExec.
+func (c *execServiceClient) AttachExec(ctx context.Context) *connect.BidiStreamForClient[v2.AttachExecRequest, v2.AttachExecResponse] {
+	return c.attachExec.CallBidiStream(ctx)
 }
 
 // ExecServiceHandler is an implementation of the agentcompose.v2.ExecService service.
 type ExecServiceHandler interface {
+	// Executes a non-persistent command and waits for its final exit result.
+	// Cancellation requests cancellation of the command. Exec IDs, when emitted
+	// by streaming forms, are correlation IDs and are not queryable resources.
 	Exec(context.Context, *connect.Request[v2.ExecRequest]) (*connect.Response[v2.ExecResponse], error)
-	// Stable server-stream projection of Exec for non-interactive stream views.
-	// Interactive clients that need stdin, resize, or signal attachment should use
-	// ExecAttach.
-	ExecStream(context.Context, *connect.Request[v2.ExecRequest], *connect.ServerStream[v2.ExecStreamResponse]) error
-	ExecAttach(context.Context, *connect.BidiStream[v2.ExecAttachRequest, v2.ExecAttachResponse]) error
+	// Executes a non-persistent command and projects output and the same final
+	// ExecResult returned by Exec. Client cancellation cancels the command.
+	StreamExec(context.Context, *connect.Request[v2.ExecRequest], *connect.ServerStream[v2.StreamExecResponse]) error
+	// Starts an interactive, non-persistent command. The first client frame must
+	// be start and start may appear exactly once. Frames before start, duplicate
+	// start frames, and frames after a terminal server frame are invalid.
+	// stdin_eof closes only stdin; cancel, half-close, or disconnection requests
+	// cancellation of the command.
+	AttachExec(context.Context, *connect.BidiStream[v2.AttachExecRequest, v2.AttachExecResponse]) error
 }
 
 // NewExecServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1275,26 +1337,26 @@ func NewExecServiceHandler(svc ExecServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(execServiceMethods.ByName("Exec")),
 		connect.WithHandlerOptions(opts...),
 	)
-	execServiceExecStreamHandler := connect.NewServerStreamHandler(
-		ExecServiceExecStreamProcedure,
-		svc.ExecStream,
-		connect.WithSchema(execServiceMethods.ByName("ExecStream")),
+	execServiceStreamExecHandler := connect.NewServerStreamHandler(
+		ExecServiceStreamExecProcedure,
+		svc.StreamExec,
+		connect.WithSchema(execServiceMethods.ByName("StreamExec")),
 		connect.WithHandlerOptions(opts...),
 	)
-	execServiceExecAttachHandler := connect.NewBidiStreamHandler(
-		ExecServiceExecAttachProcedure,
-		svc.ExecAttach,
-		connect.WithSchema(execServiceMethods.ByName("ExecAttach")),
+	execServiceAttachExecHandler := connect.NewBidiStreamHandler(
+		ExecServiceAttachExecProcedure,
+		svc.AttachExec,
+		connect.WithSchema(execServiceMethods.ByName("AttachExec")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/agentcompose.v2.ExecService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ExecServiceExecProcedure:
 			execServiceExecHandler.ServeHTTP(w, r)
-		case ExecServiceExecStreamProcedure:
-			execServiceExecStreamHandler.ServeHTTP(w, r)
-		case ExecServiceExecAttachProcedure:
-			execServiceExecAttachHandler.ServeHTTP(w, r)
+		case ExecServiceStreamExecProcedure:
+			execServiceStreamExecHandler.ServeHTTP(w, r)
+		case ExecServiceAttachExecProcedure:
+			execServiceAttachExecHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1308,12 +1370,12 @@ func (UnimplementedExecServiceHandler) Exec(context.Context, *connect.Request[v2
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.ExecService.Exec is not implemented"))
 }
 
-func (UnimplementedExecServiceHandler) ExecStream(context.Context, *connect.Request[v2.ExecRequest], *connect.ServerStream[v2.ExecStreamResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.ExecService.ExecStream is not implemented"))
+func (UnimplementedExecServiceHandler) StreamExec(context.Context, *connect.Request[v2.ExecRequest], *connect.ServerStream[v2.StreamExecResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.ExecService.StreamExec is not implemented"))
 }
 
-func (UnimplementedExecServiceHandler) ExecAttach(context.Context, *connect.BidiStream[v2.ExecAttachRequest, v2.ExecAttachResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.ExecService.ExecAttach is not implemented"))
+func (UnimplementedExecServiceHandler) AttachExec(context.Context, *connect.BidiStream[v2.AttachExecRequest, v2.AttachExecResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.ExecService.AttachExec is not implemented"))
 }
 
 // ImageServiceClient is a client for the agentcompose.v2.ImageService service.

@@ -82,8 +82,8 @@ agents:
 `)
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		run: runServiceStub{
-			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
-				t.Fatalf("RunAgentStream should not be called for invalid input mode")
+			runAgentStream: func(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+				t.Fatalf("StreamAgentRun should not be called for invalid input mode")
 				return nil
 			},
 		},
@@ -191,9 +191,9 @@ func TestCLIRunCompletionErrorBranches(t *testing.T) {
 }
 
 type runServiceStub struct {
-	startRun       func(context.Context, *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error)
-	runAgentStream func(context.Context, *connect.Request[agentcomposev2.RunAgentRequest], *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error
-	runAttach      func(context.Context, *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error
+	startRun       func(context.Context, *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error)
+	runAgentStream func(context.Context, *connect.Request[agentcomposev2.RunAgentRequest], *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error
+	runAttach      func(context.Context, *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error
 	getRun         func(context.Context, *connect.Request[agentcomposev2.GetRunRequest]) (*connect.Response[agentcomposev2.GetRunResponse], error)
 	listRuns       func(context.Context, *connect.Request[agentcomposev2.ListRunsRequest]) (*connect.Response[agentcomposev2.ListRunsResponse], error)
 	listRunEvents  func(context.Context, *connect.Request[agentcomposev2.ListRunEventsRequest]) (*connect.Response[agentcomposev2.ListRunEventsResponse], error)
@@ -202,9 +202,9 @@ type runServiceStub struct {
 	agentcomposev2connect.UnimplementedRunServiceHandler
 }
 
-func (s runServiceStub) StartRun(ctx context.Context, req *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
+func (s runServiceStub) StartAgentRun(ctx context.Context, req *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
 	if s.startRun == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("StartRun stub is not configured"))
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("StartAgentRun stub is not configured"))
 	}
 	return s.startRun(ctx, req)
 }

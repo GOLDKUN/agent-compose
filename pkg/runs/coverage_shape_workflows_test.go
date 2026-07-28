@@ -798,8 +798,8 @@ func TestRunsControllerRunProjectCommandAttachProjectsOutputAndResult(t *testing
 		{Type: driverpkg.RuntimeOutputStderr, Data: []byte("warn\n")},
 		{Type: driverpkg.RuntimeOutputResult, Result: &driverpkg.RuntimeResult{OperationID: "run-attach", ExitCode: 0, Success: true}},
 	})
-	requests := []*agentcomposev2.RunAttachRequest{{
-		Frame: &agentcomposev2.RunAttachRequest_Start{Start: &agentcomposev2.RunAttachStart{
+	requests := []*agentcomposev2.AttachAgentRunRequest{{
+		Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
 			Request: &agentcomposev2.RunAgentRequest{
 				ProjectId:       "project-1",
 				AgentName:       "worker",
@@ -811,8 +811,8 @@ func TestRunsControllerRunProjectCommandAttachProjectsOutputAndResult(t *testing
 			AttachStdin: true,
 		}},
 	}}
-	var responses []*agentcomposev2.RunAttachResponse
-	err := controller.RunProjectCommandAttach(ctx, recvRunAttachRequests(requests), func(resp *agentcomposev2.RunAttachResponse) error {
+	var responses []*agentcomposev2.AttachAgentRunResponse
+	err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(resp *agentcomposev2.AttachAgentRunResponse) error {
 		if started := resp.GetStarted(); started != nil {
 			stored, err := configDB.GetProjectRun(ctx, started.GetRunId())
 			if err != nil {
@@ -856,9 +856,9 @@ func TestRunsControllerRunProjectCommandAttachProjectsOutputAndResult(t *testing
 
 func TestRunsControllerRunProjectCommandAttachValidatesStartFrame(t *testing.T) {
 	controller, _, _ := newTestRunAttachController(t, nil)
-	err := controller.RunProjectCommandAttach(context.Background(), recvRunAttachRequests([]*agentcomposev2.RunAttachRequest{{
-		Frame: &agentcomposev2.RunAttachRequest_Stdin{Stdin: &agentcomposev2.AttachStdin{Data: []byte("x")}},
-	}}), func(*agentcomposev2.RunAttachResponse) error { return nil })
+	err := controller.RunProjectCommandAttach(context.Background(), recvAttachAgentRunRequests([]*agentcomposev2.AttachAgentRunRequest{{
+		Frame: &agentcomposev2.AttachAgentRunRequest_Stdin{Stdin: &agentcomposev2.AttachStdin{Data: []byte("x")}},
+	}}), func(*agentcomposev2.AttachAgentRunResponse) error { return nil })
 	if !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("RunProjectCommandAttach first frame error = %v, want ErrInvalidRequest", err)
 	}
@@ -875,14 +875,14 @@ func TestRunsControllerRunProjectPromptAttachProjectsAgentFrames(t *testing.T) {
 		{Type: driverpkg.RuntimeOutputResult, Result: &driverpkg.RuntimeResult{OperationID: "run-attach", ExitCode: 0, Success: true}},
 	})
 	configDB.revision.SpecJSON = `{"agents":[{"name":"worker","provider":"claude"}]}`
-	requests := []*agentcomposev2.RunAttachRequest{{
-		Frame: &agentcomposev2.RunAttachRequest_Start{Start: &agentcomposev2.RunAttachStart{
+	requests := []*agentcomposev2.AttachAgentRunRequest{{
+		Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
 			Request: &agentcomposev2.RunAgentRequest{ProjectId: "project-1", AgentName: "worker", Prompt: "hello"},
 			Mode:    agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT,
 		}},
 	}}
-	var responses []*agentcomposev2.RunAttachResponse
-	err := controller.RunProjectCommandAttach(ctx, recvRunAttachRequests(requests), func(resp *agentcomposev2.RunAttachResponse) error {
+	var responses []*agentcomposev2.AttachAgentRunResponse
+	err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(resp *agentcomposev2.AttachAgentRunResponse) error {
 		if started := resp.GetStarted(); started != nil {
 			stored, err := configDB.GetProjectRun(ctx, started.GetRunId())
 			if err != nil {
@@ -947,26 +947,26 @@ func TestRunsControllerRunProjectPromptAttachGatesQueuedTurnsAndOrdersTranscript
 	interaction := newScriptedRunAttachInteraction()
 	runtime.interactionOverride = interaction
 
-	requests := make(chan *agentcomposev2.RunAttachRequest, 4)
-	requests <- &agentcomposev2.RunAttachRequest{Frame: &agentcomposev2.RunAttachRequest_Start{Start: &agentcomposev2.RunAttachStart{
+	requests := make(chan *agentcomposev2.AttachAgentRunRequest, 4)
+	requests <- &agentcomposev2.AttachAgentRunRequest{Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
 		Request: &agentcomposev2.RunAgentRequest{ProjectId: "project-1", AgentName: "worker", Prompt: "human-1"},
 		Mode:    agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT,
 	}}}
 	requests <- humanMessageAttachRequest("human-2")
 	requests <- humanMessageAttachRequest("human-3")
-	requests <- &agentcomposev2.RunAttachRequest{Frame: &agentcomposev2.RunAttachRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}}}
+	requests <- &agentcomposev2.AttachAgentRunRequest{Frame: &agentcomposev2.AttachAgentRunRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}}}
 	close(requests)
 
-	var responses []*agentcomposev2.RunAttachResponse
+	var responses []*agentcomposev2.AttachAgentRunResponse
 	done := make(chan error, 1)
 	go func() {
-		done <- controller.RunProjectCommandAttach(ctx, func() (*agentcomposev2.RunAttachRequest, error) {
+		done <- controller.RunProjectCommandAttach(ctx, func() (*agentcomposev2.AttachAgentRunRequest, error) {
 			req, ok := <-requests
 			if !ok {
 				return nil, io.EOF
 			}
 			return req, nil
-		}, func(resp *agentcomposev2.RunAttachResponse) error {
+		}, func(resp *agentcomposev2.AttachAgentRunResponse) error {
 			responses = append(responses, resp)
 			return nil
 		})
@@ -1285,14 +1285,14 @@ func TestRunsControllerRunProjectPromptAttachUnsupportedProvidersDoNotOpenRuntim
 			ctx := context.Background()
 			controller, configDB, runtime := newTestRunAttachController(t, nil)
 			configDB.revision.SpecJSON = `{"agents":[{"name":"worker","provider":"` + provider + `"}]}`
-			requests := []*agentcomposev2.RunAttachRequest{{
-				Frame: &agentcomposev2.RunAttachRequest_Start{Start: &agentcomposev2.RunAttachStart{
+			requests := []*agentcomposev2.AttachAgentRunRequest{{
+				Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
 					Request: &agentcomposev2.RunAgentRequest{ProjectId: "project-1", AgentName: "worker", Prompt: "hello"},
 					Mode:    agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT,
 				}},
 			}}
-			var responses []*agentcomposev2.RunAttachResponse
-			err := controller.RunProjectCommandAttach(ctx, recvRunAttachRequests(requests), func(resp *agentcomposev2.RunAttachResponse) error {
+			var responses []*agentcomposev2.AttachAgentRunResponse
+			err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(resp *agentcomposev2.AttachAgentRunResponse) error {
 				responses = append(responses, resp)
 				return nil
 			})
@@ -2900,9 +2900,9 @@ func (i *fakeRunAttachInteraction) Wait() (driverpkg.RuntimeResult, error) {
 	return driverpkg.RuntimeResult{Success: true}, nil
 }
 
-func recvRunAttachRequests(requests []*agentcomposev2.RunAttachRequest) RunAttachReceiver {
+func recvAttachAgentRunRequests(requests []*agentcomposev2.AttachAgentRunRequest) RunAttachReceiver {
 	index := 0
-	return func() (*agentcomposev2.RunAttachRequest, error) {
+	return func() (*agentcomposev2.AttachAgentRunRequest, error) {
 		if index >= len(requests) {
 			return nil, io.EOF
 		}

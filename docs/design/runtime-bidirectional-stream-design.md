@@ -295,15 +295,15 @@ Existing unary and server-stream APIs cannot carry client stdin/resize/human mes
 ```proto
 service ExecService {
   rpc Exec(ExecRequest) returns (ExecResponse);
-  rpc ExecStream(ExecRequest) returns (stream ExecStreamResponse);
-  rpc ExecAttach(stream ExecAttachRequest) returns (stream ExecAttachResponse);
+  rpc ExecStream(ExecRequest) returns (stream StreamExecResponse);
+  rpc ExecAttach(stream AttachExecRequest) returns (stream AttachExecResponse);
 }
 
 service RunService {
   rpc RunAgent(RunAgentRequest) returns (RunAgentResponse);
-  rpc StartRun(StartRunRequest) returns (StartRunResponse);
-  rpc RunAgentStream(RunAgentRequest) returns (stream RunAgentStreamResponse);
-  rpc RunAttach(stream RunAttachRequest) returns (stream RunAttachResponse);
+  rpc StartRun(StartAgentRunRequest) returns (StartAgentRunResponse);
+  rpc RunAgentStream(RunAgentRequest) returns (stream StreamAgentRunResponse);
+  rpc RunAttach(stream AttachAgentRunRequest) returns (stream AttachAgentRunResponse);
 }
 ```
 

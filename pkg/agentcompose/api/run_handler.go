@@ -22,9 +22,9 @@ import (
 
 type RunAgentDelegate interface {
 	RunAgent(context.Context, *connect.Request[agentcomposev2.RunAgentRequest]) (*connect.Response[agentcomposev2.RunAgentResponse], error)
-	StartRun(context.Context, *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error)
-	RunAgentStream(context.Context, *connect.Request[agentcomposev2.RunAgentRequest], *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error
-	RunAttach(context.Context, *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error
+	StartAgentRun(context.Context, *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error)
+	StreamAgentRun(context.Context, *connect.Request[agentcomposev2.RunAgentRequest], *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error
+	AttachAgentRun(context.Context, *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error
 }
 
 type ActiveRunStopper interface {
@@ -78,23 +78,23 @@ func (h *RunHandler) RunAgent(ctx context.Context, req *connect.Request[agentcom
 	return h.delegate.RunAgent(ctx, req)
 }
 
-func (h *RunHandler) StartRun(ctx context.Context, req *connect.Request[agentcomposev2.StartRunRequest]) (*connect.Response[agentcomposev2.StartRunResponse], error) {
+func (h *RunHandler) StartAgentRun(ctx context.Context, req *connect.Request[agentcomposev2.StartAgentRunRequest]) (*connect.Response[agentcomposev2.StartAgentRunResponse], error) {
 	if h.delegate == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("start run is not configured"))
 	}
-	return h.delegate.StartRun(ctx, req)
+	return h.delegate.StartAgentRun(ctx, req)
 }
 
-func (h *RunHandler) RunAgentStream(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.RunAgentStreamResponse]) error {
+func (h *RunHandler) StreamAgentRun(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
 	PrepareStreamingHeaders(stream.ResponseHeader())
-	return h.delegate.RunAgentStream(ctx, req, stream)
+	return h.delegate.StreamAgentRun(ctx, req, stream)
 }
 
-func (h *RunHandler) RunAttach(ctx context.Context, stream *connect.BidiStream[agentcomposev2.RunAttachRequest, agentcomposev2.RunAttachResponse]) error {
+func (h *RunHandler) AttachAgentRun(ctx context.Context, stream *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
 	if h.delegate == nil {
 		return connect.NewError(connect.CodeUnimplemented, fmt.Errorf("run attach is not configured"))
 	}
-	if err := h.delegate.RunAttach(ctx, stream); err != nil {
+	if err := h.delegate.AttachAgentRun(ctx, stream); err != nil {
 		var connectErr *connect.Error
 		if errors.As(err, &connectErr) {
 			return connectErr

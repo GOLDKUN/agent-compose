@@ -17,7 +17,7 @@ func TestE2ECLISandboxNamingUserWorkflows(t *testing.T) {
 		},
 		{
 			name: "exec <sandbox> --command",
-			run:  TestIntegrationCLIExecStreamsAndSupportsJSON,
+			run:  TestIntegrationCLIStreamExecsAndSupportsJSON,
 		},
 		{
 			name: "logs --sandbox",
