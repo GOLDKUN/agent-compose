@@ -48,7 +48,9 @@ func TestE2EDockerJupyterHostDaemonStopResume(t *testing.T) {
 	binary := e2eDaemonBinary(t, ctx, repoRoot, testRoot)
 	listenAddress := unusedLoopbackAddress(t)
 	baseURL := "http://" + listenAddress
-	daemon := startE2EDaemon(t, binary, repoRoot, testRoot, listenAddress, image)
+	daemon := startE2EDaemonWithEnv(t, binary, repoRoot, testRoot, listenAddress, image, map[string]string{
+		"AGENT_COMPOSE_RUNTIME_BASE_URL": dockerDesktopRuntimeBaseURL(t, listenAddress),
+	})
 	waitForE2EDaemon(t, ctx, daemon, baseURL)
 
 	httpClient := newE2EHTTPClient()
@@ -64,6 +66,9 @@ func TestE2EDockerJupyterHostDaemonStopResume(t *testing.T) {
 				Name:     "reviewer",
 				Provider: "codex",
 				Image:    image,
+				Sandbox: &agentcomposev2.SandboxSpec{
+					StoppedRuntimePolicy: domain.StoppedRuntimePolicyRetain,
+				},
 				Driver: &agentcomposev2.DriverSpec{
 					Name:   "docker",
 					Config: &agentcomposev2.DriverSpec_Docker{Docker: &agentcomposev2.DockerDriverSpec{}},
@@ -113,7 +118,15 @@ func TestE2EDockerJupyterHostDaemonStopResume(t *testing.T) {
 		removeE2EDockerSandboxFallback(t, cleanupCtx, dockerClient, sandboxID)
 	})
 
-	proxyPath := filepath.Join(testRoot, "sandboxes", sandboxID, "proxy", "jupyter.json")
+	sandboxResp, err := sandboxClient.GetSandbox(ctx, connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
+	if err != nil {
+		t.Fatalf("GetSandbox returned error: %v", err)
+	}
+	workspacePath := sandboxResp.Msg.GetSandbox().GetWorkspacePath()
+	if workspacePath == "" {
+		t.Fatal("GetSandbox returned empty workspace path")
+	}
+	proxyPath := filepath.Join(filepath.Dir(workspacePath), "proxy", "jupyter.json")
 	initialState := readE2EProxyState(t, proxyPath)
 	assertE2EHostProxyState(t, initialState)
 	containerID, initialDockerPort := inspectE2EDockerJupyterPort(t, ctx, dockerClient, sandboxID, initialState.GuestPort)
@@ -123,8 +136,16 @@ func TestE2EDockerJupyterHostDaemonStopResume(t *testing.T) {
 	assertE2EJupyterReady(t, ctx, httpClient, baseURL, sandboxID, initialState)
 	assertE2EJupyterReady(t, ctx, httpClient, "http://127.0.0.1:"+strconv.Itoa(initialState.HostPort), sandboxID, initialState)
 
-	if _, err := sandboxClient.StopSandbox(ctx, connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID})); err != nil {
+	stopResp, err := sandboxClient.StopSandbox(ctx, connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID}))
+	if err != nil {
 		t.Fatalf("StopSandbox returned error: %v", err)
+	}
+	if stopped := stopResp.Msg.GetSandbox(); stopped.GetStoppedRuntimePolicy() != domain.StoppedRuntimePolicyRetain || stopped.GetStoppedRuntimeState() != domain.StoppedRuntimeStateRetained {
+		t.Fatalf("retained stop policy/state = %q/%q, want retain/retained", stopped.GetStoppedRuntimePolicy(), stopped.GetStoppedRuntimeState())
+	}
+	stoppedContainer := inspectE2EDockerSandboxContainer(t, ctx, dockerClient, sandboxID)
+	if stoppedContainer.ID != containerID || (stoppedContainer.State != nil && stoppedContainer.State.Running) {
+		t.Fatalf("retained stopped container id/running = %q/%v, want %q/false", stoppedContainer.ID, stoppedContainer.State != nil && stoppedContainer.State.Running, containerID)
 	}
 	staleState := readE2EProxyState(t, proxyPath)
 	staleState.HostPort = 1

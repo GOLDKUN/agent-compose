@@ -291,7 +291,8 @@ func runE2EWorkspaceSandbox(
 	}
 	run := runResp.Msg.GetRun()
 	if run.GetSummary().GetStatus() != agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED || run.GetSummary().GetSandboxId() == "" {
-		t.Fatalf("RunAgent %s result = %#v, want succeeded run with sandbox", requestID, run)
+		summary := run.GetSummary()
+		t.Fatalf("RunAgent %s status=%s sandbox_id=%q error=%q cleanup_error=%q warnings=%q, want succeeded run with sandbox", requestID, summary.GetStatus(), summary.GetSandboxId(), summary.GetError(), run.GetCleanupError(), run.GetWarnings())
 	}
 	sandboxResp, err := sandboxClient.GetSandbox(ctx, connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: run.GetSummary().GetSandboxId()}))
 	if err != nil {

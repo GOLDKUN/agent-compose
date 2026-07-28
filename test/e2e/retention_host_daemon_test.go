@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	"agent-compose/pkg/imagecache"
+	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -39,10 +40,11 @@ func TestE2EDockerDaemonRetentionCleanup(t *testing.T) {
 	listenAddress := unusedLoopbackAddress(t)
 	baseURL := "http://" + listenAddress
 	daemon := startE2EDaemonWithEnv(t, binary, repoRoot, testRoot, listenAddress, image, map[string]string{
-		"CLEANUP_INTERVAL":        "100ms",
-		"IMAGE_CACHE_CLEANUP_TTL": "1h",
-		"IMAGE_CACHE_ROOT":        cacheRoot,
-		"WORKSPACE_CLEANUP_TTL":   "500ms",
+		"AGENT_COMPOSE_RUNTIME_BASE_URL": dockerDesktopRuntimeBaseURL(t, listenAddress),
+		"CLEANUP_INTERVAL":               "100ms",
+		"IMAGE_CACHE_CLEANUP_TTL":        "1h",
+		"IMAGE_CACHE_ROOT":               cacheRoot,
+		"WORKSPACE_CLEANUP_TTL":          "500ms",
 	})
 	waitForE2EDaemon(t, ctx, daemon, baseURL)
 	t.Cleanup(func() {
@@ -70,11 +72,17 @@ func TestE2EDockerDaemonRetentionCleanup(t *testing.T) {
 		cleanupE2EWorkspaceSandbox(t, dockerClient, sandboxClient, sandboxID, removed)
 	})
 	workspacePath := sandbox.GetWorkspacePath()
+	assertE2EDockerSandboxContainerCount(t, ctx, dockerClient, sandboxID, 1)
 
 	stopResp, err := sandboxClient.StopSandbox(ctx, connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID}))
 	if err != nil || stopResp.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED {
 		t.Fatalf("StopSandbox = %#v, error %v", stopResp, err)
 	}
+	stopped := stopResp.Msg.GetSandbox()
+	if stopped.GetStoppedRuntimePolicy() != domain.StoppedRuntimePolicyRemove || stopped.GetStoppedRuntimeState() != domain.StoppedRuntimeStateReleased {
+		t.Fatalf("default stop policy/state = %q/%q, want remove/released", stopped.GetStoppedRuntimePolicy(), stopped.GetStoppedRuntimeState())
+	}
+	assertE2EDockerSandboxContainerCount(t, ctx, dockerClient, sandboxID, 0)
 	waitForE2ECondition(t, 15*time.Second, func() bool {
 		response, getErr := sandboxClient.GetSandbox(ctx, connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
 		return getErr == nil && response.Msg.GetSandbox().GetWorkspaceReclamationState() == agentcomposev2.WorkspaceReclamationState_WORKSPACE_RECLAMATION_STATE_RECLAIMED
