@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,7 +20,7 @@ import (
 	"agent-compose/pkg/sandboxes"
 )
 
-func TestAPIVersionRespondsWhileDeletionRecoveryIsBlocked(t *testing.T) {
+func TestAPIVersionContractUnchangedWhileDeletionRecoveryIsBlocked(t *testing.T) {
 	root := t.TempDir()
 	const sandboxID = "blocked"
 	if err := sandboxes.WriteOwnershipRecord(root, sandboxes.OwnershipRecord{
@@ -64,16 +63,27 @@ func TestAPIVersionRespondsWhileDeletionRecoveryIsBlocked(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("GET /api/version status = %d, want 200", response.StatusCode)
 	}
-	var status daemonStatusResponse
+	var status struct {
+		Msg  string                     `json:"msg"`
+		Data map[string]json.RawMessage `json:"data"`
+	}
 	if err := decodeJSONBody(response.Body, &status); err != nil {
 		t.Fatalf("decode /api/version: %v", err)
 	}
 	if status.Msg != "OK" {
 		t.Fatalf("/api/version message = %q, want compatibility value OK", status.Msg)
 	}
-	got := status.Data.DeletionRecovery
-	if !got.InProgress || got.Total != 1 || got.Remaining != 1 || len(got.ActiveSandboxIDs) != 1 || got.ActiveSandboxIDs[0] != sandboxID {
-		t.Fatalf("/api/version deletion recovery = %#v", got)
+	if _, exists := status.Data["deletion_recovery"]; exists {
+		t.Fatal("/api/version unexpectedly exposes deletion recovery state")
+	}
+	wantKeys := []string{"version", "os", "arch", "compiled_drivers", "timestamp", "timezone", "timezone_offset"}
+	for _, key := range wantKeys {
+		if _, exists := status.Data[key]; !exists {
+			t.Errorf("/api/version data is missing legacy field %q", key)
+		}
+	}
+	if len(status.Data) != len(wantKeys) {
+		t.Fatalf("/api/version data keys = %v, want legacy seven-field contract", status.Data)
 	}
 
 	cancelRecovery()
@@ -81,36 +91,6 @@ func TestAPIVersionRespondsWhileDeletionRecoveryIsBlocked(t *testing.T) {
 	defer cancelShutdown()
 	if err := recovery.Shutdown(shutdownCtx); err != nil {
 		t.Fatalf("shutdown deletion recovery: %v", err)
-	}
-}
-
-func TestDaemonStatusTextReflectsDeletionRecovery(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		want string
-	}{
-		{name: "legacy healthy", body: `{"err":null,"msg":"OK","data":{"version":"v"}}`, want: "OK"},
-		{name: "recovering", body: `{"err":null,"msg":"OK","data":{"version":"v","deletion_recovery":{"in_progress":true,"total":2,"remaining":2}}}`, want: "RECOVERING"},
-		{name: "failed", body: `{"err":null,"msg":"OK","data":{"version":"v","deletion_recovery":{"failed":1,"remaining":1,"last_error":"remove failed"}}}`, want: "DEGRADED"},
-		{name: "journal warning", body: `{"err":null,"msg":"OK","data":{"version":"v","deletion_recovery":{"last_error":"invalid journal"}}}`, want: "DEGRADED"},
-		{name: "envelope error wins", body: `{"err":"broken","msg":"OK","data":{"version":"v","deletion_recovery":{"in_progress":true}}}`, want: "error"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var output bytes.Buffer
-			if err := writeDaemonStatusText(&output, []byte(test.body)); err != nil {
-				t.Fatalf("writeDaemonStatusText returned error: %v", err)
-			}
-			lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-			if len(lines) != 2 {
-				t.Fatalf("status output = %q", output.String())
-			}
-			fields := strings.Fields(lines[1])
-			if len(fields) == 0 || fields[0] != test.want {
-				t.Fatalf("status output = %q, want status %s", output.String(), test.want)
-			}
-		})
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"agent-compose/pkg/fxgo/restful"
 	"agent-compose/pkg/fxgo/utils"
 	"agent-compose/pkg/health"
-	"agent-compose/pkg/sandboxes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -82,7 +81,7 @@ func NewEcho(di do.Injector) (*echo.Echo, error) {
 		now := time.Now()
 		timezone, timezoneOffset := now.Zone()
 		build := buildInfoForVersion(conf.Version)
-		data := map[string]any{
+		return c.JSON(http.StatusOK, restful.NewResponse[map[string]any, restful.StrStatusResp[map[string]any]](nil, codes.OK.String(), map[string]any{
 			"version":          build.Version,
 			"os":               build.OS,
 			"arch":             build.Arch,
@@ -90,11 +89,7 @@ func NewEcho(di do.Injector) (*echo.Echo, error) {
 			"timestamp":        float64(now.UnixNano()) / 1e9,
 			"timezone":         timezone,
 			"timezone_offset":  timezoneOffset,
-		}
-		if recovery, err := do.Invoke[*sandboxes.DeletionRecovery](di); err == nil {
-			data["deletion_recovery"] = recovery.Status()
-		}
-		return c.JSON(http.StatusOK, restful.NewResponse[map[string]any, restful.StrStatusResp[map[string]any]](nil, codes.OK.String(), data))
+		}))
 	})
 	e.GET("/api/null", echofn.EchoWrap(restful.NullHandler[restful.StrStatusResp[any]]))
 	return e, nil
@@ -446,14 +441,13 @@ type daemonStatusResponse struct {
 	Err  json.RawMessage `json:"err"`
 	Msg  string          `json:"msg"`
 	Data struct {
-		Timestamp        float64                          `json:"timestamp"`
-		Timezone         string                           `json:"timezone"`
-		TimezoneOffset   *int                             `json:"timezone_offset"`
-		Version          string                           `json:"version"`
-		OS               string                           `json:"os"`
-		Arch             string                           `json:"arch"`
-		CompiledDrivers  []string                         `json:"compiled_drivers"`
-		DeletionRecovery sandboxes.DeletionRecoveryStatus `json:"deletion_recovery"`
+		Timestamp       float64  `json:"timestamp"`
+		Timezone        string   `json:"timezone"`
+		TimezoneOffset  *int     `json:"timezone_offset"`
+		Version         string   `json:"version"`
+		OS              string   `json:"os"`
+		Arch            string   `json:"arch"`
+		CompiledDrivers []string `json:"compiled_drivers"`
 	} `json:"data"`
 }
 
@@ -469,12 +463,6 @@ func writeDaemonStatusText(out io.Writer, body []byte) error {
 	}
 	if len(response.Err) > 0 && string(response.Err) != "null" {
 		status = "error"
-	} else if response.Data.DeletionRecovery.InProgress {
-		status = "RECOVERING"
-	} else if response.Data.DeletionRecovery.Remaining > 0 ||
-		response.Data.DeletionRecovery.Failed > 0 ||
-		strings.TrimSpace(response.Data.DeletionRecovery.LastError) != "" {
-		status = "DEGRADED"
 	}
 	uptime := "-"
 	if response.Data.Timestamp > 0 {

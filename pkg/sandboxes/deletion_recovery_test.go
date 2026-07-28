@@ -1,6 +1,7 @@
 package sandboxes
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -45,28 +46,15 @@ func TestDeletionRecoveryRunsPendingDeletionsConcurrentlyAndStops(t *testing.T) 
 		t.Fatal("unblocked deletion waited behind blocked deletion")
 	}
 
-	status := waitForDeletionRecoveryStatus(t, recovery, func(status DeletionRecoveryStatus) bool {
-		return status.Completed == 1 && status.Remaining == 1
-	})
-	if !status.InProgress || status.Total != 2 || status.Failed != 0 {
-		t.Fatalf("Status = %#v, want one of two deletions completed", status)
-	}
-	if len(status.ActiveSandboxIDs) != 1 || status.ActiveSandboxIDs[0] != "a" {
-		t.Fatalf("active sandbox IDs = %v, want [a]", status.ActiveSandboxIDs)
-	}
-	status.ActiveSandboxIDs[0] = "mutated"
-	if got := recovery.Status().ActiveSandboxIDs; len(got) != 1 || got[0] != "a" {
-		t.Fatalf("Status returned shared active sandbox IDs: %v", got)
-	}
+	waitForRecoveryJournalRemoval(t, root, "b")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if err := recovery.Shutdown(shutdownCtx); err != nil {
 		t.Fatalf("Shutdown returned error: %v", err)
 	}
-	status = recovery.Status()
-	if status.InProgress || status.Completed != 1 || status.Failed != 0 || status.Remaining != 1 || len(status.ActiveSandboxIDs) != 0 {
-		t.Fatalf("Status after shutdown = %#v, want one durable deletion remaining without a failure", status)
+	if _, err := ReadOwnershipRecord(root, "a"); err != nil {
+		t.Fatalf("canceled deletion did not retain its journal: %v", err)
 	}
 }
 
@@ -78,15 +66,7 @@ func TestDeletionRecoveryReportsFailureAndRetriesOnNextInstance(t *testing.T) {
 	if err := first.Start(context.Background()); err != nil {
 		t.Fatalf("first Start returned error: %v", err)
 	}
-	failed := waitForDeletionRecoveryStatus(t, first, func(status DeletionRecoveryStatus) bool {
-		return !status.InProgress
-	})
-	if failed.Total != 1 || failed.Completed != 0 || failed.Failed != 1 || failed.Remaining != 1 {
-		t.Fatalf("failed recovery Status = %#v", failed)
-	}
-	if !strings.Contains(failed.LastError, "retry") || !strings.Contains(failed.LastError, "runtime removal failed") {
-		t.Fatalf("failed recovery last error = %q", failed.LastError)
-	}
+	waitForDeletionRecoveryDone(t, first)
 	if _, err := ReadOwnershipRecord(root, "retry"); err != nil {
 		t.Fatalf("failed deletion did not retain its journal: %v", err)
 	}
@@ -96,15 +76,8 @@ func TestDeletionRecoveryReportsFailureAndRetriesOnNextInstance(t *testing.T) {
 	if err := second.Start(context.Background()); err != nil {
 		t.Fatalf("second Start returned error: %v", err)
 	}
-	succeeded := waitForDeletionRecoveryStatus(t, second, func(status DeletionRecoveryStatus) bool {
-		return !status.InProgress
-	})
-	if succeeded.Total != 1 || succeeded.Completed != 1 || succeeded.Failed != 0 || succeeded.Remaining != 0 || succeeded.LastError != "" {
-		t.Fatalf("retried recovery Status = %#v", succeeded)
-	}
-	if _, err := ReadOwnershipRecord(root, "retry"); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("successful retry journal error = %v, want not exist", err)
-	}
+	waitForRecoveryJournalRemoval(t, root, "retry")
+	waitForDeletionRecoveryDone(t, second)
 }
 
 func TestDeletionRecoveryReportsUnreadableJournal(t *testing.T) {
@@ -117,15 +90,18 @@ func TestDeletionRecoveryReportsUnreadableJournal(t *testing.T) {
 		t.Fatalf("write broken lifecycle journal: %v", err)
 	}
 
-	recovery := newTestDeletionRecovery(root, &recoveryRuntime{})
+	var logs bytes.Buffer
+	recovery := NewDeletionRecovery(&RemovalCoordinator{
+		SandboxRoot: root,
+		Store:       recoveryStore{},
+		Runtime:     &recoveryRuntime{},
+	}, slog.New(slog.NewTextHandler(&logs, nil)))
 	if err := recovery.Start(context.Background()); err != nil {
 		t.Fatalf("Start returned error: %v", err)
 	}
-	status := waitForDeletionRecoveryStatus(t, recovery, func(status DeletionRecoveryStatus) bool {
-		return !status.InProgress
-	})
-	if status.Total != 0 || status.Completed != 0 || status.Remaining != 0 || !strings.Contains(status.LastError, "broken.json") {
-		t.Fatalf("Status = %#v, want unreadable journal warning", status)
+	waitForDeletionRecoveryDone(t, recovery)
+	if !strings.Contains(logs.String(), "broken.json") {
+		t.Fatalf("recovery log = %q, want unreadable journal warning", logs.String())
 	}
 }
 
@@ -148,9 +124,7 @@ func TestDeletionRecoveryLifecycleEdges(t *testing.T) {
 		if err := recovery.Start(context.Background()); err != nil {
 			t.Fatalf("second Start returned error: %v", err)
 		}
-		waitForDeletionRecoveryStatus(t, recovery, func(status DeletionRecoveryStatus) bool {
-			return !status.InProgress
-		})
+		waitForDeletionRecoveryDone(t, recovery)
 	})
 
 	t.Run("shutdown honors deadline", func(t *testing.T) {
@@ -198,20 +172,38 @@ func writeDeletingRecoveryRecords(t *testing.T, root string, ids ...string) {
 	}
 }
 
-func waitForDeletionRecoveryStatus(t *testing.T, recovery *DeletionRecovery, ready func(DeletionRecoveryStatus) bool) DeletionRecoveryStatus {
+func waitForDeletionRecoveryDone(t *testing.T, recovery *DeletionRecovery) {
+	t.Helper()
+	recovery.mu.Lock()
+	done := recovery.done
+	recovery.mu.Unlock()
+	if done == nil {
+		t.Fatal("deletion recovery did not initialize its completion signal")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("deletion recovery did not finish")
+	}
+}
+
+func waitForRecoveryJournalRemoval(t *testing.T, root, sandboxID string) {
 	t.Helper()
 	deadline := time.NewTimer(time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(time.Millisecond)
 	defer ticker.Stop()
 	for {
-		status := recovery.Status()
-		if ready(status) {
-			return status
+		_, err := ReadOwnershipRecord(root, sandboxID)
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		if err != nil {
+			t.Fatalf("read recovery journal %s: %v", sandboxID, err)
 		}
 		select {
 		case <-deadline.C:
-			t.Fatalf("deletion recovery status did not converge: %#v", status)
+			t.Fatalf("recovery journal %s was not removed", sandboxID)
 		case <-ticker.C:
 		}
 	}

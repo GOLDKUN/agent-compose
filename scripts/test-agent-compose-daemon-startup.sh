@@ -226,17 +226,11 @@ jq -e \
   'keys == ["data", "err", "msg"] and
    .err == null and
    .msg == "OK" and
-   (.data | keys) == ["arch", "compiled_drivers", "deletion_recovery", "os", "timestamp", "timezone", "timezone_offset", "version"] and
+   (.data | keys) == ["arch", "compiled_drivers", "os", "timestamp", "timezone", "timezone_offset", "version"] and
    .data.version == $version and
    .data.os == $os and
    .data.arch == $arch and
    .data.compiled_drivers == ($drivers | split(",")) and
-   (.data.deletion_recovery | keys) == ["completed", "failed", "in_progress", "remaining", "total"] and
-   (.data.deletion_recovery.in_progress | type == "boolean") and
-   .data.deletion_recovery.total == 0 and
-   .data.deletion_recovery.completed == 0 and
-   .data.deletion_recovery.failed == 0 and
-   .data.deletion_recovery.remaining == 0 and
    (.data.timestamp | type == "number" and . > 0) and
    (.data.timezone | type == "string" and length > 0) and
    (.data.timezone_offset | type == "number")' \

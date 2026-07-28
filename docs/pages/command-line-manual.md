@@ -677,21 +677,12 @@ agent-compose status --json
 
 Default columns:
 
-- `STATUS`: `OK` when the daemon has no outstanding startup deletion work,
-  `RECOVERING` while durable sandbox deletions are being resumed, or `DEGRADED`
-  when a deletion journal could not be read or removed and remains for a future
-  daemon restart.
+- `STATUS`: daemon response status.
 - `UPTIME`: daemon-reported timestamp rendered in the daemon timezone when available.
 - `VERSION`: daemon build version.
 
 Status requests have a five-second timeout. Use `--json` to print the raw daemon
-status response for automation. Its additive `data.deletion_recovery` object
-reports `in_progress`, `total`, successfully `completed`, `failed`, and
-`remaining` deletion counts, plus currently active `active_sandbox_ids` and the
-most recent `last_error` when present. Failed deletions remain in `remaining`
-because their durable journals are retried on the next daemon start. The legacy
-response envelope remains successful with `msg: "OK"`; the text command derives
-`RECOVERING` and `DEGRADED` from the recovery object.
+status response for automation.
 
 ## Other Commands
 
