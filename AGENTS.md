@@ -8,7 +8,7 @@ This repo contains the agent-compose daemon and CLI control plane. It applies de
 - `pkg/agentcompose/app`: use-case and component lifecycle orchestration.
 - `pkg/agentcompose/api`: Connect transport handlers and transport/domain mapping.
 - `pkg/agentcompose/adapters`, `pkg/agentcompose/proxy`, `pkg/storage`, and `pkg/driver`: external and infrastructure boundaries.
-- `pkg/loaders`, `pkg/projects`, `pkg/runs`, and `pkg/sessions`: domain owners. Other `pkg` packages provide focused capabilities; location under `pkg` alone does not make a package a domain owner.
+- `pkg/schedulers`, `pkg/projects`, `pkg/runs`, and `pkg/sessions`: domain owners. Other `pkg` packages provide focused capabilities; location under `pkg` alone does not make a package a domain owner.
 - `pkg/compose`: compose-file schema, validation, normalization, and source loading; `pkg/resources` resolves resource identifiers; `pkg/cache` owns shared runtime cache policy; `pkg/skills` resolves skill sources.
 - `proto`: v2 and health API sources plus generated Go and Connect clients. Edit `.proto` sources and regenerate; do not edit generated files manually.
 - `runtime`: the guest JavaScript runtime, runtime SDK, and Jupyter JavaScript kernel metadata.

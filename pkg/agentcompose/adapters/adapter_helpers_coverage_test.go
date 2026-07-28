@@ -15,7 +15,7 @@ import (
 )
 
 func TestAdapterHelperCoverage(t *testing.T) {
-	t.Run("loader host unavailable dependencies", func(t *testing.T) {
+	t.Run("scheduler host unavailable dependencies", func(t *testing.T) {
 		if err := (SchedulerHostEvents{}).Add(context.Background(), "", "", "", "", "", "", nil, "", "", ""); err == nil {
 			t.Fatalf("SchedulerHostEvents.Add returned nil error")
 		}
@@ -33,7 +33,7 @@ func TestAdapterHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("loader sandbox rpc linked sandbox id", func(t *testing.T) {
+	t.Run("scheduler sandbox rpc linked sandbox id", func(t *testing.T) {
 		if got := SchedulerSandboxRPCLinkedSandboxID("CreateSandbox", `{"sandboxId":"request-sandbox"}`, `{"sandbox":{"summary":{"sandboxId":"response-sandbox"}}}`); got != "response-sandbox" {
 			t.Fatalf("response sandbox id = %q", got)
 		}

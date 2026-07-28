@@ -25,7 +25,7 @@ type composeSchedulerPruneOptions struct {
 
 type composeSchedulerPruneStats struct {
 	Runs              uint64 `json:"runs"`
-	SchedulerEvents   uint64 `json:"loader_events"`
+	SchedulerEvents   uint64 `json:"scheduler_events"`
 	EventDeliveries   uint64 `json:"event_deliveries"`
 	EventSandboxLinks uint64 `json:"event_sandbox_links"`
 	ArtifactDirs      uint64 `json:"artifact_dirs"`
@@ -33,7 +33,7 @@ type composeSchedulerPruneStats struct {
 }
 
 type composeSchedulerPruneResidue struct {
-	SchedulerID string `json:"loader_id"`
+	SchedulerID string `json:"scheduler_id"`
 	RunID       string `json:"run_id"`
 	Path        string `json:"path"`
 	Error       string `json:"error"`
@@ -171,7 +171,7 @@ func composeSchedulerPruneOutputFromResponse(response *agentcomposev2.PruneSched
 	}
 	for _, residue := range response.GetResidues() {
 		output.Residues = append(output.Residues, composeSchedulerPruneResidue{
-			SchedulerID: displayOpaqueID(residue.GetLoaderId()),
+			SchedulerID: displayOpaqueID(residue.GetSchedulerId()),
 			RunID:       displayOpaqueID(residue.GetRunId()),
 			Path:        residue.GetPath(),
 			Error:       residue.GetError(),
@@ -186,7 +186,7 @@ func composeSchedulerPruneStatsFromProto(stats *agentcomposev2.SchedulerRunPrune
 	}
 	return composeSchedulerPruneStats{
 		Runs:              stats.GetRuns(),
-		SchedulerEvents:   stats.GetLoaderEvents(),
+		SchedulerEvents:   stats.GetSchedulerEvents(),
 		EventDeliveries:   stats.GetEventDeliveries(),
 		EventSandboxLinks: stats.GetEventSandboxLinks(),
 		ArtifactDirs:      stats.GetArtifactDirs(),
@@ -216,7 +216,7 @@ func writeComposeSchedulerPruneOutput(out io.Writer, asJSON bool, output compose
 		related = output.Removed
 		label = "Removed related"
 	}
-	if _, err := fmt.Fprintf(out, "%s: %d loader event(s), %d event delivery row(s), %d event sandbox link(s), %d artifact dir(s), %d artifact byte(s).\n",
+	if _, err := fmt.Fprintf(out, "%s: %d scheduler event(s), %d event delivery row(s), %d event sandbox link(s), %d artifact dir(s), %d artifact byte(s).\n",
 		label, related.SchedulerEvents, related.EventDeliveries, related.EventSandboxLinks, related.ArtifactDirs, related.ArtifactBytes); err != nil {
 		return err
 	}

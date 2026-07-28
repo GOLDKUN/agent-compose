@@ -16,8 +16,6 @@ import (
 	"agent-compose/pkg/schedulers"
 )
 
-// Sticky-binding errors and structured logs retain historical loader wording
-// because they are observable through CLI output and operational log queries.
 func (r *SchedulerSandboxRunner) reuseCompatibleSchedulerBinding(ctx context.Context, scheduler domain.Scheduler, triggerID, configHash string) (*domain.Sandbox, string, bool, *domain.SchedulerBinding, error) {
 	for range 3 {
 		binding, found, err := r.ConfigDB.GetSchedulerBinding(ctx, scheduler.Summary.ID, triggerID)
@@ -40,7 +38,7 @@ func (r *SchedulerSandboxRunner) reuseCompatibleSchedulerBinding(ctx context.Con
 			if err == nil {
 				return session, eventType, true, &binding, nil
 			}
-			slog.Warn("failed to reuse loader sticky sandbox, creating a new one", "loader_id", scheduler.Summary.ID, "sandbox_id", binding.SandboxID, "error", err)
+			slog.Warn("failed to reuse scheduler sticky sandbox, creating a new one", "scheduler_id", scheduler.Summary.ID, "sandbox_id", binding.SandboxID, "error", err)
 			replacement := schedulers.RetiringSchedulerBinding(binding, configHash)
 			claimed, claimErr := r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, &binding, replacement)
 			if claimErr != nil {
@@ -69,10 +67,10 @@ func (r *SchedulerSandboxRunner) reuseCompatibleSchedulerBinding(ctx context.Con
 		if err := r.Shutdown(ctx, binding.SandboxID); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, "", false, &binding, err
 		}
-		slog.Info("retired loader sticky sandbox with stale configuration", "loader_id", scheduler.Summary.ID, "trigger_id", triggerID, "sandbox_id", binding.SandboxID)
+		slog.Info("retired scheduler sticky sandbox with stale configuration", "scheduler_id", scheduler.Summary.ID, "trigger_id", triggerID, "sandbox_id", binding.SandboxID)
 		return nil, "", false, &binding, nil
 	}
-	return nil, "", false, nil, fmt.Errorf("loader sticky sandbox binding changed concurrently")
+	return nil, "", false, nil, fmt.Errorf("scheduler sticky sandbox binding changed concurrently")
 }
 
 func (r *SchedulerSandboxRunner) loadOrResumeSchedulerBinding(ctx context.Context, binding domain.SchedulerBinding) (*domain.Sandbox, string, bool, error) {
@@ -132,7 +130,7 @@ func (r *SchedulerSandboxRunner) reuseWinningSchedulerBinding(ctx context.Contex
 		}
 		return session, eventType, true, nil
 	}
-	return nil, "", false, fmt.Errorf("loader sticky sandbox binding changed concurrently")
+	return nil, "", false, fmt.Errorf("scheduler sticky sandbox binding changed concurrently")
 }
 
 func schedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {

@@ -82,7 +82,7 @@ func (s *schedulerRunSupervisor) start(ctx context.Context, request SchedulerRun
 	request.SchedulerID = strings.TrimSpace(request.SchedulerID)
 	request.TriggerID = strings.TrimSpace(request.TriggerID)
 	if request.SchedulerID == "" {
-		return domain.SchedulerRunSummary{}, nil, domain.ClassifyError(domain.ErrRequired, "scheduler loader id is required", nil)
+		return domain.SchedulerRunSummary{}, nil, domain.ClassifyError(domain.ErrRequired, "scheduler id is required", nil)
 	}
 	if request.TriggerID == "" {
 		return domain.SchedulerRunSummary{}, nil, domain.ClassifyError(domain.ErrRequired, "scheduler trigger id is required", nil)

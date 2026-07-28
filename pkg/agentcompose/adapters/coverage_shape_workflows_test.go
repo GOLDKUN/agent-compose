@@ -25,7 +25,7 @@ func TestIntegrationAdapterRuntimeWorkflows(t *testing.T) {
 	t.Run("capability guide http", TestSandboxRPCBridgeCapabilityGuideFromHTTPProvider)
 	t.Run("adapter helpers", TestAdapterHelperCoverage)
 	t.Run("capability sandbox resolver", TestCapabilitySandboxResolverCoverage)
-	t.Run("loader sticky unsupported history", TestLoaderSandboxRunnerRejectsUnsupportedStickyResumeBeforeSideEffects)
+	t.Run("scheduler sticky unsupported history", TestSchedulerSandboxRunnerRejectsUnsupportedStickyResumeBeforeSideEffects)
 }
 
 func TestE2EAdapterRuntimeWorkflows(t *testing.T) {

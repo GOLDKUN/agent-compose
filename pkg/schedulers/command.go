@@ -18,7 +18,7 @@ func ValidateCommandRequest(request domain.SchedulerCommandRequest) error {
 			return fmt.Errorf("script is required")
 		}
 	default:
-		return fmt.Errorf("loader command mode must be exec or shell")
+		return fmt.Errorf("scheduler command mode must be exec or shell")
 	}
 	return nil
 }

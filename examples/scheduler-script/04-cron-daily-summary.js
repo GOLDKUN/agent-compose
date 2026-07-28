@@ -4,7 +4,7 @@ function readDailyState() {
 
 function buildDailyPrompt(context) {
   return [
-    "You are a scheduled agent-compose loader.",
+    "You are an agent-compose scheduler.",
     "Create a short daily status note and a focused action list.",
     "Keep it concise and operational.",
     "",

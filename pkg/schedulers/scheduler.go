@@ -74,7 +74,7 @@ func (s *Scheduler) Dispatch(jobs []ScheduledRun) {
 		go func(job ScheduledRun) {
 			defer cancel()
 			if _, err := s.deps.Run(runCtx, job.Scheduler, &job.Trigger, job.PayloadJSON, job.Source, RunOptions{}); err != nil {
-				slog.Warn("loader scheduled run failed", "loader_id", job.Scheduler.Summary.ID, "trigger_id", job.Trigger.ID, "trigger_kind", job.Trigger.Kind, "error", err)
+				slog.Warn("scheduler run failed", "scheduler_id", job.Scheduler.Summary.ID, "trigger_id", job.Trigger.ID, "trigger_kind", job.Trigger.Kind, "error", err)
 			}
 		}(job)
 	}
@@ -107,14 +107,14 @@ func (s *Scheduler) CollectDue(now time.Time) []ScheduledRun {
 		s.deps.ReplaceCached(updatedSchedulers)
 	}
 	for _, item := range scheduleErrs {
-		slog.Warn("failed to compute next loader schedule", "loader_id", item.SchedulerID, "trigger_id", item.TriggerID, "trigger_kind", item.TriggerKind, "error", item.Err)
+		slog.Warn("failed to compute next scheduler fire time", "scheduler_id", item.SchedulerID, "trigger_id", item.TriggerID, "trigger_kind", item.TriggerKind, "error", item.Err)
 	}
 	for _, job := range scheduled {
 		if s.deps.Store == nil {
 			continue
 		}
 		if err := s.deps.Store.MarkSchedulerTriggerFired(s.rootCtx(), job.Scheduler.Summary.ID, job.Trigger.ID, job.Trigger.LastFiredAt, job.Trigger.NextFireAt); err != nil {
-			slog.Warn("failed to persist loader fire state", "loader_id", job.Scheduler.Summary.ID, "trigger_id", job.Trigger.ID, "trigger_kind", job.Trigger.Kind, "error", err)
+			slog.Warn("failed to persist scheduler fire state", "scheduler_id", job.Scheduler.Summary.ID, "trigger_id", job.Trigger.ID, "trigger_kind", job.Trigger.Kind, "error", err)
 		}
 	}
 	return scheduled

@@ -87,7 +87,7 @@ func TestSetupRegistersServiceGraph(t *testing.T) {
 	}
 }
 
-func TestStartBackgroundConstructsCleanupBeforeLoader(t *testing.T) {
+func TestStartBackgroundConstructsCleanupBeforeScheduler(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", root)
 	t.Setenv("SANDBOX_ROOT", filepath.Join(root, "sandboxes"))
@@ -110,7 +110,7 @@ func TestStartBackgroundConstructsCleanupBeforeLoader(t *testing.T) {
 		return NewCleanupRunner(di)
 	})
 	do.Override(di, func(di do.Injector) (*schedulers.Controller, error) {
-		constructionOrder = append(constructionOrder, "loader")
+		constructionOrder = append(constructionOrder, "scheduler")
 		return NewSchedulerController(di)
 	})
 	do.Override(di, func(di do.Injector) (*sandboxes.DeletionRecovery, error) {
@@ -122,8 +122,8 @@ func TestStartBackgroundConstructsCleanupBeforeLoader(t *testing.T) {
 		t.Fatalf("StartBackground returned error: %v", err)
 	}
 	cancel()
-	if len(constructionOrder) < 3 || constructionOrder[0] != "cleanup" || constructionOrder[1] != "loader" || constructionOrder[2] != "recovery" {
-		t.Fatalf("background construction order = %v, want cleanup before loader before recovery", constructionOrder)
+	if len(constructionOrder) < 3 || constructionOrder[0] != "cleanup" || constructionOrder[1] != "scheduler" || constructionOrder[2] != "recovery" {
+		t.Fatalf("background construction order = %v, want cleanup before scheduler before recovery", constructionOrder)
 	}
 }
 

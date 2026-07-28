@@ -206,11 +206,20 @@ func NewConfig(di do.Injector) (*Config, error) {
 		}
 	}
 	schedulerRunTimeout := 20 * time.Minute
-	if raw := os.Getenv("LOADER_RUN_TIMEOUT"); raw != "" {
+	schedulerRunTimeoutName := "SCHEDULER_RUN_TIMEOUT"
+	rawSchedulerRunTimeout := os.Getenv(schedulerRunTimeoutName)
+	if rawSchedulerRunTimeout == "" {
+		schedulerRunTimeoutName = "LOADER_RUN_TIMEOUT"
+		rawSchedulerRunTimeout = os.Getenv(schedulerRunTimeoutName)
+		if rawSchedulerRunTimeout != "" {
+			logger.Warn("LOADER_RUN_TIMEOUT is deprecated; use SCHEDULER_RUN_TIMEOUT")
+		}
+	}
+	if raw := rawSchedulerRunTimeout; raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
-			logger.Warn("failed to parse LOADER_RUN_TIMEOUT", "value", raw, "error", err)
+			logger.Warn("failed to parse "+schedulerRunTimeoutName, "value", raw, "error", err)
 		} else if parsed <= 0 {
-			logger.Warn("ignored non-positive LOADER_RUN_TIMEOUT", "value", raw)
+			logger.Warn("ignored non-positive "+schedulerRunTimeoutName, "value", raw)
 		} else {
 			schedulerRunTimeout = parsed
 		}

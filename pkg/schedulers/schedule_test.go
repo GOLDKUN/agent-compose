@@ -38,11 +38,11 @@ func TestCronDefaultsToProcessLocalTimezone(t *testing.T) {
 	}
 }
 
-func TestLoaderScheduleModelWorkflows(t *testing.T) {
-	testLoaderScheduleModelWorkflows(t)
+func TestSchedulerScheduleModelWorkflows(t *testing.T) {
+	testSchedulerScheduleModelWorkflows(t)
 }
 
-func testLoaderScheduleModelWorkflows(t *testing.T) {
+func testSchedulerScheduleModelWorkflows(t *testing.T) {
 	t.Helper()
 	now := time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC)
 
@@ -111,7 +111,7 @@ func testLoaderScheduleModelWorkflows(t *testing.T) {
 		t.Fatalf("stable trigger id was not stable")
 	}
 	if domain.SchedulerSourceSHA("script") == domain.SchedulerSourceSHA("other") {
-		t.Fatalf("loaderSourceSHA returned identical values for different scripts")
+		t.Fatalf("schedulerSourceSHA returned identical values for different scripts")
 	}
 	if !domain.SchedulerTriggerTopicMatches("runtime.*", "runtime.test") || !domain.SchedulerTriggerTopicMatches("runtime.test", "runtime.test") {
 		t.Fatalf("expected topic patterns to match")
@@ -139,9 +139,9 @@ func testLoaderScheduleModelWorkflows(t *testing.T) {
 		t.Fatalf("scheduled at helper returned unexpected values")
 	}
 	if domain.DefaultSchedulerName(now) != "Scheduler 2026-06-02 09:00" {
-		t.Fatalf("default loader name = %q", domain.DefaultSchedulerName(now))
+		t.Fatalf("default scheduler name = %q", domain.DefaultSchedulerName(now))
 	}
 	if script := domain.DefaultSchedulerScript(); !strings.Contains(script, "function main") || !strings.Contains(script, "scheduler.interval") || !strings.Contains(script, "scheduler.on") {
-		t.Fatalf("default loader script missing expected registrations: %s", script)
+		t.Fatalf("default scheduler script missing expected registrations: %s", script)
 	}
 }

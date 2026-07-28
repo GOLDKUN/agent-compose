@@ -16,7 +16,7 @@ type schedulerRunPageCursor struct {
 	TriggerID       string    `json:"trigger_id,omitempty"`
 	Status          string    `json:"status,omitempty"`
 	StartedAt       time.Time `json:"started_at"`
-	SchedulerID     string    `json:"loader_id"`
+	SchedulerID     string    `json:"scheduler_id"`
 	RunID           string    `json:"run_id"`
 }
 

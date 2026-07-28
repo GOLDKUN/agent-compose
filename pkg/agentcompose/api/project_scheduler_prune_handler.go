@@ -77,10 +77,10 @@ func schedulerRunPruneResultToProto(result schedulers.SchedulerRunPruneResult) *
 	}
 	for _, residue := range result.Residues {
 		response.Residues = append(response.Residues, &agentcomposev2.SchedulerRunPruneResidue{
-			LoaderId: residue.SchedulerID,
-			RunId:    residue.RunID,
-			Path:     residue.Path,
-			Error:    residue.Error,
+			SchedulerId: residue.SchedulerID,
+			RunId:       residue.RunID,
+			Path:        residue.Path,
+			Error:       residue.Error,
 		})
 	}
 	return response
@@ -89,7 +89,7 @@ func schedulerRunPruneResultToProto(result schedulers.SchedulerRunPruneResult) *
 func schedulerRunPruneStatsToProto(stats schedulers.SchedulerRunPruneStats) *agentcomposev2.SchedulerRunPruneStats {
 	return &agentcomposev2.SchedulerRunPruneStats{
 		Runs:              stats.Runs,
-		LoaderEvents:      stats.SchedulerEvents,
+		SchedulerEvents:   stats.SchedulerEvents,
 		EventDeliveries:   stats.EventDeliveries,
 		EventSandboxLinks: stats.EventSandboxLinks,
 		ArtifactDirs:      stats.ArtifactDirs,

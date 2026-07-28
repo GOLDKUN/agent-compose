@@ -113,9 +113,7 @@ func NewRuntimeHost(deps RunHostDependencies, scheduler domain.Scheduler, execut
 	return &RuntimeHost{deps: deps, scheduler: scheduler, execution: execution, triggerEvent: triggerEvent}
 }
 
-// Runtime host events are persisted and payloads are consumed by existing
-// clients. Keep loaderId/loaderRunId payload keys unchanged even though
-// scheduler events use the scheduler.* prefix.
+// Runtime host events are persisted and their payloads are consumed by clients.
 func (h *RuntimeHost) Log(ctx context.Context, message string, payload any) error {
 	return h.addSchedulerEvent(ctx, "scheduler.log", "info", message, payload, "", "", "")
 }
@@ -257,7 +255,7 @@ func (h *RuntimeHost) Agent(ctx context.Context, prompt string, request domain.S
 	_ = h.addLinkedSchedulerEvent(ctx, eventName, level, firstHostNonEmpty(result.Text, fmt.Sprintf("%s completed", result.Agent)), result, result.SandboxID, result.CellID, result.AgentThreadID)
 	h.publishAgentCompleted(result, nil)
 	if shutdownErr := h.deps.Sessions.Shutdown(ctx, session.Summary.ID); shutdownErr != nil {
-		slog.Warn("failed to stop loader sandbox after agent run", "loader_id", h.scheduler.Summary.ID, "sandbox_id", session.Summary.ID, "error", shutdownErr)
+		slog.Warn("failed to stop scheduler sandbox after agent run", "scheduler_id", h.scheduler.Summary.ID, "sandbox_id", session.Summary.ID, "error", shutdownErr)
 		_ = h.addLinkedSchedulerEvent(ctx, "scheduler.sandbox.stop_failed", "error", shutdownErr.Error(), map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
 	} else {
 		_ = h.addLinkedSchedulerEvent(ctx, "scheduler.sandbox.stopped", "info", "scheduler sandbox stopped after agent run", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
@@ -324,7 +322,7 @@ func (h *RuntimeHost) CleanupCommandSessions(ctx context.Context) {
 	h.commandSessionIDOrder = nil
 	for _, sessionID := range sessionIDs {
 		if err := h.deps.Sessions.Shutdown(ctx, sessionID); err != nil {
-			slog.Warn("failed to stop loader command sandbox after run", "loader_id", h.scheduler.Summary.ID, "sandbox_id", sessionID, "error", err)
+			slog.Warn("failed to stop scheduler command sandbox after run", "scheduler_id", h.scheduler.Summary.ID, "sandbox_id", sessionID, "error", err)
 			_ = h.addLinkedSchedulerEvent(ctx, "scheduler.sandbox.stop_failed", "error", err.Error(), map[string]any{"sandboxId": sessionID}, sessionID, "", "")
 			continue
 		}
@@ -415,12 +413,12 @@ func (h *RuntimeHost) publishAgentCompleted(result domain.SchedulerAgentResult, 
 		"agentThreadId": result.AgentThreadID,
 		"success":       result.Success,
 		"stopReason":    result.StopReason,
-		"source":        "loader",
-		"loaderId":      h.scheduler.Summary.ID,
+		"source":        "scheduler",
+		"schedulerId":   h.scheduler.Summary.ID,
 	}
 	if projectRun != nil {
 		if h.execution.Kind == ExecutionKindTrigger {
-			payload["loaderRunId"] = h.execution.ID
+			payload["schedulerRunId"] = h.execution.ID
 		}
 		payload["projectId"] = projectRun.ProjectID
 		payload["projectRunId"] = projectRun.RunID

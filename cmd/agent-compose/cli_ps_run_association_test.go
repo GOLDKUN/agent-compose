@@ -10,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"agent-compose/pkg/identity"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -47,7 +46,7 @@ func TestSchedulerRunIsNewer(t *testing.T) {
 
 func TestLegacySchedulerSandboxBelongsToProject(t *testing.T) {
 	project := testCLIProject("project-1", "project-one", "/work/agent-compose.yml")
-	loaderID := identity.NewID(identity.ResourceLoader, "project-1", "reviewer", "default")
+	loaderID := legacyProjectLoaderID("project-1", "reviewer")
 	legacyTags := map[string]string{
 		"origin":    "loader",
 		"loader_id": loaderID,

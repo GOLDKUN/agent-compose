@@ -24,8 +24,8 @@ func TestInvocationExecutorUsesEphemeralContextAndSharedConcurrencyGate(t *testi
 		LeaveRun: func(string) { left++ },
 		NewID:    func() string { return "invocation-correlation" },
 	})
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "function main() {}"}
-	result, err := executor.Invoke(context.Background(), loader, ` { "value" : true } `)
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "function main() {}"}
+	result, err := executor.Invoke(context.Background(), scheduler, ` { "value" : true } `)
 	if err != nil || result.ResultJSON != `{"ok":true}` || len(result.Warnings) != 1 {
 		t.Fatalf("Invoke result=%#v err=%v", result, err)
 	}
@@ -38,14 +38,14 @@ func TestInvocationExecutorUsesEphemeralContextAndSharedConcurrencyGate(t *testi
 }
 
 func TestInvocationExecutorBusyAndFailureDoNotCreateRunLifecycle(t *testing.T) {
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "function main() {}"}
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "function main() {}"}
 	busy := NewInvocationExecutor(InvocationExecutorDependencies{
 		Engine: &invocationEngineFake{}, HostFactory: func(domain.Scheduler, RuntimeExecutionContext, TriggerEventMetadata) RunHost {
 			return &invocationHostFake{}
 		},
 		EnterRun: func(domain.Scheduler) bool { return false },
 	})
-	if _, err := busy.Invoke(context.Background(), loader, `{}`); !errors.Is(err, domain.ErrFailedPrecondition) {
+	if _, err := busy.Invoke(context.Background(), scheduler, `{}`); !errors.Is(err, domain.ErrFailedPrecondition) {
 		t.Fatalf("busy error=%v", err)
 	}
 	host := &invocationHostFake{}
@@ -54,7 +54,7 @@ func TestInvocationExecutorBusyAndFailureDoNotCreateRunLifecycle(t *testing.T) {
 		Engine: &invocationEngineFake{err: errors.New("script failed")}, HostFactory: func(domain.Scheduler, RuntimeExecutionContext, TriggerEventMetadata) RunHost { return host },
 		EnterRun: func(domain.Scheduler) bool { return true }, LeaveRun: func(string) { left++ },
 	})
-	if _, err := failed.Invoke(context.Background(), loader, `{}`); err == nil || err.Error() != "script failed" || left != 1 || host.cleanupCalls != 1 {
+	if _, err := failed.Invoke(context.Background(), scheduler, `{}`); err == nil || err.Error() != "script failed" || left != 1 || host.cleanupCalls != 1 {
 		t.Fatalf("failure err=%v left=%d cleanup=%d", err, left, host.cleanupCalls)
 	}
 }
@@ -69,8 +69,8 @@ func TestInvocationExecutorFallsBackWhenIDGeneratorReturnsEmpty(t *testing.T) {
 		},
 		NewID: func() string { return " " },
 	})
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "function main() {}"}
-	if _, err := executor.Invoke(context.Background(), loader, `{}`); err != nil {
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "function main() {}"}
+	if _, err := executor.Invoke(context.Background(), scheduler, `{}`); err != nil {
 		t.Fatalf("Invoke returned error: %v", err)
 	}
 	if execution.ID == "" {
@@ -93,9 +93,9 @@ func TestInvocationExecutorPreservesSuccessfulResultWhenContextIsCanceledAfterEx
 			return &invocationHostFake{}
 		},
 	})
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "function main() {}"}
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "function main() {}"}
 
-	result, err := executor.Invoke(ctx, loader, `{}`)
+	result, err := executor.Invoke(ctx, scheduler, `{}`)
 	if err != nil {
 		t.Fatalf("Invoke returned error: %v", err)
 	}

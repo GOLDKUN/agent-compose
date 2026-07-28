@@ -176,7 +176,7 @@ func ProjectApplyChanges(project domain.ProjectRecord, existing domain.ProjectRe
 	}
 }
 
-func DryRunProjectChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, definitions []domain.Scheduler) []*agentcomposev2.ProjectChange {
+func DryRunProjectChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, _ []domain.Scheduler) []*agentcomposev2.ProjectChange {
 	changes := []*agentcomposev2.ProjectChange{{
 		Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
 		ResourceType: "project",
@@ -202,17 +202,9 @@ func DryRunProjectChanges(project domain.ProjectRecord, agents []domain.ProjectA
 	for _, scheduler := range schedulers {
 		changes = append(changes, &agentcomposev2.ProjectChange{
 			Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
-			ResourceType: "project_scheduler",
-			ResourceId:   scheduler.SchedulerID,
+			ResourceType: "scheduler",
+			ResourceId:   scheduler.ID,
 			Name:         scheduler.AgentName,
-		})
-	}
-	for _, definition := range definitions {
-		changes = append(changes, &agentcomposev2.ProjectChange{
-			Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
-			ResourceType: "loader",
-			ResourceId:   definition.Summary.ID,
-			Name:         definition.Summary.Name,
 		})
 	}
 	return changes

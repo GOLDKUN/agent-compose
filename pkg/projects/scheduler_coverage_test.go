@@ -10,7 +10,7 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
+func TestManagedSchedulerTriggerRegistrationCoverage(t *testing.T) {
 	triggers, script, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "nightly", &compose.NormalizedSchedulerSpec{
 		Triggers: []compose.NormalizedTriggerSpec{
 			{Name: "cron-main", Kind: "cron", Cron: "*/5 * * * *", Prompt: "Run cron"},
@@ -194,12 +194,12 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 	}
 }
 
-func TestIntegrationManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
-	TestManagedLoaderTriggerRegistrationCoverage(t)
+func TestIntegrationManagedSchedulerTriggerRegistrationCoverage(t *testing.T) {
+	TestManagedSchedulerTriggerRegistrationCoverage(t)
 	TestProjectNormalizeAndScanCoverage(t)
 }
 
-func TestE2EManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
-	TestManagedLoaderTriggerRegistrationCoverage(t)
+func TestE2EManagedSchedulerTriggerRegistrationCoverage(t *testing.T) {
+	TestManagedSchedulerTriggerRegistrationCoverage(t)
 	TestProjectNormalizeAndScanCoverage(t)
 }

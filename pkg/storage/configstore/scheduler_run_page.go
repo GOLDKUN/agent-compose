@@ -92,7 +92,7 @@ func (s *schedulerStore) ListSchedulerRunsPage(ctx context.Context, filter sched
 	args = append(args, filter.Limit, max(filter.Offset, 0))
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query loader run page: %w", err)
+		return nil, fmt.Errorf("query scheduler run page: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -105,7 +105,7 @@ func (s *schedulerStore) ListSchedulerRunsPage(ctx context.Context, filter sched
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate loader run page: %w", err)
+		return nil, fmt.Errorf("iterate scheduler run page: %w", err)
 	}
 	return items, nil
 }
@@ -133,7 +133,7 @@ func (s *schedulerStore) CountSchedulerRunsPage(ctx context.Context, filter sche
 	}
 	var total int
 	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
-		return 0, fmt.Errorf("count loader runs: %w", err)
+		return 0, fmt.Errorf("count scheduler runs: %w", err)
 	}
 	return total, nil
 }
@@ -161,7 +161,7 @@ func (s *schedulerStore) ListSchedulerRunSandboxIDs(ctx context.Context, keys []
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT scheduler_id, scheduler_run_id, linked_sandbox_id FROM scheduler_event WHERE linked_sandbox_id <> '' AND (`+strings.Join(clauses, ` OR `)+`) ORDER BY scheduler_id ASC, scheduler_run_id ASC, linked_sandbox_id ASC`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query loader run sandbox ids: %w", err)
+		return nil, fmt.Errorf("query scheduler run sandbox ids: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	seen := make(map[schedulers.SchedulerRunKey]map[string]struct{})
@@ -169,7 +169,7 @@ func (s *schedulerStore) ListSchedulerRunSandboxIDs(ctx context.Context, keys []
 		var key schedulers.SchedulerRunKey
 		var sandboxID string
 		if err := rows.Scan(&key.SchedulerID, &key.RunID, &sandboxID); err != nil {
-			return nil, fmt.Errorf("scan loader run sandbox id: %w", err)
+			return nil, fmt.Errorf("scan scheduler run sandbox id: %w", err)
 		}
 		if seen[key] == nil {
 			seen[key] = make(map[string]struct{})
@@ -181,7 +181,7 @@ func (s *schedulerStore) ListSchedulerRunSandboxIDs(ctx context.Context, keys []
 		result[key] = append(result[key], sandboxID)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate loader run sandbox ids: %w", err)
+		return nil, fmt.Errorf("iterate scheduler run sandbox ids: %w", err)
 	}
 	return result, nil
 }
@@ -229,7 +229,7 @@ func (s *schedulerStore) BatchGetLatestSchedulerRunsBySandboxIDs(ctx context.Con
 	ORDER BY sandbox_id ASC`
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query latest loader runs by sandbox ids: %w", err)
+		return nil, fmt.Errorf("query latest scheduler runs by sandbox ids: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
@@ -243,7 +243,7 @@ func (s *schedulerStore) BatchGetLatestSchedulerRunsBySandboxIDs(ctx context.Con
 		result[sandboxID] = run
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate latest loader runs by sandbox ids: %w", err)
+		return nil, fmt.Errorf("iterate latest scheduler runs by sandbox ids: %w", err)
 	}
 	return result, nil
 }

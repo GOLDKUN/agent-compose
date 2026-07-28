@@ -197,13 +197,13 @@ func TestStopProjectSandboxCoverage(t *testing.T) {
 	}
 }
 
-func TestReserveLoaderEventQueueSlotsCoverage(t *testing.T) {
+func TestReserveSchedulerEventQueueSlotsCoverage(t *testing.T) {
 	config := &appconfig.Config{WebhookQueueDefaultWorkers: 1}
 	var queue *webhooks.RunQueue
 	if reservations, ok := reserveSchedulerEventQueueSlots(config, &queue, domain.SchedulerTopicEvent{Source: domain.TopicEventSourceWebhook}, 0); !ok || reservations != nil {
 		t.Fatalf("zero reservations = %#v ok=%v", reservations, ok)
 	}
-	reservations, ok := reserveSchedulerEventQueueSlots(config, &queue, domain.SchedulerTopicEvent{Source: domain.TopicEventSourceLoader}, 2)
+	reservations, ok := reserveSchedulerEventQueueSlots(config, &queue, domain.SchedulerTopicEvent{Source: domain.TopicEventSourceScheduler}, 2)
 	if !ok || len(reservations) != 2 || queue != nil {
 		t.Fatalf("non-webhook reservations = %#v ok=%v queue=%#v", reservations, ok, queue)
 	}
@@ -227,7 +227,7 @@ func TestIntegrationAppControllerHelperCoverage(t *testing.T) {
 	TestAppProjectControllerHelperCoverage(t)
 	TestAppRunControllerHelperCoverage(t)
 	TestStopProjectSandboxCoverage(t)
-	TestReserveLoaderEventQueueSlotsCoverage(t)
+	TestReserveSchedulerEventQueueSlotsCoverage(t)
 }
 
 func TestE2EAppControllerHelperCoverage(t *testing.T) {

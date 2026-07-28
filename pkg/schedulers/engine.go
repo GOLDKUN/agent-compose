@@ -90,10 +90,10 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 		return SchedulerExecutionResult{}, err
 	}
 	if runtimeName != domain.SchedulerRuntimeScheduler {
-		return SchedulerExecutionResult{}, fmt.Errorf("unsupported loader runtime %q", runtimeName)
+		return SchedulerExecutionResult{}, fmt.Errorf("unsupported scheduler runtime %q", runtimeName)
 	}
 	if strings.TrimSpace(request.Script) == "" {
-		return SchedulerExecutionResult{}, fmt.Errorf("loader script is required")
+		return SchedulerExecutionResult{}, fmt.Errorf("scheduler script is required")
 	}
 
 	rt, err := qjs.New(qjs.Option{
@@ -125,16 +125,16 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 		return SchedulerExecutionResult{}, err
 	}
 
-	evalResult, err := jsctx.Eval("loader.js", qjs.Code(request.Script), qjs.FlagAsync())
+	evalResult, err := jsctx.Eval("scheduler.js", qjs.Code(request.Script), qjs.FlagAsync())
 	if err != nil {
 		state.freeCallbacks()
-		return SchedulerExecutionResult{}, fmt.Errorf("evaluate loader script: %w", err)
+		return SchedulerExecutionResult{}, fmt.Errorf("evaluate scheduler script: %w", err)
 	}
 	if evalResult != nil {
 		if evalResult.IsPromise() {
 			if _, err := evalResult.Await(); err != nil {
 				state.freeCallbacks()
-				return SchedulerExecutionResult{}, fmt.Errorf("await loader script: %w", err)
+				return SchedulerExecutionResult{}, fmt.Errorf("await scheduler script: %w", err)
 			}
 		}
 	}
@@ -158,7 +158,7 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 	}
 	if host == nil {
 		state.freeCallbacks()
-		return SchedulerExecutionResult{}, fmt.Errorf("loader host is required for execution")
+		return SchedulerExecutionResult{}, fmt.Errorf("scheduler host is required for execution")
 	}
 
 	payloadValue, err := payloadValueFromJSON(jsctx, request.PayloadJSON)
@@ -177,7 +177,7 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 			awaited, err := executed.Await()
 			if err != nil {
 				state.freeCallbacks()
-				return SchedulerExecutionResult{}, fmt.Errorf("await loader handler: %w", err)
+				return SchedulerExecutionResult{}, fmt.Errorf("await scheduler handler: %w", err)
 			}
 			executed = awaited
 		}
@@ -749,7 +749,7 @@ func (e *QJSSchedulerEngine) executeRequestedHandler(jsctx *qjs.Context, state *
 			}
 			return jsctx.Invoke(registration.callback, global, payload)
 		}
-		return nil, fmt.Errorf("loader trigger %s not found in script", strings.TrimSpace(trigger.ID))
+		return nil, fmt.Errorf("scheduler trigger %s not found in script", strings.TrimSpace(trigger.ID))
 	}
 
 	mainFn := global.GetPropertyStr("main")
@@ -761,14 +761,14 @@ func (e *QJSSchedulerEngine) executeRequestedHandler(jsctx *qjs.Context, state *
 		return jsctx.Invoke(state.registrations[0].callback, global, payload)
 	}
 	if len(state.registrations) > 1 {
-		return nil, fmt.Errorf("loader defines multiple triggers; choose a trigger explicitly or define main()")
+		return nil, fmt.Errorf("scheduler defines multiple triggers; choose a trigger explicitly or define main()")
 	}
 	return jsctx.NewUndefined(), nil
 }
 
 func (s *schedulerExecutionState) register(trigger domain.SchedulerTrigger, callback *qjs.Value) error {
 	if _, ok := s.seenIDs[trigger.ID]; ok {
-		return fmt.Errorf("duplicate loader trigger id %q", trigger.ID)
+		return fmt.Errorf("duplicate scheduler trigger id %q", trigger.ID)
 	}
 	cloned := callback.Clone()
 	s.seenIDs[trigger.ID] = struct{}{}

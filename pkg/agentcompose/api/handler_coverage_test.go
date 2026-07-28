@@ -706,12 +706,12 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 			{ProjectID: "project-1", AgentName: "worker-2", ID: "agent-2", Revision: 1, Driver: "boxlite", Image: "guest:latest"},
 		},
 		schedulers: []domain.ProjectSchedulerRecord{
-			{ProjectID: "project-1", SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Revision: 1, Enabled: true, SpecJSON: `{"enabled":true,"display_name":"每日巡检","description":"每天汇总巡检结果","script":"run()"}`, RunCount: 3, LatestRunAt: time.Unix(10, 0), LastError: "failed"},
-			{ProjectID: "project-1", SchedulerID: "scheduler-2", AgentName: "worker-2", ID: "loader-2", Revision: 1, Enabled: true, SpecJSON: `{"enabled":true,"script":"run()"}`},
+			{ProjectID: "project-1", SchedulerID: "scheduler-1", AgentName: "worker", ID: "scheduler-1", Revision: 1, Enabled: true, SpecJSON: `{"enabled":true,"display_name":"每日巡检","description":"每天汇总巡检结果","script":"run()"}`, RunCount: 3, LatestRunAt: time.Unix(10, 0), LastError: "failed"},
+			{ProjectID: "project-1", SchedulerID: "scheduler-2", AgentName: "worker-2", ID: "scheduler-2", Revision: 1, Enabled: true, SpecJSON: `{"enabled":true,"script":"run()"}`},
 		},
-		loaders: map[string]domain.Scheduler{
-			"loader-1": {Summary: domain.SchedulerSummary{ID: "loader-1", Enabled: false}},
-			"loader-2": {Summary: domain.SchedulerSummary{ID: "loader-2", Enabled: true}},
+		schedulerDefinitions: map[string]domain.Scheduler{
+			"scheduler-1": {Summary: domain.SchedulerSummary{ID: "scheduler-1", Enabled: false}},
+			"scheduler-2": {Summary: domain.SchedulerSummary{ID: "scheduler-2", Enabled: true}},
 		},
 		revision: domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 1, SpecJSON: `{"variables":[{"name":"PROJECT_SECRET","value":"project-secret","secret":true}],"mcp_servers":[{"name":"remote","headers":[{"name":"Authorization","value":"mcp-secret","secret":true}]}],"octobus_servers":[{"name":"internal","url":"https://octobus.example","token":"octobus-secret"}],"agents":[{"name":"worker","env":[{"name":"AGENT_SECRET","value":"agent-secret","secret":true}]},{"name":"worker-2"}]}`},
 		agentRunStates: []domain.ProjectAgentRunState{
@@ -770,12 +770,12 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	if err != nil || len(secondSchedulers.Msg.GetSchedulers()) != 1 || secondSchedulers.Msg.GetSchedulers()[0].GetSchedulerId() != "scheduler-2" {
 		t.Fatalf("ListSchedulers second page=%#v err=%v", secondSchedulers, err)
 	}
-	delete(store.loaders, "loader-2")
-	missingLoaderSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 10}))
-	if err != nil || len(missingLoaderSchedulers.Msg.GetSchedulers()) != 2 || !missingLoaderSchedulers.Msg.GetSchedulers()[1].GetEnabled() {
-		t.Fatalf("ListSchedulers missing loader fallback=%#v err=%v", missingLoaderSchedulers, err)
+	delete(store.schedulerDefinitions, "scheduler-2")
+	missingSchedulerSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 10}))
+	if err != nil || len(missingSchedulerSchedulers.Msg.GetSchedulers()) != 2 || !missingSchedulerSchedulers.Msg.GetSchedulers()[1].GetEnabled() {
+		t.Fatalf("ListSchedulers missing scheduler fallback=%#v err=%v", missingSchedulerSchedulers, err)
 	}
-	store.loaders["loader-2"] = domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-2", Enabled: true}}
+	store.schedulerDefinitions["scheduler-2"] = domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-2", Enabled: true}}
 	store.projects = append(store.projects, domain.ProjectRecord{ID: "project-2", Name: "Project"})
 	if _, err := projectHandler.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("expected ambiguous project error, got %v", err)
@@ -1273,16 +1273,16 @@ func (r *apiStatsRuntime) Stats(_ context.Context, session *domain.Sandbox, vmSt
 }
 
 type apiProjectRunStore struct {
-	mu                 sync.Mutex
-	projects           []domain.ProjectRecord
-	agents             []domain.ProjectAgentRecord
-	schedulers         []domain.ProjectSchedulerRecord
-	revision           domain.ProjectRevisionRecord
-	agentRunStates     []domain.ProjectAgentRunState
-	agentRunStateCalls int
-	runs               map[string]domain.ProjectRunRecord
-	runEvents          []domain.ProjectRunEventRecord
-	loaders            map[string]domain.Scheduler
+	mu                   sync.Mutex
+	projects             []domain.ProjectRecord
+	agents               []domain.ProjectAgentRecord
+	schedulers           []domain.ProjectSchedulerRecord
+	revision             domain.ProjectRevisionRecord
+	agentRunStates       []domain.ProjectAgentRunState
+	agentRunStateCalls   int
+	runs                 map[string]domain.ProjectRunRecord
+	runEvents            []domain.ProjectRunEventRecord
+	schedulerDefinitions map[string]domain.Scheduler
 }
 
 func (s *apiProjectRunStore) GetProject(_ context.Context, projectID string) (domain.ProjectRecord, error) {
@@ -1346,21 +1346,21 @@ func (s *apiProjectRunStore) GetManagedAgentDefinition(context.Context, string) 
 	return domain.AgentDefinition{ID: "agent-1", Enabled: true, ProjectID: "project-1", AgentName: "worker"}, nil
 }
 
-func (s *apiProjectRunStore) GetScheduler(_ context.Context, loaderID string) (domain.Scheduler, error) {
-	loader, ok := s.loaders[loaderID]
+func (s *apiProjectRunStore) GetScheduler(_ context.Context, schedulerID string) (domain.Scheduler, error) {
+	scheduler, ok := s.schedulerDefinitions[schedulerID]
 	if !ok {
 		return domain.Scheduler{}, sql.ErrNoRows
 	}
-	return loader, nil
+	return scheduler, nil
 }
 
-func (s *apiProjectRunStore) SetSchedulerEnabled(_ context.Context, loaderID string, enabled bool) error {
-	loader, ok := s.loaders[loaderID]
+func (s *apiProjectRunStore) SetSchedulerEnabled(_ context.Context, schedulerID string, enabled bool) error {
+	scheduler, ok := s.schedulerDefinitions[schedulerID]
 	if !ok {
 		return sql.ErrNoRows
 	}
-	loader.Summary.Enabled = enabled
-	s.loaders[loaderID] = loader
+	scheduler.Summary.Enabled = enabled
+	s.schedulerDefinitions[schedulerID] = scheduler
 	return nil
 }
 

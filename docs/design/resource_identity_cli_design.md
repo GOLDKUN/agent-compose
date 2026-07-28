@@ -82,7 +82,7 @@ scheduler resource for CLI purposes, and that scheduler may have many triggers.
 Trigger sources:
 
 - Declarative triggers in `agent-compose.yml`, usually with `name`.
-- Loader script registrations, usually without a user-defined name. These use
+- Scheduler script registrations, usually without a user-defined name. These use
   the internally registered trigger ID or a stable ordinal in compact display.
 
 Therefore the default `scheduler ls` output should focus on triggers, not on a

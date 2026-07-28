@@ -21,10 +21,10 @@ func (c *Controller) initializeCronSchedules(ctx context.Context, items []domain
 			}
 			nextFireAt, err := SchedulerTriggerNextFireAt(now, *trigger, false)
 			if err != nil {
-				return fmt.Errorf("initialize loader cron trigger %s/%s: %w", scheduler.Summary.ID, trigger.ID, err)
+				return fmt.Errorf("initialize scheduler cron trigger %s/%s: %w", scheduler.Summary.ID, trigger.ID, err)
 			}
 			if err := c.deps.Store.SetSchedulerTriggerNextFireAt(ctx, scheduler.Summary.ID, trigger.ID, nextFireAt); err != nil {
-				return fmt.Errorf("persist loader cron trigger schedule %s/%s: %w", scheduler.Summary.ID, trigger.ID, err)
+				return fmt.Errorf("persist scheduler cron trigger schedule %s/%s: %w", scheduler.Summary.ID, trigger.ID, err)
 			}
 			trigger.NextFireAt = nextFireAt
 		}

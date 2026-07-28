@@ -15,18 +15,16 @@ type SchedulerHostEvents struct {
 	Controller *schedulers.Controller
 }
 
-// Adapter errors retain their established loader wording because they can
-// surface through CLI and API error responses.
 func (e SchedulerHostEvents) Add(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
 	if e.Controller == nil {
-		return fmt.Errorf("loader controller is unavailable")
+		return fmt.Errorf("scheduler controller is unavailable")
 	}
 	return e.Controller.AddSchedulerEvent(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
 }
 
 func (e SchedulerHostEvents) AddRecord(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
 	if e.Controller == nil {
-		return domain.SchedulerEvent{}, fmt.Errorf("loader controller is unavailable")
+		return domain.SchedulerEvent{}, fmt.Errorf("scheduler controller is unavailable")
 	}
 	return e.Controller.AddSchedulerEventRecord(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
 }
@@ -57,7 +55,7 @@ type SchedulerHostCommandExecutor struct {
 
 func (e SchedulerHostCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
 	if e.Executor == nil {
-		return domain.SchedulerCommandResult{}, fmt.Errorf("loader command executor is unavailable")
+		return domain.SchedulerCommandResult{}, fmt.Errorf("scheduler command executor is unavailable")
 	}
 	return e.Executor.ExecuteSchedulerCommand(ctx, session, request)
 }

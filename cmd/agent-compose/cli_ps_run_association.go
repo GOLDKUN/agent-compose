@@ -12,7 +12,10 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
-const schedulerRunLookupBatchSize = 500
+const (
+	schedulerRunLookupBatchSize = 500
+	legacyLoaderResourceKind    = identity.ResourceKind("loader")
+)
 
 func latestSchedulerRunsBySandbox(ctx context.Context, clients cliServiceClients, project *agentcomposev2.Project, sessions []*agentcomposev2.Sandbox) (map[string]composeSchedulerRunItem, error) {
 	projectID := strings.TrimSpace(project.GetSummary().GetProjectId())
@@ -79,12 +82,19 @@ func legacySchedulerAgentForProject(tags map[string]string, project *agentcompos
 	for _, scheduler := range project.GetSchedulers() {
 		agentName := strings.TrimSpace(scheduler.GetAgentName())
 		schedulerID, err := domain.StableProjectSchedulerID(projectID, agentName, "")
-		legacyLoaderID := identity.NewID(identity.ResourceLoader, projectID, agentName, "default")
+		// The one-shot migrator preserves historical sandbox identity tags. This
+		// ID is computed only to associate those sandboxes; new resources use the
+		// native Scheduler identity above.
+		legacyLoaderID := legacyProjectLoaderID(projectID, agentName)
 		if err == nil && (loaderID == schedulerID || loaderID == legacyLoaderID) {
 			return strings.TrimSpace(scheduler.GetAgentName())
 		}
 	}
 	return ""
+}
+
+func legacyProjectLoaderID(projectID, agentName string) string {
+	return identity.NewID(legacyLoaderResourceKind, projectID, agentName, "default")
 }
 
 func schedulerRunIsNewer(schedulerRun composeSchedulerRunItem, projectRun *agentcomposev2.RunSummary) bool {

@@ -25,10 +25,10 @@ func TestNormalizeStickySandboxVolumeMountsUsesCanonicalOrder(t *testing.T) {
 	}
 }
 
-func TestLoaderSandboxConfigHashTracksSandboxSemantics(t *testing.T) {
+func TestSchedulerSandboxConfigHashTracksSandboxSemantics(t *testing.T) {
 	base := domain.Scheduler{
 		Summary: domain.SchedulerSummary{
-			ID:            "loader-1",
+			ID:            "scheduler-1",
 			Name:          "Scheduler",
 			Runtime:       domain.SchedulerRuntimeScheduler,
 			DefaultAgent:  "codex",
@@ -38,7 +38,7 @@ func TestLoaderSandboxConfigHashTracksSandboxSemantics(t *testing.T) {
 		Script:   "function main() {}",
 		EnvItems: []domain.SandboxEnvVar{{Name: "BUG_VALUE", Value: "A"}},
 	}
-	baseHash := mustLoaderSandboxConfigHash(t, base)
+	baseHash := mustSchedulerSandboxConfigHash(t, base)
 
 	for name, mutate := range map[string]func(*domain.Scheduler){
 		"workspace":        func(item *domain.Scheduler) { item.Summary.WorkspaceID = "workspace-2" },
@@ -62,17 +62,17 @@ func TestLoaderSandboxConfigHashTracksSandboxSemantics(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			changed := CloneScheduler(base)
 			mutate(&changed)
-			if got := mustLoaderSandboxConfigHash(t, changed); got == baseHash {
+			if got := mustSchedulerSandboxConfigHash(t, changed); got == baseHash {
 				t.Fatalf("sandbox config hash did not change for %s", name)
 			}
 		})
 	}
 }
 
-func TestLoaderSandboxConfigHashIgnoresSchedulingAndOrdering(t *testing.T) {
+func TestSchedulerSandboxConfigHashIgnoresSchedulingAndOrdering(t *testing.T) {
 	base := domain.Scheduler{
 		Summary: domain.SchedulerSummary{
-			ID:                "loader-1",
+			ID:                "scheduler-1",
 			Name:              "Scheduler",
 			Runtime:           domain.SchedulerRuntimeScheduler,
 			DefaultAgent:      "codex",
@@ -91,14 +91,14 @@ func TestLoaderSandboxConfigHashIgnoresSchedulingAndOrdering(t *testing.T) {
 	changed.Summary.CapsetIDs = []string{"b", "a", "a"}
 	changed.EnvItems = []domain.SandboxEnvVar{{Name: "B", Value: "2"}, {Name: "A", Value: "1"}}
 
-	if got, want := mustLoaderSandboxConfigHash(t, changed), mustLoaderSandboxConfigHash(t, base); got != want {
+	if got, want := mustSchedulerSandboxConfigHash(t, changed), mustSchedulerSandboxConfigHash(t, base); got != want {
 		t.Fatalf("non-sandbox update changed config hash: got %q want %q", got, want)
 	}
 }
 
-func mustLoaderSandboxConfigHash(t *testing.T, loader domain.Scheduler) string {
+func mustSchedulerSandboxConfigHash(t *testing.T, scheduler domain.Scheduler) string {
 	t.Helper()
-	hash, err := SchedulerSandboxConfigHash(loader)
+	hash, err := SchedulerSandboxConfigHash(scheduler)
 	if err != nil {
 		t.Fatalf("SchedulerSandboxConfigHash returned error: %v", err)
 	}

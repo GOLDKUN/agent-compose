@@ -54,8 +54,8 @@ Guest/runtime actually uses:
 
 | Host path | Guest path | Purpose |
 | --- | --- | --- |
-| `<sandbox>/workspace` | `/workspace` | Jupyter root, cell cwd, loader command cwd, agent working directory |
-| `<sandbox>/state` | `/data/state` | Cell artifacts, loader request/result, agent prompt/schema/provider state |
+| `<sandbox>/workspace` | `/workspace` | Jupyter root, cell cwd, scheduler command cwd, agent working directory |
+| `<sandbox>/state` | `/data/state` | Cell artifacts, scheduler request/result, agent prompt/schema/provider state |
 | `<sandbox>/runtime` | `/data/runtime` | Runtime JS MPI/resource/cache |
 | `<sandbox>/logs` | `/data/logs` | Jupyter log |
 | `<sandbox>/home` child paths | `/root/...` | Sandbox-local tool config/state for declared home entries |
@@ -185,7 +185,7 @@ Guest paths after startup:
 
 - Jupyter root: `/workspace`
 - Jupyter log: `/data/logs/jupyter.log`
-- Cell/loader command artifacts: `/data/state/cells/...`
+- Cell/scheduler command artifacts: `/data/state/cells/...`
 - Agent prompt/schema/provider state: `/data/state/agents/...`
 - Runtime JS resources/cache/MPI: `/data/runtime/...`
 

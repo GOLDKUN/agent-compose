@@ -136,12 +136,12 @@ func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 	if err := store.UpdateSandbox(ctx, session); err != nil {
 		t.Fatalf("UpdateSession returned error: %v", err)
 	}
-	payload := execution.AgentResultPrefix + `{"provider":"codex","threadId":"agent-thread-1","finalText":"done","transcript":"loader agent transcript","stopReason":"completed"}`
+	payload := execution.AgentResultPrefix + `{"provider":"codex","threadId":"agent-thread-1","finalText":"done","transcript":"scheduler agent transcript","stopReason":"completed"}`
 	runtime := &fakeAgentRuntime{
 		streamChunks: []domain.ExecChunk{
 			{Text: payload},
 			{Text: "stdout transcript\n" + payload},
-			{Text: "loader agent transcript\n", Stream: domain.StdioStderr},
+			{Text: "scheduler agent transcript\n", Stream: domain.StdioStderr},
 		},
 		result: domain.ExecResult{Stdout: payload, Output: payload, ExitCode: 0, Success: true},
 	}
@@ -168,7 +168,7 @@ func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 	if chunks[0].Text != "stdout transcript\n" || domain.NormalizeStdioStream(chunks[0].Stream) != domain.StdioStdout {
 		t.Fatalf("stdout stream chunk = %#v", chunks[0])
 	}
-	if chunks[1].Text != "loader agent transcript\n" || domain.NormalizeStdioStream(chunks[1].Stream) != domain.StdioStderr {
+	if chunks[1].Text != "scheduler agent transcript\n" || domain.NormalizeStdioStream(chunks[1].Stream) != domain.StdioStderr {
 		t.Fatalf("stderr stream chunk = %#v", chunks[1])
 	}
 	for _, chunk := range chunks {
@@ -176,10 +176,10 @@ func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 			t.Fatalf("stream chunk leaked agent result payload: %#v", chunk)
 		}
 	}
-	if !strings.Contains(cell.Stdout, "stdout transcript") || !strings.Contains(cell.Stderr, "loader agent transcript") {
+	if !strings.Contains(cell.Stdout, "stdout transcript") || !strings.Contains(cell.Stderr, "scheduler agent transcript") {
 		t.Fatalf("cell stdout/stderr = %q/%q", cell.Stdout, cell.Stderr)
 	}
-	if !strings.Contains(cell.Output, "stdout transcript") || !strings.Contains(cell.Output, "loader agent transcript") || strings.Contains(cell.Output, execution.AgentResultPrefix) {
+	if !strings.Contains(cell.Output, "stdout transcript") || !strings.Contains(cell.Output, "scheduler agent transcript") || strings.Contains(cell.Output, execution.AgentResultPrefix) {
 		t.Fatalf("cell output = %q", cell.Output)
 	}
 }

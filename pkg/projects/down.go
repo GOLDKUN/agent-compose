@@ -71,24 +71,15 @@ func DisableProjectSchedulers(ctx context.Context, project domain.ProjectRecord,
 		}
 		changes = append(changes, DownChange{
 			Action:       DownChangeUpdated,
-			ResourceType: "project_scheduler",
-			ResourceID:   disabled.SchedulerID,
+			ResourceType: "scheduler",
+			ResourceID:   disabled.ID,
 			Name:         disabled.AgentName,
 			Message:      "disabled by project down",
 		})
-		if scheduler.ID != "" {
-			changes = append(changes, DownChange{
-				Action:       DownChangeUpdated,
-				ResourceType: "loader",
-				ResourceID:   scheduler.ID,
-				Name:         scheduler.AgentName,
-				Message:      "disabled by project down",
-			})
-		}
 	}
 	if len(changes) > 0 && options.RefreshSchedulers != nil {
 		if err := options.RefreshSchedulers(ctx); err != nil {
-			return changes, fmt.Errorf("refresh loader manager after project down: %w", err)
+			return changes, fmt.Errorf("refresh scheduler controller after project down: %w", err)
 		}
 	}
 	return changes, nil

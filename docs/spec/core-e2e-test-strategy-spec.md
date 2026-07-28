@@ -2,7 +2,7 @@
 
 ## 背景与目标
 
-agent-compose 是负责 project、run、sandbox、runtime driver、workspace、scheduler、loader、事件、镜像、缓存、Jupyter 和 LLM facade 的控制面。核心用户工作流跨越 CLI、Connect/HTTP API、SQLite 与文件持久化、后台 manager、guest runtime 和外部依赖边界，单包测试或使用 fake 的多组件测试无法证明部署后的完整流程可用。
+agent-compose 是负责 project、run、sandbox、runtime driver、workspace、scheduler、事件、镜像、缓存、Jupyter 和 LLM facade 的控制面。核心用户工作流跨越 CLI、Connect/HTTP API、SQLite 与文件持久化、后台 controller、guest runtime 和外部依赖边界，单包测试或使用 fake 的多组件测试无法证明部署后的完整流程可用。
 
 仓库当前通过测试函数名称中的 `Integration` 和 `E2E` 区分测试形态，并在 `scripts/test-coverage.sh` 中分别计算 unit、integration、E2E 和 combined statement coverage。当前约有 77 个 `TestE2E...` 分散在 `cmd/`、`pkg/` 和 `test/e2e`：其中多数是复用 unit/integration helper 的 coverage-shape wrapper，只有少量测试真正启动 daemon、Docker sandbox 或后台 scheduler。现有 E2E statement coverage 因此主要反映代码执行数量，而不是用户可观察业务流程的完整性。
 
@@ -25,7 +25,7 @@ agent-compose 是负责 project、run、sandbox、runtime driver、workspace、s
 - `TESTING.md` 将 unit、integration、E2E 定义为三种互补测试形态，并要求跨 API、持久化、runtime driver 或用户工作流的变更具有更宽的测试覆盖。
 - `Taskfile.yml` 的主门禁为 `task lint`、`task build`、`task test`；现有 runtime 真实 smoke 通过 `task test:runtime-smoke` 和 `SMOKE_RUNTIME_DRIVERS` 显式启用。
 - `.github/workflows/ci.yml` 当前在 GitHub-hosted runner 上执行 lint、Go tests、coverage、runtime SDK、scheduler runtime 和 proto-client 构建，不准备 KVM runtime 产物或完整 guest image，因此不具备稳定运行三 driver 真实 E2E 的前提。
-- `docs/design/agent-compose_design.md` 定义 daemon、v1/v2 API、project/run pipeline、sandbox/runtime、loader、LLM、image/cache 和持久化边界；本规格中的业务场景以这些已实现能力为准。
+- `docs/design/agent-compose_design.md` 定义 daemon、v2 API、project/run pipeline、sandbox/runtime、scheduler、LLM、image/cache 和持久化边界；本规格中的业务场景以这些已实现能力为准。
 - `docs/design/agent-compose-runtime_contract.md` 定义 guest runtime 的 workspace、state、runtime、home、stdio、provider 和 resume 合同；driver 等价场景必须验证该合同，而不只验证 runtime 进程启动。
 
 ### 当前测试事实
@@ -280,7 +280,7 @@ BoxLite、Microsandbox 的 runtime path、library path 和 image registry 继续
 - daemon structured log。
 - sandbox metadata、VM state、proxy state、Jupyter log 和 run transcript。
 - Docker inspect 或对应 microVM runtime 状态。
-- SQLite 中相关 project/run/loader/event 摘要。
+- SQLite 中相关 project/run/scheduler/event 摘要。
 - mock 收到的脱敏请求。
 - goroutine/process/container/socket/network 泄漏清单。
 
@@ -377,17 +377,17 @@ BoxLite、Microsandbox 的 runtime path、library path 和 image registry 继续
 
 这一实现是 workspace provisioning 状态保持的 Docker-only 必需验收，不建立 BoxLite/Microsandbox 等价性，也不代替未来完整的三 driver/两 topology 核心 E2E 矩阵。它对 `WKS-003` 只证明 list/download 内容与无反向同步这一子集，不单独证明权限、路径穿越或超限请求的完整合同。
 
-### Scheduler、Loader、Event 和 Webhook
+### Scheduler、Event 和 Webhook
 
 | ID | 场景 | Driver/Topology |
 | --- | --- | --- |
-| `SCH-001` | declarative timeout、interval、event 和手动 trigger 创建正确 managed loader/run | 三 driver |
+| `SCH-001` | declarative timeout、interval、event 和手动 trigger 创建正确 managed scheduler/run | 三 driver |
 | `SCH-002` | scheduler script 的 shell、exec、state 和 event publish 行为正确 | 三 driver |
 | `SCH-003` | sticky/new sandbox policy 分别复用或创建 sandbox，binding 与 run link 正确 | 三 driver |
 | `SCH-004` | scheduler command/agent/LLM 的成功、失败、timeout 和 structured output 正确 | 三 driver，使用本地 mock |
 | `EVT-001` | webhook ingress 创建 topic event 并触发 event scheduler，重复事件按合同处理 | 控制面一次，run 在三 driver 验证 |
 | `EVT-002` | webhook dispatcher 对 2xx、5xx、timeout 执行 ack/retry，并持久化可查询事件 | 控制面一次 |
-| `LOD-001` | loader validate/CRUD/enable/run-now/list runs/events 与 managed loader 隔离 | 控制面一次 |
+| `SCH-005` | scheduler validate/CRUD/enable/run-now/list runs/events 与其他 managed scheduler 隔离 | 控制面一次 |
 
 ### Agent、LLM 和 Capability
 

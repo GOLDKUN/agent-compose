@@ -203,7 +203,7 @@ Inside an agent-compose sandbox, the host always passes `--state-root`,
 
 ### 4.1 `exec` Subcommand
 
-When a loader script runs a runtime command through `scheduler.exec` /
+When a scheduler script runs a runtime command through `scheduler.exec` /
 `scheduler.shell`, the host executes this command inside the sandbox through
 runtime driver `ExecStream`:
 
@@ -452,17 +452,17 @@ After parsing succeeds, the host strips `__AGENT_RESULT__...` from `Stdout` and
 `Output` so the protocol payload does not appear in final cell artifacts.
 
 Streaming transcript paths also use host-side marker filters. Agent streams use
-`FilterAgentStreamChunk`; command, exec, run, and loader command streams use
+`FilterAgentStreamChunk`; command, exec, run, and scheduler command streams use
 `FilterCommandStreamChunk`. These helpers strip `__AGENT_RESULT__...` and
 `__COMMAND_RESULT__...` protocol payloads before writing human transcript,
 run logs, notebook cell output, or CLI text output.
 
-Loader command host parsing flow:
+Scheduler command host parsing flow:
 
 ```text
-LoaderHost.Command
-  -> ensure loader sandbox
-  -> Executor.ExecuteLoaderCommand
+RuntimeHost.Command
+  -> ensure scheduler sandbox
+  -> SchedulerCommandExecutor.ExecuteSchedulerCommand
   -> Store.AddCell(running SHELL)
   -> write command-request.json
   -> runtime.ExecStream(agent-compose-runtime exec)
@@ -477,9 +477,9 @@ After parsing succeeds, the guest runtime has already written
 that file; it only backfills `stdout.txt`, `stderr.txt`, and `output.txt` when
 missing. The host uses stdout/stderr/output from the command result payload to
 update the cell, rather than saving the protocol payload as cell output.
-Artifact paths returned to the loader script are host-side paths.
+Artifact paths returned to the scheduler script are host-side paths.
 
-Multiple command/shell calls in the same loader run reuse the loader sandbox for
+Multiple command/shell calls in the same scheduler run reuse the scheduler sandbox for
 that run. After the run ends, the host stops command sandboxes used by that run
 and records `scheduler.sandbox.stopped`. `scheduler.agent` sandbox stop behavior
 still follows the agent path.
@@ -719,7 +719,7 @@ Failed cells write:
 
 and write an `agent.assistant.failed` event.
 
-Loader command error semantics:
+Scheduler command error semantics:
 
 - When command/shell exit code is non-zero, `scheduler.exec` /
   `scheduler.shell` does not throw. It returns `success=false` and records an
@@ -776,7 +776,7 @@ stdout/stderr/output and artifacts. `runtime.llm` calls the agent-compose
 The current runtime CLI has only two host-dependent subcommands: `prompt` and
 `exec`. There is no `workflow` subcommand, `__WORKFLOW_RESULT__` stdout
 protocol, dedicated bridge token from scheduler to Node workflow, or context
-object that lets a Node workflow directly operate on loader state, events, or
+object that lets a Node workflow directly operate on scheduler state, events, or
 artifacts. Complex Node.js logic should be run through
 `agent-compose-runtime exec`, `scheduler.exec` / `scheduler.shell`, or ordinary
 workspace scripts, and composed with already implemented SDK APIs.

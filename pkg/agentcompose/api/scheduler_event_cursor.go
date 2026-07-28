@@ -16,7 +16,7 @@ type projectSchedulerEventCursor struct {
 	TriggerID       string    `json:"trigger_id,omitempty"`
 	RunID           string    `json:"run_id,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
-	SchedulerID     string    `json:"loader_id"`
+	SchedulerID     string    `json:"scheduler_id"`
 	EventID         string    `json:"event_id"`
 }
 

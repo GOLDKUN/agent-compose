@@ -42,7 +42,7 @@ func (s *schedulerStore) ListSchedulerRunsForPrune(ctx context.Context, filter s
 	query += ` ORDER BY started_at ASC, scheduler_id ASC, run_id ASC`
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query loader runs for prune: %w", err)
+		return nil, fmt.Errorf("query scheduler runs for prune: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	result := make([]domain.SchedulerRunSummary, 0)
@@ -54,7 +54,7 @@ func (s *schedulerStore) ListSchedulerRunsForPrune(ctx context.Context, filter s
 		result = append(result, run)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate loader runs for prune: %w", err)
+		return nil, fmt.Errorf("iterate scheduler runs for prune: %w", err)
 	}
 	return result, nil
 }
@@ -133,8 +133,8 @@ func deleteSchedulerRunPruneRows(ctx context.Context, tx *sql.Tx, key schedulers
 	}{
 		{name: "event sandbox links", query: `DELETE FROM event_sandbox_link WHERE scheduler_id = ? AND scheduler_run_id = ?`, add: func(count uint64) { stats.EventSandboxLinks += count }},
 		{name: "event deliveries", query: `DELETE FROM event_delivery WHERE scheduler_id = ? AND scheduler_run_id = ?`, add: func(count uint64) { stats.EventDeliveries += count }},
-		{name: "loader events", query: `DELETE FROM scheduler_event WHERE scheduler_id = ? AND scheduler_run_id = ?`, add: func(count uint64) { stats.SchedulerEvents += count }},
-		{name: "loader run", query: `DELETE FROM scheduler_run WHERE scheduler_id = ? AND run_id = ? AND trigger_id <> ''`, add: func(count uint64) { stats.Runs += count }},
+		{name: "scheduler events", query: `DELETE FROM scheduler_event WHERE scheduler_id = ? AND scheduler_run_id = ?`, add: func(count uint64) { stats.SchedulerEvents += count }},
+		{name: "scheduler run", query: `DELETE FROM scheduler_run WHERE scheduler_id = ? AND run_id = ? AND trigger_id <> ''`, add: func(count uint64) { stats.Runs += count }},
 	}
 	for _, step := range steps {
 		result, err := tx.ExecContext(ctx, step.query, key.SchedulerID, key.RunID)

@@ -135,7 +135,7 @@ func listComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, no
 			if resolveErr != nil {
 				continue
 			}
-			items = append(items, schedulerRuntimeRunItem(scheduler.SchedulerID, scheduler.ManagedLoaderID, run))
+			items = append(items, schedulerRuntimeRunItem(scheduler.SchedulerID, run))
 			if limit > 0 && uint32(len(items)) >= limit {
 				return items, nil
 			}
@@ -260,25 +260,24 @@ func parseSchedulerRunStatusFilter(value string) (agentcomposev2.SchedulerRunSta
 	return status, value, nil
 }
 
-func schedulerRuntimeRunItem(schedulerID, loaderID string, run *agentcomposev2.SchedulerRun) composeSchedulerRunItem {
+func schedulerRuntimeRunItem(schedulerID string, run *agentcomposev2.SchedulerRun) composeSchedulerRunItem {
 	return composeSchedulerRunItem{
-		RunID:           run.GetRunId(),
-		RunShortID:      shortOpaqueID(run.GetRunId()),
-		AgentName:       run.GetAgentName(),
-		SchedulerID:     firstNonEmptyString(run.GetSchedulerId(), schedulerID),
-		ManagedLoaderID: loaderID,
-		TriggerID:       run.GetTriggerId(),
-		TriggerKind:     triggerKindText(run.GetTriggerKind()),
-		TriggerSource:   run.GetTriggerSource(),
-		Status:          schedulerRunStatusText(run.GetStatus()),
-		SandboxIDs:      append([]string(nil), run.GetSandboxIds()...),
-		StartedAt:       formatProtoTimestamp(run.GetStartedAt()),
-		CompletedAt:     formatProtoTimestamp(run.GetCompletedAt()),
-		DurationMs:      run.GetDurationMs(),
-		Error:           run.GetError(),
-		ResultJSON:      run.GetResultJson(),
-		PayloadJSON:     run.GetPayloadJson(),
-		ArtifactsDir:    run.GetArtifactsDir(),
+		RunID:         run.GetRunId(),
+		RunShortID:    shortOpaqueID(run.GetRunId()),
+		AgentName:     run.GetAgentName(),
+		SchedulerID:   firstNonEmptyString(run.GetSchedulerId(), schedulerID),
+		TriggerID:     run.GetTriggerId(),
+		TriggerKind:   triggerKindText(run.GetTriggerKind()),
+		TriggerSource: run.GetTriggerSource(),
+		Status:        schedulerRunStatusText(run.GetStatus()),
+		SandboxIDs:    append([]string(nil), run.GetSandboxIds()...),
+		StartedAt:     formatProtoTimestamp(run.GetStartedAt()),
+		CompletedAt:   formatProtoTimestamp(run.GetCompletedAt()),
+		DurationMs:    run.GetDurationMs(),
+		Error:         run.GetError(),
+		ResultJSON:    run.GetResultJson(),
+		PayloadJSON:   run.GetPayloadJson(),
+		ArtifactsDir:  run.GetArtifactsDir(),
 	}
 }
 
@@ -289,11 +288,11 @@ func resolveSchedulerRuntimeRun(ctx context.Context, client agentcomposev2connec
 	}))
 	if err == nil && response != nil && response.Msg.GetRun() != nil {
 		run := response.Msg.GetRun()
-		loaderID, idErr := domain.StableProjectSchedulerID(projectID, run.GetAgentName(), "")
+		schedulerID, idErr := domain.StableProjectSchedulerID(projectID, run.GetAgentName(), "")
 		if idErr != nil {
 			return nil, idErr
 		}
-		item := schedulerRuntimeRunItem(run.GetSchedulerId(), loaderID, run)
+		item := schedulerRuntimeRunItem(firstNonEmptyString(run.GetSchedulerId(), schedulerID), run)
 		return &item, nil
 	}
 	if err != nil && connect.CodeOf(err) != connect.CodeNotFound {
@@ -365,12 +364,8 @@ func resolveComposeScheduler(normalized *compose.NormalizedProjectSpec, projectI
 		if err != nil {
 			return nil, err
 		}
-		loaderID, err := domain.StableProjectSchedulerID(projectID, agent.Name, "")
-		if err != nil {
-			return nil, err
-		}
-		if resourceRefMatches(ref, agent.Name, schedulerID, loaderID) {
-			matches = append(matches, composeSchedulerItem{AgentName: agent.Name, SchedulerID: schedulerID, ManagedLoaderID: loaderID, Enabled: agent.Scheduler.Enabled, TriggerCount: len(agent.Scheduler.Triggers)})
+		if resourceRefMatches(ref, agent.Name, schedulerID) {
+			matches = append(matches, composeSchedulerItem{AgentName: agent.Name, SchedulerID: schedulerID, Enabled: agent.Scheduler.Enabled, TriggerCount: len(agent.Scheduler.Triggers)})
 		}
 	}
 	if len(matches) == 1 {
@@ -444,7 +439,7 @@ func schedulerTriggerItemFromDeclarative(agentName, schedulerID string, schedule
 func schedulerTriggerItemFromResolved(agentName, schedulerID string, schedulerEnabled bool, trigger *agentcomposev2.ResolvedTrigger) composeSchedulerTriggerItem {
 	interval, _ := time.ParseDuration(trigger.GetSpec().GetInterval())
 	kind := triggerKindText(trigger.GetSpec().GetKind())
-	registered := map[string]any{"loader_id": "", "trigger_id": trigger.GetTriggerId(), "kind": kind, "enabled": trigger.GetEnabled(), "auto_id": false, "interval_ms": interval.Milliseconds(), "topic": trigger.GetSpec().GetEvent().GetTopic(), "spec_json": "", "next_fire_at": formatProtoTimestamp(trigger.GetNextFireAt()), "last_fired_at": formatProtoTimestamp(trigger.GetLastFiredAt())}
+	registered := map[string]any{"scheduler_id": schedulerID, "trigger_id": trigger.GetTriggerId(), "kind": kind, "enabled": trigger.GetEnabled(), "auto_id": false, "interval_ms": interval.Milliseconds(), "topic": trigger.GetSpec().GetEvent().GetTopic(), "spec_json": "", "next_fire_at": formatProtoTimestamp(trigger.GetNextFireAt()), "last_fired_at": formatProtoTimestamp(trigger.GetLastFiredAt())}
 	return composeSchedulerTriggerItem{
 		AgentName:        agentName,
 		TriggerID:        displayOpaqueID(trigger.GetTriggerId()),
@@ -461,31 +456,29 @@ func schedulerTriggerItemFromResolved(agentName, schedulerID string, schedulerEn
 }
 
 type composeSchedulerItem struct {
-	AgentName       string `json:"agent_name"`
-	SchedulerID     string `json:"scheduler_id"`
-	ManagedLoaderID string `json:"managed_loader_id"`
-	Enabled         bool   `json:"enabled"`
-	TriggerCount    int    `json:"trigger_count"`
+	AgentName    string `json:"agent_name"`
+	SchedulerID  string `json:"scheduler_id"`
+	Enabled      bool   `json:"enabled"`
+	TriggerCount int    `json:"trigger_count"`
 }
 
 type composeSchedulerRunItem struct {
-	RunID           string   `json:"run_id"`
-	RunShortID      string   `json:"run_short_id"`
-	AgentName       string   `json:"agent_name"`
-	SchedulerID     string   `json:"scheduler_id"`
-	ManagedLoaderID string   `json:"managed_loader_id"`
-	TriggerID       string   `json:"trigger_id,omitempty"`
-	TriggerKind     string   `json:"trigger_kind,omitempty"`
-	TriggerSource   string   `json:"trigger_source,omitempty"`
-	Status          string   `json:"status"`
-	SandboxIDs      []string `json:"sandbox_ids,omitempty"`
-	StartedAt       string   `json:"started_at,omitempty"`
-	CompletedAt     string   `json:"completed_at,omitempty"`
-	DurationMs      int64    `json:"duration_ms,omitempty"`
-	Error           string   `json:"error,omitempty"`
-	ResultJSON      string   `json:"result_json,omitempty"`
-	PayloadJSON     string   `json:"payload_json,omitempty"`
-	ArtifactsDir    string   `json:"artifacts_dir,omitempty"`
+	RunID         string   `json:"run_id"`
+	RunShortID    string   `json:"run_short_id"`
+	AgentName     string   `json:"agent_name"`
+	SchedulerID   string   `json:"scheduler_id"`
+	TriggerID     string   `json:"trigger_id,omitempty"`
+	TriggerKind   string   `json:"trigger_kind,omitempty"`
+	TriggerSource string   `json:"trigger_source,omitempty"`
+	Status        string   `json:"status"`
+	SandboxIDs    []string `json:"sandbox_ids,omitempty"`
+	StartedAt     string   `json:"started_at,omitempty"`
+	CompletedAt   string   `json:"completed_at,omitempty"`
+	DurationMs    int64    `json:"duration_ms,omitempty"`
+	Error         string   `json:"error,omitempty"`
+	ResultJSON    string   `json:"result_json,omitempty"`
+	PayloadJSON   string   `json:"payload_json,omitempty"`
+	ArtifactsDir  string   `json:"artifacts_dir,omitempty"`
 }
 
 type composeSchedulerLogEvent struct {

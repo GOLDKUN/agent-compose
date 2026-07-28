@@ -70,7 +70,7 @@ func (s *schedulerStore) ListSchedulerEventsPage(ctx context.Context, filter sch
 	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query loader event page: %w", err)
+		return nil, fmt.Errorf("query scheduler event page: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	items := make([]domain.SchedulerEvent, 0)
@@ -82,7 +82,7 @@ func (s *schedulerStore) ListSchedulerEventsPage(ctx context.Context, filter sch
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate loader event page: %w", err)
+		return nil, fmt.Errorf("iterate scheduler event page: %w", err)
 	}
 	return items, nil
 }
@@ -110,7 +110,7 @@ func (s *schedulerStore) CountSchedulerEventsPage(ctx context.Context, filter sc
 	}
 	var total int
 	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
-		return 0, fmt.Errorf("count loader events: %w", err)
+		return 0, fmt.Errorf("count scheduler events: %w", err)
 	}
 	return total, nil
 }

@@ -10,12 +10,12 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
-func TestProjectHandlerSchedulerUpdatesUseLoaderRuntime(t *testing.T) {
+func TestProjectHandlerSchedulerUpdatesUseSchedulerRuntime(t *testing.T) {
 	const (
-		projectID = "project-1"
-		agentName = "中文智能体"
-		loaderID  = "loader-1"
-		triggerID = "中文心跳"
+		projectID   = "project-1"
+		agentName   = "中文智能体"
+		schedulerID = "scheduler-1"
+		triggerID   = "中文心跳"
 	)
 	store := schedulerRuntimeProjectStore{
 		project: domain.ProjectRecord{ID: projectID, Name: "migration"},
@@ -23,11 +23,11 @@ func TestProjectHandlerSchedulerUpdatesUseLoaderRuntime(t *testing.T) {
 			ProjectID:   projectID,
 			AgentName:   agentName,
 			SchedulerID: "scheduler-1",
-			ID:          loaderID,
+			ID:          schedulerID,
 		},
 	}
-	runtime := &schedulerRuntimeFake{loader: domain.Scheduler{
-		Summary:  domain.SchedulerSummary{ID: loaderID},
+	runtime := &schedulerRuntimeFake{scheduler: domain.Scheduler{
+		Summary:  domain.SchedulerSummary{ID: schedulerID},
 		Triggers: []domain.SchedulerTrigger{{ID: triggerID, Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 3000}},
 	}}
 	handler := NewProjectHandler(nil, store, runtime)
@@ -40,8 +40,8 @@ func TestProjectHandlerSchedulerUpdatesUseLoaderRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetSchedulerEnabled returned error: %v", err)
 	}
-	if runtime.enabledCalls != 1 || runtime.loaderID != loaderID || !enabled.Msg.GetScheduler().GetEnabled() {
-		t.Fatalf("scheduler update calls=%d loader=%q response=%#v", runtime.enabledCalls, runtime.loaderID, enabled.Msg.GetScheduler())
+	if runtime.enabledCalls != 1 || runtime.schedulerID != schedulerID || !enabled.Msg.GetScheduler().GetEnabled() {
+		t.Fatalf("scheduler update calls=%d scheduler=%q response=%#v", runtime.enabledCalls, runtime.schedulerID, enabled.Msg.GetScheduler())
 	}
 
 	trigger, err := handler.SetSchedulerTriggerEnabled(context.Background(), connect.NewRequest(&agentcomposev2.SetSchedulerTriggerEnabledRequest{
@@ -55,6 +55,36 @@ func TestProjectHandlerSchedulerUpdatesUseLoaderRuntime(t *testing.T) {
 	}
 	if runtime.triggerCalls != 1 || runtime.triggerID != triggerID || !trigger.Msg.GetTrigger().GetEnabled() {
 		t.Fatalf("trigger update calls=%d trigger=%q response=%#v", runtime.triggerCalls, runtime.triggerID, trigger.Msg.GetTrigger())
+	}
+}
+
+func TestProjectHandlerGetSchedulerMapsPersistedNormalizedSpec(t *testing.T) {
+	const projectID = "project-1"
+	store := schedulerRuntimeProjectStore{
+		project: domain.ProjectRecord{ID: projectID, Name: "scheduler-spec"},
+		scheduler: domain.ProjectSchedulerRecord{
+			ID:          "scheduler-1",
+			ProjectID:   projectID,
+			AgentName:   "reviewer",
+			SchedulerID: "scheduler-1",
+			SpecJSON:    `{"enabled":true,"sandbox_policy":"sticky","concurrency_policy":"parallel","display_name":"Nightly","triggers":[{"name":"heartbeat","kind":"interval","interval":"1m","sandbox_policy":"new"}]}`,
+		},
+	}
+	handler := NewProjectHandler(nil, store, nil)
+
+	response, err := handler.GetScheduler(context.Background(), connect.NewRequest(&agentcomposev2.GetSchedulerRequest{
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
+		AgentName: "reviewer",
+	}))
+	if err != nil {
+		t.Fatalf("GetScheduler returned error: %v", err)
+	}
+	spec := response.Msg.GetSpec()
+	if spec.GetSandboxPolicy() != agentcomposev2.SchedulerSandboxPolicy_SCHEDULER_SANDBOX_POLICY_STICKY ||
+		spec.GetConcurrencyPolicy() != agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_PARALLEL ||
+		len(spec.GetTriggers()) != 1 ||
+		spec.GetTriggers()[0].GetSandboxPolicy() != agentcomposev2.SchedulerSandboxPolicy_SCHEDULER_SANDBOX_POLICY_NEW {
+		t.Fatalf("mapped scheduler spec = %#v", spec)
 	}
 }
 
@@ -84,24 +114,24 @@ func (s schedulerRuntimeProjectStore) GetProjectRevision(context.Context, string
 }
 
 type schedulerRuntimeFake struct {
-	loader       domain.Scheduler
-	loaderID     string
+	scheduler    domain.Scheduler
+	schedulerID  string
 	triggerID    string
 	enabledCalls int
 	triggerCalls int
 }
 
-func (f *schedulerRuntimeFake) SetSchedulerEnabled(_ context.Context, loaderID string, enabled bool) (domain.Scheduler, error) {
+func (f *schedulerRuntimeFake) SetSchedulerEnabled(_ context.Context, schedulerID string, enabled bool) (domain.Scheduler, error) {
 	f.enabledCalls++
-	f.loaderID = loaderID
-	f.loader.Summary.Enabled = enabled
-	return f.loader, nil
+	f.schedulerID = schedulerID
+	f.scheduler.Summary.Enabled = enabled
+	return f.scheduler, nil
 }
 
-func (f *schedulerRuntimeFake) SetSchedulerTriggerEnabled(_ context.Context, loaderID, triggerID string, enabled bool) (domain.Scheduler, error) {
+func (f *schedulerRuntimeFake) SetSchedulerTriggerEnabled(_ context.Context, schedulerID, triggerID string, enabled bool) (domain.Scheduler, error) {
 	f.triggerCalls++
-	f.loaderID = loaderID
+	f.schedulerID = schedulerID
 	f.triggerID = triggerID
-	f.loader.Triggers[0].Enabled = enabled
-	return f.loader, nil
+	f.scheduler.Triggers[0].Enabled = enabled
+	return f.scheduler, nil
 }

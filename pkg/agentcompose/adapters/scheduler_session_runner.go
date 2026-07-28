@@ -65,14 +65,14 @@ func (r *SchedulerSandboxRunner) Shutdown(ctx context.Context, sessionID string)
 	outcome, stopErr := r.stopLifecycle().StopLoaded(stopCtx, session)
 	if stopErr != nil {
 		if outcome.DriverStopped && outcome.Sandbox != nil {
-			r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(outcome.Sandbox, "loader"))
+			r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(outcome.Sandbox, "scheduler"))
 		}
 		return stopErr
 	}
 	if !outcome.Changed() || outcome.Sandbox == nil {
 		return nil
 	}
-	r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(outcome.Sandbox, "loader"))
+	r.publish("agent-compose.session.stopped", schedulers.SessionTopicPayload(outcome.Sandbox, "scheduler"))
 	return nil
 }
 
@@ -89,8 +89,6 @@ func (r *SchedulerSandboxRunner) stopLifecycle() sandboxes.Lifecycle {
 	}
 }
 
-// Ensure preserves historical loader wording in observable errors, event
-// types, payload keys, and sandbox tags for CLI and integration compatibility.
 func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, titleOverridesSession bool) (*domain.Sandbox, string, error) {
 	agentDefinition, err := r.ResolveSchedulerAgentDefinition(ctx, scheduler)
 	if err != nil {
@@ -165,26 +163,18 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 
 	capabilityVars, capabilityTags := capabilities.BuildGatewaySandboxVars(capabilities.ProxyTarget(r.Cap), scheduler.Summary.CapsetIDs)
 	envItems = domain.MergeEnvItems(envItems, capabilityVars)
-	// Origin values and loader_id/loader_name tags are queried by existing
-	// sandbox consumers. Preserve them even though the owning domain is now
-	// named scheduler internally.
-	origin := "loader"
-	if strings.TrimSpace(scheduler.Summary.ProjectID) != "" {
-		origin = "scheduler"
-	}
 	tags := []domain.SandboxTag{
-		{Name: "origin", Value: origin},
-		{Name: "loader_id", Value: scheduler.Summary.ID},
-		{Name: "loader_name", Value: scheduler.Summary.Name},
+		{Name: "origin", Value: "scheduler"},
+		{Name: "scheduler_id", Value: scheduler.Summary.ID},
+		{Name: "scheduler_name", Value: scheduler.Summary.Name},
 		{Name: domain.AgentSandboxTagProvider, Value: agentConfig.Provider},
 	}
-	if origin == "scheduler" {
+	if strings.TrimSpace(scheduler.Summary.ProjectID) != "" {
 		projectID := strings.TrimSpace(scheduler.Summary.ProjectID)
 		tags = append(tags,
 			domain.SandboxTag{Name: "project", Value: projectID},
 			domain.SandboxTag{Name: "project_id", Value: projectID},
 			domain.SandboxTag{Name: "agent", Value: scheduler.Summary.AgentName},
-			domain.SandboxTag{Name: "scheduler_id", Value: scheduler.Summary.ProjectSchedulerID},
 		)
 	}
 	tags = append(tags, capabilityTags...)
@@ -249,20 +239,20 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		claimed, err := r.bindSchedulerSandbox(ctx, scheduler, request.BindingTriggerID, session.Summary.ID, configHash, previousBinding)
 		if err != nil {
 			_ = r.Shutdown(ctx, session.Summary.ID)
-			return nil, "", fmt.Errorf("persist loader sticky sandbox binding: %w", err)
+			return nil, "", fmt.Errorf("persist scheduler sticky sandbox binding: %w", err)
 		}
 		if !claimed {
 			if err := r.Shutdown(ctx, session.Summary.ID); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return nil, "", fmt.Errorf("retire unclaimed loader sticky sandbox: %w", err)
+				return nil, "", fmt.Errorf("retire unclaimed scheduler sticky sandbox: %w", err)
 			}
 			winner, eventType, reused, err := r.reuseWinningSchedulerBinding(ctx, scheduler.Summary.ID, request.BindingTriggerID, configHash)
 			if err != nil {
-				return nil, "", fmt.Errorf("reuse concurrently claimed loader sticky sandbox: %w", err)
+				return nil, "", fmt.Errorf("reuse concurrently claimed scheduler sticky sandbox: %w", err)
 			}
 			if reused {
 				return winner, eventType, nil
 			}
-			return nil, "", fmt.Errorf("loader sticky sandbox binding changed concurrently")
+			return nil, "", fmt.Errorf("scheduler sticky sandbox binding changed concurrently")
 		}
 	}
 	loaded, err := r.Store.GetSandbox(ctx, session.Summary.ID)
@@ -271,15 +261,13 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 	}
 	domain.RestoreSandboxTransientFields(loaded, session)
 	r.indexCapabilitySandbox(loaded)
-	// This topic payload is a historical external contract; source, loaderId,
-	// and the agent-compose.session.created topic stay unchanged.
 	r.publish("agent-compose.session.created", map[string]any{
 		"sandboxId":     loaded.Summary.ID,
 		"title":         loaded.Summary.Title,
 		"driver":        loaded.Summary.Driver,
 		"triggerSource": loaded.Summary.TriggerSource,
-		"source":        "loader",
-		"loaderId":      scheduler.Summary.ID,
+		"source":        "scheduler",
+		"schedulerId":   scheduler.Summary.ID,
 	})
 	return loaded, "scheduler.sandbox.created", nil
 }
@@ -349,7 +337,7 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 		"sandboxId": loaded.Summary.ID,
 		"title":     loaded.Summary.Title,
 		"driver":    loaded.Summary.Driver,
-		"source":    "loader",
+		"source":    "scheduler",
 	})
 	return loaded, "scheduler.sandbox.resumed", nil
 }
@@ -367,10 +355,10 @@ func (r *SchedulerSandboxRunner) ResolveSchedulerAgentDefinition(ctx context.Con
 	}
 	agent, err := r.ConfigDB.GetAgentDefinition(ctx, agentID)
 	if err != nil {
-		return nil, fmt.Errorf("loader agent definition %s: %w", agentID, err)
+		return nil, fmt.Errorf("scheduler agent definition %s: %w", agentID, err)
 	}
 	if !agent.Enabled {
-		return nil, fmt.Errorf("loader agent definition %s is disabled", agentID)
+		return nil, fmt.Errorf("scheduler agent definition %s is disabled", agentID)
 	}
 	return &agent, nil
 }
@@ -453,7 +441,7 @@ func (r *SchedulerSandboxRunner) schedulerProjectVolumes(ctx context.Context, sc
 	}
 	projectVolumes, err := r.ConfigDB.ListProjectVolumes(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("list loader project volumes %s: %w", projectID, err)
+		return nil, fmt.Errorf("list scheduler project volumes %s: %w", projectID, err)
 	}
 	return projectVolumes, nil
 }
@@ -468,7 +456,7 @@ func (r *SchedulerSandboxRunner) schedulerProjectRoot(ctx context.Context, sched
 	}
 	project, err := r.ConfigDB.GetProject(ctx, projectID)
 	if err != nil {
-		return "", fmt.Errorf("get loader project %s: %w", projectID, err)
+		return "", fmt.Errorf("get scheduler project %s: %w", projectID, err)
 	}
 	return schedulerProjectRoot(project), nil
 }

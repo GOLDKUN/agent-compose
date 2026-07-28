@@ -267,10 +267,10 @@ func TestE2EQJSSchedulerEngineBindingCoverageWorkflow(t *testing.T) {
 
 func TestQJSSchedulerEngineValidationCoverageWorkflow(t *testing.T) {
 	engine := &QJSSchedulerEngine{}
-	if _, err := engine.Validate(context.Background(), "unknown", `function main(){}`); err == nil || !strings.Contains(err.Error(), "unsupported loader runtime") {
+	if _, err := engine.Validate(context.Background(), "unknown", `function main(){}`); err == nil || !strings.Contains(err.Error(), "unsupported scheduler runtime") {
 		t.Fatalf("unsupported runtime error = %v", err)
 	}
-	if _, err := engine.Validate(context.Background(), domain.SchedulerRuntimeScheduler, " "); err == nil || !strings.Contains(err.Error(), "loader script is required") {
+	if _, err := engine.Validate(context.Background(), domain.SchedulerRuntimeScheduler, " "); err == nil || !strings.Contains(err.Error(), "scheduler script is required") {
 		t.Fatalf("blank script error = %v", err)
 	}
 	tests := []struct {
@@ -293,7 +293,7 @@ func TestQJSSchedulerEngineValidationCoverageWorkflow(t *testing.T) {
 		{`scheduler.interval(function interval() {});`, "requires a callback and interval"},
 		{`scheduler.interval("bad");`, "requires a callback and interval"},
 		{`scheduler.timeout(function timeout() {}, 0);`, "positive delay"},
-		{`scheduler.timeout("dup", function one() {}, 1000); scheduler.timeout("dup", function two() {}, 2000);`, "duplicate loader trigger id"},
+		{`scheduler.timeout("dup", function one() {}, 1000); scheduler.timeout("dup", function two() {}, 2000);`, "duplicate scheduler trigger id"},
 	}
 	for _, tt := range tests {
 		_, err := engine.Validate(context.Background(), domain.SchedulerRuntimeScheduler, tt.script)
@@ -330,8 +330,8 @@ func TestQJSSchedulerEngineValidationCoverageWorkflow(t *testing.T) {
 		{`function main() { return scheduler.state.set("key"); }`, "scheduler.state.set requires a key and value"},
 		{`function main() { return scheduler.state.delete(""); }`, "scheduler.state.delete requires a non-empty key"},
 		{`function main() { return scheduler.sandbox.getSandbox({}, {}); }`, "accepts at most one request object"},
-		{`scheduler.on("runtime.a", function a() {}); scheduler.on("runtime.b", function b() {});`, "loader defines multiple triggers"},
-		{`scheduler.on("runtime.a", function a() {});`, "loader trigger missing not found"},
+		{`scheduler.on("runtime.a", function a() {}); scheduler.on("runtime.b", function b() {});`, "scheduler defines multiple triggers"},
+		{`scheduler.on("runtime.a", function a() {});`, "scheduler trigger missing not found"},
 	}
 	for _, tt := range execTests {
 		request := SchedulerExecutionRequest{Runtime: domain.SchedulerRuntimeScheduler, Script: tt.script}
@@ -343,7 +343,7 @@ func TestQJSSchedulerEngineValidationCoverageWorkflow(t *testing.T) {
 			t.Fatalf("Execute(%q) error = %v, want %q", tt.script, err, tt.wantErr)
 		}
 	}
-	if _, err := engine.Execute(context.Background(), SchedulerExecutionRequest{Runtime: domain.SchedulerRuntimeScheduler, Script: `function main(){}`}, nil); err == nil || !strings.Contains(err.Error(), "loader host is required") {
+	if _, err := engine.Execute(context.Background(), SchedulerExecutionRequest{Runtime: domain.SchedulerRuntimeScheduler, Script: `function main(){}`}, nil); err == nil || !strings.Contains(err.Error(), "scheduler host is required") {
 		t.Fatalf("nil host error = %v", err)
 	}
 	if _, err := engine.Execute(context.Background(), SchedulerExecutionRequest{Runtime: domain.SchedulerRuntimeScheduler, Script: `function main(){}`, PayloadJSON: `{bad json`}, &coverageEngineHost{}); err == nil {
@@ -359,7 +359,7 @@ func TestE2EQJSSchedulerEngineValidationCoverageWorkflow(t *testing.T) {
 	TestQJSSchedulerEngineValidationCoverageWorkflow(t)
 }
 
-func TestLoaderSandboxEnvDecodingEdgeBranches(t *testing.T) {
+func TestSchedulerSandboxEnvDecodingEdgeBranches(t *testing.T) {
 	items, err := schedulerSandboxEnvItems(map[string]any{
 		" BOOL ":         true,
 		"FLOAT":          float64(12.50),

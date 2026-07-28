@@ -15,9 +15,9 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 	ctx := context.Background()
 	store := newControllerTestStore()
 	created := domain.Scheduler{
-		Summary:  domain.SchedulerSummary{ID: "loader-1", Name: "Scheduler", Runtime: domain.SchedulerRuntimeScheduler, Enabled: true},
+		Summary:  domain.SchedulerSummary{ID: "scheduler-1", Name: "Scheduler", Runtime: domain.SchedulerRuntimeScheduler, Enabled: true},
 		Script:   "function main(){}",
-		Triggers: []domain.SchedulerTrigger{{SchedulerID: "loader-1", ID: "trigger-1", Kind: domain.SchedulerTriggerKindEvent, Topic: "topic.test", Enabled: true}},
+		Triggers: []domain.SchedulerTrigger{{SchedulerID: "scheduler-1", ID: "trigger-1", Kind: domain.SchedulerTriggerKindEvent, Topic: "topic.test", Enabled: true}},
 	}
 	store.schedulers[created.Summary.ID] = created
 	notifier := &controllerTestNotifier{}
@@ -138,7 +138,7 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 			return nil
 		},
 	})
-	if bareController.RunArtifactsDir("loader", "run") != "" {
+	if bareController.RunArtifactsDir("scheduler", "run") != "" {
 		t.Fatalf("bare RunArtifactsDir returned non-empty path")
 	}
 	if err := bareController.WriteRunArtifact("", "ignored", "ignored"); err != nil {

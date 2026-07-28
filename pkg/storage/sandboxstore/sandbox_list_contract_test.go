@@ -46,7 +46,7 @@ func TestIndexedListMatchesFilesystemContract(t *testing.T) {
 	sandboxes[1].Summary.TriggerSource = domain.SandboxTypeManual
 	sandboxes[1].Summary.VMStatus = "running"
 	sandboxes[2].Summary.Title = "ordinary"
-	sandboxes[2].Summary.TriggerSource = "script:loader"
+	sandboxes[2].Summary.TriggerSource = "script:scheduler"
 	for _, sandbox := range sandboxes {
 		if err := store.SaveSandbox(sandbox); err != nil {
 			t.Fatalf("SaveSandbox(%s): %v", sandbox.Summary.ID, err)

@@ -758,7 +758,7 @@ func testStoreAgentRunLegacyVMAndListWorkflows(t *testing.T) {
 		Name:       "Workspace",
 		Type:       "file",
 		ConfigJSON: "{}",
-	}, []SandboxEnvVar{{Name: "PLAIN", Value: "value"}}, []SandboxTag{{Name: "kind", Value: "loader"}})
+	}, []SandboxEnvVar{{Name: "PLAIN", Value: "value"}}, []SandboxTag{{Name: "kind", Value: "scheduler"}})
 	if err != nil {
 		t.Fatalf("CreateSession returned error: %v", err)
 	}

@@ -244,7 +244,7 @@ func TestEnsureSessionAgentRuntimeConfigClaudeAndOpenCodeWorkflows(t *testing.T)
 		t.Fatalf("pi token = %#v, err=%v", token, err)
 	}
 
-	custom, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "opencode", "custom/gpt-custom", TokenSourceLoaderCommand, "run-custom")
+	custom, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "opencode", "custom/gpt-custom", TokenSourceSchedulerCommand, "run-custom")
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig opencode custom returned error: %v", err)
 	}

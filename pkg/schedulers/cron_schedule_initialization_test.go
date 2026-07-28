@@ -47,8 +47,8 @@ func TestControllerRefreshReportsCronInitializationFailures(t *testing.T) {
 		storeErr  error
 		wantError string
 	}{
-		{name: "invalid schedule", specJSON: `{"expr":"bad cron","timezone":"UTC"}`, wantError: "initialize loader cron trigger"},
-		{name: "persist schedule", specJSON: `{"expr":"0 9 * * *","timezone":"UTC"}`, storeErr: errors.New("write failed"), wantError: "persist loader cron trigger schedule"},
+		{name: "invalid schedule", specJSON: `{"expr":"bad cron","timezone":"UTC"}`, wantError: "initialize scheduler cron trigger"},
+		{name: "persist schedule", specJSON: `{"expr":"0 9 * * *","timezone":"UTC"}`, storeErr: errors.New("write failed"), wantError: "persist scheduler cron trigger schedule"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
