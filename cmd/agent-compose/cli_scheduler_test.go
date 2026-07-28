@@ -106,8 +106,8 @@ agents:
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("up stdout=%q stderr=%q exit=%d", stdout, stderr, exitCode)
 	}
-	if captured == nil || captured.GetExpectedSpecHash() != expectedHash {
-		t.Fatalf("Apply request = %#v, want expected hash %q", captured, expectedHash)
+	if captured == nil || captured.GetSubmittedSpecHash() != expectedHash {
+		t.Fatalf("Apply request = %#v, want submitted hash %q", captured, expectedHash)
 	}
 	gotScript := captured.GetSpec().GetAgents()[0].GetScheduler().GetScript()
 	if gotScript != script {
