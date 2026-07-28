@@ -34,8 +34,8 @@ daemon controller or store directly.
 | `project ls` | `ProjectService.ListProjects` | no | none |
 | `project down`, `down` | `GetProject`, `ListSchedulers`, `SetSchedulerEnabled`, `ListSandboxes`, `StopSandbox` | no | local compose only selects the project |
 | `agent ls`, `ls` | `ProjectService.GetProject` | no | none |
-| `run` | `ResourceService.ResolveID`, `RunService.RunAgent`, `RunAgentStream`, or `RunAttach` | server or bidi | streaming mode selects the matching RPC |
-| `exec` | `ResourceService.ResolveID`, `ExecService.Exec`, `ExecStream`, or `ExecAttach` | server or bidi | streaming mode selects the matching RPC |
+| `run` | `ResourceService.ResolveID`, `RunService.RunAgent`, `StreamAgentRun`, or `AttachAgentRun` | server or bidi | streaming mode selects the matching RPC |
+| `exec` | `ResourceService.ResolveID`, `ExecService.Exec`, `StreamExec`, or `AttachExec` | server or bidi | streaming mode selects the matching RPC |
 | `logs` | `GetProject`, `ListRuns`, `ListRunEvents`, `FollowRunLogs` | optional server | non-follow compatibility stays on listed RPCs |
 | `scheduler ls`, `inspect` | `GetProject`, `GetScheduler`, `ListSchedulers`, `ListSchedulerEvents`, `GetSchedulerRun` | no | reference resolution uses `ResourceService.ResolveID` where required |
 | `scheduler invoke`, `trigger` | `InvokeScheduler`, `RunScheduler`, `StartSchedulerRun` | no | none |
@@ -60,10 +60,10 @@ capabilities. Page layout is intentionally not part of this stable contract.
 | Web operation | Connect service and methods |
 | --- | --- |
 | Project validation/apply/list/get/remove/watch | `ProjectService.ValidateProject`, `ApplyProject`, `ListProjects`, `GetProject`, `RemoveProject`, `WatchProject` |
-| Run start/stream/attach/stop/log/events | `RunService.RunAgent`, `StartRun`, `RunAgentStream`, `RunAttach`, `StopRun`, `FollowRunLogs`, `ListRunEvents`, `ListSandboxRunEvents` |
+| Run start/stream/attach/stop/log/events | `RunService.RunAgent`, `StartAgentRun`, `StreamAgentRun`, `AttachAgentRun`, `StopRun`, `FollowRunLogs`, `ListRunEvents`, `ListSandboxRunEvents` |
 | Scheduler configuration, invocation, runs, events, and streams | the scheduler methods on `ProjectService` |
 | Sandbox list/get/history/watch/lifecycle/stats | `SandboxService` |
-| Interactive execution | `ExecService.ExecAttach`; non-interactive execution uses `Exec` or `ExecStream` |
+| Interactive execution | `ExecService.AttachExec`; non-interactive execution uses `Exec` or `StreamExec` |
 | Image/cache/volume management | `ImageService`, `CacheService`, `VolumeService` |
 | Settings and workspace presets | `SettingsService` |
 | Capability status and catalog | `CapabilityService` |

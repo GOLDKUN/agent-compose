@@ -84,6 +84,9 @@ func runComposeListProjectsCommand(cmd *cobra.Command, cli cliOptions, options c
 }
 
 func runComposeUpCommand(cmd *cobra.Command, cli cliOptions) error {
+	if cli.ProjectName != "" {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("up does not support --project-name; project identity comes from the compose file")}
+	}
 	composePath, normalized, err := loadResolvedNormalizedCompose(cmd.Context(), cli)
 	if err != nil {
 		return err
@@ -542,8 +545,11 @@ func runComposeInspectCommand(cmd *cobra.Command, cli cliOptions, args []string)
 	if err != nil {
 		return err
 	}
+	if kind == "project" {
+		return runComposeProjectInspectCommand(cmd, cli, clients, target)
+	}
 	loadMode := runtimeProjectIdentityOnly
-	if kind == "project" || kind == "agent" {
+	if kind == "agent" {
 		loadMode = runtimeProjectWithState
 	}
 	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "inspect "+kind, loadMode)
@@ -553,8 +559,6 @@ func runComposeInspectCommand(cmd *cobra.Command, cli cliOptions, args []string)
 	projectID := runtimeProject.id()
 	var output any
 	switch kind {
-	case "project":
-		output = composeProjectOutputFromProject(runtimeProject.project)
 	case "agent":
 		if target == "" {
 			return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("inspect agent requires an agent name")}

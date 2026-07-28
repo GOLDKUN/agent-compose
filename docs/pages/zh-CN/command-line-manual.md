@@ -21,7 +21,7 @@ agent-compose [global options] <command> [command options] [arguments]
 | --- | --- |
 | `-f, --file <path>` | 指定 project 配置文件。支持 `agent-compose.yml` 和 `agent-compose.yaml`。使用该参数后，可以在任意目录操作该 project，project root 为配置文件所在目录。 |
 | `--host <endpoint>` | 指定 daemon 地址。可以连接本机 daemon，也可以连接远程 daemon。 |
-| `--project-name <name>` | 按名称选择 daemon 中已部署的 project；它不会修改 compose 文件声明的项目名称。 |
+| `--project-name <name>` | 按名称选择 daemon 中已部署的 project；`up` 和 `project up` 不支持该参数，且它不会修改 compose 文件声明的项目名称。 |
 | `--json` | 使用 JSON 输出，供脚本、AI 和自动化系统解析。 |
 
 示例：
@@ -36,7 +36,7 @@ agent-compose --host http://10.0.0.12:7410 ls --json
 
 - 未指定 `-f` 和 `--project-name` 时，project 范围的命令在当前目录查找 `agent-compose.yml` 或 `agent-compose.yaml`。
 - 指定 `--project-name` 时，已部署项目命令直接选择 daemon project，不读取 compose 文件；即使同时指定 `-f` 也是如此。
-- `config`、`up` 等本地编排命令始终使用 compose 文件声明的项目名称（或根据其目录推导），`--project-name` 不会覆盖该名称。
+- 本地编排命令始终使用 compose 文件声明的项目名称（或根据其目录推导）。`up` 和 `project up` 会拒绝 `--project-name`，不再静默忽略；`config` 也不会用它覆盖 compose project 名称。
 - 使用 `-f` 时，不需要切换到 project root。
 - `--host` 只决定 CLI 连接哪个 daemon；sandbox 实际运行在 daemon 所在环境中。
 - daemon 不再消费浏览器登录用的 `AUTH_*` / `OAUTH_*` 配置；UI 浏览器认证由 agent-compose-ui server 处理。
@@ -254,6 +254,7 @@ agent-compose run reviewer --jupyter --jupyter-expose --prompt "Inspect the note
 - `run -i/--interactive` 必须选择 `--prompt` 或 `--command`，不能与 `--json` 组合。
 - REPL 中空行不会创建 run；输入 `/exit` 或 Ctrl+D 退出。
 - REPL 不是 TTY/PTY 或运行中 stdin 透传；每条输入都是一次独立 `StreamAgentRun`，但复用同一个 sandbox。
+- `--sandbox` 只能复用属于当前 project 和所选 agent 的 sandbox；跨 project 或跨 agent 复用会被拒绝，且不会修改或停止原 sandbox。
 - detached run 可通过输出的 `agent-compose logs --run <run-id> --follow` 命令观察输出，也可继续使用 `stop`/`logs` 操作该 run。
 - `run -i --prompt` 仅支持可复用 provider conversation 的 Codex、Claude/cc、OpenCode 和 Pi；Gemini 当前会返回 unsupported。
 - `StopRun` 会请求 daemon 内当前活动 run 取消；daemon 重启后遗留的 running/pending run 会在启动 reconcile 中标记为 failed，并带 `daemon interrupted` 错误。
@@ -286,7 +287,7 @@ agent-compose scheduler inspect <scheduler-or-trigger-or-run-ref> [--scheduler <
 
 查看当前 project 下的 sandbox。默认只显示运行中的 sandbox。使用 `--all` 时仍限定当前 project，但会包含所有状态。
 该 project 必须已经存在于 daemon 中；执行 `agent-compose down` 后，需要先重新执行 `agent-compose up`，再使用 `ps`。
-使用 `--project-name <name>` 时，会直接选择 daemon 中已有的 project；即使同时指定 `--file`，已部署项目选择也不会读取 compose 文件。本地编排命令仍要求 compose 文件，且绝不会用 `--project-name` 修改其中的项目名称。
+使用 `--project-name <name>` 时，会直接选择 daemon 中已有的 project；即使同时指定 `--file`，已部署项目选择也不会读取 compose 文件。本地编排命令仍要求 compose 文件；`up` 和 `project up` 会拒绝 `--project-name`，`config` 也不会用它修改 compose project 名称。
 
 ```bash
 agent-compose ps
@@ -529,6 +530,7 @@ agent-compose logs --run run_123 --json
 
 ```bash
 agent-compose inspect project
+agent-compose inspect project <project-name|project-id|short-id>
 agent-compose inspect <project|agent|run|sandbox|image|cache-id>
 agent-compose inspect agent <agent>
 agent-compose inspect run <run-id>
@@ -538,6 +540,8 @@ agent-compose inspect cache <cache-id>
 ```
 
 当唯一参数是完整 ID 或十六进制短 ID 时，`inspect` 会通过 daemon 自动识别资源类型。名称仍需使用显式类型形式；短 ID 命中多个资源时，命令会报告歧义及候选资源类型。
+
+对于 `inspect project <project-ref>`，位置参数中的 project ref 优先于 `--project-name` 和 `--file`。CLI 会先按精确 project name 解析，再按完整 ID 或唯一 short ID 解析；如果显式 ref 不存在或存在歧义，命令会直接失败，不会回退到 flag 或当前 Compose 文件选中的 project。不提供位置参数时，`inspect project` 继续使用常规的已部署 project 选择规则。
 
 说明：
 
@@ -682,7 +686,8 @@ agent-compose status --json
 - `UPTIME`：daemon 返回的时间戳；如果 daemon 返回了时区信息，则按 daemon 时区展示。
 - `VERSION`：daemon 构建版本。
 
-自动化场景使用 `--json` 输出 daemon 原始 status 响应。
+status 请求的超时时间为五秒。自动化场景使用 `--json` 输出 daemon 原始
+status 响应。
 
 ## 其他命令
 

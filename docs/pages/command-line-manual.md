@@ -21,7 +21,7 @@ Global options are placed between `agent-compose` and the subcommand, and apply 
 | --- | --- |
 | `-f, --file <path>` | Path to the project config file. Both `agent-compose.yml` and `agent-compose.yaml` are supported. When this option is used, the project root is the config file directory, so you do not need to `cd` into it. |
 | `--host <endpoint>` | Daemon HTTP endpoint. This can target a local daemon or a remote daemon. |
-| `--project-name <name>` | Select an existing daemon project by name. It never changes the project name declared by a compose file. |
+| `--project-name <name>` | Select an existing daemon project by name. It is not supported by `up` or `project up` and never changes the project name declared by a compose file. |
 | `--json` | Print machine-readable JSON for scripts, AI agents, and automation. |
 
 Examples:
@@ -36,7 +36,7 @@ Rules:
 
 - Without `-f` or `--project-name`, project-scoped commands look for `agent-compose.yml` or `agent-compose.yaml` in the current directory.
 - With `--project-name`, deployed-project commands select that daemon project directly and do not read a compose file, even when `-f` is also present.
-- Local authoring commands such as `config` and `up` always use the project name declared by the compose file (or derived from its directory); `--project-name` never overrides it.
+- Local authoring commands use the project name declared by the compose file (or derived from its directory). `up` and `project up` reject `--project-name` instead of silently ignoring it; `config` never uses it to override the compose project name.
 - With `-f`, the CLI can operate on a project from any working directory.
 - `--host` only selects the daemon. Sandboxes run in the daemon environment.
 - Automation should use `--json` and avoid parsing human-readable tables.
@@ -257,6 +257,7 @@ Rules:
 - `run -i/--interactive` must select `--prompt` or `--command`; it cannot be combined with `--json`.
 - Empty REPL lines do not create runs. Enter `/exit` or press Ctrl+D to exit.
 - REPL mode is not TTY/PTY or running stdin passthrough. Each input is one independent `StreamAgentRun` call that reuses the same sandbox.
+- `--sandbox` can reuse only a sandbox owned by the selected project and agent. Cross-project or cross-agent reuse is rejected without modifying or stopping the owner sandbox.
 - Detached runs can be observed with the printed `agent-compose logs --run <run-id> --follow` command, or managed later with `stop` and `logs`.
 - `run -i --prompt` supports providers with reusable provider conversations: Codex, Claude/cc, OpenCode, and Pi. Gemini currently returns unsupported.
 - `StopRun` requests cancellation for active in-daemon runs. Pending/running runs left behind after daemon restart are reconciled to failed with a `daemon interrupted` error.
@@ -289,7 +290,7 @@ agent-compose scheduler inspect <scheduler-or-trigger-or-run-ref> [--scheduler <
 
 List sandboxes in the current project. By default, only running sandboxes are shown. With `--all`, the command includes all statuses while remaining scoped to the current project.
 The project must already exist on the daemon; after `agent-compose down`, run `agent-compose up` again before using `ps`.
-Use `--project-name <name>` to select an existing daemon project. Compose files are not read for deployed-project selection, including when `--file` is also present. Local authoring commands still require a compose file and never use `--project-name` to change its project name.
+Use `--project-name <name>` to select an existing daemon project. Compose files are not read for deployed-project selection, including when `--file` is also present. Local authoring commands still require a compose file; `up` and `project up` reject `--project-name`, and `config` never uses it to change the compose project name.
 
 ```bash
 agent-compose ps
@@ -524,6 +525,7 @@ Inspect project resources, daemon images, or runtime cache items.
 
 ```bash
 agent-compose inspect project
+agent-compose inspect project <project-name|project-id|short-id>
 agent-compose inspect <project|agent|run|sandbox|image|cache-id>
 agent-compose inspect agent <agent>
 agent-compose inspect run <run-id>
@@ -533,6 +535,8 @@ agent-compose inspect cache <cache-id>
 ```
 
 When a full ID or hexadecimal short ID is passed as the only argument, `inspect` resolves its resource type through the daemon. Names still require the explicit typed form. Ambiguous short IDs are rejected with the matching resource types.
+
+For `inspect project <project-ref>`, the positional project reference takes precedence over both `--project-name` and `--file`. It is resolved as an exact project name first, then as a full ID or unique short ID. If the explicit reference is missing or ambiguous, the command fails instead of falling back to the project selected by flags or the current Compose file. Without a positional project reference, `inspect project` keeps using the normal deployed-project selection rules.
 
 Details:
 
@@ -677,7 +681,8 @@ Default columns:
 - `UPTIME`: daemon-reported timestamp rendered in the daemon timezone when available.
 - `VERSION`: daemon build version.
 
-Use `--json` to print the raw daemon status response for automation.
+Status requests have a five-second timeout. Use `--json` to print the raw daemon
+status response for automation.
 
 ## Other Commands
 

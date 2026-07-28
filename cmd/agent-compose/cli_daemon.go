@@ -36,6 +36,8 @@ import (
 
 type daemonRunner func(context.Context) error
 
+const daemonStatusTimeout = 5 * time.Second
+
 type DaemonOptions struct {
 	LoadDotEnv      bool
 	SetRlimit       bool
@@ -392,13 +394,28 @@ func runDaemon(ctx context.Context) error {
 }
 
 func fetchDaemonVersion(ctx context.Context, clientConfig cliClientConfig) ([]byte, error) {
+	return fetchDaemonVersionWithTimeout(ctx, clientConfig, daemonStatusTimeout)
+}
+
+func fetchDaemonVersionWithTimeout(ctx context.Context, clientConfig cliClientConfig, timeout time.Duration) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	client := newDaemonHTTPClient(clientConfig)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientConfig.BaseURL+"/api/version", nil)
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, clientConfig.BaseURL+"/api/version", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create daemon request for %s %q: %w", clientConfig.Source, clientConfig.SourceValue, err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
+			return nil, commandExitError{
+				Code: exitCodeUnavailable,
+				Err:  fmt.Errorf("daemon status request via %s %q timed out after %s: %w", clientConfig.Source, clientConfig.SourceValue, timeout, err),
+			}
+		}
 		return nil, commandExitError{Code: exitCodeUnavailable, Err: fmt.Errorf("connect daemon via %s %q: %w", clientConfig.Source, clientConfig.SourceValue, err)}
 	}
 	defer func() {

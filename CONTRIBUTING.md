@@ -77,6 +77,10 @@ task build
 task test
 ```
 
+These tasks regenerate protobuf message sources from `proto/**/*.proto` when
+needed. The generated `*.pb.go` message files are intentionally ignored; do not
+force-add them to a commit.
+
 For smaller loops:
 
 ```bash

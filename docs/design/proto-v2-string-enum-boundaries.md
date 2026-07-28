@@ -18,7 +18,7 @@ numeric enum values so adding a value remains a compatible protocol evolution.
 | `Sandbox.workspace_reclamation_state` | Daemon-owned cleanup lifecycle; `WorkspaceReclamationState` | Responses project unknown internal values as `UNSPECIFIED` |
 | `SchedulerSpec.concurrency_policy` | Scheduler-owned `skip`/`parallel`; `SchedulerConcurrencyPolicy` | `UNSPECIFIED` means the compose default during input shaping |
 | `SchedulerSpec.sandbox_policy`, `TriggerSpec.sandbox_policy` | Scheduler-owned `sticky`/`new`; shared `SchedulerSandboxPolicy` | `UNSPECIFIED` means compose default/inheritance behavior |
-| `TriggerSpec.kind` | Scheduler-owned trigger variants; `TriggerKind` | Unknown values are not turned into a compose trigger |
+| `TriggerSpec.kind`, `SchedulerRun.trigger_kind` | Scheduler-owned trigger variants; shared `TriggerKind` | Unknown input values are not turned into a compose trigger; unknown persisted run values are projected as `UNSPECIFIED` |
 | `VolumeMountSpec.type` | Daemon-owned `volume`/`bind`; `VolumeMountType` | `UNSPECIFIED` retains compose inference/default behavior |
 | provider, model, and image names | Provider/runtime ecosystems; string | Accept and preserve extensions |
 | `DriverSpec` selection | Daemon-compiled runtime drivers; `oneof config` with a matching name assertion | Unknown driver configurations are rejected |

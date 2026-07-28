@@ -31,8 +31,8 @@ The removed fields and their former tags were confirmed from git history:
 | `CacheItem` | 10 | `session_id` |
 | `CacheItem` | 11 | `sandbox_id` |
 
-`RunAttachRequest`, `RunAttachResponse`, `ExecAttachRequest`, and
-`ExecAttachResponse` intentionally keep frame variants in the low-number range
+`AttachAgentRunRequest`, `AttachAgentRunResponse`, `AttachExecRequest`, and
+`AttachExecResponse` intentionally keep frame variants in the low-number range
 and envelope metadata at tags 15 and 16. This separation leaves tags available
 for future frame variants and is asserted by the field-layout contract test.
 

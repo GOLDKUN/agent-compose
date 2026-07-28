@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -36,7 +37,27 @@ const (
 
 	dockerStopAPIMargin             = 5 * time.Second
 	dockerStopFallbackActionTimeout = 5 * time.Second
+	dockerJupyterPortBindingWait    = 5 * time.Second
+	dockerJupyterPortBindingPoll    = 50 * time.Millisecond
 )
+
+var errDockerJupyterPortBindingPending = errors.New("docker jupyter port binding pending")
+
+type dockerJupyterPortBindingPendingError struct {
+	cause error
+}
+
+func (e dockerJupyterPortBindingPendingError) Error() string {
+	return e.cause.Error()
+}
+
+func (e dockerJupyterPortBindingPendingError) Unwrap() error {
+	return errDockerJupyterPortBindingPending
+}
+
+func dockerJupyterPortBindingPendingErrorf(format string, args ...any) error {
+	return dockerJupyterPortBindingPendingError{cause: fmt.Errorf(format, args...)}
+}
 
 type dockerRuntime struct {
 	config *appconfig.Config
@@ -45,6 +66,13 @@ type dockerRuntime struct {
 type dockerContainerRemover interface {
 	ContainerRemove(context.Context, string, containerapi.RemoveOptions) error
 }
+
+type dockerContainerFailureCleaner interface {
+	ContainerRemove(context.Context, string, containerapi.RemoveOptions) error
+	ContainerStop(context.Context, string, containerapi.StopOptions) error
+}
+
+type dockerContainerInspector func(context.Context, string) (containerapi.InspectResponse, error)
 
 type dockerDaemonTopology struct {
 	networkMode   containerapi.NetworkMode
@@ -156,27 +184,39 @@ func (r *dockerRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmS
 	defer func() { _ = dockerClient.Close() }()
 
 	topology := r.dockerDaemonTopology(ctx, dockerClient)
-	containerInfo, _, err := r.getOrCreateContainer(ctx, dockerClient, sandbox, vmState, proxyState, topology.networkMode)
+	containerInfo, created, err := r.getOrCreateContainer(ctx, dockerClient, sandbox, vmState, proxyState, topology.networkMode)
 	if err != nil {
 		return SandboxVMInfo{}, err
 	}
+	started := false
 	if containerInfo.State == nil || !containerInfo.State.Running {
 		if err := dockerClient.ContainerStart(ctx, containerInfo.ID, containerapi.StartOptions{}); err != nil {
-			return SandboxVMInfo{}, fmt.Errorf("start docker container %s: %w", containerInfo.ID, err)
+			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, fmt.Errorf("start docker container %s: %w", containerInfo.ID, err))
 		}
+		started = true
 	}
 	if topology.containerized {
 		if err := ensureDockerContainerNetwork(ctx, dockerClient, containerInfo, string(topology.networkMode)); err != nil {
-			return SandboxVMInfo{}, err
+			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, err)
 		}
 	}
 	containerInfo, err = dockerClient.ContainerInspect(ctx, containerInfo.ID)
 	if err != nil {
-		return SandboxVMInfo{}, fmt.Errorf("inspect started docker container %s: %w", containerInfo.ID, err)
+		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, fmt.Errorf("inspect started docker container %s: %w", containerInfo.ID, err))
 	}
-	proxyState, err = r.dockerSandboxProxyState(sandbox, vmState, proxyState, containerInfo, topology.containerized)
+	containerInfo, proxyState, err = r.waitForDockerJupyterProxyState(
+		ctx,
+		dockerClient.ContainerInspect,
+		sandbox,
+		vmState,
+		proxyState,
+		containerInfo,
+		topology.containerized,
+		dockerJupyterPortBindingWait,
+		dockerJupyterPortBindingPoll,
+	)
 	if err != nil {
-		return SandboxVMInfo{}, err
+		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, err)
 	}
 	if !jupyterEnabled(proxyState) {
 		return SandboxVMInfo{BoxID: containerInfo.ID, ProxyState: &proxyState}, nil
@@ -190,12 +230,12 @@ func (r *dockerRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmS
 			return SandboxVMInfo{BoxID: containerInfo.ID, JupyterURL: jupyterDirectURL(proxyState), ProxyState: &proxyState}, nil
 		}
 		if logText := readSandboxJupyterLog(sandbox); logText != "" {
-			return SandboxVMInfo{}, fmt.Errorf("%w\nGuest log:\n%s", readyErr, logText)
+			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, fmt.Errorf("%w\nGuest log:\n%s", readyErr, logText))
 		}
 		if logText, err := r.readContainerLogs(ctx, dockerClient, containerInfo.ID); err == nil && strings.TrimSpace(logText) != "" {
-			return SandboxVMInfo{}, fmt.Errorf("%w\nContainer log:\n%s", readyErr, strings.TrimSpace(logText))
+			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, fmt.Errorf("%w\nContainer log:\n%s", readyErr, strings.TrimSpace(logText)))
 		}
-		return SandboxVMInfo{}, readyErr
+		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, readyErr)
 	}
 
 	return SandboxVMInfo{BoxID: containerInfo.ID, JupyterURL: jupyterDirectURL(proxyState), ProxyState: &proxyState}, nil
@@ -231,6 +271,31 @@ func removeDockerContainerWithStaleMounts(ctx context.Context, remover dockerCon
 		return fmt.Errorf("remove docker container with stale mounts %s: %w", containerID, err)
 	}
 	return nil
+}
+
+func (r *dockerRuntime) cleanupDockerContainerAfterEnsureFailure(
+	ctx context.Context,
+	cleaner dockerContainerFailureCleaner,
+	containerID string,
+	created bool,
+	started bool,
+	cause error,
+) error {
+	if (!created && !started) || strings.TrimSpace(containerID) == "" || cause == nil {
+		return cause
+	}
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dockerStopFallbackActionTimeout)
+	defer cancel()
+	if created {
+		if err := cleaner.ContainerRemove(cleanupCtx, containerID, containerapi.RemoveOptions{Force: true}); err != nil && !isDockerNotFound(err) {
+			return fmt.Errorf("%w; cleanup newly created docker container %s: %v", cause, containerID, err)
+		}
+		return cause
+	}
+	if err := cleaner.ContainerStop(cleanupCtx, containerID, containerapi.StopOptions{}); err != nil && !isDockerNotFound(err) {
+		return fmt.Errorf("%w; stop docker container %s after failed ensure: %v", cause, containerID, err)
+	}
+	return cause
 }
 
 func (r *dockerRuntime) StopSandbox(ctx context.Context, sandbox *Sandbox, vmState VMState) (bool, error) {
@@ -1175,17 +1240,69 @@ func (r *dockerRuntime) dockerSandboxProxyState(sandbox *Sandbox, vmState VMStat
 	return proxyState, nil
 }
 
+func (r *dockerRuntime) waitForDockerJupyterProxyState(
+	ctx context.Context,
+	inspect dockerContainerInspector,
+	sandbox *Sandbox,
+	vmState VMState,
+	proxyState ProxyState,
+	containerInfo containerapi.InspectResponse,
+	containerizedDaemon bool,
+	waitTimeout time.Duration,
+	pollInterval time.Duration,
+) (containerapi.InspectResponse, ProxyState, error) {
+	currentState, err := r.dockerSandboxProxyState(sandbox, vmState, proxyState, containerInfo, containerizedDaemon)
+	if err == nil || !proxyState.Enabled || waitTimeout <= 0 || pollInterval <= 0 {
+		return containerInfo, currentState, err
+	}
+	if !errors.Is(err, errDockerJupyterPortBindingPending) {
+		return containerInfo, ProxyState{}, err
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, waitTimeout)
+	defer cancel()
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+	lastErr := err
+	for {
+		select {
+		case <-waitCtx.Done():
+			if ctx.Err() != nil {
+				return containerInfo, ProxyState{}, ctx.Err()
+			}
+			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
+				return containerInfo, ProxyState{}, lastErr
+			}
+			return containerInfo, ProxyState{}, waitCtx.Err()
+		case <-ticker.C:
+			refreshed, inspectErr := inspect(waitCtx, containerInfo.ID)
+			if inspectErr != nil {
+				return containerInfo, ProxyState{}, fmt.Errorf("inspect started docker container %s: %w", containerInfo.ID, inspectErr)
+			}
+			currentState, err = r.dockerSandboxProxyState(sandbox, vmState, proxyState, refreshed, containerizedDaemon)
+			if err == nil {
+				return refreshed, currentState, nil
+			}
+			if !errors.Is(err, errDockerJupyterPortBindingPending) {
+				return refreshed, ProxyState{}, err
+			}
+			containerInfo = refreshed
+			lastErr = err
+		}
+	}
+}
+
 func dockerJupyterHostPort(containerInfo containerapi.InspectResponse, guestPort int) (int, error) {
 	if guestPort <= 0 {
 		return 0, fmt.Errorf("docker jupyter guest port must be positive, got %d", guestPort)
 	}
 	if containerInfo.NetworkSettings == nil {
-		return 0, fmt.Errorf("docker container %s has no network settings", containerInfo.ID)
+		return 0, dockerJupyterPortBindingPendingErrorf("docker container %s has no network settings", containerInfo.ID)
 	}
 	port := nat.Port(strconv.Itoa(guestPort) + "/tcp")
 	bindings, ok := containerInfo.NetworkSettings.Ports[port]
 	if !ok || len(bindings) == 0 {
-		return 0, fmt.Errorf("docker container %s has no binding for jupyter port %s", containerInfo.ID, port)
+		return 0, dockerJupyterPortBindingPendingErrorf("docker container %s has no binding for jupyter port %s", containerInfo.ID, port)
 	}
 	for _, binding := range bindings {
 		hostIP := net.ParseIP(strings.TrimSpace(binding.HostIP))

@@ -30,7 +30,7 @@ This design upgrades the lower execution boundary to an interactive runtime stre
 2. Do not merge workspace files, artifact bodies, or the LLM facade HTTP/SSE protocol into the runtime stream.
 3. Do not implement `run --prompt -it` by making users call `agent-compose exec <sandbox> -it codex` or `run --command "codex" -it`.
 4. Do not remove compatibility artifacts such as `command-request.json`, `command-result.json`, `stdout.txt`, `stderr.txt`, `output.txt`, or `transcript.txt`.
-5. Do not deprecate the regular `ExecStream` / `RunAgentStream` server-stream APIs. They are server-stream projections of the attach engine.
+5. Do not deprecate the regular `StreamExec` / `StreamAgentRun` server-stream APIs. They are server-stream projections of the attach engine.
 
 ## Overall Model
 
@@ -53,13 +53,13 @@ Exec / RunAgent
   -> aggregate output/result
   -> return unary response
 
-ExecStream / RunAgentStream
+StreamExec / StreamAgentRun
   -> build attach start
   -> execute internal bidirectional stream
   -> close or do not use stdin
   -> project attach output/result into server-stream responses
 
-ExecAttach / RunAttach
+AttachExec / AttachAgentRun
   -> expose bidirectional stream directly
   -> support stdin/resize/human_message and other continuous input
 ```
@@ -73,13 +73,13 @@ external API handlers
   -> Docker native attach or runtime wrapper framed stream
 ```
 
-To reduce risk in the first phase, only `-it` paths need to use the `ExecAttach` / `RunAttach` kernel. Existing unary and server-stream paths may keep their current implementation. In later migrations, handlers should call the same internal Go `AttachEngine` instead of making RPC calls to their own `ExecAttach` / `RunAttach` endpoints. This avoids protocol recursion and complicated connection lifecycles.
+To reduce risk in the first phase, only `-it` paths need to use the `AttachExec` / `AttachAgentRun` kernel. Existing unary and server-stream paths may keep their current implementation. In later migrations, handlers should call the same internal Go `AttachEngine` instead of making RPC calls to their own `AttachExec` / `AttachAgentRun` endpoints. This avoids protocol recursion and complicated connection lifecycles.
 
-`ExecStream` / `RunAgentStream` should not be marked legacy or deprecated. Their long-term role is a read-only server-stream projection for SDK/UI callers that do not need stdin.
+`StreamExec` / `StreamAgentRun` should not be marked legacy or deprecated. Their long-term role is a read-only server-stream projection for SDK/UI callers that do not need stdin.
 
 ## Driver Capability Matrix
 
-The first phase only requires full interactive support for Docker. Other drivers must report an explicit unsupported capability. They must not silently fall back to regular `ExecStream`.
+The first phase only requires full interactive support for Docker. Other drivers must report an explicit unsupported capability. They must not silently fall back to the regular `StreamExec` RPC.
 
 | driver | stdin | stdout/stderr | TTY | resize | first-phase strategy |
 |---|---:|---:|---:|---:|---|
@@ -295,15 +295,15 @@ Existing unary and server-stream APIs cannot carry client stdin/resize/human mes
 ```proto
 service ExecService {
   rpc Exec(ExecRequest) returns (ExecResponse);
-  rpc ExecStream(ExecRequest) returns (stream StreamExecResponse);
-  rpc ExecAttach(stream AttachExecRequest) returns (stream AttachExecResponse);
+  rpc StreamExec(ExecRequest) returns (stream StreamExecResponse);
+  rpc AttachExec(stream AttachExecRequest) returns (stream AttachExecResponse);
 }
 
 service RunService {
   rpc RunAgent(RunAgentRequest) returns (RunAgentResponse);
-  rpc StartRun(StartAgentRunRequest) returns (StartAgentRunResponse);
-  rpc RunAgentStream(RunAgentRequest) returns (stream StreamAgentRunResponse);
-  rpc RunAttach(stream AttachAgentRunRequest) returns (stream AttachAgentRunResponse);
+  rpc StartAgentRun(StartAgentRunRequest) returns (StartAgentRunResponse);
+  rpc StreamAgentRun(RunAgentRequest) returns (stream StreamAgentRunResponse);
+  rpc AttachAgentRun(stream AttachAgentRunRequest) returns (stream AttachAgentRunResponse);
 }
 ```
 
@@ -312,10 +312,10 @@ Interface roles:
 | API shape | external semantics | internal target implementation |
 |---|---|---|
 | `Exec` / `RunAgent` | one request, one response | attach engine + output/result aggregation |
-| `ExecStream` / `RunAgentStream` | one request, continuous output, no continuous stdin | attach engine + server-stream projection |
-| `ExecAttach` / `RunAttach` | continuous bidirectional interaction | direct attach engine projection |
+| `StreamExec` / `StreamAgentRun` | one request, continuous output, no continuous stdin | attach engine + server-stream projection |
+| `AttachExec` / `AttachAgentRun` | continuous bidirectional interaction | direct attach engine projection |
 
-`ExecAttach` and `RunAttach` can share similar frames:
+`AttachExec` and `AttachAgentRun` can share similar frames:
 
 ```proto
 message RuntimeAttachFrame {
@@ -348,7 +348,7 @@ Implementation requirements:
 2. Execution semantics belong in an internal `AttachEngine`; handlers must not call each other over RPC.
 3. Server-stream projection does not support continuous stdin. It may close send immediately after start or never open stdin.
 4. Unary projection must enforce an output aggregation limit. Full large output should be available through transcript/log artifacts.
-5. The newly added `ExecAttach` / `RunAttach` endpoints are new external capabilities. Existing APIs must not be changed in a breaking way.
+5. The newly added `AttachExec` / `AttachAgentRun` endpoints are new external capabilities. Existing APIs must not be changed in a breaking way.
 
 ## CLI TTY Behavior
 
@@ -525,8 +525,8 @@ Rules:
 
 ## Compatibility and Deprecation Strategy
 
-1. Keep regular `Exec`, `ExecStream`, `RunAgent`, `StartRun`, and `RunAgentStream` with unchanged external semantics.
-2. Do not mark `ExecStream` / `RunAgentStream` as legacy/deprecated. They are stable server-stream projections.
+1. Keep regular `Exec`, `StreamExec`, `RunAgent`, `StartAgentRun`, and `StreamAgentRun` with unchanged external semantics.
+2. Do not mark `StreamExec` / `StreamAgentRun` as legacy/deprecated. They are stable server-stream projections.
 3. Only consider comments or `deprecated = true` for fields/APIs that are no longer used internally and are genuinely not recommended externally.
 4. Do not destructively remove file artifacts.
 5. The new stream result is the source of truth for the online path; old result files are mirrors and crash recovery artifacts.
@@ -547,8 +547,8 @@ Rules:
 
 1. Define the internal `RuntimeInteraction` contract and capability matrix.
 2. Implement Docker native command attach.
-3. Add `ExecAttach` and wire `agent-compose exec <sandbox> -it ...`.
-4. Add command mode for `RunAttach` and wire `run --command -it`.
+3. Add `AttachExec` and wire `agent-compose exec <sandbox> -it ...`.
+4. Add command mode for `AttachAgentRun` and wire `run --command -it`.
 5. Implement prompt interactive turn loop for the Codex provider and wire `run --prompt -it`.
 6. Upgrade `logs --follow` from file polling to "file snapshot plus RunLogHub real-time fanout".
 7. Return explicit unsupported errors for Microsandbox/BoxLite and non-Codex providers.

@@ -243,6 +243,10 @@ if [[ -n $image_smoke_job ]]; then
     'image-smoke dependency on Arch Linux guest build'
   require_regex "$image_smoke_job" 'runs-on:[[:space:]]*ubuntu-latest' 'image-smoke amd64 runner'
   require_regex "$image_smoke_job" 'linux/amd64' 'image-smoke amd64 platform'
+  require_regex "$image_smoke_job" 'go install github\.com/bufbuild/buf/cmd/buf@v1\.68\.1' \
+    'image-smoke Buf installation for host tests'
+  require_regex "$image_smoke_job" 'buf generate' \
+    'image-smoke protobuf generation for host tests'
   require_regex "$image_smoke_job" 'docker/setup-buildx-action@v3' 'image-smoke Buildx setup'
   smoke_build_count=$(grep -Ec 'docker/build-push-action@v6' <<<"$image_smoke_job" || true)
   [[ $smoke_build_count -eq 3 ]] \
@@ -440,6 +444,8 @@ if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
     'configurable Arch Linux base image'
   require_regex "$archlinux_guest_source" 'pacman[[:space:]]+-Syu' \
     'Arch Linux package installation'
+  require_regex "$archlinux_guest_source" 'cat[[:space:]]+/etc/pacman\.d/mirrorlist' \
+    'Arch Linux package mirror fallback'
   require_regex "$archlinux_guest_source" 'nodejs-lts-jod' \
     'Node.js 22 LTS in Arch Linux guest image'
   forbid_regex "$archlinux_guest_source" '^[[:space:]]*base-devel[[:space:]]*\\' \
