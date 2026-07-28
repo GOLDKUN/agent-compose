@@ -39,7 +39,7 @@ silent ignored configuration.
 
 | Request | Field semantics |
 | --- | --- |
-| `ApplyProject` | `spec` is required and declaratively replaces the complete project. Repeated agents, variables, volumes, workspaces, MCP servers, OctoBus servers, and every nested repeated/map field are replaced. Empty clears; omitted entries are deleted. `source` is optional replacement metadata, `expected_spec_hash` is an optional concurrency guard, and `dry_run` explicitly chooses plan versus apply. |
+| `ApplyProject` | `spec` is required and declaratively replaces the complete project. Repeated agents, variables, volumes, workspaces, MCP servers, OctoBus servers, and every nested repeated/map field are replaced. Empty clears; omitted entries are deleted. `source` is optional normalization metadata, `submitted_spec_hash` optionally verifies the normalized submitted spec (it is not a stored-revision concurrency guard), and `dry_run` explicitly chooses plan versus apply. |
 | `SetSchedulerEnabled` | `project` and `agent_name` are required. `enabled` is an explicit value; `false` disables and is never a no-op. |
 | `SetSchedulerTriggerEnabled` | `project`, `agent_name`, and `trigger_id` are required. `enabled` is an explicit value; `false` disables and is never a no-op. |
 | `UpdateGlobalEnv` | `env` is a complete replacement keyed by name. Empty clears all entries and omitted names are deleted. For an entry marked secret, absent `value` retains the stored secret with that name; present empty clears it. `secret` is an explicit replacement value. Duplicate names normalize with the last occurrence winning. |
