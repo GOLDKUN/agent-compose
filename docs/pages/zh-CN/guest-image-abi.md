@@ -216,7 +216,7 @@ ARCHLINUX_TAG=<pinned-tag> \
 task image:agent-compose-guest-archlinux
 ```
 
-镜像 CI 会在 pull request 中构建该变体，并在推送到 `main` 或版本 tag 时将其发布到 Docker Hub 的 `chaitin/agent-compose-guest-archlinux`。它沿用默认镜像的分支、版本、SHA 和 release `latest` tag 策略，但 manifest 仅包含 `linux/amd64`。默认构建使用的上游 `library/archlinux` 镜像仅支持 x86_64；如果团队为其他架构提供了兼容的 Arch Linux base，必须单独构建并验证该变体。Arch Linux guest 不是部署默认镜像，使用时需要在 agent spec 中显式选择，并在投入使用前执行第 10 节中的验证。
+镜像 CI 会在 pull request 中构建该变体，并在推送到 `main` 或任意 Git tag 时将其发布到 Docker Hub 的 `chaitin/agent-compose-guest-archlinux`。它沿用默认镜像的分支、Git tag 和 SHA 策略，只有 `v*` release tag 会同时更新 `latest`；manifest 仅包含 `linux/amd64`。默认构建使用的上游 `library/archlinux` 镜像仅支持 x86_64；如果团队为其他架构提供了兼容的 Arch Linux base，必须单独构建并验证该变体。Arch Linux guest 不是部署默认镜像，使用时需要在 agent spec 中显式选择，并在投入使用前执行第 10 节中的验证。
 
 ## 7. 推荐构建方式：继承官方 Guest
 

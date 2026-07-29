@@ -22,7 +22,7 @@ on:
     branches:
       - main
     tags:
-      - "v*"
+      - "*"
   workflow_dispatch:
 
 permissions:
@@ -348,11 +348,11 @@ jobs:
             --image ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.meta.outputs.version }} \
             --platforms ${{ matrix.platforms }}
 
-  # Publish the installer assets. The stack pulls its multi-arch images from the
-  # registry at install time, so no per-arch binary artifacts are shipped here.
+  # Arbitrary tags stop after publishing images. Only version tags publish the
+  # installer assets and create a GitHub Release.
   release:
     name: Publish GitHub release
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     needs:
       - merge
     runs-on: ubuntu-latest

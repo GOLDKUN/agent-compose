@@ -315,9 +315,10 @@ task image:agent-compose-guest-archlinux
 ```
 
 Image CI builds this variant on pull requests and publishes it as
-`chaitin/agent-compose-guest-archlinux` on Docker Hub on pushes to `main` and version
-tags. It follows the default images' branch, version, SHA, and release `latest`
-tagging policy, but its manifest contains only `linux/amd64`. The upstream
+`chaitin/agent-compose-guest-archlinux` on Docker Hub on pushes to `main` and any
+Git tag. It follows the default images' branch, Git tag, and SHA policy, while
+only `v*` release tags also update `latest`; its manifest contains only
+`linux/amd64`. The upstream
 `library/archlinux` image used by the build is x86_64-only; a team that supplies
 its own compatible Arch Linux base for another architecture must build and
 validate that variant independently. The Arch Linux guest is not the deployment
