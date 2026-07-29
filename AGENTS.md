@@ -149,7 +149,7 @@ Current compose behavior:
 - the daemon listens on container port `7410`, published only on host loopback as `127.0.0.1:7410`; the UI profile publishes `${AGENT_COMPOSE_HTTP_PORT:-80}`
 - data is mounted from `${AGENT_COMPOSE_DATA_DIR:-./data}` to `/data`
 - the user-created `.env` is mounted read-only at `/data/work/.env` for daemon configuration
-- `.env.example` and the installer set `DEFAULT_IMAGE=ghcr.io/chaitin/agent-compose-guest:latest`, overriding the application's minimal Debian default for deployed sandboxes
+- `.env.example` and the installer set `DEFAULT_IMAGE=chaitin/agent-compose-guest:latest`, overriding the application's minimal Debian default for deployed sandboxes
 - the base file mounts the Docker socket but does not set `privileged` or expose `/dev/kvm`; it supports the default Docker driver on its own
 - `docker-compose.kvm.yml` is the explicit overlay that adds `privileged` and `/dev/kvm` for BoxLite or Microsandbox deployments
 - the installer detects `/dev/kvm` for a new installation and persists the selected Compose file set in `.env`; upgrades also preserve a populated legacy `./data/agent-compose` data directory. Neither behavior is a runtime health check

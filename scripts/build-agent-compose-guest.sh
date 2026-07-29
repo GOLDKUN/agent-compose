@@ -35,6 +35,8 @@ append_build_arg CODEX_VERSION "${CODEX_VERSION:-}"
 append_build_arg CLAUDE_CODE_VERSION "${CLAUDE_CODE_VERSION:-}"
 append_build_arg GEMINI_CLI_VERSION "${GEMINI_CLI_VERSION:-}"
 append_build_arg OPENCODE_VERSION "${OPENCODE_VERSION:-}"
+append_build_arg PI_AGENT_VERSION "${PI_AGENT_VERSION:-}"
+append_build_arg PI_MCP_ADAPTER_VERSION "${PI_MCP_ADAPTER_VERSION:-}"
 
 docker build "${build_args[@]}" "$ROOT_DIR"
 

@@ -3,11 +3,11 @@ ARG REGISTRY_MIRROR=docker.io
 FROM ${REGISTRY_MIRROR}/library/archlinux:latest
 
 ARG GOPROXY=https://goproxy.cn
-ARG CODEX_VERSION=0.144.1
-ARG CLAUDE_CODE_VERSION=2.1.206
-ARG GEMINI_CLI_VERSION=0.50.0
-ARG OPENCODE_VERSION=1.17.18
-ARG PI_AGENT_VERSION=0.81.1
+ARG CODEX_VERSION=0.146.0
+ARG CLAUDE_CODE_VERSION=2.1.220
+ARG GEMINI_CLI_VERSION=0.53.0
+ARG OPENCODE_VERSION=1.18.9
+ARG PI_AGENT_VERSION=0.82.1
 ARG PI_MCP_ADAPTER_VERSION=2.11.0
 ARG QWEN_CODE_VERSION=0.19.8
 
@@ -44,7 +44,8 @@ RUN npm config set prefix /usr/local/ &&\
     ln -sf /usr/local/lib/node_modules/pi-mcp-adapter/index.ts /usr/local/share/agent-compose/pi-mcp-adapter/index.ts &&\
     npm install -g @qwen-code/qwen-code@${QWEN_CODE_VERSION} &&\
     npm install -g @bufbuild/protobuf @bufbuild/protoc-gen-es &&\
-    npm install -g typescript-language-server typescript
+    npm install -g typescript-language-server typescript &&\
+    pi --version
 
 ARG HTTP_PROXY
 ARG HTTPS_PROXY

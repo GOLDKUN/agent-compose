@@ -82,7 +82,7 @@ agents:
     model: ${REVIEW_MODEL}
     system_prompt: |
       Review changes carefully and report concrete evidence.
-    image: ghcr.io/chaitin/agent-compose-guest:latest
+    image: chaitin/agent-compose-guest:latest
     build:
       context: .
       dockerfile: guest-images/Dockerfile.agent-compose-guest
@@ -408,7 +408,7 @@ The volume map key must be a stable identifier. Agents mount project volumes thr
 agents:
   reviewer:
     provider: codex
-    image: ghcr.io/chaitin/agent-compose-guest:latest
+    image: chaitin/agent-compose-guest:latest
 ```
 
 | Field | Type | Default | Purpose |
@@ -462,7 +462,7 @@ The part before the first slash is an LLM provider ID configured in agent-compos
 ```yaml
 agents:
   reviewer:
-    image: ghcr.io/chaitin/agent-compose-guest:latest
+    image: chaitin/agent-compose-guest:latest
 ```
 
 At runtime, the selected driver must be able to obtain this image. When `build` is also configured, `image` becomes one of the build output tags. `agent-compose build` fails if neither `image` nor `build.tags` provides a tag.
@@ -471,9 +471,9 @@ GitHub CI publishes these images to GHCR:
 
 | Image | Purpose | Dockerfile | Platforms |
 | --- | --- | --- | --- |
-| `ghcr.io/chaitin/agent-compose` | Control-plane daemon | `Dockerfile` | `linux/amd64`, `linux/arm64` |
-| `ghcr.io/chaitin/agent-compose-guest` | Sandbox guest runtime | `guest-images/Dockerfile.agent-compose-guest` | `linux/amd64`, `linux/arm64` |
-| `ghcr.io/chaitin/agent-compose-guest-archlinux` | Optional Arch Linux sandbox guest runtime | `guest-images/Dockerfile.agent-compose-guest-archlinux` | `linux/amd64` |
+| `chaitin/agent-compose` | Control-plane daemon | `Dockerfile` | `linux/amd64`, `linux/arm64` |
+| `chaitin/agent-compose-guest` | Sandbox guest runtime | `guest-images/Dockerfile.agent-compose-guest` | `linux/amd64`, `linux/arm64` |
+| `chaitin/agent-compose-guest-archlinux` | Optional Arch Linux sandbox guest runtime | `guest-images/Dockerfile.agent-compose-guest-archlinux` | `linux/amd64` |
 
 Use either guest image for an agent's `image`. The daemon image deploys the control plane and is not a guest image. Neither guest is tied to one driver: CI does not publish separate BoxLite-only, Microsandbox-only, or other per-driver guest images.
 
@@ -940,7 +940,7 @@ name: docker-minimal
 agents:
   reviewer:
     provider: codex
-    image: ghcr.io/chaitin/agent-compose-guest:latest
+    image: chaitin/agent-compose-guest:latest
     driver:
       docker: {}
 ```
