@@ -64,6 +64,32 @@ func TestProjectLifecycleGatesHonorCancellationAndAllowDifferentNames(t *testing
 	releaseDemo()
 }
 
+func TestProjectLifecycleGateReleaseIsIdempotent(t *testing.T) {
+	var gates projectLifecycleGates
+	release, err := gates.acquire(context.Background(), "demo")
+	if err != nil {
+		t.Fatalf("acquire gate: %v", err)
+	}
+
+	released := make(chan struct{})
+	go func() {
+		release()
+		release()
+		close(released)
+	}()
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("repeated lifecycle release blocked")
+	}
+
+	gates.mu.Lock()
+	defer gates.mu.Unlock()
+	if len(gates.gates) != 0 {
+		t.Fatalf("released lifecycle gates = %#v, want empty", gates.gates)
+	}
+}
+
 func waitForLifecycleGateRefs(t *testing.T, gates *projectLifecycleGates, name string, want int) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)

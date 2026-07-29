@@ -38,10 +38,10 @@ func (g *projectLifecycleGates) acquire(ctx context.Context, name string) (func(
 		g.releaseRef(name, gate)
 		return nil, ctx.Err()
 	case <-gate.token:
-		return func() {
+		return sync.OnceFunc(func() {
 			gate.token <- struct{}{}
 			g.releaseRef(name, gate)
-		}, nil
+		}), nil
 	}
 }
 
