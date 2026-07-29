@@ -39,7 +39,7 @@ func TestMigrationBaseline(t *testing.T) {
 		"capability_gateway", "volumes", "project_volumes", "scheduler_trigger",
 		"scheduler_run", "scheduler_event", "scheduler_state", "scheduler_sandbox_binding", "project",
 		"project_revision", "project_agent", "project_scheduler", "project_run",
-		"project_run_event", "event", "webhook_source", "event_delivery", "event_sandbox_link",
+		"project_run_event", "project_run_completion", "event", "webhook_source", "event_delivery", "event_sandbox_link",
 		"sandbox_projection_meta", "sandboxes",
 	}
 	for _, table := range tables {
@@ -70,6 +70,7 @@ func TestMigrationBaseline(t *testing.T) {
 		"idx_scheduler_trigger_schedule",
 		"idx_project_name", "idx_project_revision_hash", "idx_project_run_agent",
 		"idx_project_run_event_sequence", "idx_project_run_project_status", "idx_project_run_sandbox",
+		"idx_project_run_completion_retry",
 		"idx_project_run_scheduler", "idx_project_scheduler_agent",
 		"idx_project_run_scheduler_run", "idx_project_short_id", "idx_project_source_path",
 		"idx_project_volumes_volume", "idx_sandboxes_project_updated", "idx_sandboxes_type_updated", "idx_sandboxes_updated",

@@ -87,6 +87,7 @@ func RegisterDependencies(di do.Injector) {
 	do.Provide(di, NewRunController)
 	do.Provide(di, NewSandboxRunTargetResolver)
 	do.Provide(di, NewSandboxRemovalCoordinator)
+	do.Provide(di, NewRunCompletionManager)
 	do.Provide(di, NewDeletionRecovery)
 	do.Provide(di, NewCleanupRunner)
 	do.Provide(di, NewRunSupervisor)
@@ -246,6 +247,7 @@ func StartBackground(di do.Injector) error {
 		do.MustInvoke[*events.Dispatcher](di),
 		do.MustInvoke[*capproxy.Server](di),
 		do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
+		do.MustInvoke[*runs.CompletionManager](di),
 	); err != nil {
 		return err
 	}
@@ -259,6 +261,17 @@ func StartBackground(di do.Injector) error {
 func StopBackground(ctx context.Context, di do.Injector) error {
 	components := make([]backgroundComponent, 0, 2)
 	var setupErrors []error
+	if supervisor, err := do.Invoke[*RunSupervisor](di); err != nil {
+		setupErrors = append(setupErrors, fmt.Errorf("resolve run supervisor: %w", err))
+	} else if err := supervisor.Shutdown(ctx); err != nil {
+		setupErrors = append(setupErrors, fmt.Errorf("stop run supervisor: %w", err))
+	}
+	completion, completionErr := do.Invoke[*runs.CompletionManager](di)
+	if completionErr != nil {
+		setupErrors = append(setupErrors, fmt.Errorf("resolve project run completion manager: %w", completionErr))
+	} else {
+		components = append(components, backgroundComponent{name: "project run completion manager", shutdown: completion.Shutdown})
+	}
 
 	recovery, recoveryErr := do.Invoke[*sandboxes.DeletionRecovery](di)
 	if recoveryErr != nil {

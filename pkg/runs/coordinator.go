@@ -23,6 +23,7 @@ type StartRequest struct {
 	TriggerID       string
 	Prompt          string
 	Driver          string
+	CleanupPolicy   string
 	ClientRequestID string
 }
 
@@ -147,6 +148,7 @@ func (c *Coordinator) BeginRun(ctx context.Context, req StartRequest) (domain.Pr
 		Prompt:          req.Prompt,
 		Driver:          driver,
 		ImageRef:        firstNonEmpty(agent.GuestImage, projectAgent.Image),
+		CleanupPolicy:   NormalizeCleanupPolicy(req.CleanupPolicy),
 		ResultJSON:      "{}",
 	}
 	var initialEvents []domain.ProjectRunEventRecord
@@ -158,6 +160,19 @@ func (c *Coordinator) BeginRun(ctx context.Context, req StartRequest) (domain.Pr
 		return domain.ProjectRunRecord{}, err
 	}
 	return created, nil
+}
+
+func (c *Coordinator) BindSandbox(ctx context.Context, runID, sandboxID string, created bool) (domain.ProjectRunRecord, error) {
+	current, err := c.store.GetProjectRun(ctx, strings.TrimSpace(runID))
+	if err != nil {
+		return domain.ProjectRunRecord{}, err
+	}
+	if StatusIsTerminal(current.Status) {
+		return domain.ProjectRunRecord{}, fmt.Errorf("project run %s is already terminal", current.RunID)
+	}
+	current.SandboxID = strings.TrimSpace(sandboxID)
+	current.SandboxCreated = created
+	return c.store.UpdateProjectRun(ctx, current)
 }
 
 func (c *Coordinator) MarkRunning(ctx context.Context, runID, sessionID string) (domain.ProjectRunRecord, error) {

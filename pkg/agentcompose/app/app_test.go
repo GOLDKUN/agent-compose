@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/labstack/echo/v4"
@@ -50,6 +51,11 @@ func TestSetupRegistersServiceGraph(t *testing.T) {
 	do.ProvideValue(di, slog.Default())
 	do.ProvideValue(di, echo.New())
 	Setup(di)
+	t.Cleanup(func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer shutdownCancel()
+		_ = StopBackground(shutdownCtx, di)
+	})
 	cancel()
 
 	app := do.MustInvoke[*echo.Echo](di)
@@ -122,6 +128,11 @@ func TestStartBackgroundConstructsCleanupBeforeScheduler(t *testing.T) {
 		t.Fatalf("StartBackground returned error: %v", err)
 	}
 	cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer shutdownCancel()
+	if err := StopBackground(shutdownCtx, di); err != nil {
+		t.Fatalf("StopBackground returned error: %v", err)
+	}
 	if len(constructionOrder) < 3 || constructionOrder[0] != "cleanup" || constructionOrder[1] != "scheduler" || constructionOrder[2] != "recovery" {
 		t.Fatalf("background construction order = %v, want cleanup before scheduler before recovery", constructionOrder)
 	}

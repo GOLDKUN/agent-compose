@@ -211,6 +211,9 @@ func TestResolveStickySchedulerBindingDoesNotReuseRetiringLegacyBinding(t *testi
 func TestEnsureProjectRunSandboxConcurrentStickyClaimReusesWinner(t *testing.T) {
 	fixture := newControllerRunFixture(t)
 	run := domain.ProjectRunRecord{RunID: "run-1", ProjectID: "project-1", ProjectRevision: 1, ProjectName: "Project", AgentName: "worker", AgentID: "agent-1"}
+	if _, err := fixture.configDB.CreateProjectRun(fixture.ctx, run); err != nil {
+		t.Fatalf("CreateProjectRun returned error: %v", err)
+	}
 	prepared := Preparation{}
 	baseHash := "sha256:scheduler"
 	configHash, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:latest", nil, sandboxstore.CreateSandboxOptions{})

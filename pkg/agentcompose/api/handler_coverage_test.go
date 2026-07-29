@@ -697,6 +697,13 @@ func TestExecAttachInputFrameMapping(t *testing.T) {
 	}
 }
 
+type sequenceRunStopper struct{ calls int }
+
+func (s *sequenceRunStopper) StopActiveRun(context.Context, string, string) (bool, error) {
+	s.calls++
+	return s.calls == 1, nil
+}
+
 func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	ctx := context.Background()
 	store := &apiProjectRunStore{
@@ -785,7 +792,7 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 		t.Fatalf("expected missing project ref error, got %v", err)
 	}
 
-	runHandler := NewRunHandler(nil, store)
+	runHandler := NewRunHandler(nil, store, &sequenceRunStopper{})
 	runResp, err := runHandler.GetRun(ctx, connect.NewRequest(&agentcomposev2.GetRunRequest{RunId: "run-1", ProjectId: "project-1"}))
 	if err != nil || runResp.Msg.GetRun().GetSummary().GetRunId() != "run-1" {
 		t.Fatalf("GetRun resp=%#v err=%v", runResp, err)
@@ -803,12 +810,12 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 		t.Fatalf("ListSandboxRunEvents resp=%#v err=%v", batchEvents, err)
 	}
 	stopResp, err := runHandler.StopRun(ctx, connect.NewRequest(&agentcomposev2.StopRunRequest{RunId: "run-1", Reason: "stop"}))
-	if err != nil || !stopResp.Msg.GetStopRequested() || stopResp.Msg.GetRun().GetSummary().GetStatus() != agentcomposev2.RunStatus_RUN_STATUS_CANCELED {
+	if err != nil || !stopResp.Msg.GetStopRequested() || stopResp.Msg.GetRun().GetSummary().GetStatus() != agentcomposev2.RunStatus_RUN_STATUS_RUNNING {
 		t.Fatalf("StopRun resp=%#v err=%v", stopResp, err)
 	}
-	terminalResp, err := runHandler.StopRun(ctx, connect.NewRequest(&agentcomposev2.StopRunRequest{RunId: "run-1"}))
-	if err != nil || terminalResp.Msg.GetStopRequested() {
-		t.Fatalf("terminal StopRun resp=%#v err=%v", terminalResp, err)
+	inactiveResp, err := runHandler.StopRun(ctx, connect.NewRequest(&agentcomposev2.StopRunRequest{RunId: "run-1"}))
+	if err != nil || inactiveResp.Msg.GetStopRequested() || inactiveResp.Msg.GetRun().GetSummary().GetStatus() != agentcomposev2.RunStatus_RUN_STATUS_RUNNING {
+		t.Fatalf("inactive StopRun resp=%#v err=%v", inactiveResp, err)
 	}
 	if _, err := runHandler.GetRun(ctx, connect.NewRequest(&agentcomposev2.GetRunRequest{})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("expected run id error, got %v", err)

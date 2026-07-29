@@ -140,6 +140,7 @@ func NormalizeRunRecord(run domain.ProjectRunRecord) (domain.ProjectRunRecord, e
 	run.ResultJSON = strings.TrimSpace(run.ResultJSON)
 	run.LogsPath = strings.TrimSpace(run.LogsPath)
 	run.ArtifactsDir = strings.TrimSpace(run.ArtifactsDir)
+	run.CleanupPolicy = NormalizeRunCleanupPolicy(run.CleanupPolicy)
 	run.Driver = strings.TrimSpace(run.Driver)
 	run.ImageRef = strings.TrimSpace(run.ImageRef)
 	if run.RunID == "" || run.ProjectID == "" {
@@ -155,6 +156,17 @@ func NormalizeRunRecord(run domain.ProjectRunRecord) (domain.ProjectRunRecord, e
 		return domain.ProjectRunRecord{}, fmt.Errorf("project run result_json must be valid JSON")
 	}
 	return run, nil
+}
+
+func NormalizeRunCleanupPolicy(policy string) string {
+	switch strings.ToLower(strings.TrimSpace(policy)) {
+	case domain.ProjectRunCleanupKeepRunning:
+		return domain.ProjectRunCleanupKeepRunning
+	case domain.ProjectRunCleanupRemoveOnCompletion:
+		return domain.ProjectRunCleanupRemoveOnCompletion
+	default:
+		return domain.ProjectRunCleanupStopOnCompletion
+	}
 }
 
 func NormalizeRunStatus(status string) string {

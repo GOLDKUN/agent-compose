@@ -13,7 +13,7 @@ import (
 	"agent-compose/pkg/storage/configstore"
 )
 
-func TestRunSupervisorStopActiveRunRemovesActiveBeforeMarkCanceled(t *testing.T) {
+func TestRunSupervisorStopActiveRunRequestsCancellationWithoutMarkingTerminal(t *testing.T) {
 	ctx := context.Background()
 	store := newRunSupervisorTestConfigStore(t)
 	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{
@@ -42,54 +42,53 @@ func TestRunSupervisorStopActiveRunRemovesActiveBeforeMarkCanceled(t *testing.T)
 	}
 
 	cancelCalls := 0
+	var cancelCause error
 	supervisor := &RunSupervisor{
 		store:  store,
-		active: map[string]*activeRun{"run-1": {cancel: func() { cancelCalls++ }}},
+		active: map[string]*activeRun{"run-1": {cancel: func(cause error) { cancelCalls++; cancelCause = cause }}},
 	}
 	stopped, err := supervisor.StopActiveRun(ctx, "run-1", "user stop")
 	if err != nil {
 		t.Fatalf("StopActiveRun returned error: %v", err)
 	}
-	if !stopped || cancelCalls != 1 {
+	if !stopped || cancelCalls != 1 || cancelCause == nil || cancelCause.Error() != "user stop" {
 		t.Fatalf("first stop stopped=%v cancelCalls=%d, want true/1", stopped, cancelCalls)
 	}
-	if _, ok := supervisor.active["run-1"]; ok {
-		t.Fatalf("run remained active after stop")
+	if _, ok := supervisor.active["run-1"]; !ok {
+		t.Fatalf("run was removed before execution exited")
 	}
 
 	stopped, err = supervisor.StopActiveRun(ctx, "run-1", "second stop")
 	if err != nil {
 		t.Fatalf("second StopActiveRun returned error: %v", err)
 	}
-	if stopped || cancelCalls != 1 {
-		t.Fatalf("second stop stopped=%v cancelCalls=%d, want false/1", stopped, cancelCalls)
+	if !stopped || cancelCalls != 1 {
+		t.Fatalf("second stop stopped=%v cancelCalls=%d, want true/1", stopped, cancelCalls)
 	}
 	run, err := store.GetProjectRun(ctx, "run-1")
 	if err != nil {
 		t.Fatalf("GetProjectRun returned error: %v", err)
 	}
-	if run.Status != domain.ProjectRunStatusCanceled || run.Error != "user stop" {
+	if run.Status != domain.ProjectRunStatusRunning || run.Error != "" {
 		t.Fatalf("run after stop = %#v", run)
+	}
+	supervisor.unregister("run-1")
+	if _, ok := supervisor.active["run-1"]; ok {
+		t.Fatal("run remained active after execution exit")
 	}
 }
 
-func TestRunSupervisorUnregisterKeepsStoppingRun(t *testing.T) {
+func TestRunSupervisorUnregisterRemovesStoppingRun(t *testing.T) {
 	active := &activeRun{
-		cancel:   func() {},
+		cancel:   func(error) {},
 		stopping: true,
 	}
 	supervisor := &RunSupervisor{
 		active: map[string]*activeRun{"run-1": active},
 	}
 	supervisor.unregister("run-1")
-	if got := supervisor.active["run-1"]; got != active {
-		t.Fatalf("stopping run was unregistered: %#v", supervisor.active)
-	}
-
-	active.stopping = false
-	supervisor.unregister("run-1")
 	if _, ok := supervisor.active["run-1"]; ok {
-		t.Fatalf("inactive run remained registered")
+		t.Fatalf("stopping run remained registered")
 	}
 }
 

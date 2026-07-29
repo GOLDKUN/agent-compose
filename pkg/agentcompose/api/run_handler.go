@@ -538,7 +538,6 @@ func (h *RunHandler) StopRun(ctx context.Context, req *connect.Request[agentcomp
 			}), nil
 		}
 	}
-	coordinator := runs.NewCoordinator(h.store, domain.StableProjectRunID)
 	current, err := h.store.GetProjectRun(ctx, runID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -552,19 +551,8 @@ func (h *RunHandler) StopRun(ctx context.Context, req *connect.Request[agentcomp
 			StopRequested: false,
 		}), nil
 	}
-	reason := strings.TrimSpace(req.Msg.GetReason())
-	if reason == "" {
-		reason = "stop requested"
-	}
-	run, err := coordinator.MarkCanceled(ctx, runs.TransitionRequest{
-		RunID: runID,
-		Error: reason,
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
 	return connect.NewResponse(&agentcomposev2.StopRunResponse{
-		Run:           ProjectRunDetailToProto(run),
-		StopRequested: true,
+		Run:           ProjectRunDetailToProto(current),
+		StopRequested: false,
 	}), nil
 }

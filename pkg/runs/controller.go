@@ -131,6 +131,7 @@ type Controller struct {
 	runLogs          *RunLogHub
 	lifecycleLocks   *sandboxes.LifecycleLocks
 	removal          SandboxRemoval
+	completion       *CompletionManager
 }
 
 type llmFacadeTokenDeleter interface {
@@ -161,6 +162,7 @@ type ControllerDependencies struct {
 	RunLogs          *RunLogHub
 	LifecycleLocks   *sandboxes.LifecycleLocks
 	Removal          SandboxRemoval
+	Completion       *CompletionManager
 }
 
 type SandboxRemoval interface {
@@ -187,6 +189,7 @@ func NewController(deps ControllerDependencies) *Controller {
 		runLogs:          deps.RunLogs,
 		lifecycleLocks:   deps.LifecycleLocks,
 		removal:          deps.Removal,
+		completion:       deps.Completion,
 	}
 }
 
@@ -266,6 +269,7 @@ func (c *Controller) StartProjectRun(ctx context.Context, req RunAgentRequest) (
 		TriggerID:       req.TriggerID,
 		Prompt:          req.Prompt,
 		Driver:          req.Driver,
+		CleanupPolicy:   CleanupPolicyFromProto(req.CleanupPolicy),
 		ClientRequestID: req.ClientRequestID,
 	})
 	if err != nil {
@@ -290,6 +294,10 @@ func (c *Controller) RunProjectAgent(ctx context.Context, req RunAgentRequest, s
 }
 
 func (c *Controller) RunProjectCommandAttach(ctx context.Context, receive RunAttachReceiver, send RunAttachSender) error {
+	return c.RunProjectCommandAttachRegistered(ctx, receive, send, nil)
+}
+
+func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, receive RunAttachReceiver, send RunAttachSender, onStarted func(string)) error {
 	if receive == nil || send == nil {
 		return fmt.Errorf("run attach stream is required")
 	}
@@ -326,6 +334,9 @@ func (c *Controller) RunProjectCommandAttach(ctx context.Context, receive RunAtt
 	if err != nil {
 		return err
 	}
+	if onStarted != nil {
+		onStarted(started.Run.RunID)
+	}
 	run, execErr, err := c.executeStartedProjectRunAttach(ctx, started.Run, req, started.Warnings, start, mode, receive, send)
 	if err != nil {
 		return err
@@ -346,7 +357,7 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 			RunID: run.RunID,
 			Error: fmt.Sprintf("workspace preparation failed: %v", err),
 		}
-		run, markErr := markProjectRunTerminalError(transitionCtx, coordinator, transition, err)
+		run, markErr := c.completeProjectRunError(transitionCtx, ctx, transition, err)
 		if markErr != nil {
 			return domain.ProjectRunRecord{}, nil, markErr
 		}
@@ -362,30 +373,33 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 		if sandboxResult.Sandbox != nil {
 			transition.SandboxID = sandboxResult.Sandbox.Summary.ID
 		}
-		run, markErr := markProjectRunTerminalError(transitionCtx, coordinator, transition, err)
+		run, markErr := c.completeProjectRunError(transitionCtx, ctx, transition, err)
 		if markErr != nil {
 			return domain.ProjectRunRecord{}, nil, markErr
 		}
-		run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 		run = withRunWarnings(run, warnings)
 		return run, err, nil
 	}
 	warnings = append(warnings, sandboxResult.Warnings...)
 	if err := ctx.Err(); err != nil {
-		run, markErr := coordinator.MarkCanceled(transitionCtx, TransitionRequest{
+		stopReason := err.Error()
+		if cause := context.Cause(ctx); cause != nil {
+			stopReason = cause.Error()
+		}
+		run, markErr := c.completeProjectRun(transitionCtx, TransitionRequest{
 			RunID:     run.RunID,
+			Status:    domain.ProjectRunStatusCanceled,
 			SandboxID: sandboxResult.Sandbox.Summary.ID,
-			Error:     err.Error(),
+			Error:     stopReason,
 		})
 		if markErr != nil {
 			return domain.ProjectRunRecord{}, nil, markErr
 		}
-		run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 		run = withRunWarnings(run, warnings)
 		return run, err, nil
 	}
 	if current, loadErr := c.configDB.GetProjectRun(transitionCtx, run.RunID); loadErr == nil && StatusIsTerminal(current.Status) {
-		run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, current, sandboxResult, req.CleanupPolicy)
+		run = current
 		run = withRunWarnings(run, warnings)
 		return run, context.Canceled, nil
 	}
@@ -397,26 +411,26 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 	if commandText != "" {
 		transition, execErr := c.executeProjectRunCommand(ctx, run, sandboxResult.Sandbox, req, commandText, stream)
 		if execErr != nil || transition.ExitCode != 0 {
-			run, err = markProjectRunTerminalError(transitionCtx, coordinator, transition, execErr)
+			run, err = c.completeProjectRunError(transitionCtx, ctx, transition, execErr)
 			if err != nil {
 				return domain.ProjectRunRecord{}, nil, err
 			}
-			run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 			run = withRunWarnings(run, warnings)
 			return run, execErr, nil
 		}
-		run, err = coordinator.MarkSucceeded(transitionCtx, transition)
+		transition.Status = domain.ProjectRunStatusSucceeded
+		run, err = c.completeProjectRun(transitionCtx, transition)
 		if err != nil {
 			return domain.ProjectRunRecord{}, nil, err
 		}
-		run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 		run = withRunWarnings(run, warnings)
 		return run, nil, nil
 	}
 	agentConfig, err := c.projectRunAgentConfig(ctx, run)
 	if err != nil {
-		run, markErr := coordinator.MarkFailed(transitionCtx, TransitionRequest{
+		run, markErr := c.completeProjectRun(transitionCtx, TransitionRequest{
 			RunID:     run.RunID,
+			Status:    domain.ProjectRunStatusFailed,
 			SandboxID: sandboxResult.Sandbox.Summary.ID,
 			ExitCode:  1,
 			Error:     fmt.Sprintf("agent execution failed: %v", err),
@@ -424,14 +438,14 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 		if markErr != nil {
 			return domain.ProjectRunRecord{}, nil, markErr
 		}
-		run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 		run = withRunWarnings(run, warnings)
 		return run, err, nil
 	}
 	if c.executor == nil {
 		err = fmt.Errorf("executor is required")
-		run, markErr := coordinator.MarkFailed(transitionCtx, TransitionRequest{
+		run, markErr := c.completeProjectRun(transitionCtx, TransitionRequest{
 			RunID:     run.RunID,
+			Status:    domain.ProjectRunStatusFailed,
 			SandboxID: sandboxResult.Sandbox.Summary.ID,
 			ExitCode:  1,
 			Error:     fmt.Sprintf("agent execution failed: %v", err),
@@ -439,7 +453,6 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 		if markErr != nil {
 			return domain.ProjectRunRecord{}, nil, markErr
 		}
-		run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 		run = withRunWarnings(run, warnings)
 		return run, err, nil
 	}
@@ -455,19 +468,18 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 	transition := TransitionFromAgentCell(run, sandboxResult.Sandbox, cell, execErr)
 	transition.TerminalEvents = projectAgentTerminalEvents(run, cell, assistantEvent, execErr)
 	if execErr != nil || !cell.Success {
-		run, err = markProjectRunTerminalError(transitionCtx, coordinator, transition, execErr)
+		run, err = c.completeProjectRunError(transitionCtx, ctx, transition, execErr)
 		if err != nil {
 			return domain.ProjectRunRecord{}, nil, err
 		}
-		run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 		run = withRunWarnings(run, warnings)
 		return run, execErr, nil
 	}
-	run, err = coordinator.MarkSucceeded(transitionCtx, transition)
+	transition.Status = domain.ProjectRunStatusSucceeded
+	run, err = c.completeProjectRun(transitionCtx, transition)
 	if err != nil {
 		return domain.ProjectRunRecord{}, nil, err
 	}
-	run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 	run = withRunWarnings(run, warnings)
 	return run, nil, nil
 }
@@ -482,6 +494,90 @@ func markProjectRunTerminalError(ctx context.Context, coordinator *Coordinator, 
 		return coordinator.MarkCanceled(ctx, transition)
 	}
 	return coordinator.MarkFailed(ctx, transition)
+}
+
+func (c *Controller) completeProjectRunError(ctx, executionCtx context.Context, transition TransitionRequest, err error) (domain.ProjectRunRecord, error) {
+	transition.Status = domain.ProjectRunStatusFailed
+	if errors.Is(err, context.Canceled) {
+		transition.Status = domain.ProjectRunStatusCanceled
+		if cause := context.Cause(executionCtx); cause != nil {
+			transition.Error = cause.Error()
+		}
+	}
+	return c.completeProjectRun(ctx, transition)
+}
+
+func (c *Controller) completeProjectRun(ctx context.Context, transition TransitionRequest) (domain.ProjectRunRecord, error) {
+	manager, err := c.completionManager()
+	if err != nil {
+		return domain.ProjectRunRecord{}, err
+	}
+	if manager == nil {
+		return c.completeProjectRunWithoutJournal(ctx, transition)
+	}
+	return manager.Complete(ctx, transition)
+}
+
+func (c *Controller) completeProjectRunWithoutJournal(ctx context.Context, transition TransitionRequest) (domain.ProjectRunRecord, error) {
+	current, err := c.configDB.GetProjectRun(ctx, transition.RunID)
+	if err != nil {
+		return domain.ProjectRunRecord{}, err
+	}
+	action := CompletionCleanupAction(current.CleanupPolicy, current.SandboxID != "", current.SandboxCreated)
+	if action != domain.ProjectRunCompletionActionNone {
+		sandbox, loadErr := c.store.GetSandbox(ctx, current.SandboxID)
+		if loadErr != nil && !completionSandboxMissing(loadErr) {
+			return current, loadErr
+		}
+		if sandbox != nil {
+			policy := agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION
+			if action == domain.ProjectRunCompletionActionRemove {
+				policy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION
+			}
+			if err := c.cleanupProjectRunSandboxByPolicy(ctx, SandboxResult{Sandbox: sandbox, Created: current.SandboxCreated}, policy); err != nil {
+				current.Status = domain.ProjectRunStatusRunning
+				current.CleanupError = err.Error()
+				applyProjectRunTransitionFields(&current, transition)
+				return c.configDB.UpdateProjectRun(ctx, current)
+			}
+		}
+	}
+	return NewCoordinator(c.configDB, domain.StableProjectRunID).TransitionRun(ctx, transition)
+}
+
+type controllerCompletionStopper struct{ controller *Controller }
+
+func (s controllerCompletionStopper) Stop(ctx context.Context, sandbox *domain.Sandbox) error {
+	return s.controller.stopProjectRunSandbox(ctx, sandbox)
+}
+
+type controllerCompletionRemoval struct{ controller *Controller }
+
+func (r controllerCompletionRemoval) Remove(ctx context.Context, sandboxID string, _ bool) (sandboxes.RemovalResult, error) {
+	sandbox, err := r.controller.store.GetSandbox(ctx, sandboxID)
+	if err != nil {
+		return sandboxes.RemovalResult{}, err
+	}
+	if err := r.controller.cleanupProjectRunSandboxByPolicy(ctx, SandboxResult{Sandbox: sandbox, Created: true}, agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION); err != nil {
+		return sandboxes.RemovalResult{SandboxID: sandboxID}, err
+	}
+	return sandboxes.RemovalResult{SandboxID: sandboxID, Stopped: true, Removed: true}, nil
+}
+
+func (c *Controller) completionManager() (*CompletionManager, error) {
+	if c.completion != nil {
+		return c.completion, nil
+	}
+	store, ok := c.configDB.(CompletionStore)
+	if !ok {
+		return nil, nil
+	}
+	removal := c.removal
+	if removal == nil {
+		removal = controllerCompletionRemoval{controller: c}
+	}
+	c.completion = NewCompletionManager(store, c.store, controllerCompletionStopper{controller: c}, removal, slog.Default())
+	return c.completion, nil
 }
 
 func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.ProjectRunRecord, sandbox *domain.Sandbox, req RunAgentRequest, commandText string, sink *StreamSink) (TransitionRequest, error) {
@@ -600,7 +696,7 @@ func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run dom
 	transitionCtx := context.WithoutCancel(ctx)
 	prepared, err := c.prepareProjectRun(ctx, run, req.Env)
 	if err != nil {
-		run, markErr := markProjectRunTerminalError(transitionCtx, coordinator, TransitionRequest{
+		run, markErr := c.completeProjectRunError(transitionCtx, ctx, TransitionRequest{
 			RunID: run.RunID,
 			Error: fmt.Sprintf("workspace preparation failed: %v", err),
 		}, err)
@@ -615,10 +711,7 @@ func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run dom
 		if sandboxResult.Sandbox != nil {
 			transition.SandboxID = sandboxResult.Sandbox.Summary.ID
 		}
-		run, markErr := markProjectRunTerminalError(transitionCtx, coordinator, transition, err)
-		if sandboxResult.Sandbox != nil {
-			run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
-		}
+		run, markErr := c.completeProjectRunError(transitionCtx, ctx, transition, err)
 		return withRunWarnings(run, warnings), err, markErr
 	}
 	warnings = append(warnings, sandboxResult.Warnings...)
@@ -636,20 +729,19 @@ func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run dom
 		transition, execErr = c.runCommandInteraction(ctx, coordinator, run, sandboxResult.Sandbox, req, commandText, start, receive, send)
 	}
 	if execErr != nil || transition.ExitCode != 0 {
-		run, err = markProjectRunTerminalError(transitionCtx, coordinator, transition, execErr)
+		run, err = c.completeProjectRunError(transitionCtx, ctx, transition, execErr)
 		if err != nil {
 			return domain.ProjectRunRecord{}, nil, err
 		}
-		run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 		run = withRunWarnings(run, warnings)
 		_ = send(runAttachResultResponse(run, transition, false))
 		return run, execErr, nil
 	}
-	run, err = coordinator.MarkSucceeded(transitionCtx, transition)
+	transition.Status = domain.ProjectRunStatusSucceeded
+	run, err = c.completeProjectRun(transitionCtx, transition)
 	if err != nil {
 		return domain.ProjectRunRecord{}, nil, err
 	}
-	run = c.cleanupProjectRunSandbox(transitionCtx, coordinator, run, sandboxResult, req.CleanupPolicy)
 	run = withRunWarnings(run, warnings)
 	if err := send(runAttachResultResponse(run, transition, true)); err != nil {
 		return domain.ProjectRunRecord{}, nil, err
@@ -2067,6 +2159,11 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			if err := validateProjectRunSandboxOwnership(sandbox, run); err != nil {
 				return SandboxResult{}, err
 			}
+			if pendingRunID, pending, err := c.pendingCompletionForSandbox(ctx, sandboxID); err != nil {
+				return SandboxResult{}, err
+			} else if pending && pendingRunID != run.RunID {
+				return SandboxResult{}, domain.ClassifyError(domain.ErrFailedPrecondition, fmt.Sprintf("sandbox %s has pending completion for run %s", sandboxID, pendingRunID), nil)
+			}
 			if sandbox.Summary.VMStatus == domain.VMStatusDeleting {
 				return SandboxResult{Sandbox: sandbox}, fmt.Errorf("sandbox %s is being deleted", sandboxID)
 			}
@@ -2076,6 +2173,9 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			}
 			if err := c.validateSandboxRuntimeDriver(driver); err != nil {
 				return SandboxResult{Sandbox: sandbox}, err
+			}
+			if _, err := NewCoordinator(c.configDB, domain.StableProjectRunID).BindSandbox(ctx, run.RunID, sandboxID, false); err != nil {
+				return SandboxResult{Sandbox: sandbox}, fmt.Errorf("bind reused sandbox to project run: %w", err)
 			}
 			if sandbox.Summary.VMStatus != domain.VMStatusRunning {
 				if err := c.applyJupyterOptionsToSandbox(sandbox, jupyterOptions); err != nil {
@@ -2139,6 +2239,14 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	if err != nil {
 		return SandboxResult{}, err
 	}
+	if _, err := NewCoordinator(c.configDB, domain.StableProjectRunID).BindSandbox(ctx, run.RunID, sandbox.Summary.ID, true); err != nil {
+		bindErr := fmt.Errorf("bind created sandbox to project run: %w", err)
+		if c.removal == nil {
+			return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, bindErr
+		}
+		_, removeErr := c.removal.Remove(context.WithoutCancel(ctx), sandbox.Summary.ID, true)
+		return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, errors.Join(bindErr, removeErr)
+	}
 	llms.SetSandboxProviderEnvItems(sandbox, prepared.ProviderEnvItems)
 	if err := c.ensureProjectRunSandboxWorkspace(ctx, sandbox); err != nil {
 		return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, err
@@ -2194,6 +2302,14 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	}
 	volumeWarnings = append(warnings, volumeWarnings...)
 	return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, nil
+}
+
+func (c *Controller) pendingCompletionForSandbox(ctx context.Context, sandboxID string) (string, bool, error) {
+	store, ok := c.configDB.(CompletionStore)
+	if !ok {
+		return "", false, nil
+	}
+	return store.ProjectRunCompletionForSandbox(ctx, sandboxID)
 }
 
 func (c *Controller) validateSandboxRuntimeDriver(driver string) error {

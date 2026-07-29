@@ -59,3 +59,35 @@ func CleanupPolicyStopsSandbox(policy agentcomposev2.RunSandboxCleanupPolicy) bo
 func CleanupPolicyRemovesSandbox(policy agentcomposev2.RunSandboxCleanupPolicy) bool {
 	return policy == agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION
 }
+
+func CleanupPolicyFromProto(policy agentcomposev2.RunSandboxCleanupPolicy) string {
+	switch policy {
+	case agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING:
+		return domain.ProjectRunCleanupKeepRunning
+	case agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_REMOVE_ON_COMPLETION:
+		return domain.ProjectRunCleanupRemoveOnCompletion
+	default:
+		return domain.ProjectRunCleanupStopOnCompletion
+	}
+}
+
+func NormalizeCleanupPolicy(policy string) string {
+	switch strings.ToLower(strings.TrimSpace(policy)) {
+	case domain.ProjectRunCleanupKeepRunning:
+		return domain.ProjectRunCleanupKeepRunning
+	case domain.ProjectRunCleanupRemoveOnCompletion:
+		return domain.ProjectRunCleanupRemoveOnCompletion
+	default:
+		return domain.ProjectRunCleanupStopOnCompletion
+	}
+}
+
+func CompletionCleanupAction(policy string, hasSandbox, sandboxCreated bool) string {
+	if !hasSandbox || NormalizeCleanupPolicy(policy) == domain.ProjectRunCleanupKeepRunning {
+		return domain.ProjectRunCompletionActionNone
+	}
+	if NormalizeCleanupPolicy(policy) == domain.ProjectRunCleanupRemoveOnCompletion && sandboxCreated {
+		return domain.ProjectRunCompletionActionRemove
+	}
+	return domain.ProjectRunCompletionActionStop
+}

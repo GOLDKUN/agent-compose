@@ -50,7 +50,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerPaths(t *testing.T) {
 
 		result, err := fixture.controller.ensureProjectRunSandbox(
 			fixture.ctx,
-			projectRunEnsurerRecord("run-new"),
+			persistProjectRunEnsurerRecord(t, fixture, "run-new"),
 			prepared,
 			RunAgentRequest{},
 		)
@@ -75,7 +75,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerPaths(t *testing.T) {
 
 		result, err := fixture.controller.ensureProjectRunSandbox(
 			fixture.ctx,
-			projectRunEnsurerRecord("run-explicit"),
+			persistProjectRunEnsurerRecord(t, fixture, "run-explicit"),
 			Preparation{Workspace: projectRunWorkspaceSnapshot("prepared-conflict")},
 			RunAgentRequest{SandboxID: sandbox.Summary.ID},
 		)
@@ -110,7 +110,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerPaths(t *testing.T) {
 
 		result, err := fixture.controller.ensureProjectRunSandbox(
 			fixture.ctx,
-			projectRunEnsurerRecord("run-sticky"),
+			persistProjectRunEnsurerRecord(t, fixture, "run-sticky"),
 			Preparation{Workspace: projectRunWorkspaceSnapshot("prepared-conflict")},
 			RunAgentRequest{StickyBindingSchedulerID: "scheduler-1", StickyBindingTriggerID: "trigger-1"},
 		)
@@ -144,7 +144,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerPaths(t *testing.T) {
 
 		result, err := fixture.controller.ensureProjectRunSandbox(
 			fixture.ctx,
-			projectRunEnsurerRecord("run-running"),
+			persistProjectRunEnsurerRecord(t, fixture, "run-running"),
 			Preparation{Workspace: projectRunWorkspaceSnapshot("prepared-conflict")},
 			RunAgentRequest{SandboxID: sandbox.Summary.ID},
 		)
@@ -249,7 +249,7 @@ func TestRunsControllerProjectRunRuntimeFailurePreservesReadyWorkspace(t *testin
 
 	result, err := fixture.controller.ensureProjectRunSandbox(
 		fixture.ctx,
-		projectRunEnsurerRecord("run-runtime-failure"),
+		persistProjectRunEnsurerRecord(t, fixture, "run-runtime-failure"),
 		prepared,
 		RunAgentRequest{},
 	)
@@ -291,6 +291,16 @@ func projectRunEnsurerRecord(runID string) domain.ProjectRunRecord {
 		Driver:      "docker",
 		ImageRef:    "guest:latest",
 	}
+}
+
+func persistProjectRunEnsurerRecord(t *testing.T, fixture *controllerRunFixture, runID string) domain.ProjectRunRecord {
+	t.Helper()
+	run := projectRunEnsurerRecord(runID)
+	created, err := fixture.configDB.CreateProjectRun(fixture.ctx, run)
+	if err != nil {
+		t.Fatalf("CreateProjectRun returned error: %v", err)
+	}
+	return created
 }
 
 func projectRunWorkspaceSnapshot(id string) *domain.SandboxWorkspace {

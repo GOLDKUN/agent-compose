@@ -98,6 +98,11 @@ func (c *Controller) resolveStickySchedulerBinding(ctx context.Context, store st
 		if !found {
 			return "", nil, nil, nil
 		}
+		if pendingRunID, pending, err := c.pendingCompletionForSandbox(ctx, binding.SandboxID); err != nil {
+			return "", &binding, nil, err
+		} else if pending {
+			return "", &binding, nil, domain.ClassifyError(domain.ErrFailedPrecondition, fmt.Sprintf("sandbox %s has pending completion for run %s", binding.SandboxID, pendingRunID), nil)
+		}
 		retiringHash, retiring := schedulers.RetiringSchedulerBindingConfigHash(binding)
 		if retiring && retiringHash == configHash {
 			return "", &binding, nil, nil
