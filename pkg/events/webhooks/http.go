@@ -134,21 +134,19 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 		PublisherType:  domain.TopicEventSourceWebhook,
 	})
 	if err != nil {
+		var conflict *domain.TopicEventIdempotencyConflictError
+		if errors.As(err, &conflict) {
+			existing := conflict.Existing
+			if strings.TrimSpace(existing.ID) == "" || strings.TrimSpace(existing.Topic) != topic {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "invalid conflicting webhook event"})
+			}
+			if ExistingBodyHash(existing.PayloadJSON) == domain.TopicEventPayloadSHA256(compactBody) {
+				return c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
+			}
+			return c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
+		}
 		if errors.Is(err, domain.ErrConflict) {
-			existing, ok, lookupErr := h.store().FindEventByIdempotencyKey(c.Request().Context(), topic, idempotencyKey)
-			if lookupErr != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load conflicting webhook event"})
-			}
-			if ok {
-				if ExistingBodyHash(existing.PayloadJSON) == domain.TopicEventPayloadSHA256(compactBody) {
-					return c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
-				}
-				return c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
-			}
-			return c.JSON(http.StatusConflict, map[string]string{
-				"code":  idempotencyPayloadMismatchCode,
-				"error": idempotencyPayloadMismatchMessage,
-			})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "webhook event conflict did not include the existing event"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to store webhook event"})
 	}

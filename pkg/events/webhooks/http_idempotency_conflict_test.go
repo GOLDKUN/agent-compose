@@ -3,6 +3,7 @@ package webhooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -37,8 +38,8 @@ func TestWebhookConcurrentPayloadConflictReturnsExistingEvent(t *testing.T) {
 
 	response := postWebhookWithIdempotencyKey(t, store, `{"intent":"changed"}`)
 	assertIdempotencyConflictResponse(t, response, existing)
-	if store.lookupCount != 2 {
-		t.Fatalf("idempotency lookups = %d, want 2", store.lookupCount)
+	if store.lookupCount != 1 {
+		t.Fatalf("idempotency lookups = %d, want 1", store.lookupCount)
 	}
 }
 
@@ -62,8 +63,44 @@ func TestWebhookConcurrentIdenticalPayloadReturnsExistingEvent(t *testing.T) {
 	if !accepted.Accepted || accepted.EventID != existing.ID || accepted.Topic != existing.Topic {
 		t.Fatalf("accepted response = %#v", accepted)
 	}
-	if store.lookupCount != 2 {
-		t.Fatalf("idempotency lookups = %d, want 2", store.lookupCount)
+	if store.lookupCount != 1 {
+		t.Fatalf("idempotency lookups = %d, want 1", store.lookupCount)
+	}
+}
+
+func TestWebhookIdempotencyComparesCanonicalRequestBodyOnly(t *testing.T) {
+	existing := webhookConflictEvent()
+	existing.PayloadJSON = `{
+		"body":{"intent":"original"},
+		"correlationId":"correlation-original",
+		"headers":{"user-agent":"original-agent"},
+		"query":{"delivery":"original"}
+	}`
+	store := newWebhookRouteStore()
+	store.events[existing.ID] = existing
+	store.existingID = existing.ID
+
+	response := postWebhookWithHeaders(t, store, `{"intent":"original"}`, http.Header{
+		"User-Agent":       {"changed-agent"},
+		"X-Correlation-ID": {"correlation-changed"},
+	})
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status = %d body=%s, want %d", response.Code, response.Body.String(), http.StatusAccepted)
+	}
+	var accepted AcceptedResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &accepted); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if accepted.EventID != existing.ID || accepted.CorrelationID != existing.CorrelationID {
+		t.Fatalf("accepted response = %#v", accepted)
+	}
+}
+
+func TestWebhookConflictWithoutExistingEventReturnsInternalError(t *testing.T) {
+	store := &untypedWebhookConflictStore{webhookRouteStore: newWebhookRouteStore()}
+	response := postWebhookWithIdempotencyKey(t, store, `{"intent":"original"}`)
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body=%s, want %d", response.Code, response.Body.String(), http.StatusInternalServerError)
 	}
 }
 
@@ -80,6 +117,11 @@ func webhookConflictEvent() domain.TopicEventRecord {
 
 func postWebhookWithIdempotencyKey(t *testing.T, store Store, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	return postWebhookWithHeaders(t, store, body, nil)
+}
+
+func postWebhookWithHeaders(t *testing.T, store Store, body string, headers http.Header) *httptest.ResponseRecorder {
+	t.Helper()
 	app := echo.New()
 	RegisterRoutes(app, RouteOptions{
 		Store:            store,
@@ -90,6 +132,11 @@ func postWebhookWithIdempotencyKey(t *testing.T, store Store, body string) *http
 	req.Header.Set("Authorization", "Bearer token")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", "idem-existing")
+	for name, values := range headers {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
 	rec := httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
 	return rec
@@ -125,9 +172,17 @@ func (s *concurrentWebhookConflictStore) FindEventByIdempotencyKey(context.Conte
 	if s.lookupCount == 1 {
 		return domain.TopicEventRecord{}, false, nil
 	}
-	return s.existing, true, nil
+	return domain.TopicEventRecord{}, false, errors.New("unexpected second idempotency lookup")
 }
 
 func (s *concurrentWebhookConflictStore) CreateEvent(context.Context, domain.TopicEventRecord) (domain.TopicEventRecord, error) {
+	return domain.TopicEventRecord{}, &domain.TopicEventIdempotencyConflictError{Existing: s.existing}
+}
+
+type untypedWebhookConflictStore struct {
+	*webhookRouteStore
+}
+
+func (s *untypedWebhookConflictStore) CreateEvent(context.Context, domain.TopicEventRecord) (domain.TopicEventRecord, error) {
 	return domain.TopicEventRecord{}, domain.ErrConflict
 }

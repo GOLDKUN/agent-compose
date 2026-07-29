@@ -59,6 +59,23 @@ type TopicEventRecord struct {
 	DispatchedAt    time.Time `json:"dispatched_at,omitempty"`
 }
 
+// TopicEventIdempotencyConflictError reports a duplicate topic and idempotency
+// key while carrying the event record that already owns them.
+type TopicEventIdempotencyConflictError struct {
+	Existing TopicEventRecord
+}
+
+func (e *TopicEventIdempotencyConflictError) Error() string {
+	if e == nil || strings.TrimSpace(e.Existing.Topic) == "" {
+		return "event idempotency conflict"
+	}
+	return fmt.Sprintf("event idempotency conflict for topic %q", e.Existing.Topic)
+}
+
+func (e *TopicEventIdempotencyConflictError) Unwrap() error {
+	return ErrConflict
+}
+
 type TopicEventFilter struct {
 	EventID        string
 	Topic          string

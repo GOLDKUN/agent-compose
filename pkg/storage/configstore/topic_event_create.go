@@ -84,7 +84,7 @@ func (s *eventStore) resolveTopicEventInsertError(ctx context.Context, item doma
 				return domain.TopicEventRecord{}, fmt.Errorf("sequence duplicate event payload: %w", hashErr)
 			}
 			if existing.PayloadHash != itemPayloadHash {
-				return domain.TopicEventRecord{}, domain.ResourceError(domain.ErrConflict, "event", item.Topic, fmt.Sprintf("event idempotency conflict for topic %q", item.Topic), nil)
+				return domain.TopicEventRecord{}, &domain.TopicEventIdempotencyConflictError{Existing: existing}
 			}
 			return existing, nil
 		}
