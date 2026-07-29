@@ -75,6 +75,29 @@ Health RPCs, the runtime LLM facade, Jupyter proxy traffic, and webhook
 ingestion retain their existing independent authentication or trust boundaries
 and do not consume the daemon token.
 
+#### GitHub webhooks
+
+Create an enabled webhook source through `PUT /api/webhook-sources/<source-id>`
+with `provider` set to `github`, a `topic_prefix` such as `webhook.github.`,
+`signature_type` set to `github_sha256`, and the same `signature_secret` that
+will be entered in GitHub. The secret is write-only in API responses.
+
+In the GitHub repository or organization settings, add a webhook with:
+
+- Payload URL: `https://<agent-compose-host>/api/webhooks/webhook.github`
+- Content type: `application/json`
+- Secret: the configured source signature secret
+- Events: select the events consumed by your schedulers
+
+The daemon verifies `X-Hub-Signature-256` against the exact request body and
+uses `X-GitHub-Event` to publish topics such as `webhook.github.push`,
+`webhook.github.pull_request`, and `webhook.github.ping`. GitHub's
+`X-GitHub-Delivery` value provides the delivery ID and idempotency key, so a
+redelivery of the same payload is accepted without creating another event.
+Missing or invalid signatures are rejected even if the source also has a
+legacy static token. Generic sources continue to use their URL topic and
+Bearer, `X-WEBHOOK-TOKEN`, or configured custom-header token.
+
 The token protects the daemon control plane rather than identifying the CLI
 application. Any UI server or reverse proxy that calls the same control-plane
 APIs must also inject `Authorization: Bearer <token>` before daemon

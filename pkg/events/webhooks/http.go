@@ -80,7 +80,7 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	if err := ValidateExternalTopic(topic); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
-	source, bodyLimit, handled, err := h.authorizeWebhookRequest(c, topic)
+	sources, bodyLimit, handled, err := h.webhookSources(c, topic)
 	if handled {
 		return err
 	}
@@ -93,6 +93,20 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 			return c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "request body is too large"})
 		}
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "failed to read request body"})
+	}
+	source, handled, err := h.authorizeWebhookRequest(c, sources, rawBody)
+	if handled {
+		return err
+	}
+	if source.BodyLimitBytes > 0 && int64(len(rawBody)) > source.BodyLimitBytes {
+		return c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "request body is too large"})
+	}
+	if strings.EqualFold(strings.TrimSpace(source.SignatureType), githubSignatureType) {
+		var ok bool
+		topic, ok = githubTopic(c.Request())
+		if !ok {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid or missing X-GitHub-Event header"})
+		}
 	}
 	body, compactBody, err := DecodeJSONObject(rawBody)
 	if err != nil {
@@ -328,31 +342,41 @@ func (h routeHandler) handleDeleteWebhookSource(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h routeHandler) authorizeWebhookRequest(c echo.Context, topic string) (domain.WebhookSource, int64, bool, error) {
+func (h routeHandler) webhookSources(c echo.Context, topic string) ([]domain.WebhookSource, int64, bool, error) {
 	sources, err := h.store().ListEnabledWebhookSourcesForTopic(c.Request().Context(), topic)
 	if err != nil {
-		return domain.WebhookSource{}, 0, true, c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook sources"})
+		return nil, 0, true, c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook sources"})
 	}
 	if len(sources) == 0 {
-		return domain.WebhookSource{}, 0, true, c.JSON(http.StatusNotFound, map[string]string{"error": "webhook source not found"})
+		return nil, 0, true, c.JSON(http.StatusNotFound, map[string]string{"error": "webhook source not found"})
 	}
+	limit := h.opts.WebhookBodyLimit
+	for _, source := range sources {
+		if source.BodyLimitBytes > limit {
+			limit = source.BodyLimitBytes
+		}
+	}
+	return sources, limit, false, nil
+}
+
+func (h routeHandler) authorizeWebhookRequest(c echo.Context, sources []domain.WebhookSource, rawBody []byte) (domain.WebhookSource, bool, error) {
 	matches := make([]domain.WebhookSource, 0, 1)
 	for _, source := range sources {
-		if source.TokenHash != "" && ValidTokenHash(c.Request(), source.TokenHash, source.TokenHeader) {
+		authenticated := source.TokenHash != "" && ValidTokenHash(c.Request(), source.TokenHash, source.TokenHeader)
+		if strings.EqualFold(strings.TrimSpace(source.SignatureType), githubSignatureType) {
+			authenticated = strings.TrimSpace(source.SignatureSecret) != "" && validGitHubSignature(c.Request(), rawBody, source.SignatureSecret)
+		}
+		if authenticated {
 			matches = append(matches, source)
 		}
 	}
 	if len(matches) == 0 {
-		return domain.WebhookSource{}, 0, true, c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid webhook source token"})
+		return domain.WebhookSource{}, true, c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid webhook source authentication"})
 	}
 	if len(matches) > 1 {
-		return domain.WebhookSource{}, 0, true, c.JSON(http.StatusConflict, map[string]string{"error": "webhook source is ambiguous"})
+		return domain.WebhookSource{}, true, c.JSON(http.StatusConflict, map[string]string{"error": "webhook source is ambiguous"})
 	}
-	limit := matches[0].BodyLimitBytes
-	if limit <= 0 {
-		limit = h.opts.WebhookBodyLimit
-	}
-	return matches[0], limit, false, nil
+	return matches[0], false, nil
 }
 
 func parseOptionalInt64Query(c echo.Context, name string) (int64, error) {

@@ -137,16 +137,18 @@ Current implementation:
 
 - `/api/webhooks/*` bypasses UI session auth. The handler validates token
   according to webhook source.
-- Each webhook source binds `topic_prefix` and token hash; request topic must
-  match an enabled source.
+- Each webhook source binds `topic_prefix` and authentication settings; the
+  request URL topic must match an enabled source.
 - External callers should send `Authorization: Bearer <source-token>` or
   `X-WEBHOOK-TOKEN`.
 - Source token comparison uses hash + constant-time compare.
 - `/api/events` and `/api/events/*` use normal API/auth path and no longer
   depend on webhook token.
 
-Current model is per-source token. Provider signature verification is needed
-before exposing this to the public internet.
+GitHub sources configured with `signature_type=github_sha256` verify
+`X-Hub-Signature-256` over the exact raw body. They route the authenticated
+delivery from `X-GitHub-Event`; generic token-authenticated sources retain the
+URL-derived topic.
 
 Target behavior:
 

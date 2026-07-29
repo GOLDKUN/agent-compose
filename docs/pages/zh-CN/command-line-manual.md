@@ -72,6 +72,27 @@ Token 可能被监听并重放。CLI 与 daemon 位于不同机器时，应使�
 Health RPC、runtime LLM facade、Jupyter proxy 和 webhook ingestion 继续使用各自
 已有的认证或信任边界，不消费 daemon Token。
 
+#### GitHub Webhook
+
+通过 `PUT /api/webhook-sources/<source-id>` 创建启用的 webhook source：将
+`provider` 设为 `github`，将 `topic_prefix` 设为 `webhook.github.`，将
+`signature_type` 设为 `github_sha256`，并在 `signature_secret` 中填写准备配置到
+GitHub 的同一个 secret。API 响应不会返回 secret 明文。
+
+在 GitHub 仓库或组织设置中添加 webhook，并使用以下配置：
+
+- Payload URL：`https://<agent-compose-host>/api/webhooks/webhook.github`
+- Content type：`application/json`
+- Secret：webhook source 中配置的 signature secret
+- Events：选择 scheduler 需要消费的事件
+
+daemon 会针对原始请求体校验 `X-Hub-Signature-256`，并根据
+`X-GitHub-Event` 发布 `webhook.github.push`、`webhook.github.pull_request` 和
+`webhook.github.ping` 等 topic。GitHub 的 `X-GitHub-Delivery` 同时作为 delivery
+ID 和幂等键，因此相同 payload 的 redelivery 会返回成功，但不会创建重复事件。
+即使 source 同时保留了旧的静态 token，缺失或无效的签名仍会被拒绝。通用 webhook
+source 继续使用 URL topic，以及 Bearer、`X-WEBHOOK-TOKEN` 或自定义 header token。
+
 该 Token 保护的是 daemon 控制面，并非只识别 CLI 程序。任何调用相同控制面 API
 的 UI server 或反向代理，也必须先配置注入 `Authorization: Bearer <token>`，再
 开启 daemon 认证。
