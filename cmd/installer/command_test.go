@@ -24,10 +24,18 @@ func TestRootHelpDocumentsOperationsAndDefaultDirectory(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"install", "upgrade", "uninstall", "/opt/agent-compose"} {
+	for _, expected := range []string{"install", "upgrade", "uninstall", "/opt/agent-compose", "--backend-image", "--frontend-image", "--guest-image"} {
 		if !strings.Contains(output.String(), expected) {
 			t.Fatalf("help missing %q:\n%s", expected, output.String())
 		}
+	}
+}
+
+func TestRootRejectsExplicitEmptyImage(t *testing.T) {
+	command := newRootCommand(&bytes.Buffer{}, &bytes.Buffer{})
+	command.SetArgs([]string{"install", "--backend-image", "", "--yes"})
+	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "backend image must be a non-empty image reference") {
+		t.Fatalf("Execute error = %v", err)
 	}
 }
 

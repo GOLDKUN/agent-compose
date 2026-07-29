@@ -23,22 +23,28 @@ const (
 )
 
 type Options struct {
-	InstallDir      string
-	Repository      string
-	ReleaseBaseURL  string
-	Version         string
-	ImagePrefix     string
-	FrontendVersion string
-	Port            int
-	PortSet         bool
-	WithUI          bool
-	WithUISet       bool
-	SkipGuestPull   bool
-	NoStart         bool
-	Purge           bool
-	KVMPath         string
-	BundleDir       string
-	InstallerPath   string
+	InstallDir       string
+	Repository       string
+	ReleaseBaseURL   string
+	Version          string
+	ImagePrefix      string
+	BackendImage     string
+	BackendImageSet  bool
+	FrontendImage    string
+	FrontendImageSet bool
+	GuestImage       string
+	GuestImageSet    bool
+	FrontendVersion  string
+	Port             int
+	PortSet          bool
+	WithUI           bool
+	WithUISet        bool
+	SkipGuestPull    bool
+	NoStart          bool
+	Purge            bool
+	KVMPath          string
+	BundleDir        string
+	InstallerPath    string
 }
 
 func DefaultOptions() Options {
@@ -68,6 +74,19 @@ func (o Options) Validate(operation Operation) error {
 		}
 		if o.Port < 1 || o.Port > 65535 {
 			return fmt.Errorf("port must be between 1 and 65535")
+		}
+		for _, image := range []struct {
+			name  string
+			value string
+			set   bool
+		}{
+			{name: "backend image", value: o.BackendImage, set: o.BackendImageSet},
+			{name: "frontend image", value: o.FrontendImage, set: o.FrontendImageSet},
+			{name: "guest image", value: o.GuestImage, set: o.GuestImageSet},
+		} {
+			if image.set && (strings.TrimSpace(image.value) == "" || strings.ContainsAny(image.value, "\r\n")) {
+				return fmt.Errorf("%s must be a non-empty image reference", image.name)
+			}
 		}
 	}
 	return nil

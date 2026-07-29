@@ -35,8 +35,7 @@ func newRootCommand(out, errOut io.Writer) *cobra.Command {
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			options.PortSet = cmd.Flags().Changed("port")
-			options.WithUISet = cmd.Flags().Changed("with-ui")
+			markExplicitOptions(cmd, options)
 			if options.legacyUpgrade || options.yes || hasInstallerFlags(cmd) {
 				operation := core.OperationInstall
 				if options.legacyUpgrade {
@@ -64,10 +63,14 @@ func newRootCommand(out, errOut io.Writer) *cobra.Command {
 	flags.BoolVar(&options.SkipGuestPull, "skip-guest-pull", false, "do not pre-pull the sandbox guest image")
 	flags.StringVar(&options.Version, "version", options.Version, "application release version")
 	flags.StringVar(&options.ImagePrefix, "image-prefix", "", "image registry prefix")
+	flags.StringVar(&options.BackendImage, "backend-image", "", "complete backend image reference")
+	flags.StringVar(&options.FrontendImage, "frontend-image", "", "complete frontend image reference")
+	flags.StringVar(&options.GuestImage, "guest-image", "", "complete sandbox guest image reference")
 	flags.BoolVar(&options.NoStart, "no-start", false, "prepare files without starting services")
 	flags.BoolVarP(&options.yes, "yes", "y", options.yes, "skip confirmation prompts")
 	flags.BoolVar(&options.legacyUpgrade, "upgrade", false, "upgrade an existing installation (legacy form)")
 	_ = flags.MarkHidden("upgrade")
+	_ = flags.MarkDeprecated("image-prefix", "use --backend-image, --frontend-image, and --guest-image instead")
 
 	root.AddCommand(newOperationCommand(core.OperationInstall, options, out, errOut))
 	root.AddCommand(newOperationCommand(core.OperationUpgrade, options, out, errOut))
@@ -92,11 +95,18 @@ func newOperationCommand(operation core.Operation, options *commandOptions, out,
 		Short: strings.ToUpper(string(operation[:1])) + string(operation[1:]) + " agent-compose",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			options.PortSet = cmd.Flags().Changed("port")
-			options.WithUISet = cmd.Flags().Changed("with-ui")
+			markExplicitOptions(cmd, options)
 			return executeOperation(cmd.Context(), operation, options, out, errOut)
 		},
 	}
+}
+
+func markExplicitOptions(cmd *cobra.Command, options *commandOptions) {
+	options.PortSet = cmd.Flags().Changed("port")
+	options.WithUISet = cmd.Flags().Changed("with-ui")
+	options.BackendImageSet = cmd.Flags().Changed("backend-image")
+	options.FrontendImageSet = cmd.Flags().Changed("frontend-image")
+	options.GuestImageSet = cmd.Flags().Changed("guest-image")
 }
 
 func executeOperation(ctx context.Context, operation core.Operation, options *commandOptions, out, errOut io.Writer) error {
@@ -202,7 +212,7 @@ func writeResult(out io.Writer, operation core.Operation, result core.Result, pu
 }
 
 func hasInstallerFlags(cmd *cobra.Command) bool {
-	for _, name := range []string{"dir", "port", "version", "image-prefix", "no-start", "yes", "with-ui", "skip-guest-pull"} {
+	for _, name := range []string{"dir", "port", "version", "image-prefix", "backend-image", "frontend-image", "guest-image", "no-start", "yes", "with-ui", "skip-guest-pull"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}

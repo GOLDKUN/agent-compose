@@ -20,11 +20,11 @@ func TestModelSelectsLanguageAndInstallFlow(t *testing.T) {
 		t.Fatalf("language screen = %q, %d", m.language, m.screen)
 	}
 	press(t, m, "enter")
-	if m.operation != core.OperationInstall || m.screen != screenForm || len(m.fields) != 5 {
+	if m.operation != core.OperationInstall || m.screen != screenForm || len(m.fields) != 8 {
 		t.Fatalf("install form = %q, %d, %d fields", m.operation, m.screen, len(m.fields))
 	}
 	form := m.View()
-	for _, expected := range []string{"Configure installation", "Install directory", "Application version", "Install web UI", "Web UI port", "Pre-pull guest image", "╭", "Tab / ↑↓ move"} {
+	for _, expected := range []string{"Configure installation", "Install directory", "Application version", "Backend image (optional)", "Frontend image (optional)", "Guest image (optional)", "Install web UI", "Web UI port", "Pre-pull guest image", "╭", "Tab / ↑↓ move"} {
 		if !strings.Contains(form, expected) {
 			t.Fatalf("install form missing %q:\n%s", expected, form)
 		}
@@ -43,13 +43,37 @@ func TestModelSelectsLanguageAndInstallFlow(t *testing.T) {
 		t.Fatalf("screen = %d, want confirmation", m.screen)
 	}
 	confirmation := m.View()
-	for _, expected := range []string{"/opt/agent-compose", "latest", "Install web UI: No", "Pre-pull guest image: Yes"} {
+	for _, expected := range []string{"/opt/agent-compose", "latest", "Backend image: Use release default", "Frontend image: Use release default", "Guest image: Use release default", "Install web UI: No", "Pre-pull guest image: Yes"} {
 		if !strings.Contains(confirmation, expected) {
 			t.Fatalf("confirmation missing %q:\n%s", expected, confirmation)
 		}
 	}
 	if strings.Contains(confirmation, "Web UI port") {
 		t.Fatalf("confirmation offered a port without the web UI:\n%s", confirmation)
+	}
+}
+
+func TestModelReadsExplicitImageOverrides(t *testing.T) {
+	m := installForm(t)
+	m.field(fieldBackendImage).input.SetValue(" registry.example/backend:v1 ")
+	m.field(fieldFrontendImage).input.SetValue("registry.example/frontend@sha256:abc")
+	m.field(fieldGuestImage).input.SetValue("registry.example/guest:v2")
+
+	press(t, m, "enter")
+	if !m.options.BackendImageSet || m.options.BackendImage != "registry.example/backend:v1" {
+		t.Fatalf("backend image = %q, set=%t", m.options.BackendImage, m.options.BackendImageSet)
+	}
+	if !m.options.FrontendImageSet || m.options.FrontendImage != "registry.example/frontend@sha256:abc" {
+		t.Fatalf("frontend image = %q, set=%t", m.options.FrontendImage, m.options.FrontendImageSet)
+	}
+	if !m.options.GuestImageSet || m.options.GuestImage != "registry.example/guest:v2" {
+		t.Fatalf("guest image = %q, set=%t", m.options.GuestImage, m.options.GuestImageSet)
+	}
+	confirmation := m.View()
+	for _, image := range []string{m.options.BackendImage, m.options.FrontendImage, m.options.GuestImage} {
+		if !strings.Contains(confirmation, image) {
+			t.Fatalf("confirmation missing %q:\n%s", image, confirmation)
+		}
 	}
 }
 

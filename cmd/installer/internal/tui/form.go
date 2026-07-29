@@ -14,6 +14,9 @@ type fieldID int
 const (
 	fieldInstallDir fieldID = iota
 	fieldVersion
+	fieldBackendImage
+	fieldFrontendImage
+	fieldGuestImage
 	fieldWithUI
 	fieldPort
 	fieldGuestPull
@@ -46,6 +49,9 @@ func (m *model) buildFields() {
 	if m.operation != core.OperationUninstall {
 		m.fields = append(m.fields,
 			newTextField(fieldVersion, m.options.Version),
+			newTextField(fieldBackendImage, m.options.BackendImage),
+			newTextField(fieldFrontendImage, m.options.FrontendImage),
+			newTextField(fieldGuestImage, m.options.GuestImage),
 			newToggleField(fieldWithUI, m.options.WithUI),
 			newTextField(fieldPort, strconv.Itoa(m.options.Port)),
 			newToggleField(fieldGuestPull, !m.options.SkipGuestPull),
@@ -113,6 +119,15 @@ func (m *model) readFields() error {
 			m.options.InstallDir = strings.TrimSpace(field.input.Value())
 		case fieldVersion:
 			m.options.Version = strings.TrimSpace(field.input.Value())
+		case fieldBackendImage:
+			m.options.BackendImage = strings.TrimSpace(field.input.Value())
+			m.options.BackendImageSet = m.options.BackendImage != ""
+		case fieldFrontendImage:
+			m.options.FrontendImage = strings.TrimSpace(field.input.Value())
+			m.options.FrontendImageSet = m.options.FrontendImage != ""
+		case fieldGuestImage:
+			m.options.GuestImage = strings.TrimSpace(field.input.Value())
+			m.options.GuestImageSet = m.options.GuestImage != ""
 		case fieldWithUI:
 			m.options.WithUI = field.on
 			m.options.WithUISet = true
@@ -146,6 +161,12 @@ func (m *model) fieldLabel(id fieldID) string {
 		return m.text("安装目录", "Install directory")
 	case fieldVersion:
 		return m.text("应用版本", "Application version")
+	case fieldBackendImage:
+		return m.text("后端镜像（可选）", "Backend image (optional)")
+	case fieldFrontendImage:
+		return m.text("前端镜像（可选）", "Frontend image (optional)")
+	case fieldGuestImage:
+		return m.text("Guest 镜像（可选）", "Guest image (optional)")
 	case fieldWithUI:
 		return m.text("安装 Web UI", "Install web UI")
 	case fieldPort:

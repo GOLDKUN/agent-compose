@@ -27,6 +27,8 @@ func TestE2EInstallerLifecycle(t *testing.T) {
 	options.BundleDir = makeTestBundle(t, "v1")
 	options.KVMPath = filepath.Join(root, "missing-kvm")
 	options.InstallerPath = installerPath
+	options.GuestImage = "custom.example/guest:v1"
+	options.GuestImageSet = true
 
 	installed, err := service.Apply(context.Background(), OperationInstall, options)
 	if err != nil {
@@ -43,7 +45,7 @@ func TestE2EInstallerLifecycle(t *testing.T) {
 		"|docker compose version --short",
 		installDir + "|docker compose config --quiet",
 		installDir + "|docker compose pull",
-		installDir + "|docker pull registry.example/agent-compose-guest:v1",
+		installDir + "|docker pull custom.example/guest:v1",
 		installDir + "|docker compose up -d",
 	}, "\n") {
 		t.Fatalf("install calls:\n%s", strings.Join(runner.calls, "\n"))

@@ -128,6 +128,81 @@ func TestIntegrationUpgradePreservesPortUnlessExplicitlySet(t *testing.T) {
 	}
 }
 
+func TestIntegrationExplicitImagesOverrideIndependently(t *testing.T) {
+	root := t.TempDir()
+	installDir := filepath.Join(root, "install")
+	options := DefaultOptions()
+	options.InstallDir = installDir
+	options.BundleDir = makeTestBundle(t, "v1")
+	options.KVMPath = filepath.Join(root, "missing-kvm")
+	options.NoStart = true
+	options.ImagePrefix = "mirror.example/team"
+	options.FrontendImage = "frontend.example/ui:chosen"
+	options.FrontendImageSet = true
+	service := Service{Runner: &fakeRunner{}}
+
+	if _, err := service.Apply(context.Background(), OperationInstall, options); err != nil {
+		t.Fatal(err)
+	}
+	envPath := filepath.Join(installDir, ".env")
+	env := readTestEnv(t, envPath)
+	assertTestEnv(t, env, "AGENT_COMPOSE_IMAGE", "mirror.example/team/agent-compose:v1")
+	assertTestEnv(t, env, "AGENT_COMPOSE_FRONTEND_IMAGE", "frontend.example/ui:chosen")
+	assertTestEnv(t, env, "DEFAULT_IMAGE", "mirror.example/team/agent-compose-guest:v1")
+	if err := env.Set("AGENT_COMPOSE_FRONTEND_IMAGE", "operator.example/ui:keep"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(envPath, env.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	options.BundleDir = makeTestBundle(t, "v2")
+	options.FrontendImage = ""
+	options.FrontendImageSet = false
+	options.BackendImage = "backend.example/daemon@sha256:abc"
+	options.BackendImageSet = true
+	options.GuestImage = "guest.example/runtime:v9"
+	options.GuestImageSet = true
+	if _, err := service.Apply(context.Background(), OperationUpgrade, options); err != nil {
+		t.Fatal(err)
+	}
+
+	upgraded := readTestEnv(t, envPath)
+	assertTestEnv(t, upgraded, "AGENT_COMPOSE_IMAGE", "backend.example/daemon@sha256:abc")
+	assertTestEnv(t, upgraded, "AGENT_COMPOSE_FRONTEND_IMAGE", "operator.example/ui:keep")
+	assertTestEnv(t, upgraded, "DEFAULT_IMAGE", "guest.example/runtime:v9")
+	state := readTestEnv(t, filepath.Join(installDir, ".installer-state.env"))
+	assertTestEnv(t, state, "AGENT_COMPOSE_IMAGE", "backend.example/daemon@sha256:abc")
+	assertTestEnv(t, state, "AGENT_COMPOSE_FRONTEND_IMAGE", "frontend.example/ui:chosen")
+	assertTestEnv(t, state, "DEFAULT_IMAGE", "guest.example/runtime:v9")
+}
+
+func TestOptionsRejectExplicitInvalidImages(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		set     func(*Options)
+		wantErr string
+	}{
+		{name: "empty backend", set: func(options *Options) { options.BackendImageSet = true }, wantErr: "backend image"},
+		{name: "newline frontend", set: func(options *Options) {
+			options.FrontendImage = "example/ui:v1\nINJECTED=value"
+			options.FrontendImageSet = true
+		}, wantErr: "frontend image"},
+		{name: "blank guest", set: func(options *Options) {
+			options.GuestImage = "  "
+			options.GuestImageSet = true
+		}, wantErr: "guest image"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			options := DefaultOptions()
+			testCase.set(&options)
+			if err := options.Validate(OperationInstall); err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("Validate error = %v", err)
+			}
+		})
+	}
+}
+
 func TestIntegrationInstallRollbackRestoresManagedFiles(t *testing.T) {
 	root := t.TempDir()
 	installDir := filepath.Join(root, "install")
