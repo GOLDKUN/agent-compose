@@ -6,10 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 	"github.com/samber/do/v2"
 	"gopkg.in/yaml.v3"
 
@@ -41,19 +39,9 @@ func NewProjectController(di do.Injector) (*projects.Controller, error) {
 		Volumes:    do.MustInvoke[*volumes.Manager](di),
 		Gateway:    do.MustInvoke[*configstore.ConfigStore](di),
 		StopSandbox: func(ctx context.Context, session *domain.Sandbox) error {
-			return stopProjectSandbox(ctx, sessionStore, sandboxDriver, streams, session)
+			return stopProjectSandbox(ctx, do.MustInvoke[*appconfig.Config](di).SandboxRoot, do.MustInvoke[*sessionstream.LifecycleLocks](di), sessionStore, sandboxDriver, streams, session, do.MustInvoke[*adapters.CapabilitySandboxResolver](di))
 		},
 	}), nil
-}
-
-type projectSandboxStore interface {
-	GetSandbox(context.Context, string) (*domain.Sandbox, error)
-	UpdateSandbox(context.Context, *domain.Sandbox) error
-	AddEvent(context.Context, string, domain.SandboxEvent) error
-}
-
-type projectSandboxDriver interface {
-	StopSandboxVM(context.Context, *domain.Sandbox) error
 }
 
 type projectSandboxStreams interface {
@@ -61,43 +49,43 @@ type projectSandboxStreams interface {
 	PublishEventAdded(string, domain.SandboxEvent)
 }
 
-func stopProjectSandbox(ctx context.Context, store projectSandboxStore, driver projectSandboxDriver, streams projectSandboxStreams, session *domain.Sandbox) error {
+func stopProjectSandbox(ctx context.Context, sandboxRoot string, locks *sessionstream.LifecycleLocks, store sessionstream.LifecycleStore, driver sessionstream.SandboxDriver, streams projectSandboxStreams, session *domain.Sandbox, accessRevoker sessionstream.SandboxAccessRevoker) error {
 	if session == nil {
 		return nil
 	}
 	if store == nil {
 		return fmt.Errorf("sandbox store is required")
 	}
-	loaded, err := store.GetSandbox(ctx, session.Summary.ID)
-	if err != nil {
-		return err
+	_, err := (sessionstream.Lifecycle{
+		Config:        &appconfig.Config{SandboxRoot: sandboxRoot},
+		Store:         store,
+		Driver:        driver,
+		AccessRevoker: accessRevoker,
+		Notifier: projectSandboxLifecycleNotifier{
+			streams: streams,
+		},
+		Locks: locks,
+	}).StopLoaded(ctx, session)
+	return err
+}
+
+type projectSandboxLifecycleNotifier struct {
+	streams projectSandboxStreams
+}
+
+func (n projectSandboxLifecycleNotifier) PublishSandboxUpdated(summary *domain.SandboxSummary) {
+	if n.streams != nil {
+		n.streams.PublishSandboxUpdated(summary)
 	}
-	if loaded.Summary.VMStatus != domain.VMStatusRunning {
-		return nil
+}
+
+func (n projectSandboxLifecycleNotifier) PublishEventAdded(sandboxID string, event domain.SandboxEvent) {
+	if n.streams != nil {
+		n.streams.PublishEventAdded(sandboxID, event)
 	}
-	if driver == nil {
-		return fmt.Errorf("sandbox driver is required")
-	}
-	if err := driver.StopSandboxVM(ctx, loaded); err != nil {
-		return err
-	}
-	loaded.Summary.VMStatus = domain.VMStatusStopped
-	if err := store.UpdateSandbox(ctx, loaded); err != nil {
-		return err
-	}
-	event := domain.SandboxEvent{
-		ID:        uuid.NewString(),
-		Type:      "sandbox.stopped",
-		Level:     "info",
-		Message:   "sandbox stopped",
-		CreatedAt: time.Now().UTC(),
-	}
-	_ = store.AddEvent(ctx, loaded.Summary.ID, event)
-	if streams != nil {
-		streams.PublishSandboxUpdated(&loaded.Summary)
-		streams.PublishEventAdded(loaded.Summary.ID, event)
-	}
-	return nil
+}
+
+func (projectSandboxLifecycleNotifier) NotifyDashboard(string) {
 }
 
 type projectControllerDelegate struct {

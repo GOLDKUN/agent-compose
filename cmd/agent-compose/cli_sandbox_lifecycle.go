@@ -139,21 +139,25 @@ func composeSandboxInspectOutputFor(ctx context.Context, clients cliServiceClien
 }
 
 type composeSandboxOutput struct {
-	SandboxID            string                             `json:"sandbox_id"`
-	SandboxShortID       string                             `json:"sandbox_short_id,omitempty"`
-	Title                string                             `json:"title,omitempty"`
-	Driver               string                             `json:"driver,omitempty"`
-	VMStatus             string                             `json:"vm_status,omitempty"`
-	WorkspacePath        string                             `json:"workspace_path,omitempty"`
-	ProxyPath            string                             `json:"proxy_path,omitempty"`
-	GuestImage           string                             `json:"guest_image,omitempty"`
-	TriggerSource        string                             `json:"trigger_source,omitempty"`
-	CreatedAt            string                             `json:"created_at,omitempty"`
-	UpdatedAt            string                             `json:"updated_at,omitempty"`
-	CellCount            uint32                             `json:"cell_count"`
-	EventCount           uint32                             `json:"event_count"`
-	Tags                 map[string]string                  `json:"tags,omitempty"`
-	WorkspaceReclamation *composeWorkspaceReclamationOutput `json:"workspace_reclamation,omitempty"`
+	SandboxID                string                             `json:"sandbox_id"`
+	SandboxShortID           string                             `json:"sandbox_short_id,omitempty"`
+	Title                    string                             `json:"title,omitempty"`
+	Driver                   string                             `json:"driver,omitempty"`
+	VMStatus                 string                             `json:"vm_status,omitempty"`
+	WorkspacePath            string                             `json:"workspace_path,omitempty"`
+	ProxyPath                string                             `json:"proxy_path,omitempty"`
+	GuestImage               string                             `json:"guest_image,omitempty"`
+	TriggerSource            string                             `json:"trigger_source,omitempty"`
+	CreatedAt                string                             `json:"created_at,omitempty"`
+	UpdatedAt                string                             `json:"updated_at,omitempty"`
+	CellCount                uint32                             `json:"cell_count"`
+	EventCount               uint32                             `json:"event_count"`
+	Tags                     map[string]string                  `json:"tags,omitempty"`
+	WorkspaceReclamation     *composeWorkspaceReclamationOutput `json:"workspace_reclamation,omitempty"`
+	StoppedRuntimePolicy     string                             `json:"stopped_runtime_policy"`
+	StoppedRuntimeState      string                             `json:"stopped_runtime_state"`
+	StoppedRuntimeError      string                             `json:"stopped_runtime_last_error,omitempty"`
+	StoppedRuntimeReleasedAt string                             `json:"stopped_runtime_released_at,omitempty"`
 }
 
 func listAllSandboxes(ctx context.Context, client agentcomposev2connect.SandboxServiceClient) ([]*agentcomposev2.Sandbox, error) {
@@ -252,20 +256,24 @@ func composeSandboxOutputFromSummary(summary *agentcomposev2.Sandbox) composeSan
 		tags = nil
 	}
 	result := composeSandboxOutput{
-		SandboxID:      displayOpaqueID(summary.GetSandboxId()),
-		SandboxShortID: identity.ShortID(summary.GetSandboxId()),
-		Title:          summary.GetTitle(),
-		Driver:         summary.GetDriver(),
-		VMStatus:       sandboxStatusText(summary.GetStatus()),
-		WorkspacePath:  summary.GetWorkspacePath(),
-		ProxyPath:      summary.GetProxyPath(),
-		GuestImage:     summary.GetImage(),
-		TriggerSource:  summary.GetTriggerSource(),
-		CreatedAt:      formatProtoTimestamp(summary.GetCreatedAt()),
-		UpdatedAt:      formatProtoTimestamp(summary.GetUpdatedAt()),
-		CellCount:      summary.GetCellCount(),
-		EventCount:     summary.GetEventCount(),
-		Tags:           tags,
+		SandboxID:                displayOpaqueID(summary.GetSandboxId()),
+		SandboxShortID:           identity.ShortID(summary.GetSandboxId()),
+		Title:                    summary.GetTitle(),
+		Driver:                   summary.GetDriver(),
+		VMStatus:                 sandboxStatusText(summary.GetStatus()),
+		WorkspacePath:            summary.GetWorkspacePath(),
+		ProxyPath:                summary.GetProxyPath(),
+		GuestImage:               summary.GetImage(),
+		TriggerSource:            summary.GetTriggerSource(),
+		CreatedAt:                formatProtoTimestamp(summary.GetCreatedAt()),
+		UpdatedAt:                formatProtoTimestamp(summary.GetUpdatedAt()),
+		CellCount:                summary.GetCellCount(),
+		EventCount:               summary.GetEventCount(),
+		Tags:                     tags,
+		StoppedRuntimePolicy:     summary.GetStoppedRuntimePolicy(),
+		StoppedRuntimeState:      summary.GetStoppedRuntimeState(),
+		StoppedRuntimeError:      summary.GetStoppedRuntimeLastError(),
+		StoppedRuntimeReleasedAt: formatProtoTimestamp(summary.GetStoppedRuntimeReleasedAt()),
 	}
 	if state := workspaceReclamationStateText(summary.GetWorkspaceReclamationState()); state != "" {
 		result.WorkspaceReclamation = &composeWorkspaceReclamationOutput{

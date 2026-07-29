@@ -61,6 +61,9 @@ func (m *RuntimeResidueManager) listBoxLiteLifecycleResidues() ([]sandboxes.Runt
 		if record.LifecycleState == "deleting" {
 			continue
 		}
+		if strings.TrimSpace(record.RuntimeID) == "" {
+			continue
+		}
 		valid := strings.TrimSpace(record.RuntimeID) != ""
 		resource := sandboxes.RuntimeResidue{
 			Driver: driverpkg.RuntimeDriverBoxlite, RuntimeID: record.RuntimeID, SandboxID: record.SandboxID,

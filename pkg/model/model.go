@@ -183,6 +183,8 @@ type Sandbox struct {
 	Workspace             *SandboxWorkspace             `json:"workspace,omitempty"`
 	WorkspaceProvisioning *SandboxWorkspaceProvisioning `json:"workspace_provisioning,omitempty"`
 	WorkspaceReclamation  *SandboxWorkspaceReclamation  `json:"workspace_reclamation,omitempty"`
+	StoppedRuntimePolicy  string                        `json:"stopped_runtime_policy,omitempty"`
+	StoppedRuntime        *StoppedRuntime               `json:"stopped_runtime,omitempty"`
 	EnvItems              []SandboxEnvVar               `json:"env_items,omitempty"`
 	// ProviderEnvOverrideNames records which provider environment names were
 	// explicitly supplied by the sandbox. A nil slice means the metadata has no

@@ -428,6 +428,7 @@ agents:
 | `skills` | list | Empty | Skill sources projected into the agent runtime. |
 | `volumes` | list | Empty | Volume and bind mounts. |
 | `workspace` | object | None | Explicitly selects a project `workspaces` entry or defines an inline workspace. |
+| `sandbox` | object | Remove stopped runtime | Sandbox lifecycle configuration. |
 | `scheduler` | object | None | Automatic trigger configuration. |
 | `jupyter` | object | Disabled | Default Jupyter behavior for agent runs. |
 
@@ -734,6 +735,28 @@ workspace:
 ```
 
 If `name` is combined with any source field or `target`, the object is treated as an inline workspace rather than an inherited project workspace with overrides. To reuse a project entry, set only `name`.
+
+### `sandbox`: stopped runtime lifecycle
+
+By default, stopping a sandbox removes its driver runtime and private writable state after confirming the stop. Sandbox metadata, logs, workspace, and declared durable mounts remain, and `resume` creates a fresh runtime. To restart the same container, box, or microVM sandbox, retain its private runtime state explicitly:
+
+```yaml
+sandbox:
+  stopped_runtime_policy: retain
+```
+
+`stopped_runtime_policy` accepts only `retain` or `remove` (the default):
+
+- `retain` keeps the stopped runtime and its private writable layer. Resume requires that same runtime; unexpected runtime loss is not silently recreated.
+- `remove` explicitly deletes the stopped container, BoxLite box/private disk, or Microsandbox sandbox/private qcow2 overlay. Sandbox metadata, events, logs, workspace, and declared durable mounts remain. Resume creates a new runtime, so data stored only in the private writable layer is lost.
+
+The effective policy is snapshotted when the sandbox is created. Editing the project changes only new sandboxes. Legacy sandboxes without a policy snapshot continue to retain their runtime. `agent-compose inspect sandbox <sandbox> --json` exposes the lifecycle record through `stopped_runtime_policy`, `stopped_runtime_state`, `stopped_runtime_last_error`, and `stopped_runtime_released_at`. The states are:
+
+- `retained`: no intentional runtime release is in progress; a stopped sandbox is expected to resume the retained runtime.
+- `release_pending`: release intent is durable, but stopping, runtime removal, or the ownership update has not been fully confirmed. The daemon retries this state after an interruption, and resume completes the pending release before creating a fresh runtime.
+- `released`: runtime removal and the ownership update both completed. Resume creates a fresh runtime.
+
+For `remove`, the daemon first persists `release_pending`, then confirms a driver stop when the lifecycle record contains a start or start attempt newer than the last confirmed stop, even if the coarse VM status is `failed` rather than `running`. Only then does it remove the runtime and mark the record `released`. This ordering prevents a partially started runtime from being skipped or destructively released without a confirmed stop. The on-disk ownership-record layout is internal recovery state and is not a stable operator-facing format.
 
 ### `scheduler`
 

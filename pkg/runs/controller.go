@@ -1956,7 +1956,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	if c == nil || c.config == nil || c.store == nil || c.driver == nil {
 		return SandboxResult{}, fmt.Errorf("sandbox runtime dependencies are required")
 	}
-	jupyterOptions, err := resolveRunJupyterOptions(prepared.Jupyter, req.Jupyter)
+	jupyterOptions, err := resolveRunJupyterOptions(prepared.SandboxOptions, req.Jupyter)
 	if err != nil {
 		return SandboxResult{}, err
 	}
@@ -2297,7 +2297,7 @@ func (c *Controller) prepareFreshStartAgentEnvironment(ctx context.Context, sand
 	if err != nil {
 		return err
 	}
-	if !vmState.StartedAt.IsZero() {
+	if !vmState.StartedAt.IsZero() && !domain.SandboxRuntimeReleaseIntentional(sandbox) {
 		return nil
 	}
 	if c.executor == nil {
@@ -2315,6 +2315,7 @@ func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox 
 			return err
 		}
 	}
+	sandbox.StoppedRuntime = nil
 	sandbox.Summary.VMStatus = domain.VMStatusRunning
 	if err := c.store.UpdateSandbox(ctx, sandbox); err != nil {
 		return err
@@ -2361,96 +2362,6 @@ func (c *Controller) publishProjectRunSandboxStarted(ctx context.Context, sandbo
 			CreatedAt: time.Now().UTC(),
 		})
 	}
-}
-
-func (c *Controller) cleanupProjectRunSandbox(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandboxResult SandboxResult, policy agentcomposev2.RunSandboxCleanupPolicy) domain.ProjectRunRecord {
-	sandbox := sandboxResult.Sandbox
-	if !CleanupPolicyStopsSandbox(policy) || sandbox == nil {
-		return run
-	}
-	cleanupErr := c.cleanupProjectRunSandboxByPolicy(ctx, sandboxResult, policy)
-	if cleanupErr == nil {
-		return run
-	}
-	updated, err := coordinator.TransitionRun(ctx, TransitionRequest{
-		RunID:        run.RunID,
-		Status:       run.Status,
-		SandboxID:    run.SandboxID,
-		CleanupError: cleanupErr.Error(),
-	})
-	if err != nil {
-		return run
-	}
-	return updated
-}
-
-func (c *Controller) cleanupProjectRunSandboxByPolicy(ctx context.Context, sandboxResult SandboxResult, policy agentcomposev2.RunSandboxCleanupPolicy) error {
-	sandbox := sandboxResult.Sandbox
-	if CleanupPolicyRemovesSandbox(policy) && sandboxResult.Created {
-		if c.removal != nil {
-			result, err := c.removal.Remove(ctx, sandbox.Summary.ID, true)
-			if err == nil && result.Removed && c.capTokens != nil {
-				c.capTokens.RevokeSandbox(sandbox.Summary.ID)
-			}
-			return err
-		}
-		if err := c.stopProjectRunSandbox(ctx, sandbox); err != nil {
-			return err
-		}
-		if c.store == nil {
-			return fmt.Errorf("sandbox store is required")
-		}
-		if c.driver == nil {
-			return fmt.Errorf("sandbox driver is required")
-		}
-		if err := c.driver.RemoveSandboxVM(ctx, sandbox); err != nil {
-			return err
-		}
-		if err := c.store.RemoveSandbox(ctx, sandbox.Summary.ID); err != nil {
-			return err
-		}
-		if c.dashboard != nil {
-			c.dashboard.Notify("sandbox_removed")
-		}
-		return nil
-	}
-	return c.stopProjectRunSandbox(ctx, sandbox)
-}
-
-func (c *Controller) stopProjectRunSandbox(ctx context.Context, sandbox *domain.Sandbox) error {
-	if c.store == nil {
-		return fmt.Errorf("sandbox store is required")
-	}
-	loaded, err := c.store.GetSandbox(ctx, sandbox.Summary.ID)
-	if err != nil {
-		return err
-	}
-	if loaded.Summary.VMStatus != domain.VMStatusRunning {
-		if c.capTokens != nil {
-			c.capTokens.RevokeSandbox(loaded.Summary.ID)
-		}
-		return nil
-	}
-	if c.driver == nil {
-		return fmt.Errorf("sandbox driver is required")
-	}
-	if err := c.driver.StopSandboxVM(ctx, loaded); err != nil {
-		return err
-	}
-	loaded.Summary.VMStatus = domain.VMStatusStopped
-	if err := c.store.UpdateSandbox(ctx, loaded); err != nil {
-		return err
-	}
-	if c.capTokens != nil {
-		c.capTokens.RevokeSandbox(loaded.Summary.ID)
-	}
-	event := domain.SandboxEvent{ID: uuid.NewString(), Type: "sandbox.stopped", Level: "info", Message: "sandbox stopped", CreatedAt: time.Now().UTC()}
-	_ = c.store.AddEvent(ctx, loaded.Summary.ID, event)
-	if c.streams != nil {
-		c.streams.PublishSandboxUpdated(&loaded.Summary)
-		c.streams.PublishEventAdded(loaded.Summary.ID, event)
-	}
-	return nil
 }
 
 func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, store SandboxRuntimeStore, streams *sandboxes.StreamBroker, sandbox *domain.Sandbox, capsetIDs []string) {

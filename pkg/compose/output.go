@@ -61,6 +61,7 @@ type orderedAgentSpec struct {
 	Skills       []NormalizedSkillSpec       `yaml:"skills,omitempty" json:"skills,omitempty"`
 	Volumes      []NormalizedVolumeMountSpec `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 	Workspace    *WorkspaceSpec              `yaml:"workspace,omitempty" json:"workspace,omitempty"`
+	Sandbox      *NormalizedSandboxSpec      `yaml:"sandbox,omitempty" json:"sandbox,omitempty"`
 	Scheduler    *NormalizedSchedulerSpec    `yaml:"scheduler,omitempty" json:"scheduler,omitempty"`
 	Jupyter      *JupyterSpec                `yaml:"jupyter,omitempty" json:"jupyter,omitempty"`
 }
@@ -163,6 +164,7 @@ func (s *NormalizedProjectSpec) ordered(redactSecrets bool) orderedProjectSpec {
 			Skills:       cloneNormalizedSkillSpecs(agent.Skills),
 			Volumes:      cloneNormalizedVolumeMountSpecs(agent.Volumes),
 			Workspace:    cloneWorkspaceSpec(agent.Workspace),
+			Sandbox:      agent.Sandbox,
 			Scheduler:    cloneNormalizedSchedulerSpec(agent.Scheduler),
 			Jupyter:      cloneJupyterSpec(agent.Jupyter),
 		})
@@ -209,6 +211,7 @@ func (s *NormalizedProjectSpec) clone(redactSecrets bool) *NormalizedProjectSpec
 			Skills:       cloneNormalizedSkillSpecs(agent.Skills),
 			Volumes:      cloneNormalizedVolumeMountSpecs(agent.Volumes),
 			Workspace:    agent.Workspace,
+			Sandbox:      agent.Sandbox,
 			Scheduler:    agent.Scheduler,
 			Jupyter:      agent.Jupyter,
 		})

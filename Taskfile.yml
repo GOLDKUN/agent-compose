@@ -309,7 +309,7 @@ tasks:
         drivers="${drivers//[[:space:]]/}"
         if [[ ",$drivers," == *",all,"* || ",$drivers," == *",boxlite,"* ]]; then
           for test_name in \
-            TestSmokeBoxLiteStopResumePreservesWritableLayer \
+            TestSmokeBoxLiteRuntimeRetentionAndRelease \
             TestSmokeBoxLiteRuntimeMountManifestDirectoryOnlyStarts \
             TestSmokeBoxLiteUsesGoContainerRegistryOCIImage; do
             SMOKE_RUNTIME_DRIVERS=boxlite \
@@ -321,7 +321,7 @@ tasks:
         if [[ ",$drivers," == *",all,"* || ",$drivers," == *",microsandbox,"* ]]; then
           for test_name in \
             TestSmokeMicrosandboxBaseDiskBuild \
-            TestSmokeMicrosandboxStopResumePreservesWritableLayer \
+            TestSmokeMicrosandboxRuntimeRetentionAndRelease \
             TestSmokeMicrosandboxRootfsIsolation \
             TestSmokeMicrosandboxRuntimeMountManifestDirectoryOnlyStarts; do
             SMOKE_RUNTIME_DRIVERS=microsandbox \

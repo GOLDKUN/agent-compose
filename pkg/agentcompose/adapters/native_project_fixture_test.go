@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -22,6 +23,15 @@ func createNativeTestAgent(t testing.TB, ctx context.Context, store *configstore
 		Description: definition.Description, Provider: definition.Provider, Model: definition.Model,
 		SystemPrompt: definition.SystemPrompt, Image: definition.GuestImage,
 		Env: adapterTestEnvSpec(definition.EnvItems), CapsetIDs: append([]string(nil), definition.CapsetIDs...),
+	}
+	if configJSON := strings.TrimSpace(definition.ConfigJSON); configJSON != "" {
+		var config struct {
+			Sandbox *compose.NormalizedSandboxSpec `json:"sandbox"`
+		}
+		if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+			t.Fatalf("unmarshal native agent fixture config: %v", err)
+		}
+		agent.Sandbox = config.Sandbox
 	}
 	if driver := strings.TrimSpace(definition.Driver); driver != "" {
 		agent.Driver = &compose.NormalizedDriverSpec{Name: driver}

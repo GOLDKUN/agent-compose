@@ -245,7 +245,7 @@ func assertRuntimeSmokeHomeFiles(t *testing.T, ctx context.Context, runtime Sand
 	}
 }
 
-func assertRuntimeStopResumePreservesWritableLayer(t *testing.T, ctx context.Context, config *appconfig.Config, runtime SandboxRuntime, session *Sandbox, vmState VMState, proxyState ProxyState) {
+func assertRuntimeRetentionAndRelease(t *testing.T, ctx context.Context, config *appconfig.Config, runtime SandboxRuntime, session *Sandbox, vmState VMState, proxyState ProxyState) {
 	t.Helper()
 	proxyState.Enabled = false
 	info, err := runtime.EnsureSandbox(ctx, session, vmState, proxyState)
@@ -295,12 +295,38 @@ func assertRuntimeStopResumePreservesWritableLayer(t *testing.T, ctx context.Con
 		}
 	}
 
+	durablePath := config.GuestWorkspacePath + "/runtime-release-durable.txt"
+	if err := os.WriteFile(filepath.Join(session.Summary.WorkspacePath, "runtime-release-durable.txt"), []byte("durable-ok\n"), 0o644); err != nil {
+		t.Fatalf("write durable workspace marker: %v", err)
+	}
 	if err := runtime.RemoveSandbox(ctx, session, vmState); err != nil {
 		t.Fatalf("RemoveSandbox() error = %v", err)
 	}
 	vmState.StoppedAt = time.Now().UTC()
 	if _, err := runtime.EnsureSandbox(ctx, session, vmState, proxyState); err == nil || !strings.Contains(err.Error(), "refusing to recreate") {
 		t.Fatalf("resume after runtime removal error = %v, want refusal to recreate", err)
+	}
+
+	// A lifecycle coordinator proves intentional removal by clearing the
+	// physical runtime ID and presenting an unstopped creation view. This must
+	// create a fresh private writable layer while preserving durable mounts.
+	vmState.BoxID = ""
+	vmState.StoppedAt = time.Time{}
+	recreated, err := runtime.EnsureSandbox(ctx, session, vmState, proxyState)
+	if err != nil {
+		t.Fatalf("EnsureSandbox() after intentional release error = %v", err)
+	}
+	if session.Summary.Driver != RuntimeDriverMicrosandbox && recreated.BoxID == originalBoxID {
+		t.Fatalf("recreated runtime identity = %q, want a new identity", recreated.BoxID)
+	}
+	vmState.BoxID = recreated.BoxID
+	checkResult, err := runtime.Exec(ctx, session, vmState, ExecSpec{
+		Command: "sh",
+		Args:    []string{"-lc", "test ! -e " + statePath + " && test \"$(cat " + durablePath + ")\" = durable-ok"},
+		Cwd:     "/",
+	})
+	if err != nil || !checkResult.Success {
+		t.Fatalf("released runtime persistence check = %#v, err=%v", checkResult, err)
 	}
 }
 

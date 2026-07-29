@@ -18,18 +18,43 @@ import (
 )
 
 type stickyProjectRunSandboxConfig struct {
-	SchedulerConfigHash string                            `json:"loader_config_hash"`
-	ProjectID           string                            `json:"project_id"`
-	ProjectRevision     int64                             `json:"project_revision"`
-	AgentName           string                            `json:"agent_name"`
-	AgentID             string                            `json:"managed_agent_id"`
-	Driver              string                            `json:"driver"`
-	ImageRef            string                            `json:"image_ref"`
-	EnvItems            []domain.SandboxEnvVar            `json:"env_items,omitempty"`
-	CapsetIDs           []string                          `json:"capset_ids,omitempty"`
-	Workspace           *domain.SandboxWorkspace          `json:"workspace,omitempty"`
-	VolumeMounts        []domain.SandboxVolumeMount       `json:"volume_mounts,omitempty"`
-	Jupyter             sandboxstore.CreateSandboxOptions `json:"jupyter"`
+	SchedulerConfigHash string                      `json:"loader_config_hash"`
+	ProjectID           string                      `json:"project_id"`
+	ProjectRevision     int64                       `json:"project_revision"`
+	AgentName           string                      `json:"agent_name"`
+	AgentID             string                      `json:"managed_agent_id"`
+	Driver              string                      `json:"driver"`
+	ImageRef            string                      `json:"image_ref"`
+	EnvItems            []domain.SandboxEnvVar      `json:"env_items,omitempty"`
+	CapsetIDs           []string                    `json:"capset_ids,omitempty"`
+	Workspace           *domain.SandboxWorkspace    `json:"workspace,omitempty"`
+	VolumeMounts        []domain.SandboxVolumeMount `json:"volume_mounts,omitempty"`
+	Jupyter             stickyProjectSandboxOptions `json:"jupyter"`
+}
+
+// stickyProjectSandboxOptions preserves the serialized shape used before
+// stopped-runtime policy existed for explicit retain. The default remove policy
+// is added to the hash so existing retained bindings are retired.
+type stickyProjectSandboxOptions struct {
+	JupyterEnabled       bool
+	JupyterGuestPort     int
+	JupyterExpose        bool
+	VolumeMounts         []domain.SandboxVolumeMount
+	StoppedRuntimePolicy string `json:",omitempty"`
+}
+
+func stickyProjectSandboxOptionsFrom(options sandboxstore.CreateSandboxOptions) stickyProjectSandboxOptions {
+	policy := ""
+	if normalized, err := domain.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy); err == nil && normalized == domain.StoppedRuntimePolicyRemove {
+		policy = domain.StoppedRuntimePolicyRemove
+	}
+	return stickyProjectSandboxOptions{
+		JupyterEnabled:       options.JupyterEnabled,
+		JupyterGuestPort:     options.JupyterGuestPort,
+		JupyterExpose:        options.JupyterExpose,
+		VolumeMounts:         schedulers.NormalizeStickySandboxVolumeMounts(options.VolumeMounts),
+		StoppedRuntimePolicy: policy,
+	}
 }
 
 func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, prepared Preparation, driver, guestImage string, volumeMounts []domain.SandboxVolumeMount, jupyter sandboxstore.CreateSandboxOptions) (string, error) {
@@ -40,7 +65,6 @@ func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, pr
 	capsetIDs := capabilities.NormalizeCapsetIDs(prepared.CapsetIDs)
 	sort.Strings(capsetIDs)
 	volumeMounts = schedulers.NormalizeStickySandboxVolumeMounts(volumeMounts)
-	jupyter.VolumeMounts = schedulers.NormalizeStickySandboxVolumeMounts(jupyter.VolumeMounts)
 	payload, err := json.Marshal(stickyProjectRunSandboxConfig{
 		SchedulerConfigHash: baseHash,
 		ProjectID:           run.ProjectID,
@@ -53,7 +77,7 @@ func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, pr
 		CapsetIDs:           capsetIDs,
 		Workspace:           prepared.Workspace,
 		VolumeMounts:        volumeMounts,
-		Jupyter:             jupyter,
+		Jupyter:             stickyProjectSandboxOptionsFrom(jupyter),
 	})
 	if err != nil {
 		return "", err
@@ -100,7 +124,7 @@ func (c *Controller) resolveStickySchedulerBinding(ctx context.Context, store st
 		unlock := c.lifecycleLocks.Lock(binding.SandboxID)
 		sandbox, err := c.store.GetSandbox(ctx, binding.SandboxID)
 		if err == nil {
-			err = c.stopProjectRunSandbox(ctx, sandbox)
+			err = c.stopProjectRunSandboxLocked(ctx, sandbox)
 		}
 		unlock()
 		if err != nil {

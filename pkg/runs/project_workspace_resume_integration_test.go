@@ -102,6 +102,9 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	if sandboxA.Summary.VMStatus != domain.VMStatusStopped || sandboxA.Workspace == nil || sandboxA.Workspace.Type != "file" {
 		t.Fatalf("run A sandbox = %#v", sandboxA)
 	}
+	if domain.EffectiveStoppedRuntimePolicy(sandboxA) != domain.StoppedRuntimePolicyRemove || domain.EffectiveStoppedRuntimeState(sandboxA) != domain.StoppedRuntimeStateReleased || !reflect.DeepEqual(driver.released, []string{runA.SandboxID}) {
+		t.Fatalf("run A runtime policy/state/releases = %q/%q/%#v, want remove/released/[sandbox]", domain.EffectiveStoppedRuntimePolicy(sandboxA), domain.EffectiveStoppedRuntimeState(sandboxA), driver.released)
+	}
 	if sandboxA.WorkspaceProvisioning == nil || sandboxA.WorkspaceProvisioning.Status != domain.SandboxWorkspaceProvisioningStatusReady {
 		t.Fatalf("run A provisioning = %#v, want ready", sandboxA.WorkspaceProvisioning)
 	}
@@ -186,6 +189,9 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	}
 	if containsProjectWorkspaceSandboxID(driver.removed, runA.SandboxID) {
 		t.Fatalf("REMOVE_ON_COMPLETION removed reused sandbox %q: removed=%#v", runA.SandboxID, driver.removed)
+	}
+	if !reflect.DeepEqual(driver.released, []string{runA.SandboxID, runA.SandboxID}) {
+		t.Fatalf("default runtime releases after reused run = %#v, want sandbox released twice", driver.released)
 	}
 
 	runB, runBExecErr, runBErr := controller.RunProjectAgent(ctx, runs.RunAgentRequest{
@@ -332,10 +338,11 @@ type projectWorkspaceDriverStart struct {
 }
 
 type projectWorkspaceManifestDriver struct {
-	store   *sandboxstore.Store
-	starts  []projectWorkspaceDriverStart
-	stopped []string
-	removed []string
+	store    *sandboxstore.Store
+	starts   []projectWorkspaceDriverStart
+	stopped  []string
+	released []string
+	removed  []string
 }
 
 func (d *projectWorkspaceManifestDriver) StartSandboxVM(_ context.Context, sandbox *domain.Sandbox) error {
@@ -369,6 +376,11 @@ func (d *projectWorkspaceManifestDriver) StartSandboxVM(_ context.Context, sandb
 
 func (d *projectWorkspaceManifestDriver) StopSandboxVM(_ context.Context, sandbox *domain.Sandbox) error {
 	d.stopped = append(d.stopped, sandbox.Summary.ID)
+	return nil
+}
+
+func (d *projectWorkspaceManifestDriver) ReleaseSandboxRuntime(_ context.Context, sandbox *domain.Sandbox) error {
+	d.released = append(d.released, sandbox.Summary.ID)
 	return nil
 }
 

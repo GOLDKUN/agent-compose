@@ -64,6 +64,21 @@ func TestBoxLiteLifecycleResidueRejectsChangedOwnership(t *testing.T) {
 	}
 }
 
+func TestBoxLiteLifecycleResidueSkipsReleasedRuntimeOwnership(t *testing.T) {
+	root := t.TempDir()
+	if err := sandboxes.WriteOwnershipRecord(root, sandboxes.OwnershipRecord{
+		Version: sandboxes.OwnershipRecordVersion, SandboxID: "sandbox-boxlite-released",
+		Driver: driverpkg.RuntimeDriverBoxlite, SandboxPath: filepath.Join(root, "sandbox-boxlite-released"), LifecycleState: "active",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewRuntimeResidueManager(&appconfig.Config{SandboxRoot: root}, &boxLiteResidueRuntimeFake{})
+	items, warnings := manager.listBoxLiteLifecycleResidues()
+	if len(warnings) != 0 || len(items) != 0 {
+		t.Fatalf("released BoxLite residues = %#v warnings=%#v", items, warnings)
+	}
+}
+
 type boxLiteResidueRuntimeFake struct {
 	calls   int
 	sandbox *domain.Sandbox

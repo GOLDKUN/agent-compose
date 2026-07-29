@@ -326,6 +326,7 @@ func AgentSpecsToProto(agents []compose.NormalizedAgentSpec) []*agentcomposev2.A
 			CapsetIds:    capabilities.NormalizeCapsetIDs(agent.CapsetIDs),
 			Skills:       SkillSpecsToProto(agent.Skills),
 			Workspace:    WorkspaceSpecToProto(agent.Workspace),
+			Sandbox:      SandboxSpecToProto(agent.Sandbox),
 			Scheduler:    SchedulerSpecToProto(agent.Scheduler),
 			Jupyter:      JupyterSpecToProto(agent.Jupyter),
 			Volumes:      VolumeMountSpecsToProto(agent.Volumes),
@@ -334,6 +335,13 @@ func AgentSpecsToProto(agents []compose.NormalizedAgentSpec) []*agentcomposev2.A
 		})
 	}
 	return items
+}
+
+func SandboxSpecToProto(sandbox *compose.NormalizedSandboxSpec) *agentcomposev2.SandboxSpec {
+	if sandbox == nil {
+		return nil
+	}
+	return &agentcomposev2.SandboxSpec{StoppedRuntimePolicy: sandbox.StoppedRuntimePolicy}
 }
 
 func MCPServerSpecsToProto(values map[string]compose.NormalizedMCPServerSpec) []*agentcomposev2.MCPServerSpec {
@@ -683,6 +691,9 @@ func AgentYAMLMap(agents []*agentcomposev2.AgentSpec) (map[string]any, []*agentc
 		}
 		if workspace := WorkspaceYAMLShape(agent.GetWorkspace()); len(workspace) > 0 {
 			raw["workspace"] = workspace
+		}
+		if sandbox := agent.GetSandbox(); sandbox != nil {
+			raw["sandbox"] = map[string]any{"stopped_runtime_policy": sandbox.GetStoppedRuntimePolicy()}
 		}
 		if scheduler := SchedulerYAMLShape(agent.GetScheduler()); len(scheduler) > 0 {
 			raw["scheduler"] = scheduler

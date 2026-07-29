@@ -135,6 +135,7 @@ func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, ag
 
 type agentDefinitionConfig struct {
 	Jupyter        *compose.JupyterSpec                           `json:"jupyter,omitempty"`
+	Sandbox        *compose.NormalizedSandboxSpec                 `json:"sandbox,omitempty"`
 	MCPServers     map[string]compose.NormalizedMCPServerSpec     `json:"mcp_servers,omitempty"`
 	OctoBusServers map[string]compose.NormalizedOctoBusServerSpec `json:"octobus_servers,omitempty"`
 }
@@ -142,10 +143,11 @@ type agentDefinitionConfig struct {
 func agentDefinitionConfigJSON(agent compose.NormalizedAgentSpec, projectMCPServers map[string]compose.NormalizedMCPServerSpec, projectOctoBusServers map[string]compose.NormalizedOctoBusServerSpec) (string, error) {
 	payload := agentDefinitionConfig{
 		Jupyter:        agent.Jupyter,
+		Sandbox:        agent.Sandbox,
 		MCPServers:     selectedAgentMCPServers(agent, projectMCPServers),
 		OctoBusServers: selectedAgentOctoBusServers(agent, projectOctoBusServers),
 	}
-	if payload.Jupyter == nil && len(payload.MCPServers) == 0 && len(payload.OctoBusServers) == 0 {
+	if payload.Jupyter == nil && payload.Sandbox == nil && len(payload.MCPServers) == 0 && len(payload.OctoBusServers) == 0 {
 		return "{}", nil
 	}
 	data, err := MarshalCanonicalJSON(payload)

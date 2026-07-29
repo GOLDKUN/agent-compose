@@ -66,8 +66,13 @@ type AgentSpec struct {
 	Skills       []SkillSpec           `yaml:"skills,omitempty" json:"skills,omitempty"`
 	Volumes      []VolumeMountSpec     `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 	Workspace    *WorkspaceSpec        `yaml:"workspace,omitempty" json:"workspace,omitempty"`
+	Sandbox      *SandboxSpec          `yaml:"sandbox,omitempty" json:"sandbox,omitempty"`
 	Scheduler    *SchedulerSpec        `yaml:"scheduler,omitempty" json:"scheduler,omitempty"`
 	Jupyter      *JupyterSpec          `yaml:"jupyter,omitempty" json:"jupyter,omitempty"`
+}
+
+type SandboxSpec struct {
+	StoppedRuntimePolicy string `yaml:"stopped_runtime_policy,omitempty" json:"stopped_runtime_policy,omitempty"`
 }
 
 type AgentMCPEntriesSpec []AgentMCPEntrySpec
@@ -522,8 +527,15 @@ func validateAgent(node *yaml.Node, path string) error {
 		"skills":        validateSkillList,
 		"volumes":       validateVolumeMountList,
 		"workspace":     validateWorkspace,
+		"sandbox":       validateSandbox,
 		"scheduler":     validateScheduler,
 		"jupyter":       validateJupyter,
+	})
+}
+
+func validateSandbox(node *yaml.Node, path string) error {
+	return validateMapping(node, path, map[string]nodeValidator{
+		"stopped_runtime_policy": validateScalar,
 	})
 }
 

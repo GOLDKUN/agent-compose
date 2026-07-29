@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	appconfig "agent-compose/pkg/config"
@@ -59,7 +60,8 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 		return err
 	}
 	runtimeStarted := false
-	if vmState.StartedAt.IsZero() && d.ConfigDB != nil {
+	freshRuntime := vmState.StartedAt.IsZero() || domain.SandboxRuntimeReleaseIntentional(session)
+	if freshRuntime && d.ConfigDB != nil {
 		defer func() {
 			if resultErr == nil || runtimeStarted {
 				return
@@ -91,7 +93,20 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 		return err
 	}
 
-	info, err := runtime.EnsureSandbox(ctx, session, vmState, proxyState)
+	if domain.EffectiveStoppedRuntimeState(session) == domain.StoppedRuntimeStateReleasePending {
+		if _, err := d.releaseSandboxRuntime(ctx, session, runtime, vmState); err != nil {
+			return err
+		}
+		vmState, err = d.Store.GetVMState(session.Summary.ID)
+		if err != nil {
+			return err
+		}
+	}
+	runtimeVMState := vmState
+	if domain.SandboxRuntimeReleaseIntentional(session) {
+		runtimeVMState.StoppedAt = time.Time{}
+	}
+	info, err := runtime.EnsureSandbox(ctx, session, runtimeVMState, proxyState)
 	if err != nil {
 		vmState.LastError = err.Error()
 		_ = d.Store.SaveVMState(session.Summary.ID, vmState)
@@ -99,7 +114,45 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 	}
 	runtimeStarted = true
 
-	return d.saveSandboxStartInfo(session, vmState, proxyState, info)
+	if err := d.saveSandboxStartInfo(session, vmState, proxyState, info); err != nil {
+		return err
+	}
+	if !freshRuntime {
+		return nil
+	}
+	if err := sandboxes.MarkSandboxRuntimeOwned(d.Config.SandboxRoot, session); err != nil {
+		removed, rollbackErr := d.rollbackStartedSandboxRuntime(ctx, driver, runtime, session)
+		if removed {
+			runtimeStarted = false
+		}
+		if rollbackErr != nil {
+			rollbackErr = fmt.Errorf("rollback unowned sandbox runtime: %w", rollbackErr)
+		}
+		return errors.Join(fmt.Errorf("mark sandbox runtime owned: %w", err), rollbackErr)
+	}
+	return nil
+}
+
+func (d *SandboxDriver) rollbackStartedSandboxRuntime(ctx context.Context, driver string, runtime SandboxRuntime, session *domain.Sandbox) (bool, error) {
+	rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), driverpkg.SandboxStopContextTimeout(driver, d.Config.SandboxStopTimeout))
+	defer cancel()
+	vmState, err := d.Store.GetVMState(session.Summary.ID)
+	if err != nil {
+		return false, err
+	}
+	if err := runtime.RemoveSandbox(rollbackCtx, session, vmState); err != nil {
+		return false, err
+	}
+	// Removal succeeded, so no start fence from this unowned runtime should
+	// survive and make a retry look like a retained-runtime resume.
+	vmState.BoxID = ""
+	vmState.StartedAt = time.Time{}
+	vmState.StartAttemptedAt = time.Time{}
+	vmState.StoppedAt = time.Time{}
+	vmState.LastError = ""
+	stateErr := d.Store.SaveVMState(session.Summary.ID, vmState)
+	ownershipErr := sandboxes.MarkSandboxRuntimeReleased(d.Config.SandboxRoot, session)
+	return true, errors.Join(stateErr, ownershipErr)
 }
 
 func (d *SandboxDriver) saveSandboxStartInfo(session *domain.Sandbox, vmState domain.VMState, proxyState domain.ProxyState, info domain.SandboxVMInfo) error {
@@ -148,17 +201,55 @@ func (d *SandboxDriver) RemoveSandboxVM(ctx context.Context, session *domain.San
 	if err != nil {
 		return err
 	}
+	vmState, err = d.releaseSandboxRuntime(ctx, session, runtime, vmState)
+	if err != nil {
+		return err
+	}
+	return d.revokeReleasedRuntimeTokens(ctx, session.Summary.ID, vmState)
+}
+
+func (d *SandboxDriver) ReleaseSandboxRuntime(ctx context.Context, session *domain.Sandbox) error {
+	driver, runtime, err := d.runtimeForSession(session)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, driverpkg.SandboxStopContextTimeout(driver, d.Config.SandboxStopTimeout))
+	defer cancel()
+	vmState, err := d.Store.GetVMState(session.Summary.ID)
+	if err != nil {
+		return err
+	}
+	vmState, err = d.releaseSandboxRuntime(ctx, session, runtime, vmState)
+	if err != nil {
+		return err
+	}
+	return d.revokeReleasedRuntimeTokens(ctx, session.Summary.ID, vmState)
+}
+
+func (d *SandboxDriver) releaseSandboxRuntime(ctx context.Context, session *domain.Sandbox, runtime SandboxRuntime, vmState domain.VMState) (domain.VMState, error) {
 	if err := runtime.RemoveSandbox(ctx, session, vmState); err != nil {
 		vmState.LastError = err.Error()
 		_ = d.Store.SaveVMState(session.Summary.ID, vmState)
-		return err
+		return vmState, err
 	}
-	if d.ConfigDB != nil {
-		if err := d.ConfigDB.RevokeLLMFacadeTokensForSandbox(ctx, session.Summary.ID); err != nil {
-			vmState.LastError = err.Error()
-			_ = d.Store.SaveVMState(session.Summary.ID, vmState)
-			return err
+	vmState.BoxID = ""
+	vmState.LastError = ""
+	if err := d.Store.SaveVMState(session.Summary.ID, vmState); err != nil {
+		return vmState, err
+	}
+	return vmState, nil
+}
+
+func (d *SandboxDriver) revokeReleasedRuntimeTokens(ctx context.Context, sandboxID string, vmState domain.VMState) error {
+	if d.ConfigDB == nil {
+		return nil
+	}
+	if err := d.ConfigDB.RevokeLLMFacadeTokensForSandbox(ctx, sandboxID); err != nil {
+		vmState.LastError = err.Error()
+		if saveErr := d.Store.SaveVMState(sandboxID, vmState); saveErr != nil {
+			return errors.Join(err, fmt.Errorf("persist facade token revocation failure: %w", saveErr))
 		}
+		return err
 	}
 	return nil
 }

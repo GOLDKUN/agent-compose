@@ -42,6 +42,20 @@ func TestStickyProjectRunConfigHashTracksEffectiveSandboxSpec(t *testing.T) {
 	if same != first {
 		t.Fatalf("capset ordering changed effective hash: got %q want %q", same, first)
 	}
+	retain, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRetain})
+	if err != nil {
+		t.Fatalf("stickyProjectRunConfigHash explicit retain returned error: %v", err)
+	}
+	if retain == first {
+		t.Fatal("explicit retain did not change default remove sticky hash")
+	}
+	remove, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove})
+	if err != nil {
+		t.Fatalf("stickyProjectRunConfigHash remove returned error: %v", err)
+	}
+	if remove != first {
+		t.Fatalf("explicit remove changed default sticky hash: got %q want %q", remove, first)
+	}
 	jupyterFirst, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{VolumeMounts: volumeMounts})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash with Jupyter mounts returned error: %v", err)

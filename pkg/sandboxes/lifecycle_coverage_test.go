@@ -22,12 +22,14 @@ func TestLifecycleReconcileRuntimeStateMicrosandboxLost(t *testing.T) {
 	}
 	notifier := &fakeLifecycleNotifier{}
 	revoker := &fakeFacadeTokenRevoker{}
+	accessRevoker := &fakeSandboxAccessRevoker{}
 	lifecycle := Lifecycle{
-		Config:       &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
-		Store:        store,
-		Liveness:     fakeRuntimeLiveness{alive: false, ok: true},
-		TokenRevoker: revoker,
-		Notifier:     notifier,
+		Config:        &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
+		Store:         store,
+		Liveness:      fakeRuntimeLiveness{alive: false, ok: true},
+		TokenRevoker:  revoker,
+		AccessRevoker: accessRevoker,
+		Notifier:      notifier,
 	}
 
 	loaded, err := lifecycle.ReconcileRuntimeState(context.Background(), session)
@@ -37,8 +39,8 @@ func TestLifecycleReconcileRuntimeStateMicrosandboxLost(t *testing.T) {
 	if loaded.Summary.VMStatus != domain.VMStatusStopped || store.savedVM.BoxID != "" || !domain.TimeIsSet(store.savedVM.StoppedAt) {
 		t.Fatalf("loaded=%#v savedVM=%#v", loaded, store.savedVM)
 	}
-	if store.updated != 1 || store.events != 1 || revoker.revoked != "session-lost" {
-		t.Fatalf("updated/events/revoked = %d/%d/%q", store.updated, store.events, revoker.revoked)
+	if store.updated != 1 || store.events != 1 || revoker.revoked != "session-lost" || accessRevoker.revoked != "session-lost" {
+		t.Fatalf("updated/events/revoked/access = %d/%d/%q/%q", store.updated, store.events, revoker.revoked, accessRevoker.revoked)
 	}
 	if notifier.updated != 1 || notifier.dashboard != "sandbox_updated" || notifier.events != 1 {
 		t.Fatalf("notifier = %#v", notifier)
@@ -106,12 +108,12 @@ func TestLifecycleStopLoadedConfirmsUnresolvedStartAttempt(t *testing.T) {
 	driver := &fakeSandboxDriver{}
 	lifecycle := Lifecycle{Store: store, Driver: driver, Locks: NewLifecycleLocks()}
 
-	loaded, stopped, err := lifecycle.StopLoaded(context.Background(), session)
+	outcome, err := lifecycle.StopLoaded(context.Background(), session)
 	if err != nil {
 		t.Fatalf("StopLoaded returned error: %v", err)
 	}
-	if !stopped || !driver.stopped || loaded.Summary.VMStatus != domain.VMStatusStopped {
-		t.Fatalf("stopped/driver/loaded = %v/%v/%#v", stopped, driver.stopped, loaded)
+	if !outcome.DriverStopped || !driver.stopped || outcome.Sandbox.Summary.VMStatus != domain.VMStatusStopped {
+		t.Fatalf("outcome/driver = %#v/%v", outcome, driver.stopped)
 	}
 	if store.updated != 1 || store.events != 1 {
 		t.Fatalf("updates/events = %d/%d, want 1/1", store.updated, store.events)
@@ -127,9 +129,53 @@ func TestLifecycleStopLoadedSkipsConfirmedStoppedSandbox(t *testing.T) {
 	driver := &fakeSandboxDriver{}
 	lifecycle := Lifecycle{Store: store, Driver: driver, Locks: NewLifecycleLocks()}
 
-	loaded, stopped, err := lifecycle.StopLoaded(context.Background(), session)
-	if err != nil || stopped || driver.stopped || loaded != session {
-		t.Fatalf("StopLoaded confirmed stop = %#v/%v/%v, driver stopped=%v", loaded, stopped, err, driver.stopped)
+	outcome, err := lifecycle.StopLoaded(context.Background(), session)
+	if err != nil || outcome.Changed() || driver.stopped || outcome.Sandbox != session {
+		t.Fatalf("StopLoaded confirmed stop = %#v/%v, driver stopped=%v", outcome, err, driver.stopped)
+	}
+}
+
+func TestLifecycleStopLoadedFinalizesConfirmedStopWhenRuntimeReleaseFails(t *testing.T) {
+	releaseErr := errors.New("runtime release failed")
+	session := lifecycleTestSession("session-release-failure", driverpkg.RuntimeDriverDocker, domain.VMStatusRunning)
+	session.StoppedRuntimePolicy = domain.StoppedRuntimePolicyRemove
+	store := &fakeLifecycleStore{session: session}
+	driver := &recordingSandboxDriver{releaseErr: releaseErr}
+	notifier := &fakeLifecycleNotifier{}
+	accessRevoker := &fakeSandboxAccessRevoker{}
+	lifecycle := Lifecycle{
+		Config:        &appconfig.Config{SandboxRoot: t.TempDir()},
+		Store:         store,
+		Driver:        driver,
+		AccessRevoker: accessRevoker,
+		Notifier:      notifier,
+		Locks:         NewLifecycleLocks(),
+	}
+
+	outcome, err := lifecycle.StopLoaded(context.Background(), session)
+	if !errors.Is(err, releaseErr) {
+		t.Fatalf("StopLoaded error = %v, want %v", err, releaseErr)
+	}
+	if outcome.Sandbox != session || !outcome.DriverStopped || session.Summary.VMStatus != domain.VMStatusStopped {
+		t.Fatalf("outcome/session = %#v/%#v", outcome, session.Summary)
+	}
+	if driver.stopCalls != 1 || driver.releaseCalls != 1 {
+		t.Fatalf("stop/release calls = %d/%d, want 1/1", driver.stopCalls, driver.releaseCalls)
+	}
+	if notifier.updated != 1 || notifier.events != 2 || notifier.dashboard != "sandbox_updated" {
+		t.Fatalf("notifier = %#v, want stopped update, runtime failure, and stopped events", notifier)
+	}
+	if notifier.eventItems[0].Type != "sandbox.runtime_release_failed" || notifier.eventItems[1].Type != "sandbox.stopped" {
+		t.Fatalf("notified events = %#v", notifier.eventItems)
+	}
+	if store.events != 2 || store.eventItems[0].Type != "sandbox.runtime_release_failed" || store.eventItems[1].Type != "sandbox.stopped" {
+		t.Fatalf("events = %#v, want release failure followed by stopped", store.eventItems)
+	}
+	if store.eventItems[1].Message != "sandbox stopped; runtime release pending" {
+		t.Fatalf("stopped event message = %q", store.eventItems[1].Message)
+	}
+	if accessRevoker.revoked != session.Summary.ID {
+		t.Fatalf("revoked sandbox = %q, want %q", accessRevoker.revoked, session.Summary.ID)
 	}
 }
 
@@ -227,6 +273,40 @@ func TestLifecycleEnsureProxyReadyBranches(t *testing.T) {
 		}
 		if prepareCalls != 1 || !driver.started || loaded.Summary.VMStatus != domain.VMStatusRunning || loadedProxy.ProxyPath != "/lab" {
 			t.Fatalf("driver/loaded/proxy = %v/%#v/%#v", driver.started, loaded, loadedProxy)
+		}
+	})
+
+	t.Run("released runtime prepares agent environment before recreation", func(t *testing.T) {
+		session := lifecycleTestSession("session-released", driverpkg.RuntimeDriverDocker, domain.VMStatusStopped)
+		session.StoppedRuntime = &domain.StoppedRuntime{State: domain.StoppedRuntimeStateReleased, ReleasedAt: time.Now().UTC()}
+		store := &fakeLifecycleStore{
+			session:    session,
+			vmState:    domain.VMState{StartedAt: time.Now().Add(-time.Minute).UTC()},
+			proxyState: domain.ProxyState{Enabled: true, HostPort: unusedTCPPort(t), GuestPort: 8888},
+		}
+		prepareCalls := 0
+		driver := &recordingSandboxDriver{onStart: func(started *domain.Sandbox) {
+			if got := domain.SandboxEnvMap(started.RuntimeEnvItems)["AGENT_COMPOSE_SANDBOX_TOKEN"]; got != "replacement-token" {
+				t.Fatalf("runtime token = %q, want replacement-token", got)
+			}
+		}}
+		lifecycle := Lifecycle{
+			Config:           &appconfig.Config{SandboxStartTimeout: time.Second},
+			Store:            store,
+			WorkspaceEnsurer: &recordingWorkspaceEnsurer{},
+			Driver:           driver,
+			PrepareAgentEnvironment: func(_ context.Context, sandbox *domain.Sandbox) error {
+				prepareCalls++
+				sandbox.RuntimeEnvItems = []domain.SandboxEnvVar{{Name: "AGENT_COMPOSE_SANDBOX_TOKEN", Value: "replacement-token"}}
+				return nil
+			},
+		}
+
+		if _, _, err := lifecycle.EnsureProxyReady(context.Background(), session.Summary.ID); err != nil {
+			t.Fatalf("EnsureProxyReady returned error: %v", err)
+		}
+		if prepareCalls != 1 || driver.calls != 1 {
+			t.Fatalf("agent preparation/start calls = %d/%d, want 1/1", prepareCalls, driver.calls)
 		}
 	})
 
@@ -573,6 +653,7 @@ type fakeLifecycleStore struct {
 	proxyState domain.ProxyState
 	updated    int
 	events     int
+	eventItems []domain.SandboxEvent
 	onUpdate   func()
 	onEvent    func()
 }
@@ -603,8 +684,9 @@ func (s *fakeLifecycleStore) GetProxyState(string) (domain.ProxyState, error) {
 	return s.proxyState, nil
 }
 
-func (s *fakeLifecycleStore) AddEvent(context.Context, string, domain.SandboxEvent) error {
+func (s *fakeLifecycleStore) AddEvent(_ context.Context, _ string, event domain.SandboxEvent) error {
 	s.events++
+	s.eventItems = append(s.eventItems, event)
 	if s.onEvent != nil {
 		s.onEvent()
 	}
@@ -625,16 +707,25 @@ type fakeFacadeTokenRevoker struct {
 	revoked string
 }
 
+type fakeSandboxAccessRevoker struct {
+	revoked string
+}
+
+func (r *fakeSandboxAccessRevoker) RevokeSandbox(sandboxID string) {
+	r.revoked = sandboxID
+}
+
 func (r *fakeFacadeTokenRevoker) RevokeLLMFacadeTokensForSandbox(_ context.Context, sessionID string) error {
 	r.revoked = sessionID
 	return nil
 }
 
 type fakeLifecycleNotifier struct {
-	updated   int
-	events    int
-	dashboard string
-	order     *[]string
+	updated    int
+	events     int
+	eventItems []domain.SandboxEvent
+	dashboard  string
+	order      *[]string
 }
 
 func (n *fakeLifecycleNotifier) PublishSandboxUpdated(*domain.SandboxSummary) {
@@ -644,8 +735,9 @@ func (n *fakeLifecycleNotifier) PublishSandboxUpdated(*domain.SandboxSummary) {
 	}
 }
 
-func (n *fakeLifecycleNotifier) PublishEventAdded(string, domain.SandboxEvent) {
+func (n *fakeLifecycleNotifier) PublishEventAdded(_ string, event domain.SandboxEvent) {
 	n.events++
+	n.eventItems = append(n.eventItems, event)
 	if n.order != nil {
 		*n.order = append(*n.order, "notify.event")
 	}
@@ -699,11 +791,14 @@ func (d *fakeSandboxDriver) StopSandboxVM(context.Context, *domain.Sandbox) erro
 }
 
 type recordingSandboxDriver struct {
-	started  bool
-	calls    int
-	order    *[]string
-	onStart  func(*domain.Sandbox)
-	startErr error
+	started      bool
+	calls        int
+	order        *[]string
+	onStart      func(*domain.Sandbox)
+	startErr     error
+	stopCalls    int
+	releaseCalls int
+	releaseErr   error
 }
 
 func (d *recordingSandboxDriver) StartSandboxVM(_ context.Context, sandbox *domain.Sandbox) error {
@@ -719,7 +814,13 @@ func (d *recordingSandboxDriver) StartSandboxVM(_ context.Context, sandbox *doma
 }
 
 func (d *recordingSandboxDriver) StopSandboxVM(context.Context, *domain.Sandbox) error {
+	d.stopCalls++
 	return nil
+}
+
+func (d *recordingSandboxDriver) ReleaseSandboxRuntime(context.Context, *domain.Sandbox) error {
+	d.releaseCalls++
+	return d.releaseErr
 }
 
 func unusedTCPPort(t *testing.T) int {

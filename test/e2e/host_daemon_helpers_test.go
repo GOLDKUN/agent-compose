@@ -230,6 +230,15 @@ func unusedLoopbackAddress(t *testing.T) string {
 	return address
 }
 
+func dockerDesktopRuntimeBaseURL(t *testing.T, listenAddress string) string {
+	t.Helper()
+	_, port, err := net.SplitHostPort(listenAddress)
+	if err != nil {
+		t.Fatalf("parse daemon listen address %q: %v", listenAddress, err)
+	}
+	return "http://host.docker.internal:" + port
+}
+
 func overrideE2EEnv(environ []string, overrides map[string]string) []string {
 	values := make(map[string]string, len(environ)+len(overrides))
 	for _, item := range environ {

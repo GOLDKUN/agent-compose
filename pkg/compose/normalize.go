@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/sources"
 
 	"github.com/robfig/cron/v3"
@@ -65,8 +66,13 @@ type NormalizedAgentSpec struct {
 	Skills       []NormalizedSkillSpec              `yaml:"skills,omitempty" json:"skills,omitempty"`
 	Volumes      []NormalizedVolumeMountSpec        `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 	Workspace    *WorkspaceSpec                     `yaml:"workspace,omitempty" json:"workspace,omitempty"`
+	Sandbox      *NormalizedSandboxSpec             `yaml:"sandbox,omitempty" json:"sandbox,omitempty"`
 	Scheduler    *NormalizedSchedulerSpec           `yaml:"scheduler,omitempty" json:"scheduler,omitempty"`
 	Jupyter      *JupyterSpec                       `yaml:"jupyter,omitempty" json:"jupyter,omitempty"`
+}
+
+type NormalizedSandboxSpec struct {
+	StoppedRuntimePolicy string `yaml:"stopped_runtime_policy" json:"stopped_runtime_policy"`
 }
 
 type NormalizedMCPServerSpec struct {
@@ -292,6 +298,10 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
+	sandbox, err := normalizeSandboxSpec(joinPath("agents", name)+".sandbox", agent.Sandbox)
+	if err != nil {
+		return NormalizedAgentSpec{}, err
+	}
 	capsetIDs := normalizeStringList(agent.CapsetIDs)
 	if err := validateAgentCapsetReferences(joinPath("agents", name)+".capset_ids", capsetIDs, projectOctoBusServers); err != nil {
 		return NormalizedAgentSpec{}, err
@@ -313,9 +323,21 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 		Skills:       skills,
 		Volumes:      volumes,
 		Workspace:    workspace,
+		Sandbox:      sandbox,
 		Scheduler:    scheduler,
 		Jupyter:      jupyter,
 	}, nil
+}
+
+func normalizeSandboxSpec(path string, sandbox *SandboxSpec) (*NormalizedSandboxSpec, error) {
+	if sandbox == nil {
+		return nil, nil
+	}
+	policy, err := domain.NormalizeStoppedRuntimePolicy(sandbox.StoppedRuntimePolicy)
+	if err != nil {
+		return nil, &ValidationError{Path: path + ".stopped_runtime_policy", Message: err.Error()}
+	}
+	return &NormalizedSandboxSpec{StoppedRuntimePolicy: policy}, nil
 }
 
 func normalizeProjectWorkspaces(values map[string]WorkspaceSpec) (map[string]WorkspaceSpec, error) {

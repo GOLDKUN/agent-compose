@@ -31,9 +31,11 @@ type fakeRPCSandboxDriver struct {
 	startSessions []*domain.Sandbox
 	onStart       func(*domain.Sandbox)
 	stopCalls     []string
+	releaseCalls  []string
 	validateErr   error
 	startErr      error
 	stopErr       error
+	releaseErr    error
 }
 
 func (d *fakeRPCSandboxDriver) ValidateSandboxRuntime(*domain.Sandbox) error {
@@ -52,6 +54,11 @@ func (d *fakeRPCSandboxDriver) StartSandboxVM(_ context.Context, session *domain
 func (d *fakeRPCSandboxDriver) StopSandboxVM(_ context.Context, session *domain.Sandbox) error {
 	d.stopCalls = append(d.stopCalls, session.Summary.ID)
 	return d.stopErr
+}
+
+func (d *fakeRPCSandboxDriver) ReleaseSandboxRuntime(_ context.Context, session *domain.Sandbox) error {
+	d.releaseCalls = append(d.releaseCalls, session.Summary.ID)
+	return d.releaseErr
 }
 
 type testCapabilityProvider struct {
@@ -227,6 +234,78 @@ func TestSandboxRPCBridgeCreateSandboxInheritsSchedulerAgentEnvironment(t *testi
 	}
 	if len(driver.startSessions) != 1 {
 		t.Fatalf("driver start sessions = %d", len(driver.startSessions))
+	}
+}
+
+func TestSandboxRPCBridgeCreateSandboxInheritsStoppedRuntimePolicy(t *testing.T) {
+	ctx := context.Background()
+	bridge, _ := newTestSandboxRPCBridge(t)
+	definition := createNativeTestAgent(t, ctx, bridge.configDB, domain.AgentDefinition{
+		ID:         "agent-scheduler-remove-runtime",
+		Name:       "scheduler-agent-remove-runtime",
+		Enabled:    true,
+		ConfigJSON: `{"sandbox":{"stopped_runtime_policy":"remove"}}`,
+	})
+	ctx = schedulers.WithSandboxCreationContext(ctx, schedulers.SandboxCreationContext{
+		AgentDefinitionID: definition.ID,
+	})
+
+	responseJSON, err := bridge.CallJSONWithSource(ctx, "CreateSandbox", `{"title":"scheduler child"}`, domain.SandboxTypeScript+":scheduler-1")
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	var response sandboxRPCResponse
+	if err := json.Unmarshal([]byte(responseJSON), &response); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+	loaded, err := bridge.store.GetSandbox(ctx, response.Sandbox.Summary.SandboxID)
+	if err != nil {
+		t.Fatalf("GetSandbox returned error: %v", err)
+	}
+	if got, want := loaded.StoppedRuntimePolicy, domain.StoppedRuntimePolicyRemove; got != want {
+		t.Fatalf("stopped runtime policy = %q, want %q", got, want)
+	}
+}
+
+func TestSandboxRPCBridgeRuntimeReleaseFailureRevokesCapabilityAfterConfirmedStop(t *testing.T) {
+	ctx := context.Background()
+	bridge, driver := newTestSandboxRPCBridge(t)
+	releaseErr := errors.New("runtime release failed")
+	driver.releaseErr = releaseErr
+	resolver := NewCapabilitySandboxResolver(bridge.store)
+	resolver.initialized = true
+	bridge.capTokens = resolver
+
+	const capabilityToken = "rpc-capability-token"
+	sandbox, err := bridge.store.CreateSandbox(ctx, "release failure", "", driverpkg.RuntimeDriverBoxlite, "", "", domain.SandboxTypeManual, nil,
+		[]domain.SandboxEnvVar{{Name: capabilities.SandboxTokenEnvName, Value: capabilityToken, Secret: true}},
+		[]domain.SandboxTag{{Name: capabilities.CapsetTagName, Value: "dev"}},
+	)
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	sandbox.Summary.VMStatus = domain.VMStatusRunning
+	sandbox.StoppedRuntimePolicy = domain.StoppedRuntimePolicyRemove
+	if err := bridge.store.UpdateSandbox(ctx, sandbox); err != nil {
+		t.Fatalf("UpdateSandbox returned error: %v", err)
+	}
+	resolver.IndexSandbox(sandbox)
+	if _, ok := resolver.tokens[capabilityToken]; !ok {
+		t.Fatal("capability token was not indexed before stop")
+	}
+
+	if _, err := bridge.StopSandbox(ctx, sandbox.Summary.ID); err == nil || !strings.Contains(err.Error(), releaseErr.Error()) {
+		t.Fatalf("StopSandbox error = %v, want release failure", err)
+	}
+	if _, ok := resolver.tokens[capabilityToken]; ok {
+		t.Fatal("capability token remains indexed after confirmed stop")
+	}
+	loaded, err := bridge.store.GetSandbox(ctx, sandbox.Summary.ID)
+	if err != nil {
+		t.Fatalf("GetSandbox returned error: %v", err)
+	}
+	if loaded.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
+		t.Fatalf("stopped sandbox = %#v release=%#v", loaded.Summary, loaded.StoppedRuntime)
 	}
 }
 
