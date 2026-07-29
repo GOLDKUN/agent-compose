@@ -83,7 +83,7 @@ name: demo
 agents:
   reviewer:
     provider: codex
-    image: ghcr.io/chaitin/agent-compose-guest:latest
+    image: chaitin/agent-compose-guest:latest
     driver:
       docker: {}
 ```
@@ -287,7 +287,7 @@ Bearer Token 不会加密网络流量。跨机器连接时，请使用 HTTPS、S
 
 产物的平台能力并不相同：macOS 原生二进制只编译 `docker`；Linux 原生二进制和发布的 Linux daemon 镜像编译 `docker`、`boxlite`、`microsandbox`。`agent-compose --json version` 和 `/api/version` 中的 `compiled_drivers` 只表示真实 driver 实现已编入当前产物，不代表 Docker daemon、KVM、native artifact 或 runtime 本身当前可用或健康。BoxLite 和 Microsandbox 的真实运行仍要求 Linux/KVM 及对应 runtime artifact；完整 Linux 镜像可以在 macOS Docker Desktop 中以 Docker driver 运行，但不承诺在该环境运行两种 KVM driver。
 
-镜像处理由 `IMAGE_STORE_MODE` 选择（`auto` / `docker` / `oci`，其中 `oci` 使用无 daemon 的镜像缓存）。新 sandbox 使用 `DEFAULT_IMAGE` 指定的镜像；自带的 `.env.example` 和安装脚本将其设为 `ghcr.io/chaitin/agent-compose-guest:latest`，该镜像内置 agent runtime 和各 provider CLI。
+镜像处理由 `IMAGE_STORE_MODE` 选择（`auto` / `docker` / `oci`，其中 `oci` 使用无 daemon 的镜像缓存）。新 sandbox 使用 `DEFAULT_IMAGE` 指定的镜像；自带的 `.env.example` 和安装脚本将其设为 `chaitin/agent-compose-guest:latest`，该镜像内置 agent runtime 和各 provider CLI。
 
 ## Agent Provider
 

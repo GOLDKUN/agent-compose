@@ -1,7 +1,7 @@
 # 自定义 Guest Image ABI
 
 本文定义当前 `agent-compose` 与 OCI guest image 之间的最小约定，并说明如何构建、选择和验证自定义镜像，而不必照搬官方
-`ghcr.io/chaitin/agent-compose-guest` 镜像中的全部工具。
+Docker Hub 上 `chaitin/agent-compose-guest` 镜像中的全部工具。
 
 这是一份按能力分层的约定。只用于直接执行命令的 sandbox 镜像，所需软件远少于同时运行 Codex、Claude、Gemini、OpenCode、Pi、JupyterLab 和所有 notebook cell 类型的镜像。
 
@@ -216,7 +216,7 @@ ARCHLINUX_TAG=<pinned-tag> \
 task image:agent-compose-guest-archlinux
 ```
 
-镜像 CI 会在 pull request 中构建该变体，并在推送到 `main` 或版本 tag 时将其发布为 `ghcr.io/chaitin/agent-compose-guest-archlinux`。它沿用默认镜像的分支、版本、SHA 和 release `latest` tag 策略，但 manifest 仅包含 `linux/amd64`。默认构建使用的上游 `library/archlinux` 镜像仅支持 x86_64；如果团队为其他架构提供了兼容的 Arch Linux base，必须单独构建并验证该变体。Arch Linux guest 不是部署默认镜像，使用时需要在 agent spec 中显式选择，并在投入使用前执行第 10 节中的验证。
+镜像 CI 会在 pull request 中构建该变体，并在推送到 `main` 或版本 tag 时将其发布到 Docker Hub 的 `chaitin/agent-compose-guest-archlinux`。它沿用默认镜像的分支、版本、SHA 和 release `latest` tag 策略，但 manifest 仅包含 `linux/amd64`。默认构建使用的上游 `library/archlinux` 镜像仅支持 x86_64；如果团队为其他架构提供了兼容的 Arch Linux base，必须单独构建并验证该变体。Arch Linux guest 不是部署默认镜像，使用时需要在 agent spec 中显式选择，并在投入使用前执行第 10 节中的验证。
 
 ## 7. 推荐构建方式：继承官方 Guest
 
@@ -224,7 +224,7 @@ task image:agent-compose-guest-archlinux
 
 ```dockerfile
 ARG AGENT_COMPOSE_VERSION=vX.Y.Z
-FROM ghcr.io/chaitin/agent-compose-guest:${AGENT_COMPOSE_VERSION}
+FROM chaitin/agent-compose-guest:${AGENT_COMPOSE_VERSION}
 
 # 只添加项目特有工具，保留默认 root user 和路径。
 RUN apt-get update \

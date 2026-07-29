@@ -93,6 +93,9 @@ step_containing() { # $1=job block $2=literal needle
 header=$(awk '/^jobs:[[:space:]]*$/ { exit } { print }' "$WORKFLOW")
 require_regex "$header" '^[[:space:]]*-[[:space:]]*docker-compose\.kvm\.yml[[:space:]]*$' \
   'docker-compose.kvm.yml workflow path filter'
+require_regex "$header" 'REGISTRY:[[:space:]]*docker\.io' 'Docker Hub registry'
+require_regex "$header" 'IMAGE_PREFIX:[[:space:]]*chaitin' 'Docker Hub chaitin namespace'
+forbid_regex "$header" 'ghcr\.io' 'GHCR registry configuration'
 
 load_job setup setup_job
 load_job build build_job
@@ -156,6 +159,10 @@ if [[ -n $build_job ]]; then
     'daemon and guest build matrix'
   require_regex "$build_job" 'uses:[[:space:]]*docker/build-push-action@v6' \
     'Buildx image build action'
+  require_regex "$build_job" 'username:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_USERNAME' \
+    'Docker Hub username secret'
+  require_regex "$build_job" 'password:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_PASSWORD' \
+    'Docker Hub password secret'
   require_regex "$build_job" 'platforms:[[:space:]]*\$\{\{[[:space:]]*matrix\.platform\.tag' \
     'native target platform selection'
   require_regex "$build_job" 'push-by-digest=true' 'push-by-digest output'
@@ -204,6 +211,10 @@ if [[ -n $archlinux_build_job ]]; then
     'Arch Linux guest build dependency on setup'
   require_regex "$archlinux_build_job" 'runs-on:[[:space:]]*ubuntu-latest' \
     'Arch Linux guest native amd64 runner'
+  require_regex "$archlinux_build_job" 'username:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_USERNAME' \
+    'Arch Linux Docker Hub username secret'
+  require_regex "$archlinux_build_job" 'password:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_PASSWORD' \
+    'Arch Linux Docker Hub password secret'
   require_regex "$archlinux_build_job" 'file:[[:space:]]*guest-images/Dockerfile\.agent-compose-guest-archlinux' \
     'Arch Linux guest published Dockerfile'
   require_regex "$archlinux_build_job" 'platforms:[[:space:]]*linux/amd64' \
@@ -309,6 +320,10 @@ if [[ -n $merge_job ]]; then
   require_regex "$merge_job" 'platforms:[[:space:]]*linux/amd64[[:space:]]*$' \
     'Arch Linux guest amd64-only manifest entry'
   require_regex "$merge_job" 'docker buildx imagetools create' 'multi-arch manifest creation'
+  require_regex "$merge_job" 'username:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_USERNAME' \
+    'manifest Docker Hub username secret'
+  require_regex "$merge_job" 'password:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_PASSWORD' \
+    'manifest Docker Hub password secret'
 
   manifest_verify_step=$(step_containing "$merge_job" 'verify-image-manifest.sh')
   if [[ -z $manifest_verify_step ]]; then

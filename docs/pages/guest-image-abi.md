@@ -3,7 +3,7 @@
 This document defines the current minimum contract between `agent-compose` and
 an OCI guest image. It also explains how to build, select, and validate a custom
 image without copying every tool from the published
-`ghcr.io/chaitin/agent-compose-guest` image.
+`chaitin/agent-compose-guest` image on Docker Hub.
 
 The contract is capability-based. A sandbox image used only for direct command
 execution needs much less software than an image that runs Codex, Claude,
@@ -315,7 +315,7 @@ task image:agent-compose-guest-archlinux
 ```
 
 Image CI builds this variant on pull requests and publishes it as
-`ghcr.io/chaitin/agent-compose-guest-archlinux` on pushes to `main` and version
+`chaitin/agent-compose-guest-archlinux` on Docker Hub on pushes to `main` and version
 tags. It follows the default images' branch, version, SHA, and release `latest`
 tagging policy, but its manifest contains only `linux/amd64`. The upstream
 `library/archlinux` image used by the build is x86_64-only; a team that supplies
@@ -331,7 +331,7 @@ capabilities:
 
 ```dockerfile
 ARG AGENT_COMPOSE_VERSION=vX.Y.Z
-FROM ghcr.io/chaitin/agent-compose-guest:${AGENT_COMPOSE_VERSION}
+FROM chaitin/agent-compose-guest:${AGENT_COMPOSE_VERSION}
 
 # Add only project-specific tools. Keep the default root user and paths.
 RUN apt-get update \

@@ -39,7 +39,7 @@ func TestE2EDockerComposeSandboxEnvContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("docker-compose.yml missing agent-compose service")
 	}
-	if !strings.Contains(service.Image, "AGENT_COMPOSE_IMAGE") || !strings.Contains(service.Image, "ghcr.io/chaitin/agent-compose:latest") {
+	if !strings.Contains(service.Image, "AGENT_COMPOSE_IMAGE") || !strings.Contains(service.Image, "chaitin/agent-compose:latest") {
 		t.Fatalf("agent-compose image should stay deployable from published image, got %q", service.Image)
 	}
 	if hostRoot, ok := service.Environment["DOCKER_HOST_SANDBOX_ROOT"]; ok {

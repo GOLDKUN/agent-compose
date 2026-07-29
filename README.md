@@ -125,7 +125,7 @@ name: demo
 agents:
   reviewer:
     provider: codex
-    image: ghcr.io/chaitin/agent-compose-guest:latest
+    image: chaitin/agent-compose-guest:latest
     driver:
       docker: {}
 ```
@@ -341,7 +341,7 @@ BoxLite or Microsandbox.
 Image handling is selected by `IMAGE_STORE_MODE` (`auto` / `docker` / `oci`,
 where `oci` uses a daemonless image cache). New sandboxes use the image set by
 `DEFAULT_IMAGE`; the bundled `.env.example` and installer set this to
-`ghcr.io/chaitin/agent-compose-guest:latest`, which ships the agent runtime and
+`chaitin/agent-compose-guest:latest`, which ships the agent runtime and
 provider CLIs.
 
 ## Agent providers
