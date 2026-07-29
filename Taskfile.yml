@@ -124,7 +124,7 @@ tasks:
     desc: Build the optional Arch Linux agent-compose guest image
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - GUEST_IMAGE_DOCKERFILE=./guest-images/Dockerfile.agent-compose-guest-archlinux IMAGE_TAG='{{default "agent-compose-guest-archlinux:latest" .IMAGE_TAG}}' BUILD_PLATFORM='{{default "linux/amd64" .BUILD_PLATFORM}}' ./scripts/build-agent-compose-guest.sh
+      - GUEST_IMAGE_DOCKERFILE=./guest-images/Dockerfile.agent-compose-guest-archlinux IMAGE_TAG='{{default "agent-compose-guest:archlinux" .IMAGE_TAG}}' BUILD_PLATFORM='{{default "linux/amd64" .BUILD_PLATFORM}}' ./scripts/build-agent-compose-guest.sh
 
   lint:
     desc: Lint/format code

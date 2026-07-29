@@ -226,8 +226,12 @@ if [[ -n $archlinux_build_job ]]; then
     'Arch Linux guest amd64 publication platform'
   forbid_regex "$archlinux_build_job" 'linux/arm64' \
     'Arch Linux guest arm64 publication platform'
-  require_regex "$archlinux_build_job" 'IMAGE_PREFIX[^[:space:]]*\}?/agent-compose-guest-archlinux|IMAGE_PREFIX.*agent-compose-guest-archlinux' \
-    'Arch Linux guest registry image name'
+  require_regex "$archlinux_build_job" 'images:[[:space:]]*\$\{\{[[:space:]]*env\.IMAGE_PREFIX[[:space:]]*\}\}/agent-compose-guest[[:space:]]*$' \
+    'Arch Linux guest shared registry repository'
+  require_regex "$archlinux_build_job" 'outputs:.*name=\$\{\{[[:space:]]*env\.IMAGE_PREFIX[[:space:]]*\}\}/agent-compose-guest,' \
+    'Arch Linux guest shared digest repository'
+  forbid_regex "$archlinux_build_job" 'images:.*agent-compose-guest-archlinux|outputs:.*name=.*agent-compose-guest-archlinux' \
+    'standalone Arch Linux guest registry repository'
   require_regex "$archlinux_build_job" 'push-by-digest=true' \
     'Arch Linux guest push-by-digest output'
   require_regex "$archlinux_build_job" 'name-canonical=true' \
@@ -285,7 +289,7 @@ if [[ -n $image_smoke_job ]]; then
     'image-smoke explicit daemon reference'
   require_regex "$image_smoke_job" 'agent-compose-guest:[[:alnum:]_.${}{}/-]*smoke|smoke[[:alnum:]_.${}{}/-]*agent-compose-guest' \
     'image-smoke explicit guest reference'
-  require_regex "$image_smoke_job" 'agent-compose-guest-archlinux:[[:alnum:]_.${}{}/-]*smoke' \
+  require_regex "$image_smoke_job" 'agent-compose-guest:archlinux-[[:alnum:]_.${}{}/-]*smoke' \
     'image-smoke explicit Arch Linux guest reference'
   require_regex "$image_smoke_job" '(\./)?scripts/verify-agent-compose-image\.sh' \
     'image-smoke daemon image verifier'
@@ -318,16 +322,24 @@ if [[ -n $merge_job ]]; then
     'daemon manifest matrix entry'
   require_regex "$merge_job" '^[[:space:]]*-[[:space:]]*image:[[:space:]]*agent-compose-guest[[:space:]]*$' \
     'default guest manifest matrix entry'
-  require_regex "$merge_job" 'image:[[:space:]]*agent-compose-guest-archlinux' \
-    'Arch Linux guest manifest matrix entry'
+  guest_manifest_count=$(grep -Ec '^[[:space:]]*-[[:space:]]*image:[[:space:]]*agent-compose-guest[[:space:]]*$' <<<"$merge_job" || true)
+  [[ $guest_manifest_count -eq 2 ]] \
+    || fail "merge job has $guest_manifest_count guest manifest entries, expected default and Arch Linux variants"
+  require_regex "$merge_job" 'artifact:[[:space:]]*agent-compose-guest-archlinux' \
+    'Arch Linux guest digest artifact matrix entry'
+  require_regex "$merge_job" 'tag_suffix:[[:space:]]*-archlinux' \
+    'Arch Linux guest variant tag suffix'
+  require_regex "$merge_job" 'stable_tag:[[:space:]]*archlinux' \
+    'Arch Linux guest stable tag'
   require_regex "$merge_job" 'platforms:[[:space:]]*linux/amd64,linux/arm64' \
     'default image multi-architecture manifest entries'
   require_regex "$merge_job" 'platforms:[[:space:]]*linux/amd64[[:space:]]*$' \
     'Arch Linux guest amd64-only manifest entry'
   require_regex "$merge_job" 'docker buildx imagetools create' 'multi-arch manifest creation'
-  require_regex "$merge_job" 'type=ref,event=tag' 'pushed Git tag image metadata'
-  require_regex "$merge_job" "type=raw,value=latest,enable=\\$\\{\\{[[:space:]]*startsWith\\(github\\.ref,[[:space:]]*['\"]refs/tags/v['\"]\\)[[:space:]]*\\}\\}" \
-    'version-tag-only latest image metadata'
+  require_regex "$merge_job" 'type=ref,event=tag,suffix=\$\{\{[[:space:]]*matrix\.tag_suffix' \
+    'variant-aware pushed Git tag image metadata'
+  require_regex "$merge_job" "type=raw,value=\\$\\{\\{[[:space:]]*matrix\.stable_tag[[:space:]]*\\}\\},enable=\\$\\{\\{[[:space:]]*startsWith\\(github\\.ref,[[:space:]]*['\"]refs/tags/v['\"]\\)[[:space:]]*\\}\\}" \
+    'version-tag-only stable image metadata'
   require_regex "$merge_job" 'username:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_USERNAME' \
     'manifest Docker Hub username secret'
   require_regex "$merge_job" 'password:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_PASSWORD' \
@@ -377,7 +389,7 @@ if [[ -f $TASKFILE ]]; then
     'Arch Linux guest image task'
   require_regex "$taskfile_source" 'GUEST_IMAGE_DOCKERFILE=.*Dockerfile\.agent-compose-guest-archlinux' \
     'Arch Linux guest Dockerfile selection in task'
-  require_regex "$taskfile_source" 'agent-compose-guest-archlinux:latest' \
+  require_regex "$taskfile_source" 'agent-compose-guest:archlinux' \
     'Arch Linux guest default local tag'
   require_regex "$taskfile_source" 'BUILD_PLATFORM=.*linux/amd64' \
     'Arch Linux guest amd64 build platform'
