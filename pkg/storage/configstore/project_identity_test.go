@@ -9,7 +9,7 @@ import (
 	"agent-compose/pkg/projects"
 )
 
-func TestProjectNameIsUniqueAndReusesIdentityAcrossSourceMoves(t *testing.T) {
+func TestProjectNameIsUniqueAndKeepsIdentityAcrossRenameAndSourceMoves(t *testing.T) {
 	ctx := context.Background()
 	store := FromDB(newMemoryDB(t))
 	if err := store.initSchema(ctx); err != nil {
@@ -26,24 +26,37 @@ func TestProjectNameIsUniqueAndReusesIdentityAcrossSourceMoves(t *testing.T) {
 	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "other-id", Name: "demo", SourcePath: "/other/agent-compose.yml"}); err == nil {
 		t.Fatal("duplicate project name was accepted")
 	}
-	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: created.ID, Name: "renamed", SourcePath: created.SourcePath}); err == nil {
-		t.Fatal("existing project identity accepted a name change")
+	renamed, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: created.ID, Name: "renamed", SourcePath: created.SourcePath})
+	if err != nil {
+		t.Fatalf("rename project: %v", err)
+	}
+	if renamed.ID != created.ID || renamed.Name != "renamed" {
+		t.Fatalf("renamed project = %#v, want stable id %s", renamed, created.ID)
+	}
+	if _, err := store.GetProjectByName(ctx, "demo", true); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("old project name lookup error = %v, want not found", err)
+	}
+	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "other-id", Name: "other", SourcePath: "/other/agent-compose.yml"}); err != nil {
+		t.Fatalf("create second project: %v", err)
+	}
+	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: created.ID, Name: "other", SourcePath: created.SourcePath}); err == nil {
+		t.Fatal("rename to an existing project name was accepted")
 	}
 	unchanged, err := store.GetProject(ctx, created.ID)
-	if err != nil || unchanged.Name != "demo" {
-		t.Fatalf("project after rejected rename = %#v, %v", unchanged, err)
+	if err != nil || unchanged.Name != "renamed" {
+		t.Fatalf("project after rejected conflicting rename = %#v, %v", unchanged, err)
 	}
 	if _, err := store.MarkProjectRemoved(ctx, created.ID); err != nil {
 		t.Fatalf("mark project removed: %v", err)
 	}
-	if _, err := store.GetProjectByName(ctx, "demo", false); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := store.GetProjectByName(ctx, "renamed", false); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("active lookup after down error = %v, want not found", err)
 	}
-	removed, err := store.GetProjectByName(ctx, "demo", true)
+	removed, err := store.GetProjectByName(ctx, "renamed", true)
 	if err != nil || removed.ID != created.ID {
 		t.Fatalf("removed lookup = %#v, %v", removed, err)
 	}
-	reactivated, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: created.ID, Name: "demo", SourcePath: "/moved/agent-compose.yml"})
+	reactivated, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: created.ID, Name: "renamed", SourcePath: "/moved/agent-compose.yml"})
 	if err != nil {
 		t.Fatalf("reactivate moved project: %v", err)
 	}

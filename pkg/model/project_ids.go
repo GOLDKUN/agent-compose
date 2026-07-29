@@ -11,9 +11,10 @@ import (
 // ProjectNamePattern is the Docker Compose-compatible project name contract.
 const ProjectNamePattern = `^[a-z0-9][a-z0-9_-]*$`
 
-// StableProjectID derives project identity from name alone. The source-path
-// parameter remains in the signature so existing callers do not need a
-// compatibility wrapper; moving a compose file must not change its identity.
+// StableProjectID derives the initial project ID from name alone. The
+// source-path parameter remains in the signature so existing callers do not
+// need a compatibility wrapper; moving a compose file must not change its
+// identity.
 func StableProjectID(name, _ string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {

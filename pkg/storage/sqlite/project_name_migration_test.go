@@ -129,8 +129,12 @@ func TestUniqueProjectNameMigrationRenamesDuplicatesInStableOrder(t *testing.T) 
 	if _, err := db.ExecContext(ctx, `INSERT INTO project(id,name,created_at,updated_at) VALUES('duplicate','demo',1,1)`); err == nil {
 		t.Fatal("unique project name index accepted duplicate name")
 	}
-	if _, err := db.ExecContext(ctx, `UPDATE project SET name='renamed' WHERE id='canonical'`); err == nil {
-		t.Fatal("project name immutability trigger accepted a rename")
+	if _, err := db.ExecContext(ctx, `UPDATE project SET name='renamed' WHERE id='canonical'`); err != nil {
+		t.Fatalf("rename uniquely named project: %v", err)
+	}
+	var renamedProjectName string
+	if err := db.QueryRowContext(ctx, `SELECT name FROM project WHERE id='canonical'`).Scan(&renamedProjectName); err != nil || renamedProjectName != "renamed" {
+		t.Fatalf("renamed project name = %q, %v", renamedProjectName, err)
 	}
 	rows, err := db.QueryContext(ctx, `PRAGMA foreign_key_check`)
 	if err != nil {

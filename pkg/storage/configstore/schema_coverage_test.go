@@ -84,10 +84,9 @@ func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 		t.Fatalf("UpsertProject returned error: %v", err)
 	}
 	project.Name = "project-renamed"
-	if _, err := store.UpsertProject(ctx, project); err == nil {
-		t.Fatal("UpsertProject renamed an existing project")
+	if project, err = store.UpsertProject(ctx, project); err != nil || project.Name != "project-renamed" {
+		t.Fatalf("UpsertProject rename project=%#v err=%v", project, err)
 	}
-	project.Name = "project"
 	project.SourcePath = "/tmp/project-updated"
 	if project, err = store.UpsertProject(ctx, project); err != nil || project.SourcePath != "/tmp/project-updated" {
 		t.Fatalf("UpsertProject update project=%#v err=%v", project, err)

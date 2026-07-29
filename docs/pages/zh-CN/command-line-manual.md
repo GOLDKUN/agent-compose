@@ -178,7 +178,7 @@ agent-compose -f /path/to/project/agent-compose.yml up
 
 当前 `up` 的行为是将 project 应用到 daemon 后返回，project 后续由 daemon 管理。它不会 attach project 日志，也不提供 `-d/--detach` 参数。
 
-Project 身份由规范化后的 project name 决定，不再由 compose 文件路径决定。同名 compose 文件移动后再次执行 `up`，会更新 daemon 中原有 project，并保留其 ID 和历史。
+Project 应用通过规范化后的 project name 解析，不再由 compose 文件路径决定。同名 compose 文件移动后再次执行 `up`，会更新 daemon 中原有 project，并保留其持久 ID 和历史。
 
 如果升级时数据库中已有多个同名 project，系统会保留每个 project，并把其余记录确定性地改为可用的 `<name>-N`。操作这些 project 前应先查看 `project ls`，并在对应 compose 文件中使用迁移后分配的名称。
 
