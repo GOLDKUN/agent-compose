@@ -266,8 +266,8 @@ func runtimeTriggerSpec(trigger domain.SchedulerTrigger) *agentcomposev2.Trigger
 }
 
 func declaredTriggerSpec(scheduler domain.ProjectSchedulerRecord, triggerID string) *agentcomposev2.TriggerSpec {
-	var spec agentcomposev2.SchedulerSpec
-	if json.Unmarshal([]byte(scheduler.SpecJSON), &spec) != nil {
+	spec, err := decodeProjectSchedulerSpec(scheduler.SpecJSON)
+	if err != nil {
 		return nil
 	}
 	for index, trigger := range spec.GetTriggers() {
@@ -301,10 +301,11 @@ func (h *ProjectHandler) resolveProjectScheduler(ctx context.Context, ref *agent
 }
 
 func (h *ProjectHandler) schedulerResponse(ctx context.Context, scheduler domain.ProjectSchedulerRecord) (*agentcomposev2.GetSchedulerResponse, error) {
-	response := &agentcomposev2.GetSchedulerResponse{Scheduler: ProjectSchedulersToProto([]domain.ProjectSchedulerRecord{scheduler})[0], Spec: &agentcomposev2.SchedulerSpec{}}
-	if err := json.Unmarshal([]byte(scheduler.SpecJSON), response.Spec); err != nil {
+	spec, err := decodeProjectSchedulerSpec(scheduler.SpecJSON)
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode scheduler spec: %w", err))
 	}
+	response := &agentcomposev2.GetSchedulerResponse{Scheduler: ProjectSchedulersToProto([]domain.ProjectSchedulerRecord{scheduler})[0], Spec: spec}
 	schedulerStore, ok := h.store.(ProjectSchedulerStore)
 	if !ok || scheduler.ID == "" {
 		return response, nil

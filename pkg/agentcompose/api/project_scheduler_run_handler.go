@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -41,8 +40,8 @@ func (h *ProjectHandler) InvokeScheduler(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	var spec agentcomposev2.SchedulerSpec
-	if err := json.Unmarshal([]byte(scheduler.SpecJSON), &spec); err != nil {
+	spec, err := decodeProjectSchedulerSpec(scheduler.SpecJSON)
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode scheduler spec: %w", err))
 	}
 	if strings.TrimSpace(spec.GetScript()) == "" {
