@@ -97,6 +97,10 @@ require_regex "$header" '^[[:space:]]*-[[:space:]]*docker-compose\.kvm\.yml[[:sp
 require_regex "$header" 'REGISTRY:[[:space:]]*docker\.io' 'Docker Hub registry'
 require_regex "$header" 'IMAGE_PREFIX:[[:space:]]*chaitin' 'Docker Hub chaitin namespace'
 forbid_regex "$header" 'ghcr\.io' 'GHCR registry configuration'
+require_regex "$header" '^[[:space:]]*-[[:space:]]*"\*"[[:space:]]*$' \
+  'all-tag image publication trigger'
+forbid_regex "$header" '^[[:space:]]*-[[:space:]]*"v\*"[[:space:]]*$' \
+  'version-only image publication trigger'
 
 load_job setup setup_job
 load_job build build_job
@@ -321,6 +325,9 @@ if [[ -n $merge_job ]]; then
   require_regex "$merge_job" 'platforms:[[:space:]]*linux/amd64[[:space:]]*$' \
     'Arch Linux guest amd64-only manifest entry'
   require_regex "$merge_job" 'docker buildx imagetools create' 'multi-arch manifest creation'
+  require_regex "$merge_job" 'type=ref,event=tag' 'pushed Git tag image metadata'
+  require_regex "$merge_job" "type=raw,value=latest,enable=\\$\\{\\{[[:space:]]*startsWith\\(github\\.ref,[[:space:]]*['\"]refs/tags/v['\"]\\)[[:space:]]*\\}\\}" \
+    'version-tag-only latest image metadata'
   require_regex "$merge_job" 'username:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_USERNAME' \
     'manifest Docker Hub username secret'
   require_regex "$merge_job" 'password:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_PASSWORD' \
@@ -342,8 +349,8 @@ if [[ -n $merge_job ]]; then
 fi
 
 if [[ -n $release_job ]]; then
-  require_regex "$release_job" "if:[[:space:]]*github\\.ref_type[[:space:]]*==[[:space:]]*[\"']tag[\"']" \
-    'tag-only release guard'
+  require_regex "$release_job" "if:.*github\\.ref_type[[:space:]]*==[[:space:]]*['\"]tag['\"].*startsWith\\(github\\.ref_name,[[:space:]]*['\"]v['\"]\\)" \
+    'version-tag-only release guard'
   require_regex "$release_job" '\./scripts/build-installer-assets\.sh[[:space:]]+\./upload' \
     'shared installer asset builder in release job'
   require_regex "$release_job" 'gh release (upload|create).*upload/\*' \
