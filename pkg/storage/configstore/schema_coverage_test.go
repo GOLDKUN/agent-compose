@@ -696,13 +696,16 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 
 func testConfigStoreLLMBootstrapResolveCoverage(t *testing.T, ctx context.Context) {
 	t.Helper()
+	isolateConfigStoreLLMEnv(t)
+
 	store := FromDB(newMemoryDB(t))
 	if err := store.initSchema(ctx); err != nil {
 		t.Fatalf("initSchema for LLM bootstrap returned error: %v", err)
 	}
 	config := &appconfig.Config{LLMAPIEndpoint: "https://config.example/v1", LLMAPIProtocol: "chat_completions", LLMAPIKey: "config-key", LLMModel: "config-model"}
-	if lookup := llms.DefaultLLMEnvProviderLookup(ctx, config, store); lookup("LLM_API_ENDPOINT") != "https://config.example/v1" {
-		t.Fatalf("config LLM lookup failed")
+	lookup := llms.DefaultLLMEnvProviderLookup(ctx, config, store)
+	if endpoint := lookup("LLM_API_ENDPOINT"); endpoint != "https://config.example/v1" {
+		t.Fatalf("config LLM endpoint = %q, want %q", endpoint, "https://config.example/v1")
 	}
 	if _, err := store.ReplaceGlobalEnv(ctx, []domain.SandboxEnvVar{
 		{Name: "LLM_API_ENDPOINT", Value: "https://global.example/v1"},
@@ -761,6 +764,25 @@ func testConfigStoreLLMBootstrapResolveCoverage(t *testing.T, ctx context.Contex
 	})
 	if err != nil || sessionAnthropicID == "" {
 		t.Fatalf("EnsureSessionAnthropicEnvProvider id=%q err=%v", sessionAnthropicID, err)
+	}
+}
+
+func isolateConfigStoreLLMEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		"LLM_API_ENDPOINT",
+		"LLM_API_PROTOCOL",
+		"LLM_API_KEY",
+		"OPENAI_API_KEY",
+		"LLM_MODEL",
+		"ANTHROPIC_BASE_URL",
+		"ANTHROPIC_API_ENDPOINT",
+		"ANTHROPIC_API_KEY",
+		"ANTHROPIC_AUTH_TOKEN",
+		"ANTHROPIC_MODEL",
+		"CLAUDE_MODEL",
+	} {
+		t.Setenv(key, "")
 	}
 }
 
