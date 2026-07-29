@@ -44,7 +44,8 @@ RUN npm config set prefix /usr/local/ &&\
     ln -sf /usr/local/lib/node_modules/pi-mcp-adapter/index.ts /usr/local/share/agent-compose/pi-mcp-adapter/index.ts &&\
     npm install -g @qwen-code/qwen-code@${QWEN_CODE_VERSION} &&\
     npm install -g @bufbuild/protobuf @bufbuild/protoc-gen-es &&\
-    npm install -g typescript-language-server typescript
+    npm install -g typescript-language-server typescript &&\
+    pi --version
 
 ARG HTTP_PROXY
 ARG HTTPS_PROXY

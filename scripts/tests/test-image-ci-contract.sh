@@ -11,6 +11,7 @@ DAEMON_BUILDER="$ROOT_DIR/scripts/build-agent-compose.sh"
 GUEST_BUILDER="$ROOT_DIR/scripts/build-agent-compose-guest.sh"
 GUEST_DOCKERFILE="$ROOT_DIR/guest-images/Dockerfile.agent-compose-guest"
 ARCHLINUX_GUEST_DOCKERFILE="$ROOT_DIR/guest-images/Dockerfile.agent-compose-guest-archlinux"
+DEVBOX_DOCKERFILE="$ROOT_DIR/guest-images/Dockerfile.devbox-archlinux"
 
 failures=0
 TEST_ROOT=$(mktemp -d)
@@ -463,6 +464,16 @@ if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
     'Arch Linux package mirror fallback'
   require_regex "$archlinux_guest_source" 'nodejs-lts-jod' \
     'Node.js 22 LTS in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" 'ARG[[:space:]]+PI_AGENT_VERSION=[0-9]+\.[0-9]+\.[0-9]+' \
+    'pinned Pi coding agent version in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" '"@earendil-works/pi-coding-agent@\$\{PI_AGENT_VERSION\}"' \
+    'versioned Pi coding agent install in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" '"pi-mcp-adapter@\$\{PI_MCP_ADAPTER_VERSION\}"' \
+    'versioned Pi MCP adapter install in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" '/usr/bin/pi' \
+    'stable Pi executable path in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" '/usr/local/share/agent-compose/pi-mcp-adapter/index\.ts' \
+    'stable Pi MCP adapter path in Arch Linux guest image'
   forbid_regex "$archlinux_guest_source" '^[[:space:]]*base-devel[[:space:]]*\\' \
     'full Arch Linux development package group'
   require_regex "$archlinux_guest_source" 'allow-scripts=.*@anthropic-ai/claude-code.*opencode-ai' \
@@ -481,17 +492,34 @@ if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
     'catatonit entrypoint in Arch Linux guest image'
   require_regex "$archlinux_guest_source" 'CMD[[:space:]]+\["/usr/local/bin/agent-compose-env"' \
     'long-running default command in Arch Linux guest image'
-  for provider_cli in codex claude gemini opencode; do
+  for provider_cli in codex claude gemini opencode pi; do
     require_regex "$archlinux_guest_source" "$provider_cli[[:space:]]+--version" \
       "$provider_cli build-time validation in Arch Linux guest image"
   done
   runtime_cleanup_line=$(awk '/rm -rf \/tmp\/agent-compose-runtime[[:space:]]*&&|rm -rf \/tmp\/agent-compose-runtime[[:space:]]*$/ { print NR; exit }' "$ARCHLINUX_GUEST_DOCKERFILE")
-  provider_validation_end_line=$(awk '/opencode --version/ { print NR; exit }' "$ARCHLINUX_GUEST_DOCKERFILE")
+  provider_validation_end_line=$(awk '/pi --version/ { print NR; exit }' "$ARCHLINUX_GUEST_DOCKERFILE")
   if [[ -z $runtime_cleanup_line || -z $provider_validation_end_line ]] ||
     ((runtime_cleanup_line <= provider_validation_end_line)); then
     fail 'Arch Linux guest runtime cleanup after provider build-time validation'
   fi
 fi
+
+for provider_dockerfile in "$GUEST_DOCKERFILE" "$ARCHLINUX_GUEST_DOCKERFILE" "$DEVBOX_DOCKERFILE"; do
+  [[ -f $provider_dockerfile ]] || {
+    fail "provider-capable guest Dockerfile $provider_dockerfile"
+    continue
+  }
+  provider_source=$(<"$provider_dockerfile")
+  for provider_package in \
+    '@openai/codex' \
+    '@anthropic-ai/claude-code' \
+    '@google/gemini-cli' \
+    'opencode-ai' \
+    '@earendil-works/pi-coding-agent'; do
+    require_regex "$provider_source" "$provider_package" \
+      "provider package $provider_package in $(basename "$provider_dockerfile")"
+  done
+done
 
 FAKE_BIN="$TEST_ROOT/fake-bin"
 FAKE_DOCKER_LOG="$TEST_ROOT/docker.log"
@@ -570,7 +598,8 @@ if ! run_guest_builder; then
 else
   guest_log=$(<"$FAKE_DOCKER_LOG")
   for omitted in REGISTRY_MIRROR GOPROXY GO_VERSION GRPCURL_VERSION PYPI_INDEX_URL PYPI_TRUSTED_HOST \
-    ARCHLINUX_TAG ARCHLINUX_MIRROR CODEX_VERSION CLAUDE_CODE_VERSION GEMINI_CLI_VERSION OPENCODE_VERSION; do
+    ARCHLINUX_TAG ARCHLINUX_MIRROR CODEX_VERSION CLAUDE_CODE_VERSION GEMINI_CLI_VERSION OPENCODE_VERSION \
+    PI_AGENT_VERSION PI_MCP_ADAPTER_VERSION; do
     forbid_regex "$guest_log" "^$omitted=" "empty guest $omitted build argument"
   done
 fi
@@ -595,7 +624,9 @@ if ! run_guest_builder \
   CODEX_VERSION=9.1.0 \
   CLAUDE_CODE_VERSION=9.2.0 \
   GEMINI_CLI_VERSION=9.3.0 \
-  OPENCODE_VERSION=9.4.0; then
+  OPENCODE_VERSION=9.4.0 \
+  PI_AGENT_VERSION=9.5.0 \
+  PI_MCP_ADAPTER_VERSION=9.6.0; then
   fail 'guest image helper override build invocation'
 else
   guest_log=$(<"$FAKE_DOCKER_LOG")
@@ -611,7 +642,9 @@ else
     'CODEX_VERSION=9.1.0' \
     'CLAUDE_CODE_VERSION=9.2.0' \
     'GEMINI_CLI_VERSION=9.3.0' \
-    'OPENCODE_VERSION=9.4.0'; do
+    'OPENCODE_VERSION=9.4.0' \
+    'PI_AGENT_VERSION=9.5.0' \
+    'PI_MCP_ADAPTER_VERSION=9.6.0'; do
     require_regex "$guest_log" "^$forwarded$" "guest $forwarded build argument"
   done
 fi

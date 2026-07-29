@@ -10,6 +10,8 @@ ARG CODEX_VERSION=0.146.0
 ARG CLAUDE_CODE_VERSION=2.1.220
 ARG GEMINI_CLI_VERSION=0.53.0
 ARG OPENCODE_VERSION=1.18.9
+ARG PI_AGENT_VERSION=0.82.1
+ARG PI_MCP_ADAPTER_VERSION=2.11.0
 
 FROM ${REGISTRY_MIRROR}/library/golang:${GO_VERSION}-alpine AS grpcurl-builder
 ARG GOPROXY
@@ -28,6 +30,8 @@ ARG CODEX_VERSION
 ARG CLAUDE_CODE_VERSION
 ARG GEMINI_CLI_VERSION
 ARG OPENCODE_VERSION
+ARG PI_AGENT_VERSION
+ARG PI_MCP_ADAPTER_VERSION
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 ARG TARGETARCH
@@ -85,7 +89,9 @@ RUN set -e; \
       "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
       "${CLAUDE_CODE_PLATFORM_PACKAGE}@${CLAUDE_CODE_VERSION}" \
       "@google/gemini-cli@${GEMINI_CLI_VERSION}" \
-      "opencode-ai@${OPENCODE_VERSION}" && \
+      "opencode-ai@${OPENCODE_VERSION}" \
+      "@earendil-works/pi-coding-agent@${PI_AGENT_VERSION}" \
+      "pi-mcp-adapter@${PI_MCP_ADAPTER_VERSION}" && \
     npm cache clean --force && \
     rm -rf /root/.npm
 
@@ -111,10 +117,15 @@ RUN cd /tmp/agent-compose-runtime && \
     ln -sf ../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /usr/bin/claude && \
     ln -sf ../lib/node_modules/@google/gemini-cli/bundle/gemini.js /usr/bin/gemini && \
     ln -sf ../lib/node_modules/opencode-ai/bin/opencode.exe /usr/bin/opencode && \
+    ln -sf ../lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js /usr/bin/pi && \
+    mkdir -p /usr/local/share/agent-compose/pi-mcp-adapter && \
+    ln -sf /usr/lib/node_modules/pi-mcp-adapter/index.ts /usr/local/share/agent-compose/pi-mcp-adapter/index.ts && \
+    test -f /usr/local/share/agent-compose/pi-mcp-adapter/index.ts && \
     codex --version && \
     claude --version && \
     gemini --version && \
     OPENCODE_DISABLE_AUTOUPDATE=true OPENCODE_DISABLE_MODELS_FETCH=1 opencode --version && \
+    pi --version && \
     rm -rf /tmp/agent-compose-runtime
 
 RUN mkdir -p /opt/agent-compose/npm && \
