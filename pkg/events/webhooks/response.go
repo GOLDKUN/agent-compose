@@ -8,6 +8,26 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
+const idempotencyPayloadMismatchMessage = "idempotency key conflicts with existing payload"
+
+func acceptedResponseFor(item domain.TopicEventRecord) AcceptedResponse {
+	return AcceptedResponse{
+		Accepted:      true,
+		Topic:         item.Topic,
+		EventID:       item.ID,
+		Sequence:      item.Sequence,
+		CorrelationID: item.CorrelationID,
+	}
+}
+
+func idempotencyConflictResponseFor(item domain.TopicEventRecord) idempotencyConflictResponse {
+	return idempotencyConflictResponse{
+		Code:          idempotencyPayloadMismatchCode,
+		Error:         idempotencyPayloadMismatchMessage,
+		ExistingEvent: acceptedResponseFor(item),
+	}
+}
+
 func SourceToJSON(source domain.WebhookSource) SourceJSON {
 	return SourceJSON{
 		ID:                 source.ID,

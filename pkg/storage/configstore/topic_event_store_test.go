@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -60,6 +61,45 @@ func TestCreateEventAcceptsIdempotentPayloadWithSequencePlaceholder(t *testing.T
 	}
 	if duplicate.ID != created.ID || duplicate.PayloadHash != created.PayloadHash {
 		t.Fatalf("duplicate = %#v, want original %#v", duplicate, created)
+	}
+}
+
+func TestCreateEventPayloadConflictCarriesExistingEvent(t *testing.T) {
+	ctx := context.Background()
+	store := FromDB(newMemoryDB(t))
+	if err := store.initSchema(ctx); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+
+	created, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID:             "event-original",
+		Topic:          "webhook.github.push",
+		Source:         domain.TopicEventSourceWebhook,
+		IdempotencyKey: "delivery-1",
+		PayloadJSON:    `{"sequence":0,"body":{"branch":"main"}}`,
+		DispatchStatus: domain.TopicEventDispatchPending,
+	})
+	if err != nil {
+		t.Fatalf("create original event: %v", err)
+	}
+
+	_, err = store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID:             "event-conflict",
+		Topic:          created.Topic,
+		Source:         domain.TopicEventSourceWebhook,
+		IdempotencyKey: created.IdempotencyKey,
+		PayloadJSON:    `{"sequence":0,"body":{"branch":"changed"}}`,
+		DispatchStatus: domain.TopicEventDispatchPending,
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("conflict error = %v, want ErrConflict", err)
+	}
+	var conflict *domain.TopicEventIdempotencyConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("conflict error type = %T, want TopicEventIdempotencyConflictError", err)
+	}
+	if conflict.Existing.ID != created.ID || conflict.Existing.Sequence != created.Sequence {
+		t.Fatalf("conflicting existing event = %#v, want %#v", conflict.Existing, created)
 	}
 }
 
