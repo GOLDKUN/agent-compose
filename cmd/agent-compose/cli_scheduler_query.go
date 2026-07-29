@@ -27,7 +27,7 @@ func runComposeSchedulerListCommand(cmd *cobra.Command, cli cliOptions, options 
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler ls", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler ls")
 	if err != nil {
 		return err
 	}

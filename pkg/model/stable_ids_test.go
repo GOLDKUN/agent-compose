@@ -24,8 +24,8 @@ func TestProjectStableIDHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("other domain.StableProjectID returned error: %v", err)
 	}
-	if otherProjectID == projectID {
-		t.Fatalf("project id did not include source path: %q", projectID)
+	if otherProjectID != projectID {
+		t.Fatalf("project id changed with source path: %q != %q", otherProjectID, projectID)
 	}
 
 	agentID, err := domain.StableProjectAgentID(projectID, "reviewer")
@@ -70,6 +70,9 @@ func TestProjectStableIDHelpers(t *testing.T) {
 	}
 	if _, err := domain.StableProjectID("Demo", ""); err == nil {
 		t.Fatalf("domain.StableProjectID accepted non-normalized project name")
+	}
+	if _, err := domain.StableProjectID("1demo", ""); err != nil {
+		t.Fatalf("domain.StableProjectID rejected digit-prefixed project name: %v", err)
 	}
 	if _, err := domain.StableProjectAgentID(projectID, "Bad Agent"); err == nil {
 		t.Fatalf("domain.StableProjectAgentID accepted non-normalized agent name")

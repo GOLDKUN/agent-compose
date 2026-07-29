@@ -8,15 +8,22 @@ import (
 	"agent-compose/pkg/identity"
 )
 
-func StableProjectID(name, sourcePath string) (string, error) {
+// ProjectNamePattern is the Docker Compose-compatible project name contract.
+const ProjectNamePattern = `^[a-z0-9][a-z0-9_-]*$`
+
+// StableProjectID derives the initial project ID from name alone. The
+// source-path parameter remains in the signature so existing callers do not
+// need a compatibility wrapper; moving a compose file must not change its
+// identity.
+func StableProjectID(name, _ string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("project name is required")
 	}
-	if !IsProjectStableIdentifier(name) {
-		return "", fmt.Errorf("project name %q is not a stable identifier", name)
+	if !IsProjectName(name) {
+		return "", fmt.Errorf("project name %q must match %s", name, ProjectNamePattern)
 	}
-	return identity.NewID(identity.ResourceProject, name, NormalizeProjectSourcePath(sourcePath)), nil
+	return identity.NewID(identity.ResourceProject, name), nil
 }
 
 func StableProjectAgentID(projectID, agentName string) (string, error) {
@@ -112,6 +119,28 @@ func IsProjectStableIdentifier(value string) bool {
 	for i, r := range value {
 		switch {
 		case i == 0 && r >= 'a' && r <= 'z':
+		case i > 0 && r >= 'a' && r <= 'z':
+		case i > 0 && r >= '0' && r <= '9':
+		case i > 0 && (r == '-' || r == '_'):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// IsProjectName reports whether value follows the Docker Compose project-name
+// character contract. Other project-scoped resource names intentionally keep
+// the stricter stable-identifier contract.
+func IsProjectName(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for i, r := range value {
+		switch {
+		case i == 0 && r >= 'a' && r <= 'z':
+		case i == 0 && r >= '0' && r <= '9':
 		case i > 0 && r >= 'a' && r <= 'z':
 		case i > 0 && r >= '0' && r <= '9':
 		case i > 0 && (r == '-' || r == '_'):

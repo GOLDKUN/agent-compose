@@ -3,6 +3,7 @@ package runs
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
@@ -22,9 +23,11 @@ func normalizeRevisionClosedSetsJSON(data []byte) ([]byte, error) {
 		if scheduler == nil {
 			continue
 		}
+		defaultClosedSetString(scheduler, "sandbox_policy", "new")
 		if err := replaceClosedSetString(scheduler, "sandbox_policy", map[string]int32{"sticky": int32(agentcomposev2.SchedulerSandboxPolicy_SCHEDULER_SANDBOX_POLICY_STICKY), "new": int32(agentcomposev2.SchedulerSandboxPolicy_SCHEDULER_SANDBOX_POLICY_NEW)}); err != nil {
 			return nil, fmt.Errorf("agents[%d].scheduler.sandbox_policy: %w", index, err)
 		}
+		defaultClosedSetString(scheduler, "concurrency_policy", "skip")
 		if err := replaceClosedSetString(scheduler, "concurrency_policy", map[string]int32{"skip": int32(agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_SKIP), "parallel": int32(agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_PARALLEL)}); err != nil {
 			return nil, fmt.Errorf("agents[%d].scheduler.concurrency_policy: %w", index, err)
 		}
@@ -40,6 +43,20 @@ func normalizeRevisionClosedSetsJSON(data []byte) ([]byte, error) {
 		}
 	}
 	return json.Marshal(root)
+}
+
+func defaultClosedSetString(object map[string]any, field, fallback string) {
+	if object == nil {
+		return
+	}
+	raw, exists := object[field]
+	if !exists || raw == nil {
+		object[field] = fallback
+		return
+	}
+	if text, ok := raw.(string); ok && strings.TrimSpace(text) == "" {
+		object[field] = fallback
+	}
 }
 
 func normalizeRevisionVolumes(value any) error {

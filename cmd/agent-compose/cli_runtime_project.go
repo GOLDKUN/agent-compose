@@ -2,6 +2,7 @@ package main
 
 import (
 	"agent-compose/pkg/compose"
+	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
@@ -25,13 +26,6 @@ type composeRuntimeProjectSelection struct {
 	localSpec     *compose.NormalizedProjectSpec
 }
 
-type composeRuntimeProjectLoadMode uint8
-
-const (
-	runtimeProjectIdentityOnly composeRuntimeProjectLoadMode = iota
-	runtimeProjectWithState
-)
-
 func (p composeRuntimeProject) id() string {
 	return strings.TrimSpace(p.project.GetSummary().GetProjectId())
 }
@@ -43,27 +37,31 @@ func (p composeRuntimeProject) name() string {
 // resolveComposeRuntimeProject resolves an explicit project name as an
 // already-applied project filter. Without one, the compose file identifies the
 // project.
-func resolveComposeRuntimeProject(ctx context.Context, client agentcomposev2connect.ProjectServiceClient, cli cliOptions, command string, loadMode composeRuntimeProjectLoadMode) (composeRuntimeProject, error) {
+func resolveComposeRuntimeProject(ctx context.Context, client agentcomposev2connect.ProjectServiceClient, cli cliOptions, command string) (composeRuntimeProject, error) {
 	selection, err := resolveComposeRuntimeProjectSelectionForCLI(cli)
 	if err != nil {
 		return composeRuntimeProject{}, err
-	}
-	if selection.localSpec != nil && loadMode == runtimeProjectIdentityOnly {
-		return composeRuntimeProject{
-			composePath: selection.composePath,
-			project: &agentcomposev2.Project{Summary: &agentcomposev2.ProjectSummary{
-				ProjectId:  selection.ref.GetProjectId(),
-				Name:       selection.requestedName,
-				SourcePath: selection.composePath,
-			}},
-			spec: selection.localSpec,
-		}, nil
 	}
 	response, err := client.GetProject(ctx, connect.NewRequest(&agentcomposev2.GetProjectRequest{
 		Project:     selection.ref,
 		IncludeSpec: true,
 	}))
 	if err != nil {
+		if connect.CodeOf(err) == connect.CodeUnimplemented && selection.localSpec != nil {
+			projectID, idErr := domain.StableProjectID(selection.requestedName, "")
+			if idErr != nil {
+				return composeRuntimeProject{}, idErr
+			}
+			return composeRuntimeProject{
+				composePath: selection.composePath,
+				project: &agentcomposev2.Project{Summary: &agentcomposev2.ProjectSummary{
+					ProjectId:  projectID,
+					Name:       selection.requestedName,
+					SourcePath: selection.composePath,
+				}},
+				spec: selection.localSpec,
+			}, nil
+		}
 		return composeRuntimeProject{}, commandExitErrorForComposeProject(fmt.Errorf("get project %s: %w", selection.requestedName, err), command, selection.requestedName, selection.composePath)
 	}
 	project := response.Msg.GetProject()
@@ -91,14 +89,14 @@ func resolveComposeRuntimeProjectSelectionForCLI(cli cliOptions) (composeRuntime
 	if projectName != "" {
 		return composeRuntimeProjectSelection{requestedName: projectName, ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: projectName}}}, nil
 	}
-	composePath, normalized, projectID, err := resolveComposeProject(cli)
+	composePath, normalized, _, err := resolveComposeProject(cli)
 	if err != nil {
 		return composeRuntimeProjectSelection{}, err
 	}
 	return composeRuntimeProjectSelection{
 		composePath:   composePath,
 		requestedName: normalized.Name,
-		ref:           &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
+		ref:           &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: normalized.Name}},
 		localSpec:     normalized,
 	}, nil
 }
@@ -108,8 +106,8 @@ func resolveComposeRuntimeProjectSelectionForCLI(cli cliOptions) (composeRuntime
 // daemon remains the source of truth; no local config is read here.
 func normalizedRuntimeProjectSpec(project *agentcomposev2.Project) *compose.NormalizedProjectSpec {
 	result := &compose.NormalizedProjectSpec{Name: project.GetSummary().GetName()}
-	if spec := project.GetSpec(); spec != nil {
-		result.Name = firstNonEmptyString(spec.GetName(), result.Name)
+	if spec := project.GetSpec(); spec != nil && (len(spec.GetAgents()) > 0 || len(project.GetAgents()) == 0) {
+		result.Name = firstNonEmptyString(result.Name, spec.GetName())
 		result.Agents = make([]compose.NormalizedAgentSpec, 0, len(spec.GetAgents()))
 		for _, agent := range spec.GetAgents() {
 			result.Agents = append(result.Agents, normalizedRuntimeAgentSpec(agent))

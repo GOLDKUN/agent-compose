@@ -79,12 +79,16 @@ func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 	if _, _, err := store.SaveProjectRevision(ctx, domain.ProjectRevisionRecord{ProjectID: "missing-project", SpecHash: "hash", SpecJSON: `{bad json`}); err == nil {
 		t.Fatalf("SaveProjectRevision invalid JSON returned nil error")
 	}
-	project, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-1", Name: "Project", SourcePath: "/tmp/project", SourceJSON: `{"kind":"local"}`, SpecHash: "hash-0"})
+	project, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-1", Name: "project", SourcePath: "/tmp/project", SourceJSON: `{"kind":"local"}`, SpecHash: "hash-0"})
 	if err != nil {
 		t.Fatalf("UpsertProject returned error: %v", err)
 	}
-	project.Name = "Project Updated"
-	if project, err = store.UpsertProject(ctx, project); err != nil || project.Name != "Project Updated" {
+	project.Name = "project-renamed"
+	if project, err = store.UpsertProject(ctx, project); err != nil || project.Name != "project-renamed" {
+		t.Fatalf("UpsertProject rename project=%#v err=%v", project, err)
+	}
+	project.SourcePath = "/tmp/project-updated"
+	if project, err = store.UpsertProject(ctx, project); err != nil || project.SourcePath != "/tmp/project-updated" {
 		t.Fatalf("UpsertProject update project=%#v err=%v", project, err)
 	}
 	revision, created, err := store.SaveProjectRevision(ctx, domain.ProjectRevisionRecord{ProjectID: project.ID, SpecHash: "hash-1", SpecJSON: `{"agents":[]}`})
@@ -114,7 +118,7 @@ func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 	if result, err := store.ListProjects(ctx, domain.ProjectListOptions{Query: "updated", Limit: 10}); err != nil || result.TotalCount != 1 {
 		t.Fatalf("ListProjects result=%#v err=%v", result, err)
 	}
-	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-2", Name: "Other Project", SourcePath: "/tmp/other", SourceJSON: `{"kind":"local"}`}); err != nil {
+	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-2", Name: "other-project", SourcePath: "/tmp/other", SourceJSON: `{"kind":"local"}`}); err != nil {
 		t.Fatalf("UpsertProject second project returned error: %v", err)
 	}
 	if result, err := store.ListProjects(ctx, domain.ProjectListOptions{Limit: 1, Offset: -5}); err != nil || result.TotalCount != 2 || len(result.Projects) != 1 || !result.HasMore || result.NextOffset != 1 {

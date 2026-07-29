@@ -12,7 +12,7 @@ Single-resource requests use one of these forms:
 
 | Selector | Contract |
 | --- | --- |
-| `ProjectRef` | Exactly one non-empty `project_id`, `name`, or `source_path`. IDs are stable; names and source paths are exact mutable lookup keys. |
+| `ProjectRef` | Exactly one non-empty `project_id`, `name`, or `source_path`. IDs are stable, names are daemon-unique project identities, and source paths are exact mutable lookup keys. |
 | `ExecRequest.target` | Exactly one `sandbox_id`, `run_id`, or `selector`. Empty selected scalar cases are invalid. |
 | `ExecSandboxSelector.project` | Exactly one non-empty `project_id` or `project_name`; `agent_name` is an optional narrowing filter, not an alternative project selector. |
 | Hierarchical project resources | Scheduler requests combine one `ProjectRef` with required `agent_name` and, where applicable, `trigger_id` or `run_id`. These fields identify nested resources and are not mutually exclusive alternatives. |

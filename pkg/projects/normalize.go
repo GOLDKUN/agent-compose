@@ -22,6 +22,9 @@ func NormalizeRecord(project domain.ProjectRecord) (domain.ProjectRecord, error)
 	if project.Name == "" {
 		return domain.ProjectRecord{}, fmt.Errorf("project name is required")
 	}
+	if !domain.IsProjectName(project.Name) {
+		return domain.ProjectRecord{}, fmt.Errorf("project name %q must match %s", project.Name, domain.ProjectNamePattern)
+	}
 	if project.ShortID == "" {
 		project.ShortID = identity.ShortID(project.ID)
 	}

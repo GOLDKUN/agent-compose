@@ -103,11 +103,14 @@ func runComposeExecCommand(cmd *cobra.Command, cli cliOptions, options composeEx
 	if !cmd.Flags().Changed("run") && len(args) > 0 && strings.TrimSpace(args[0]) == "" {
 		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("exec requires non-empty sandbox")}
 	}
+	if cmd.Flags().Changed("run") && strings.TrimSpace(options.RunID) == "" {
+		return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("exec --run requires a value")}
+	}
 	clients, err := newCLIServiceClients(cli)
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "exec", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "exec")
 	if err != nil {
 		return err
 	}

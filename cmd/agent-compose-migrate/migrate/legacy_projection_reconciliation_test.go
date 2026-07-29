@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/storage/sqlite"
 )
@@ -36,10 +37,7 @@ func TestRunReconcilesExistingLegacyProjectProjections(t *testing.T) {
 		t.Fatalf("create legacy event session links: %v", err)
 	}
 
-	projectID, err := domain.StableProjectID(legacyDefaultProjectName, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	projectID := identity.NewID(identity.ResourceProject, legacyDefaultProjectName, "")
 	existingAgentID, err := domain.StableProjectAgentID(projectID, "duplicate")
 	if err != nil {
 		t.Fatal(err)
@@ -163,10 +161,7 @@ func TestRunReconcilesExistingLegacyProjectProjections(t *testing.T) {
 }
 
 func TestPlanStandaloneAgentsRejectsDifferentExistingAgent(t *testing.T) {
-	projectID, err := domain.StableProjectID(legacyDefaultProjectName, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	projectID := identity.NewID(identity.ResourceProject, legacyDefaultProjectName, "")
 	existingID, err := domain.StableProjectAgentID(projectID, "worker")
 	if err != nil {
 		t.Fatal(err)

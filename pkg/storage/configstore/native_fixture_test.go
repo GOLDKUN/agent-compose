@@ -47,11 +47,12 @@ func upsertNativeTestScheduler(ctx context.Context, store *ConfigStore, schedule
 	if driver := strings.TrimSpace(scheduler.Summary.Driver); driver != "" {
 		agent.Driver = &compose.NormalizedDriverSpec{Name: driver}
 	}
-	specJSON, err := (&compose.NormalizedProjectSpec{Name: "test-project", Agents: []compose.NormalizedAgentSpec{agent}}).MarshalCanonicalJSON(false)
+	projectName := "test-" + projectID
+	specJSON, err := (&compose.NormalizedProjectSpec{Name: projectName, Agents: []compose.NormalizedAgentSpec{agent}}).MarshalCanonicalJSON(false)
 	if err != nil {
 		return domain.Scheduler{}, fmt.Errorf("marshal native scheduler fixture: %w", err)
 	}
-	project, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: projectID, Name: "test-project"})
+	project, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: projectID, Name: projectName})
 	if err != nil {
 		return domain.Scheduler{}, err
 	}

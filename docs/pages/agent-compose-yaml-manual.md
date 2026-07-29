@@ -149,7 +149,7 @@ agents:
 - Unknown fields are rejected rather than silently ignored.
 - A field repeated in the same mapping is rejected as a duplicate.
 - Boolean fields must be YAML booleans, list fields must be sequences, and object fields must be mappings.
-- Project names, agent names, project workspace keys, MCP names, volume keys, and final skill names must match `^[a-z][a-z0-9_-]*$`.
+- Project names must match `^[a-z0-9][a-z0-9_-]*$`. Agent names, project workspace keys, MCP names, volume keys, and final skill names use the stricter `^[a-z][a-z0-9_-]*$` form.
 - Relative paths use field-specific base directories described below.
 
 ### Environment sources and precedence
@@ -196,7 +196,7 @@ SECRET_VALUE:
 
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
-| `name` | string | Conditionally | Project identifier. If omitted, the compose directory name is used; the final value must be a stable identifier. |
+| `name` | string | Conditionally | Project identifier. If omitted, a Docker Compose-compatible name is derived from the compose directory. |
 | `env_file` | string or string[] | No | Dotenv files used for interpolation. Relative paths are resolved from the compose directory. |
 | `variables` | map | No | Project-level named values and secret metadata stored in the normalized project specification. |
 | `workspaces` | map | No | Reusable project workspace definitions. Only the plural top-level form is valid. |
@@ -211,7 +211,7 @@ SECRET_VALUE:
 name: code-review
 ```
 
-The value must begin with a lowercase letter and may then contain lowercase letters, digits, `_`, and `-`. `review-v2` is valid; `Review`, `2-review`, and names containing spaces are not. Project identity also incorporates the normalized source path, allowing projects with the same name from different compose paths to remain distinct.
+The value must match `^[a-z0-9][a-z0-9_-]*$`. `review-v2` and `2-review` are valid; `Review` and names containing spaces are not. When omitted, the compose directory basename is lowercased, unsupported characters are removed, and leading `_` or `-` characters are trimmed. The resulting name is the daemon-wide project identity; moving the compose file does not create another project.
 
 ### `env_file`
 
@@ -873,6 +873,12 @@ jupyter:
 Setting `guest_port` while leaving `enabled: false` retains the port configuration without enabling Jupyter by default. `agent-compose run --jupyter` can enable it for one run.
 
 ## Common errors and migration notes
+
+### Duplicate project names during upgrade
+
+An upgrade does not merge projects that already have the same name, because matching names and compose paths do not prove that their histories are equivalent. One project keeps the original name; active projects are preferred, then the most recently updated project, with creation time and full ID as deterministic tie-breakers. The others are renamed to the next available `<name>-N` value. Existing numeric suffixes are skipped.
+
+Every project ID and its revisions, agents, schedulers, runs, sandboxes, and volume associations remain attached to the same project. Use `agent-compose project ls` after the upgrade to see the assigned names. To update a suffixed project later, set that assigned name in its compose file.
 
 ### Using top-level `workspace`
 

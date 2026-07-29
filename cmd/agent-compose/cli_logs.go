@@ -45,7 +45,7 @@ func runComposeLogsCommand(cmd *cobra.Command, cli cliOptions, options composeLo
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "logs", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "logs")
 	if err != nil {
 		return err
 	}

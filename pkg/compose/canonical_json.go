@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	domain "agent-compose/pkg/model"
 )
 
 // ParseCanonicalJSON decodes the immutable representation produced by
@@ -14,6 +17,7 @@ func ParseCanonicalJSON(data []byte) (*NormalizedProjectSpec, error) {
 		return nil, fmt.Errorf("decode canonical project spec: %w", err)
 	}
 	applyHistoricalAgentEnabledDefaults(data, ordered.Agents)
+	applyHistoricalSchedulerDefaults(ordered.Agents)
 	return normalizedProjectSpecFromOrdered(ordered), nil
 }
 
@@ -64,6 +68,21 @@ func applyHistoricalAgentEnabledDefaults(data []byte, agents []orderedAgentSpec)
 	for index := range agents {
 		if index >= len(shape.Agents) || shape.Agents[index].Enabled == nil {
 			agents[index].Enabled = true
+		}
+	}
+}
+
+func applyHistoricalSchedulerDefaults(agents []orderedAgentSpec) {
+	for index := range agents {
+		scheduler := agents[index].Scheduler
+		if scheduler == nil {
+			continue
+		}
+		if strings.TrimSpace(scheduler.SandboxPolicy) == "" {
+			scheduler.SandboxPolicy = domain.SchedulerSandboxPolicyNew
+		}
+		if strings.TrimSpace(scheduler.ConcurrencyPolicy) == "" {
+			scheduler.ConcurrencyPolicy = domain.SchedulerConcurrencyPolicySkip
 		}
 	}
 }

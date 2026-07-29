@@ -148,7 +148,7 @@ agents:
 - 顶层和各对象中的未知字段会报 `unknown field`，不会被静默忽略。
 - 同一映射中的重复字段会报 `duplicate field`。
 - 布尔字段必须是布尔值，列表字段必须是 YAML sequence，映射字段必须是 YAML mapping。
-- 项目名、Agent 名、顶层 Workspace 键、MCP 名、Volume 键和最终 Skill 名使用稳定标识符格式：`^[a-z][a-z0-9_-]*$`。
+- 项目名必须匹配 `^[a-z0-9][a-z0-9_-]*$`。Agent 名、顶层 Workspace 键、MCP 名、Volume 键和最终 Skill 名使用更严格的 `^[a-z][a-z0-9_-]*$` 格式。
 - 路径和 URL 的相对基准因字段而异，具体见对应章节。
 
 ### 环境变量来源和优先级
@@ -195,7 +195,7 @@ SECRET_VALUE:
 
 | 字段 | 类型 | 必填 | 作用 |
 | --- | --- | --- | --- |
-| `name` | string | 条件必填 | 项目标识。省略时尝试使用配置文件所在目录名；最终必须符合稳定标识符格式。 |
+| `name` | string | 条件必填 | 项目标识。省略时按照 Docker Compose 规则从配置文件目录推导。 |
 | `env_file` | string 或 string[] | 否 | 指定插值使用的 dotenv 文件。相对路径以配置文件目录为基准。 |
 | `variables` | map | 否 | 项目级命名变量及 secret 元数据，写入规范化项目配置。它们不会自动继承到 Agent 的 `env`，也不会成为其他 `${NAME}` 的变量来源。 |
 | `workspaces` | map | 否 | 可复用的项目级 Workspace 定义。只能使用复数形式。 |
@@ -210,7 +210,7 @@ SECRET_VALUE:
 name: code-review
 ```
 
-允许小写字母开头，后续可包含小写字母、数字、`_` 和 `-`。例如 `review-v2` 合法，`Review`、`2-review` 和包含空格的名称不合法。项目身份同时受规范化的配置文件路径影响，因此同名但来自不同路径的项目可被区分。
+名称必须匹配 `^[a-z0-9][a-z0-9_-]*$`。例如 `review-v2` 和 `2-review` 合法，`Review` 和包含空格的名称不合法。省略名称时，目录 basename 会转为小写、移除不支持的字符并裁掉开头的 `_` 或 `-`。最终名称是 daemon 内全局唯一的 project 身份；移动 compose 文件不会创建另一个 project。
 
 ### `env_file`
 
@@ -878,6 +878,12 @@ jupyter:
 设置 `guest_port` 但保持 `enabled: false` 会保留端口配置，但默认不启动 Jupyter。CLI `run --jupyter` 可以为单次运行启用。
 
 ## 常见错误与迁移提示
+
+### 升级时存在同名 project
+
+升级不会归并已有的同名 project，因为名称和 compose 路径相同并不能证明它们的历史数据等价。一个 project 保留原名：优先 active project，其次按最近更新时间排序，最后使用创建时间和完整 ID 做确定性排序。其余 project 依次改为下一个可用的 `<name>-N`，并跳过已经存在的数字后缀。
+
+每个 project 的 ID 以及 revision、agent、scheduler、run、sandbox 和 volume 关联仍属于原 project。升级后使用 `agent-compose project ls` 查看分配后的名称；后续如需更新带后缀的 project，应在对应 compose 文件中设置该名称。
 
 ### 顶层误写 `workspace`
 

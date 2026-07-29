@@ -38,6 +38,16 @@ The key idea is to separate human names from opaque identity:
 
 Declared resources come from `agent-compose.yml` or the project directory.
 
+The normalized project name is a unique public selector within one daemon. The
+opaque project ID is the durable identity, while the compose source path is
+mutable metadata and does not participate in initial ID generation.
+
+When uniqueness is introduced for an existing database, duplicate projects are
+not merged. Active records rank before removed records, followed by
+`updated_at DESC`, `created_at DESC`, and full `id ASC`. The first record keeps
+the name; later records receive the next unused `<name>-N` suffix. IDs and all
+project-owned relationships remain unchanged.
+
 | Resource | Public identifier | Default display | Additional handles |
 | --- | --- | --- | --- |
 | Project | `name`, or config directory name when omitted | project name | `id`, `short_id` in verbose/JSON |

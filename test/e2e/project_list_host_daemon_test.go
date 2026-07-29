@@ -67,9 +67,9 @@ func seedE2EProjectListDatabase(t *testing.T, ctx context.Context, databasePath 
 	store := configstore.FromDB(database.DB())
 	for index := range count {
 		id := fmt.Sprintf("project-%03d", index)
-		name := fmt.Sprintf("Project %03d", index)
+		name := id
 		if index == 42 {
-			name = "Needle Project 042"
+			name = "needle-" + id
 		}
 		project, err := store.UpsertProject(ctx, domain.ProjectRecord{
 			ID: id, Name: name, SourcePath: filepath.Join("/projects", id, "agent-compose.yml"), SourceJSON: `{"kind":"local"}`,

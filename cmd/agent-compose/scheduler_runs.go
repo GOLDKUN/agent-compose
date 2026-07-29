@@ -67,7 +67,7 @@ func runComposeSchedulerInvokeCommand(cmd *cobra.Command, cli cliOptions, option
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler invoke", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler invoke")
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func runComposeSchedulerTriggerV2Command(cmd *cobra.Command, cli cliOptions, opt
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler trigger", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler trigger")
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func runComposeSchedulerStopCommand(cmd *cobra.Command, cli cliOptions, options 
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler stop", runtimeProjectIdentityOnly)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, cli, "scheduler stop")
 	if err != nil {
 		return err
 	}

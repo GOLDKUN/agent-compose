@@ -63,7 +63,7 @@ func TestIntegrationManagerPersistsProjectVolumeLifecycle(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("ReplaceProjectVolumes: %v", err)
 	}
-	projectVolumes, err := store.ListProjectVolumes(ctx, "project-1")
+	projectVolumes, err := manager.ListProjectVolumes(ctx, "project-1")
 	if err != nil {
 		t.Fatalf("ListProjectVolumes: %v", err)
 	}

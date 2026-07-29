@@ -12,9 +12,18 @@ import (
 type projectVolumeManagerStub struct {
 	ensured      map[string]domain.VolumeRecord
 	inspected    map[string]domain.VolumeRecord
+	listed       map[string]domain.VolumeRecord
 	replaced     map[string]domain.ProjectVolumeLink
 	replacedProj string
 	removeCalls  []string
+}
+
+func (m *projectVolumeManagerStub) ListProjectVolumes(_ context.Context, _ string) (map[string]domain.VolumeRecord, error) {
+	result := make(map[string]domain.VolumeRecord, len(m.listed))
+	for key, record := range m.listed {
+		result[key] = record
+	}
+	return result, nil
 }
 
 func (m *projectVolumeManagerStub) Ensure(_ context.Context, item domain.VolumeRecord) (domain.VolumeRecord, bool, error) {
@@ -84,5 +93,32 @@ func TestEnsureProjectVolumesClearsRemovedLinksWhenSpecEmpty(t *testing.T) {
 	}
 	if len(manager.replaced) != 0 {
 		t.Fatalf("replaced links = %#v, want empty", manager.replaced)
+	}
+}
+
+func TestEnsureProjectVolumesReusesImplicitVolumeAfterProjectRename(t *testing.T) {
+	ctx := context.Background()
+	manager := &projectVolumeManagerStub{
+		listed: map[string]domain.VolumeRecord{
+			"cache": {ID: "vol-cache", Name: "demo_cache"},
+		},
+		ensured: map[string]domain.VolumeRecord{
+			"demo_cache": {ID: "vol-cache", Name: "demo_cache"},
+		},
+	}
+	controller := &Controller{volumes: manager}
+	project := domain.ProjectRecord{ID: "project-1", Name: "demo-2"}
+	spec := &compose.NormalizedProjectSpec{
+		Name: "demo-2",
+		Volumes: map[string]compose.NormalizedVolumeSpec{
+			"cache": {Driver: domain.VolumeDriverLocal},
+		},
+	}
+
+	if err := controller.ensureProjectVolumes(ctx, project, spec); err != nil {
+		t.Fatalf("ensureProjectVolumes after rename: %v", err)
+	}
+	if link := manager.replaced["cache"]; link.VolumeID != "vol-cache" {
+		t.Fatalf("cache link = %#v, want preserved volume vol-cache", link)
 	}
 }

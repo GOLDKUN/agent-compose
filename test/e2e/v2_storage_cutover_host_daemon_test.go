@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	domain "agent-compose/pkg/model"
 	storagesqlite "agent-compose/pkg/storage/sqlite"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
@@ -79,13 +80,14 @@ func TestE2EV2StorageMigratorDockerCutover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSandbox after cutover: %v", err)
 	}
-	if sandboxResp.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED || sandboxResp.Msg.GetSandbox().GetProjectId() != projectID {
-		t.Fatalf("migrated scheduler sandbox = %#v, want completed stopped sandbox for project %s", sandboxResp.Msg.GetSandbox(), projectID)
+	sandbox := sandboxResp.Msg.GetSandbox()
+	if sandbox.GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED || sandbox.GetProjectId() != projectID {
+		t.Fatalf("migrated scheduler sandbox = %#v, want completed stopped sandbox for project %s", sandbox, projectID)
 	}
-	container := inspectE2EDockerSandboxContainer(t, ctx, dockerClient, sandboxID)
-	if container.State == nil || container.State.Running {
-		t.Fatalf("migrated scheduler Docker sandbox = %#v, want stopped container after one-shot execution", container.State)
+	if sandbox.GetStoppedRuntimePolicy() != domain.StoppedRuntimePolicyRemove || sandbox.GetStoppedRuntimeState() != domain.StoppedRuntimeStateReleased {
+		t.Fatalf("migrated scheduler runtime policy/state = %q/%q, want remove/released", sandbox.GetStoppedRuntimePolicy(), sandbox.GetStoppedRuntimeState())
 	}
+	assertE2EDockerSandboxContainerCount(t, ctx, dockerClient, sandboxID, 0)
 	removeResp, err := sandboxClient.RemoveSandbox(ctx, connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: sandboxID, Force: true}))
 	if err != nil {
 		t.Fatalf("RemoveSandbox after cutover: %v", err)
@@ -189,8 +191,8 @@ func runV2StorageMigrator(t *testing.T, ctx context.Context, binary, dataRoot st
 	if err := json.Unmarshal(output, &report); err != nil {
 		t.Fatalf("decode V2 storage migrator report %q: %v", output, err)
 	}
-	if report.Stage != "complete" || report.SourceVersion != 4 || report.TargetVersion != 7 || !report.InPlace {
-		t.Fatalf("V2 storage migrator report = %+v, want in-place v4 to v7 completion", report)
+	if report.Stage != "complete" || report.SourceVersion != 4 || report.TargetVersion != 9 || !report.InPlace {
+		t.Fatalf("V2 storage migrator report = %+v, want in-place v4 to v9 completion", report)
 	}
 }
 

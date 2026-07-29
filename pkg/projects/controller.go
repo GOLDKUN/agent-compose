@@ -81,6 +81,7 @@ type SchedulerValidator interface {
 type VolumeManager interface {
 	Ensure(ctx context.Context, item domain.VolumeRecord) (domain.VolumeRecord, bool, error)
 	Inspect(ctx context.Context, nameOrID string) (domain.VolumeRecord, error)
+	ListProjectVolumes(ctx context.Context, projectID string) (map[string]domain.VolumeRecord, error)
 	ReplaceProjectVolumes(ctx context.Context, projectID string, links map[string]domain.ProjectVolumeLink) error
 	RemoveProjectVolumes(ctx context.Context, projectID string) error
 }
@@ -95,6 +96,7 @@ type Controller struct {
 	gateway    CapabilityGatewaySource
 	stop       func(context.Context, *domain.Sandbox) error
 	defaultDR  string
+	lifecycle  projectLifecycleGates
 }
 
 type ControllerDependencies struct {
@@ -184,6 +186,19 @@ func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyR
 	}
 	if issues := c.validateProjectAgentDefinitions(normalized); len(issues) > 0 {
 		return ApplyResult{Issues: issues, RevisionSpec: normalized.Spec}, nil
+	}
+	release, err := c.lifecycle.acquire(ctx, project.Name)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("apply project %s: wait for lifecycle operation: %w", normalized.Spec.Name, err)
+	}
+	defer release()
+	existingByName, nameFound, err := c.projectByNameIfExists(ctx, project.Name)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("apply project %s: resolve existing name: %w", normalized.Spec.Name, err)
+	}
+	if nameFound {
+		project.ID = existingByName.ID
+		project.ShortID = existingByName.ShortID
 	}
 	if issues := c.validateSchedulers(ctx, normalized); len(issues) > 0 {
 		return ApplyResult{Issues: issues, RevisionSpec: normalized.Spec}, nil
@@ -333,6 +348,17 @@ func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyR
 	}, nil
 }
 
+func (c *Controller) projectByNameIfExists(ctx context.Context, name string) (domain.ProjectRecord, bool, error) {
+	project, err := c.resolveProjectRef(ctx, ProjectRefByName(name), true)
+	if err == nil {
+		return project, true, nil
+	}
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.ProjectRecord{}, false, nil
+	}
+	return domain.ProjectRecord{}, false, err
+}
+
 func (c *Controller) capabilityGatewayWarnings(ctx context.Context, spec *compose.NormalizedProjectSpec) ([]ValidationIssue, error) {
 	if c.gateway == nil || !usesGlobalCapabilityGateway(spec) {
 		return nil, nil
@@ -389,6 +415,15 @@ func (c *Controller) RemoveProject(ctx context.Context, req RemoveRequest) (Remo
 	if err != nil {
 		return RemoveResult{}, err
 	}
+	release, err := c.lifecycle.acquire(ctx, project.Name)
+	if err != nil {
+		return RemoveResult{}, fmt.Errorf("remove project %s: wait for lifecycle operation: %w", project.Name, err)
+	}
+	defer release()
+	project, err = c.resolveProjectRef(ctx, ProjectRefByID(project.ID), true)
+	if err != nil {
+		return RemoveResult{}, err
+	}
 	downChanges, err := DownProject(ctx, project, DownOptions{
 		Store:             c.store,
 		Sandboxes:         c.sandboxes,
@@ -398,6 +433,17 @@ func (c *Controller) RemoveProject(ctx context.Context, req RemoveRequest) (Remo
 	changes := downChangesToChanges(downChanges)
 	if err != nil {
 		return RemoveResult{Project: project, Changes: changes}, err
+	}
+	if DownChangesHaveFailures(downChanges) {
+		agents, listAgentsErr := c.store.ListProjectAgents(ctx, project.ID)
+		if listAgentsErr != nil {
+			return RemoveResult{Project: project, Changes: changes}, listAgentsErr
+		}
+		schedulers, listSchedulersErr := c.store.ListProjectSchedulers(ctx, project.ID)
+		if listSchedulersErr != nil {
+			return RemoveResult{Project: project, Agents: agents, Changes: changes}, listSchedulersErr
+		}
+		return RemoveResult{Project: project, Agents: agents, Schedulers: schedulers, Changes: changes}, nil
 	}
 	if project.RemovedAt.IsZero() {
 		removedProject, err := c.store.MarkProjectRemoved(ctx, project.ID)
@@ -412,10 +458,10 @@ func (c *Controller) RemoveProject(ctx context.Context, req RemoveRequest) (Remo
 			Name:         project.Name,
 			Message:      "removed by project down",
 		})
-		if c.volumes != nil {
-			if err := c.volumes.RemoveProjectVolumes(ctx, project.ID); err != nil {
-				return RemoveResult{Project: project, Changes: changes}, err
-			}
+	}
+	if c.volumes != nil {
+		if err := c.volumes.RemoveProjectVolumes(ctx, project.ID); err != nil {
+			return RemoveResult{Project: project, Changes: changes}, err
 		}
 	}
 	agents, err := c.store.ListProjectAgents(ctx, project.ID)

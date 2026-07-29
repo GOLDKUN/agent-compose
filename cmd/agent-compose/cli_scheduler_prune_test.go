@@ -71,7 +71,7 @@ func TestIntegrationCLISchedulerPruneMapsFiltersAndJSONStats(t *testing.T) {
 	var captured *agentcomposev2.PruneSchedulerRunsRequest
 	server := newComposeServiceStubServer(t, composeServiceStubs{project: projectServiceStub{
 		getProject: func(_ context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-			return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProject(req.Msg.GetProject().GetProjectId(), "scheduler-prune-test", composePath)}), nil
+			return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProjectFromCompose(t, req.Msg.GetProject().GetProjectId(), composePath)}), nil
 		},
 		pruneSchedulerRuns: func(_ context.Context, req *connect.Request[agentcomposev2.PruneSchedulerRunsRequest]) (*connect.Response[agentcomposev2.PruneSchedulerRunsResponse], error) {
 			captured = req.Msg

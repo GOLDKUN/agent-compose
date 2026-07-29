@@ -74,6 +74,18 @@ func TestParseCanonicalJSONDefaultsHistoricalAgentEnabled(t *testing.T) {
 	}
 }
 
+func TestParseCanonicalJSONDefaultsHistoricalSchedulerPolicies(t *testing.T) {
+	parsed, err := ParseCanonicalJSON([]byte(`{"name":"historical","agents":[{"name":"missing","scheduler":{}},{"name":"empty","scheduler":{"sandbox_policy":"","concurrency_policy":""}}]}`))
+	if err != nil {
+		t.Fatalf("ParseCanonicalJSON returned error: %v", err)
+	}
+	for _, agent := range parsed.Agents {
+		if agent.Scheduler == nil || agent.Scheduler.SandboxPolicy != "new" || agent.Scheduler.ConcurrencyPolicy != "skip" {
+			t.Fatalf("historical scheduler default for %s = %#v", agent.Name, agent.Scheduler)
+		}
+	}
+}
+
 func TestParseCanonicalJSONRejectsMalformedJSON(t *testing.T) {
 	if _, err := ParseCanonicalJSON([]byte(`{"agents":`)); err == nil {
 		t.Fatal("ParseCanonicalJSON accepted malformed JSON")

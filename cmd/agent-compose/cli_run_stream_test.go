@@ -19,7 +19,13 @@ agents:
   reviewer:
     provider: %s
 `, provider, provider))
-			stdout, stderr, _, exitCode := executeCLICommandWithInput("hello\n", "run", "--file", composePath, "reviewer", "-i", "-t", "--prompt", "hello")
+			server := newComposeServiceStubServer(t, composeServiceStubs{project: projectServiceStub{
+				getProject: func(_ context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
+					return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProjectFromCompose(t, req.Msg.GetProject().GetProjectId(), composePath)}), nil
+				},
+			}})
+			defer server.Close()
+			stdout, stderr, _, exitCode := executeCLICommandWithInput("hello\n", "run", "--host", server.URL, "--file", composePath, "reviewer", "-i", "-t", "--prompt", "hello")
 			if exitCode != exitCodeUnsupported {
 				t.Fatalf("run --prompt -it %s exit code = %d, want %d; stderr=%q", provider, exitCode, exitCodeUnsupported, stderr)
 			}

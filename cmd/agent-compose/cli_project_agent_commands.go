@@ -94,7 +94,7 @@ func runComposeListAgentsCommand(cmd *cobra.Command, options cliOptions) error {
 	if err != nil {
 		return err
 	}
-	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, options, "agent ls", runtimeProjectWithState)
+	runtimeProject, err := resolveComposeRuntimeProject(cmd.Context(), clients.project, options, "agent ls")
 	if err != nil {
 		return err
 	}

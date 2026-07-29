@@ -131,6 +131,15 @@ func StopProjectRunningSandboxes(ctx context.Context, project domain.ProjectReco
 	return changes, nil
 }
 
+func DownChangesHaveFailures(changes []DownChange) bool {
+	for _, change := range changes {
+		if change.ResourceType == "sandbox" && change.Action == DownChangeUnchanged {
+			return true
+		}
+	}
+	return false
+}
+
 func SandboxBelongsToProject(sandbox *domain.Sandbox, projectID string) bool {
 	if sandbox == nil {
 		return false

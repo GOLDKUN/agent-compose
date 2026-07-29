@@ -23,6 +23,21 @@ func TestDecodeRevisionSpecMapsStoredClosedSetStrings(t *testing.T) {
 	}
 }
 
+func TestDecodeRevisionSpecDefaultsHistoricalSchedulerPolicies(t *testing.T) {
+	spec, err := DecodeRevisionSpec(`{"name":"historical","agents":[{"name":"missing","scheduler":{}},{"name":"empty","scheduler":{"sandbox_policy":"","concurrency_policy":""}}]}`)
+	if err != nil {
+		t.Fatalf("DecodeRevisionSpec returned error: %v", err)
+	}
+	for _, agent := range spec.GetAgents() {
+		if agent.GetScheduler().GetSandboxPolicy() != agentcomposev2.SchedulerSandboxPolicy_SCHEDULER_SANDBOX_POLICY_NEW {
+			t.Fatalf("scheduler sandbox policy for %s = %s", agent.GetName(), agent.GetScheduler().GetSandboxPolicy())
+		}
+		if agent.GetScheduler().GetConcurrencyPolicy() != agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_SKIP {
+			t.Fatalf("scheduler concurrency policy for %s = %s", agent.GetName(), agent.GetScheduler().GetConcurrencyPolicy())
+		}
+	}
+}
+
 func TestDecodeRevisionSpecRejectsUnknownStoredClosedSetString(t *testing.T) {
 	if _, err := DecodeRevisionSpec(`{"agents":[{"scheduler":{"concurrency_policy":"queue"}}]}`); err == nil {
 		t.Fatal("DecodeRevisionSpec accepted an unknown concurrency policy")

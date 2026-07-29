@@ -15,10 +15,11 @@ import (
 )
 
 func TestProjectToProtoOnlyIncludesCurrentRevisionArtifacts(t *testing.T) {
-	project := domain.ProjectRecord{ID: "project", CurrentRevision: 2}
+	project := domain.ProjectRecord{ID: "project", Name: "current-name", CurrentRevision: 2}
 	agents := []domain.ProjectAgentRecord{{ProjectID: "project", AgentName: "old", Revision: 1}, {ProjectID: "project", AgentName: "current", Revision: 2}}
 	schedulers := []domain.ProjectSchedulerRecord{{ProjectID: "project", SchedulerID: "old", Revision: 1}, {ProjectID: "project", SchedulerID: "current", Revision: 2}}
-	result := ProjectToProto(project, nil, agents, schedulers)
+	revisionSpec := &agentcomposev2.ProjectSpec{Name: "historical-name"}
+	result := ProjectToProto(project, revisionSpec, agents, schedulers)
 	if len(result.GetAgents()) != 1 || result.GetAgents()[0].GetAgentName() != "current" {
 		t.Fatalf("agents = %#v", result.GetAgents())
 	}
@@ -27,6 +28,9 @@ func TestProjectToProtoOnlyIncludesCurrentRevisionArtifacts(t *testing.T) {
 	}
 	if result.GetSummary().GetAgentCount() != 1 || result.GetSummary().GetSchedulerCount() != 1 {
 		t.Fatalf("summary = %#v", result.GetSummary())
+	}
+	if result.GetSpec() != revisionSpec || result.GetSpec().GetName() != "historical-name" {
+		t.Fatalf("returned revision spec = %#v, want unchanged input %#v", result.GetSpec(), revisionSpec)
 	}
 }
 

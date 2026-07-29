@@ -15,7 +15,7 @@ func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {
 	if err := store.initSchema(ctx); err != nil {
 		t.Fatalf("init schema: %v", err)
 	}
-	for _, project := range []domain.ProjectRecord{{ID: "project-a", Name: "Alpha"}, {ID: "project-b", Name: "Beta"}} {
+	for _, project := range []domain.ProjectRecord{{ID: "project-a", Name: "alpha"}, {ID: "project-b", Name: "beta"}} {
 		if _, err := store.UpsertProject(ctx, project); err != nil {
 			t.Fatalf("upsert project %s: %v", project.ID, err)
 		}

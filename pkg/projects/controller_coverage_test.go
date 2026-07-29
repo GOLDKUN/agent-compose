@@ -54,10 +54,7 @@ agents:
 		t.Fatalf("Hash returned error: %v", err)
 	}
 	store := &controllerCoverageStore{
-		projects: []domain.ProjectRecord{
-			{ID: "project-1", Name: "coverage-project", SourcePath: "/one"},
-			{ID: "project-2", Name: "coverage-project", SourcePath: "/two"},
-		},
+		projects: []domain.ProjectRecord{{ID: "project-1", Name: "coverage-project", SourcePath: "/one"}},
 	}
 	controller := NewController(ControllerDependencies{
 		Config:     &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
@@ -73,7 +70,7 @@ agents:
 	if err != nil {
 		t.Fatalf("ApplyProject dry-run returned error: %v", err)
 	}
-	if dryRun.Applied || len(dryRun.Agents) != 1 || len(dryRun.Schedulers) != 1 || len(dryRun.Changes) < 4 {
+	if dryRun.Applied || dryRun.Project.ID != "project-1" || len(dryRun.Agents) != 1 || len(dryRun.Schedulers) != 1 || len(dryRun.Changes) < 4 {
 		t.Fatalf("dryRun = %#v", dryRun)
 	}
 	if !strings.Contains(dryRun.Agents[0].SpecJSON, `"jupyter"`) {
@@ -85,6 +82,7 @@ agents:
 	if missingSpec, err := controller.ValidateProject(ctx, NormalizedProject{}, nil); err != nil || missingSpec.Valid {
 		t.Fatalf("ValidateProject missing spec=%#v err=%v", missingSpec, err)
 	}
+	store.projects = append(store.projects, domain.ProjectRecord{ID: "project-2", Name: "coverage-project", SourcePath: "/two"})
 	if _, err := controller.ResolveProjectRef(ctx, ProjectRefByName("coverage-project")); !errors.Is(err, domain.ErrAmbiguous) {
 		t.Fatalf("expected ambiguous project error, got %v", err)
 	}
@@ -133,6 +131,66 @@ func TestControllerRemoveProjectMarksProjectRemovedAndIsIdempotent(t *testing.T)
 	}
 }
 
+func TestControllerRemoveProjectKeepsProjectActiveWhenSandboxStopFails(t *testing.T) {
+	project := domain.ProjectRecord{ID: "project-partial", Name: "partial-down"}
+	store := &controllerCoverageStore{projects: []domain.ProjectRecord{project}}
+	volumeManager := &controllerCoverageVolumeManager{}
+	controller := NewController(ControllerDependencies{
+		Store: store,
+		Sandboxes: &downCoverageSessions{sessions: []*domain.Sandbox{{Summary: domain.SandboxSummary{
+			ID: "sandbox-failed", Tags: []domain.SandboxTag{{Name: "project", Value: project.ID}},
+		}}}},
+		Volumes: volumeManager,
+		StopSandbox: func(context.Context, *domain.Sandbox) error {
+			return errors.New("stop failed")
+		},
+	})
+	result, err := controller.RemoveProject(context.Background(), RemoveRequest{Project: ProjectRefByID(project.ID)})
+	if err != nil {
+		t.Fatalf("RemoveProject returned error: %v", err)
+	}
+	if !result.Project.RemovedAt.IsZero() {
+		t.Fatalf("partially stopped project was marked removed: %#v", result.Project)
+	}
+	if len(volumeManager.removedProjects) != 0 {
+		t.Fatalf("partial down removed volume links: %#v", volumeManager.removedProjects)
+	}
+	failureReported := false
+	for _, change := range result.Changes {
+		if change.ResourceType == "sandbox" && change.Action == ChangeActionUnchanged && strings.Contains(change.Message, "failed to stop") {
+			failureReported = true
+		}
+	}
+	if !failureReported {
+		t.Fatalf("partial down changes did not report failure: %#v", result.Changes)
+	}
+}
+
+func TestControllerRemoveProjectRetriesVolumeCleanupAfterRemoval(t *testing.T) {
+	project := domain.ProjectRecord{ID: "project-volume-retry", Name: "volume-retry"}
+	store := &controllerCoverageStore{projects: []domain.ProjectRecord{project}}
+	volumeManager := &controllerCoverageVolumeManager{removeErr: errors.New("volume cleanup failed")}
+	controller := NewController(ControllerDependencies{
+		Store: store, Sandboxes: controllerCoverageSessionStore{}, Volumes: volumeManager,
+	})
+
+	first, err := controller.RemoveProject(context.Background(), RemoveRequest{Project: ProjectRefByID(project.ID)})
+	if err == nil || first.Project.RemovedAt.IsZero() {
+		t.Fatalf("first down result=%#v err=%v, want removed project and cleanup error", first, err)
+	}
+	volumeManager.removeErr = nil
+	second, err := controller.RemoveProject(context.Background(), RemoveRequest{Project: ProjectRefByID(project.ID)})
+	if err != nil {
+		t.Fatalf("retry down returned error: %v", err)
+	}
+	if len(volumeManager.removedProjects) != 2 {
+		t.Fatalf("volume cleanup calls = %#v, want two attempts", volumeManager.removedProjects)
+	}
+	if !second.Project.RemovedAt.Equal(first.Project.RemovedAt) {
+		t.Fatalf("retry changed removed time from %v to %v", first.Project.RemovedAt, second.Project.RemovedAt)
+	}
+}
+
 func TestManagedSchedulerErrorHelpersCoverage(t *testing.T) {
 	plain := &projectSchedulerBuildError{message: "missing script"}
 	if plain.Error() != "missing script" {
@@ -168,7 +226,7 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 		{ProjectID: project.ID, SchedulerID: "scheduler-disabled", AgentName: "idle", ID: "loader-idle", Enabled: false},
 		{ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Enabled: true},
 	}}
-	sessionStore := downCoverageSessions{sessions: []*domain.Sandbox{
+	sessionStore := &downCoverageSessions{sessions: []*domain.Sandbox{
 		nil,
 		{Summary: domain.SandboxSummary{ID: "other", Title: "Other", Tags: []domain.SandboxTag{{Name: "project", Value: "other"}}}},
 		{Summary: domain.SandboxSummary{ID: "session-fail", Title: "Fail", Tags: []domain.SandboxTag{{Name: " project ", Value: " project-1 "}}}},
@@ -199,11 +257,17 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	if !refreshed || len(stopped) != 3 {
 		t.Fatalf("refreshed/stopped = %v/%#v", refreshed, stopped)
 	}
+	if len(sessionStore.listOptions) != 1 || sessionStore.listOptions[0].ProjectID != "" || sessionStore.listOptions[0].VMStatus != domain.VMStatusRunning {
+		t.Fatalf("sandbox list options = %#v, want all running sandboxes without project prefilter", sessionStore.listOptions)
+	}
 	assertDownChange(t, changes, DownChangeUpdated, "project_scheduler", "scheduler-1")
 	assertDownChange(t, changes, DownChangeUpdated, "loader", "loader-1")
 	assertDownChange(t, changes, DownChangeUnchanged, "sandbox", "session-fail")
 	assertDownChange(t, changes, DownChangeUpdated, "sandbox", "session-ok")
 	assertDownChange(t, changes, DownChangeUpdated, "sandbox", "session-legacy")
+	if !DownChangesHaveFailures(changes) || DownChangesHaveFailures(nil) {
+		t.Fatalf("DownChangesHaveFailures(%#v) returned unexpected result", changes)
+	}
 	if SandboxHasTag(nil, "project", project.ID) || !SandboxHasTag(sessionStore.sessions[2], "project", project.ID) {
 		t.Fatalf("SandboxHasTag returned unexpected values")
 	}
@@ -225,10 +289,10 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{}); err == nil {
 		t.Fatalf("StopProjectRunningSandboxes without sandboxes returned nil error")
 	}
-	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{Sandboxes: downCoverageSessions{err: errors.New("list failed")}}); err == nil {
+	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{Sandboxes: &downCoverageSessions{err: errors.New("list failed")}}); err == nil {
 		t.Fatalf("StopProjectRunningSandboxes list error returned nil error")
 	}
-	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{Sandboxes: downCoverageSessions{sessions: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: "session-1", Tags: []domain.SandboxTag{{Name: "project", Value: project.ID}}}}}}}); err == nil {
+	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{Sandboxes: &downCoverageSessions{sessions: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: "session-1", Tags: []domain.SandboxTag{{Name: "project", Value: project.ID}}}}}}}); err == nil {
 		t.Fatalf("StopProjectRunningSandboxes without stopper returned nil error")
 	}
 }
@@ -374,6 +438,7 @@ func (controllerCoverageSessionStore) ListSandboxes(context.Context, domain.Sand
 
 type controllerCoverageVolumeManager struct {
 	removedProjects []string
+	removeErr       error
 }
 
 func (m *controllerCoverageVolumeManager) Ensure(context.Context, domain.VolumeRecord) (domain.VolumeRecord, bool, error) {
@@ -384,13 +449,17 @@ func (m *controllerCoverageVolumeManager) Inspect(context.Context, string) (doma
 	return domain.VolumeRecord{}, nil
 }
 
+func (m *controllerCoverageVolumeManager) ListProjectVolumes(context.Context, string) (map[string]domain.VolumeRecord, error) {
+	return nil, nil
+}
+
 func (m *controllerCoverageVolumeManager) ReplaceProjectVolumes(context.Context, string, map[string]domain.ProjectVolumeLink) error {
 	return nil
 }
 
 func (m *controllerCoverageVolumeManager) RemoveProjectVolumes(_ context.Context, projectID string) error {
 	m.removedProjects = append(m.removedProjects, projectID)
-	return nil
+	return m.removeErr
 }
 
 func assertProjectChange(t *testing.T, changes []Change, action, resourceType, resourceID string) {
@@ -426,11 +495,13 @@ func (s *downCoverageStore) SetProjectSchedulerEnabled(_ context.Context, projec
 }
 
 type downCoverageSessions struct {
-	sessions []*domain.Sandbox
-	err      error
+	sessions    []*domain.Sandbox
+	err         error
+	listOptions []domain.SandboxListOptions
 }
 
-func (s downCoverageSessions) ListSandboxes(context.Context, domain.SandboxListOptions) (domain.SandboxListResult, error) {
+func (s *downCoverageSessions) ListSandboxes(_ context.Context, options domain.SandboxListOptions) (domain.SandboxListResult, error) {
+	s.listOptions = append(s.listOptions, options)
 	return domain.SandboxListResult{Sandboxes: s.sessions}, s.err
 }
 

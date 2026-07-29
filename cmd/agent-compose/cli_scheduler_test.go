@@ -301,7 +301,7 @@ agents:
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		project: projectServiceStub{
 			getProject: func(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProject(req.Msg.GetProject().GetProjectId(), "cli-scheduler-list", composePath)}), nil
+				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProjectFromCompose(t, req.Msg.GetProject().GetProjectId(), composePath)}), nil
 			},
 			listSchedulerEvents: func(context.Context, *connect.Request[agentcomposev2.ListSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListSchedulerEventsResponse], error) {
 				return connect.NewResponse(&agentcomposev2.ListSchedulerEventsResponse{}), nil
@@ -444,7 +444,11 @@ agents:
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		project: projectServiceStub{
 			getProject: func(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProject(req.Msg.GetProject().GetProjectId(), "cli-scheduler-observability", composePath)}), nil
+				projectID, err := domain.StableProjectID("cli-scheduler-observability", "")
+				if err != nil {
+					t.Fatalf("resolve test project ID: %v", err)
+				}
+				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProject(projectID, "cli-scheduler-observability", composePath)}), nil
 			},
 			listSchedulerRuns: func(context.Context, *connect.Request[agentcomposev2.ListSchedulerRunsRequest]) (*connect.Response[agentcomposev2.ListSchedulerRunsResponse], error) {
 				return connect.NewResponse(&agentcomposev2.ListSchedulerRunsResponse{Runs: []*agentcomposev2.SchedulerRun{{
@@ -725,7 +729,7 @@ agents:
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		project: projectServiceStub{
 			getProject: func(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProject(req.Msg.GetProject().GetProjectId(), "cli-scheduler-inspect", composePath)}), nil
+				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: testCLIProjectFromCompose(t, req.Msg.GetProject().GetProjectId(), composePath)}), nil
 			},
 		},
 	})
@@ -770,7 +774,7 @@ agents:
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		project: projectServiceStub{
 			getProject: func(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-				project := testCLIProject(req.Msg.GetProject().GetProjectId(), "cli-scheduler-loader", composePath)
+				project := testCLIProjectFromCompose(t, req.Msg.GetProject().GetProjectId(), composePath)
 				return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: project}), nil
 			},
 			getScheduler: func(_ context.Context, req *connect.Request[agentcomposev2.GetSchedulerRequest]) (*connect.Response[agentcomposev2.GetSchedulerResponse], error) {
