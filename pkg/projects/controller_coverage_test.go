@@ -137,7 +137,7 @@ func TestControllerRemoveProjectKeepsProjectActiveWhenSandboxStopFails(t *testin
 	volumeManager := &controllerCoverageVolumeManager{}
 	controller := NewController(ControllerDependencies{
 		Store: store,
-		Sandboxes: downCoverageSessions{sessions: []*domain.Sandbox{{Summary: domain.SandboxSummary{
+		Sandboxes: &downCoverageSessions{sessions: []*domain.Sandbox{{Summary: domain.SandboxSummary{
 			ID: "sandbox-failed", Tags: []domain.SandboxTag{{Name: "project", Value: project.ID}},
 		}}}},
 		Volumes: volumeManager,
@@ -226,7 +226,7 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 		{ProjectID: project.ID, SchedulerID: "scheduler-disabled", AgentName: "idle", ID: "loader-idle", Enabled: false},
 		{ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Enabled: true},
 	}}
-	sessionStore := downCoverageSessions{sessions: []*domain.Sandbox{
+	sessionStore := &downCoverageSessions{sessions: []*domain.Sandbox{
 		nil,
 		{Summary: domain.SandboxSummary{ID: "other", Title: "Other", Tags: []domain.SandboxTag{{Name: "project", Value: "other"}}}},
 		{Summary: domain.SandboxSummary{ID: "session-fail", Title: "Fail", Tags: []domain.SandboxTag{{Name: " project ", Value: " project-1 "}}}},
@@ -257,6 +257,9 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	if !refreshed || len(stopped) != 3 {
 		t.Fatalf("refreshed/stopped = %v/%#v", refreshed, stopped)
 	}
+	if len(sessionStore.listOptions) != 1 || sessionStore.listOptions[0].ProjectID != "" || sessionStore.listOptions[0].VMStatus != domain.VMStatusRunning {
+		t.Fatalf("sandbox list options = %#v, want all running sandboxes without project prefilter", sessionStore.listOptions)
+	}
 	assertDownChange(t, changes, DownChangeUpdated, "project_scheduler", "scheduler-1")
 	assertDownChange(t, changes, DownChangeUpdated, "loader", "loader-1")
 	assertDownChange(t, changes, DownChangeUnchanged, "sandbox", "session-fail")
@@ -286,10 +289,10 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{}); err == nil {
 		t.Fatalf("StopProjectRunningSandboxes without sandboxes returned nil error")
 	}
-	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{Sandboxes: downCoverageSessions{err: errors.New("list failed")}}); err == nil {
+	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{Sandboxes: &downCoverageSessions{err: errors.New("list failed")}}); err == nil {
 		t.Fatalf("StopProjectRunningSandboxes list error returned nil error")
 	}
-	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{Sandboxes: downCoverageSessions{sessions: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: "session-1", Tags: []domain.SandboxTag{{Name: "project", Value: project.ID}}}}}}}); err == nil {
+	if _, err := StopProjectRunningSandboxes(ctx, project, DownOptions{Sandboxes: &downCoverageSessions{sessions: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: "session-1", Tags: []domain.SandboxTag{{Name: "project", Value: project.ID}}}}}}}); err == nil {
 		t.Fatalf("StopProjectRunningSandboxes without stopper returned nil error")
 	}
 }
@@ -492,11 +495,13 @@ func (s *downCoverageStore) SetProjectSchedulerEnabled(_ context.Context, projec
 }
 
 type downCoverageSessions struct {
-	sessions []*domain.Sandbox
-	err      error
+	sessions    []*domain.Sandbox
+	err         error
+	listOptions []domain.SandboxListOptions
 }
 
-func (s downCoverageSessions) ListSandboxes(context.Context, domain.SandboxListOptions) (domain.SandboxListResult, error) {
+func (s *downCoverageSessions) ListSandboxes(_ context.Context, options domain.SandboxListOptions) (domain.SandboxListResult, error) {
+	s.listOptions = append(s.listOptions, options)
 	return domain.SandboxListResult{Sandboxes: s.sessions}, s.err
 }
 

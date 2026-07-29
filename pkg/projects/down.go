@@ -98,7 +98,7 @@ func StopProjectRunningSandboxes(ctx context.Context, project domain.ProjectReco
 	if options.Sandboxes == nil {
 		return nil, fmt.Errorf("sandbox store is required")
 	}
-	result, err := options.Sandboxes.ListSandboxes(ctx, domain.SandboxListOptions{ProjectID: project.ID, VMStatus: domain.VMStatusRunning, Limit: 1 << 30})
+	result, err := options.Sandboxes.ListSandboxes(ctx, domain.SandboxListOptions{VMStatus: domain.VMStatusRunning, Limit: 1 << 30})
 	if err != nil {
 		return nil, fmt.Errorf("list running sandboxes for project down %s: %w", project.Name, err)
 	}
