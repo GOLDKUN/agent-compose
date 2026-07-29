@@ -468,13 +468,13 @@ agents:
 
 运行时会确保所选 driver 能使用该镜像。若同时配置 `build`，`image` 也会加入构建 tag；若两者均未提供 tag，执行 `agent-compose build` 会失败。
 
-GitHub CI 会向 GHCR 发布以下镜像：
+GitHub CI 会向 Docker Hub 发布以下镜像：
 
 | 镜像 | 用途 | Dockerfile | 平台 |
 | --- | --- | --- | --- |
 | `chaitin/agent-compose` | 控制面 daemon | `Dockerfile` | `linux/amd64`、`linux/arm64` |
 | `chaitin/agent-compose-guest` | Sandbox guest runtime | `guest-images/Dockerfile.agent-compose-guest` | `linux/amd64`、`linux/arm64` |
-| `chaitin/agent-compose-guest-archlinux` | 可选的 Arch Linux sandbox guest runtime | `guest-images/Dockerfile.agent-compose-guest-archlinux` | `linux/amd64` |
+| `chaitin/agent-compose-guest:archlinux` | 可选的 Arch Linux sandbox guest runtime | `guest-images/Dockerfile.agent-compose-guest-archlinux` | `linux/amd64` |
 
 Agent 的 `image` 可以使用任一 guest 镜像。daemon 镜像用于部署控制面，不能作为 guest 镜像使用。两个 guest 都不绑定某一个 driver；CI 不发布 BoxLite-only、Microsandbox-only 或其他 driver 专用 guest 镜像。
 

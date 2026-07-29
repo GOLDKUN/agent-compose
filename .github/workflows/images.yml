@@ -160,7 +160,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_PREFIX }}/agent-compose-guest-archlinux
+          images: ${{ env.IMAGE_PREFIX }}/agent-compose-guest
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -176,7 +176,7 @@ jobs:
           file: guest-images/Dockerfile.agent-compose-guest-archlinux
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.IMAGE_PREFIX }}/agent-compose-guest-archlinux,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+          outputs: type=image,name=${{ env.IMAGE_PREFIX }}/agent-compose-guest,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           build-args: |
             REGISTRY_MIRROR=${{ env.REGISTRY_MIRROR }}
             GOPROXY=${{ env.GOPROXY }}
@@ -239,7 +239,7 @@ jobs:
           file: guest-images/Dockerfile.agent-compose-guest-archlinux
           platforms: linux/amd64
           load: true
-          tags: agent-compose-guest-archlinux:image-smoke
+          tags: agent-compose-guest:archlinux-image-smoke
           build-args: |
             REGISTRY_MIRROR=${{ env.REGISTRY_MIRROR }}
             GOPROXY=${{ env.GOPROXY }}
@@ -274,14 +274,14 @@ jobs:
       - name: Run Arch Linux guest no-KVM Docker lifecycle smoke
         env:
           AGENT_COMPOSE_E2E_DAEMON_IMAGE: agent-compose:image-smoke
-          AGENT_COMPOSE_E2E_GUEST_IMAGE: agent-compose-guest-archlinux:image-smoke
+          AGENT_COMPOSE_E2E_GUEST_IMAGE: agent-compose-guest:archlinux-image-smoke
           AGENT_COMPOSE_E2E_DOCKER_SOCKET: /var/run/docker.sock
           GOCACHE: ${{ github.workspace }}/.cache/go-build
         run: ./scripts/test-image-docker-e2e.sh
 
-  # Combine each image's per-platform digests into its published manifest.
+  # Combine each image variant's per-platform digests into its published manifest.
   merge:
-    name: Merge ${{ matrix.image }} manifest
+    name: Merge ${{ matrix.artifact }} manifest
     if: github.event_name != 'pull_request'
     needs:
       - build
@@ -293,18 +293,27 @@ jobs:
       matrix:
         include:
           - image: agent-compose
+            artifact: agent-compose
             platforms: linux/amd64,linux/arm64
+            tag_suffix: ""
+            stable_tag: latest
           - image: agent-compose-guest
+            artifact: agent-compose-guest
             platforms: linux/amd64,linux/arm64
-          - image: agent-compose-guest-archlinux
+            tag_suffix: ""
+            stable_tag: latest
+          - image: agent-compose-guest
+            artifact: agent-compose-guest-archlinux
             platforms: linux/amd64
+            tag_suffix: -archlinux
+            stable_tag: archlinux
     steps:
       - uses: actions/checkout@v4
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-${{ matrix.image }}--*
+          pattern: digests-${{ matrix.artifact }}--*
           merge-multiple: true
       - uses: docker/setup-buildx-action@v3
       - name: Docker metadata
@@ -313,10 +322,10 @@ jobs:
         with:
           images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=ref,event=branch,suffix=${{ matrix.tag_suffix }}
+            type=ref,event=tag,suffix=${{ matrix.tag_suffix }}
+            type=sha,prefix=sha-,suffix=${{ matrix.tag_suffix }}
+            type=raw,value=${{ matrix.stable_tag }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:

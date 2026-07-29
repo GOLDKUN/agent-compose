@@ -208,15 +208,15 @@ daemon 会自行使用配置的 port、root directory、base URL 和 token 启�
 task image:agent-compose-guest-archlinux
 ```
 
-生成的 tag 为 `agent-compose-guest-archlinux:latest`。该 task 会显式构建 `linux/amd64`，因此也可以在 Arm 开发主机上通过模拟执行。可通过 `IMAGE_TAG` 覆盖 tag；如果部署需要固定 base tag 或使用其他软件包镜像，可设置 `ARCHLINUX_TAG` 或 `ARCHLINUX_MIRROR`：
+生成的 tag 为 `agent-compose-guest:archlinux`。该 task 会显式构建 `linux/amd64`，因此也可以在 Arm 开发主机上通过模拟执行。可通过 `IMAGE_TAG` 覆盖 tag；如果部署需要固定 base tag 或使用其他软件包镜像，可设置 `ARCHLINUX_TAG` 或 `ARCHLINUX_MIRROR`：
 
 ```bash
-IMAGE_TAG=registry.example.com/team/agent-compose-guest-archlinux:vX.Y.Z \
+IMAGE_TAG=registry.example.com/team/agent-compose-guest:vX.Y.Z-archlinux \
 ARCHLINUX_TAG=<pinned-tag> \
 task image:agent-compose-guest-archlinux
 ```
 
-镜像 CI 会在 pull request 中构建该变体，并在推送到 `main` 或任意 Git tag 时将其发布到 Docker Hub 的 `chaitin/agent-compose-guest-archlinux`。它沿用默认镜像的分支、Git tag 和 SHA 策略，只有 `v*` release tag 会同时更新 `latest`；manifest 仅包含 `linux/amd64`。默认构建使用的上游 `library/archlinux` 镜像仅支持 x86_64；如果团队为其他架构提供了兼容的 Arch Linux base，必须单独构建并验证该变体。Arch Linux guest 不是部署默认镜像，使用时需要在 agent spec 中显式选择，并在投入使用前执行第 10 节中的验证。
+镜像 CI 会在 pull request 中构建该变体，并在推送到 `main` 或任意 Git tag 时将其发布到 Docker Hub 的 `chaitin/agent-compose-guest`。它的分支、Git tag 和 SHA tag 使用 `-archlinux` 后缀，`v*` release tag 还会更新稳定 tag `archlinux`。例如，release `vX.Y.Z` 会同时发布 `vX.Y.Z-archlinux` 和 `archlinux`。manifest 仅包含 `linux/amd64`。默认构建使用的上游 `library/archlinux` 镜像仅支持 x86_64；如果团队为其他架构提供了兼容的 Arch Linux base，必须单独构建并验证该变体。Arch Linux guest 不是部署默认镜像，使用时需要在 agent spec 中显式选择，并在投入使用前执行第 10 节中的验证。
 
 ## 7. 推荐构建方式：继承官方 Guest
 

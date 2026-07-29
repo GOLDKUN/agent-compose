@@ -302,22 +302,23 @@ Build it locally from the repository root:
 task image:agent-compose-guest-archlinux
 ```
 
-The resulting tag is `agent-compose-guest-archlinux:latest`. The task explicitly
+The resulting tag is `agent-compose-guest:archlinux`. The task explicitly
 targets `linux/amd64`, so it also works through emulation on an Arm development
 host. Override the tag with `IMAGE_TAG`, and use `ARCHLINUX_TAG` or
 `ARCHLINUX_MIRROR` when a deployment needs a pinned base tag or another package
 mirror:
 
 ```bash
-IMAGE_TAG=registry.example.com/team/agent-compose-guest-archlinux:vX.Y.Z \
+IMAGE_TAG=registry.example.com/team/agent-compose-guest:vX.Y.Z-archlinux \
 ARCHLINUX_TAG=<pinned-tag> \
 task image:agent-compose-guest-archlinux
 ```
 
 Image CI builds this variant on pull requests and publishes it as
-`chaitin/agent-compose-guest-archlinux` on Docker Hub on pushes to `main` and any
-Git tag. It follows the default images' branch, Git tag, and SHA policy, while
-only `v*` release tags also update `latest`; its manifest contains only
+`chaitin/agent-compose-guest` on Docker Hub on pushes to `main` and any Git tag.
+Its branch, Git tag, and SHA tags use an `-archlinux` suffix, while `v*` release
+tags also update the stable `archlinux` tag. For example, release `vX.Y.Z`
+publishes both `vX.Y.Z-archlinux` and `archlinux`. Its manifest contains only
 `linux/amd64`. The upstream
 `library/archlinux` image used by the build is x86_64-only; a team that supplies
 its own compatible Arch Linux base for another architecture must build and
