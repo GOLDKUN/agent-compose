@@ -1,0 +1,135 @@
+package configstore
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"strings"
+
+	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
+)
+
+const (
+	defaultProjectListLimit = 50
+	maxProjectListLimit     = 500
+)
+
+// ListProjects returns one stable project page and the current-revision
+// resource counts used by the public project summary. Count and page queries
+// share a read transaction so concurrent project updates cannot make the page
+// disagree with its reported total.
+func (s *projectStore) ListProjects(ctx context.Context, options ProjectListOptions) (ProjectListResult, error) {
+	limit, offset := projectListBounds(options)
+	where, args := projectListWhere(options)
+
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return ProjectListResult{}, fmt.Errorf("begin project list transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var total int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM project p WHERE `+where, args...).Scan(&total); err != nil {
+		return ProjectListResult{}, fmt.Errorf("count projects: %w", err)
+	}
+	result := ProjectListResult{
+		Projects:          []ProjectRecord{},
+		CountsByProjectID: make(map[string]domain.ProjectListCounts),
+		TotalCount:        total,
+		NextOffset:        min(offset, total),
+	}
+	if offset >= total {
+		if err := tx.Commit(); err != nil {
+			return ProjectListResult{}, fmt.Errorf("commit empty project list transaction: %w", err)
+		}
+		return result, nil
+	}
+
+	pageArgs := append(append([]any(nil), args...), limit, offset)
+	rows, err := tx.QueryContext(ctx, `SELECT
+		p.id, p.name, p.short_id, p.source_path, p.source_json,
+		p.current_revision, p.spec_hash, p.created_at, p.updated_at, p.removed_at,
+		(SELECT COUNT(*) FROM project_agent a
+			WHERE a.project_id = p.id AND (p.current_revision <= 0 OR a.revision = p.current_revision)),
+		(SELECT COUNT(*) FROM project_scheduler s
+			WHERE s.project_id = p.id AND (p.current_revision <= 0 OR s.revision = p.current_revision))
+		FROM project p
+		WHERE `+where+`
+		ORDER BY p.updated_at DESC, p.created_at DESC, p.id ASC
+		LIMIT ? OFFSET ?`, pageArgs...)
+	if err != nil {
+		return ProjectListResult{}, fmt.Errorf("query project page: %w", err)
+	}
+	for rows.Next() {
+		project, counts, scanErr := scanProjectListRow(rows)
+		if scanErr != nil {
+			_ = rows.Close()
+			return ProjectListResult{}, scanErr
+		}
+		result.Projects = append(result.Projects, project)
+		result.CountsByProjectID[project.ID] = counts
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return ProjectListResult{}, fmt.Errorf("iterate project page: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return ProjectListResult{}, fmt.Errorf("close project page: %w", err)
+	}
+
+	result.NextOffset = offset + len(result.Projects)
+	result.HasMore = result.NextOffset < total
+	if err := tx.Commit(); err != nil {
+		return ProjectListResult{}, fmt.Errorf("commit project list transaction: %w", err)
+	}
+	return result, nil
+}
+
+func projectListBounds(options ProjectListOptions) (limit, offset int) {
+	limit = options.Limit
+	if limit <= 0 {
+		limit = defaultProjectListLimit
+	}
+	if limit > maxProjectListLimit {
+		limit = maxProjectListLimit
+	}
+	offset = max(options.Offset, 0)
+	return limit, offset
+}
+
+func projectListWhere(options ProjectListOptions) (string, []any) {
+	clauses := make([]string, 0, 2)
+	args := make([]any, 0, 3)
+	if !options.IncludeRemoved {
+		clauses = append(clauses, "p.removed_at = 0")
+	}
+	if query := strings.ToLower(strings.TrimSpace(options.Query)); query != "" {
+		clauses = append(clauses, `(instr(lower(p.id), ?) > 0 OR instr(lower(p.name), ?) > 0 OR instr(lower(p.source_path), ?) > 0)`)
+		args = append(args, query, query, query)
+	}
+	if len(clauses) == 0 {
+		return "1 = 1", args
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+type projectListRows interface {
+	Scan(...any) error
+}
+
+func scanProjectListRow(row projectListRows) (ProjectRecord, domain.ProjectListCounts, error) {
+	var agentCount int64
+	var schedulerCount int64
+	project, err := projects.ScanProject(func(dest ...any) error {
+		dest = append(dest, &agentCount, &schedulerCount)
+		return row.Scan(dest...)
+	})
+	if err != nil {
+		return ProjectRecord{}, domain.ProjectListCounts{}, err
+	}
+	return project, domain.ProjectListCounts{
+		AgentCount:     uint32(agentCount),
+		SchedulerCount: uint32(schedulerCount),
+	}, nil
+}

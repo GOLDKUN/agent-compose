@@ -11,3 +11,7 @@ Migration files are embedded into the agent-compose binary and applied by the
 - Add schema changes only as a new migration; do not add startup-time schema
   inspection or `CREATE TABLE` statements to store implementations.
 - Keep connection PRAGMAs and operations such as `VACUUM` out of migrations.
+- Store new business timestamps as Unix milliseconds, with `0` representing an
+  optional timestamp that has not been set. Existing second-, millisecond-, and
+  nanosecond-based columns retain their released units and are converted at
+  their owning storage boundary rather than rewritten in place.
