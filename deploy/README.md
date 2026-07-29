@@ -34,13 +34,15 @@ The bootstrap forwards all arguments to the downloaded binary:
 curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | \
   sudo bash -s -- install --yes
 
-# Select a release, directory, UI port, or image mirror.
+# Select a release, directory, UI port, or complete image references.
 sudo /opt/agent-compose/installer install \
   --version v1.2.3 \
   --dir /srv/agent-compose \
   --with-ui \
   --port 8080 \
-  --image-prefix registry.example.com/agent-compose \
+  --backend-image registry.example.com/team/agent-compose:v1.2.3 \
+  --frontend-image registry.example.com/team/agent-compose-ui:v1.2.3 \
+  --guest-image registry.example.com/team/agent-compose-guest:v1.2.3 \
   --yes
 
 # Skip the guest image pre-pull; the first sandbox downloads it instead.
@@ -54,8 +56,10 @@ sudo /opt/agent-compose/installer install --no-start --yes
 ```
 
 The legacy top-level form, including `--upgrade`, `--dir`, `--version`,
-`--image-prefix`, `--no-start`, and `--yes`, remains accepted. New automation
-should use the explicit `install`, `upgrade`, and `uninstall` subcommands.
+`--image-prefix`, `--no-start`, and `--yes`, remains accepted. `--image-prefix`
+is deprecated; use the three complete image options when selecting a mirror or
+custom image. New automation should use the explicit `install`, `upgrade`, and
+`uninstall` subcommands.
 
 Environment overrides retained for automation are:
 
@@ -86,6 +90,16 @@ On first installation the installer generates `AUTH_SECRET` and an `admin`
 password. The password is printed once and stored in `.env`. Existing settings
 are preserved. During upgrade, image references advance only when their current
 value still matches `.installer-state.env`; user overrides are never replaced.
+
+The interactive form and non-interactive CLI can independently override the
+backend (`--backend-image`), frontend (`--frontend-image`), and sandbox guest
+(`--guest-image`) image with a complete tag or digest reference. An explicit
+image always replaces that one value and becomes installer-managed, including
+during upgrade. Images omitted from the command retain the normal upgrade
+protection above. If the deprecated `--image-prefix` is combined with complete
+image options, the complete option wins for its image and the prefix supplies
+the omitted images. Without either form of override, the Docker Hub references
+from the selected Release bundle are used.
 
 New installations persist `AGENT_COMPOSE_DATA_DIR=./data`. If an older database
 exists only under `./data/agent-compose`, that path is retained. When databases

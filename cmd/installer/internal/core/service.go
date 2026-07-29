@@ -414,6 +414,11 @@ func ensureSecrets(env *envFile) (string, error) {
 
 func applyImageReferences(env, state, manifest *envFile, options Options, mode string) error {
 	desired := map[string]string{}
+	explicit := map[string]bool{
+		"AGENT_COMPOSE_IMAGE":          options.BackendImageSet,
+		"AGENT_COMPOSE_FRONTEND_IMAGE": options.FrontendImageSet,
+		"DEFAULT_IMAGE":                options.GuestImageSet,
+	}
 	if options.ImagePrefix != "" {
 		version := options.Version
 		if image, ok := manifest.Get("AGENT_COMPOSE_IMAGE"); ok {
@@ -436,10 +441,19 @@ func applyImageReferences(env, state, manifest *envFile, options Options, mode s
 			}
 		}
 	}
+	if options.BackendImageSet {
+		desired["AGENT_COMPOSE_IMAGE"] = strings.TrimSpace(options.BackendImage)
+	}
+	if options.FrontendImageSet {
+		desired["AGENT_COMPOSE_FRONTEND_IMAGE"] = strings.TrimSpace(options.FrontendImage)
+	}
+	if options.GuestImageSet {
+		desired["DEFAULT_IMAGE"] = strings.TrimSpace(options.GuestImage)
+	}
 	for key, value := range desired {
 		current, currentExists := env.Get(key)
 		managed, managedExists := state.Get(key)
-		shouldSet := mode == "install" || !currentExists || current == ""
+		shouldSet := explicit[key] || mode == "install" || !currentExists || current == ""
 		if mode == "upgrade" && managedExists && current == managed {
 			shouldSet = true
 		}
