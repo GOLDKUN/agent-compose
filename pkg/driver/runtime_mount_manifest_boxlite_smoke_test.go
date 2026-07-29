@@ -43,14 +43,14 @@ func TestBoxLiteStoppedStatusIsResumable(t *testing.T) {
 	}
 }
 
-func TestSmokeBoxLiteStopResumePreservesWritableLayer(t *testing.T) {
+func TestSmokeBoxLiteRuntimeRetentionAndRelease(t *testing.T) {
 	runtimeSmokeEnabled(t, RuntimeDriverBoxlite)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	config := newRuntimeSmokeConfig(t, RuntimeDriverBoxlite)
 	session, vmState, proxyState := newRuntimeSmokeSandbox(t, ctx, config, RuntimeDriverBoxlite)
 	runtime := &cgoSandboxRuntime{config: config}
-	assertRuntimeStopResumePreservesWritableLayer(t, ctx, config, runtime, session, vmState, proxyState)
+	assertRuntimeRetentionAndRelease(t, ctx, config, runtime, session, vmState, proxyState)
 }
 
 func TestSmokeBoxLiteRuntimeMountManifestDirectoryOnlyStarts(t *testing.T) {

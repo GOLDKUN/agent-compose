@@ -245,7 +245,7 @@ func assertRuntimeSmokeHomeFiles(t *testing.T, ctx context.Context, runtime Sand
 	}
 }
 
-func assertRuntimeStopResumePreservesWritableLayer(t *testing.T, ctx context.Context, config *appconfig.Config, runtime SandboxRuntime, session *Sandbox, vmState VMState, proxyState ProxyState) {
+func assertRuntimeRetentionAndRelease(t *testing.T, ctx context.Context, config *appconfig.Config, runtime SandboxRuntime, session *Sandbox, vmState VMState, proxyState ProxyState) {
 	t.Helper()
 	proxyState.Enabled = false
 	info, err := runtime.EnsureSandbox(ctx, session, vmState, proxyState)

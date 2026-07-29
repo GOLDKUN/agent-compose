@@ -71,7 +71,7 @@ func TestDockerJupyterAutomaticPortsSmoke(t *testing.T) {
 	}
 }
 
-func TestDockerStopResumePreservesWritableLayerSmoke(t *testing.T) {
+func TestDockerRuntimeRetentionAndReleaseSmoke(t *testing.T) {
 	runtimeSmokeEnabled(t, RuntimeDriverDocker)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -79,7 +79,7 @@ func TestDockerStopResumePreservesWritableLayerSmoke(t *testing.T) {
 	config := newRuntimeSmokeConfig(t, RuntimeDriverDocker)
 	runtime := &dockerRuntime{config: config}
 	session, vmState, proxyState := newRuntimeSmokeSandbox(t, ctx, config, RuntimeDriverDocker)
-	assertRuntimeStopResumePreservesWritableLayer(t, ctx, config, runtime, session, vmState, proxyState)
+	assertRuntimeRetentionAndRelease(t, ctx, config, runtime, session, vmState, proxyState)
 }
 
 func TestDockerCommandInteractionSmokeCatStdinEOF(t *testing.T) {

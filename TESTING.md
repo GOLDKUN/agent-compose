@@ -161,6 +161,12 @@ resource IDs on the next invocation instead of touching unrelated containers.
 Ordinary `task test` runs only the deterministic task contract and compiles the
 environment-gated runtime cases without contacting the Docker daemon.
 
+On a prepared Linux/KVM host, `task test:runtime-smoke` runs the real BoxLite
+and Microsandbox retention-and-release cases. Each case verifies that a normal
+stop/resume preserves the private writable layer, intentional runtime removal
+prevents a stale resume, and recreation starts with a fresh private layer while
+preserving declared durable workspace data.
+
 ## Quality Gate
 
 `task test` is the project quality gate for tests.
