@@ -23,6 +23,7 @@ agent-compose [global options] <command> [command options] [arguments]
 | `--host <endpoint>` | 指定 daemon 地址。可以连接本机 daemon，也可以连接远程 daemon。 |
 | `--project-name <name>` | 按名称选择 daemon 中已部署的 project；`up` 和 `project up` 不支持该参数，且它不会修改 compose 文件声明的项目名称。 |
 | `--json` | 使用 JSON 输出，供脚本、AI 和自动化系统解析。 |
+| `--timeout <duration>` | 每个 CLI→daemon RPC 的最大总时长，包括读取流式响应；默认值 `0` 表示不设置 RPC 总超时。 |
 
 示例：
 
@@ -39,6 +40,9 @@ agent-compose --host http://10.0.0.12:7410 ls --json
 - 本地编排命令始终使用 compose 文件声明的项目名称（或根据其目录推导）。`up` 和 `project up` 会拒绝 `--project-name`，不再静默忽略；`config` 也不会用它覆盖 compose project 名称。
 - 使用 `-f` 时，不需要切换到 project root。
 - `--host` 只决定 CLI 连接哪个 daemon；sandbox 实际运行在 daemon 所在环境中。
+- `--timeout` 接受 `30s`、`15m`、`2h` 等 Go duration。它分别作用于每个 unary、server-streaming 或双向流 RPC；设置为 `0` 时会等待 RPC 完成或用户主动取消。
+- 即使 `--timeout` 为 `0`，连接建立和显式健康检查仍保留各自的有限超时。
+- `--timeout` 只控制 CLI 请求；`AGENT_TIMEOUT`、`SANDBOX_START_TIMEOUT`、`SANDBOX_STOP_TIMEOUT` 等 daemon 侧限制保持独立。
 - daemon 不再消费浏览器登录用的 `AUTH_*` / `OAUTH_*` 配置；UI 浏览器认证由 agent-compose-ui server 处理。
 - 自动化场景应使用 `--json`，不要解析人类可读表格。
 

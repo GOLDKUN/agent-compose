@@ -7,7 +7,21 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestResolveCLIServiceClientConfigIncludesTimeout(t *testing.T) {
+	t.Setenv("AGENT_COMPOSE_HOST", "")
+	t.Setenv("AGENT_COMPOSE_SOCKET", filepath.Join(t.TempDir(), "agent-compose.sock"))
+
+	clientConfig, err := resolveCLIServiceClientConfig(cliOptions{Timeout: 45 * time.Second})
+	if err != nil {
+		t.Fatalf("resolveCLIServiceClientConfig returned error: %v", err)
+	}
+	if clientConfig.Timeout != 45*time.Second {
+		t.Fatalf("client timeout = %v, want 45s", clientConfig.Timeout)
+	}
+}
 
 func TestCLIClientConfigPriority(t *testing.T) {
 	testCLIClientConfigPriority(t)

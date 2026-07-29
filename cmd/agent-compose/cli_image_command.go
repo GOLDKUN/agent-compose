@@ -212,7 +212,7 @@ func runComposeProjectBuildCommand(cmd *cobra.Command, cli cliOptions, options c
 	}
 	output := composeProjectImageBuildOutput{Images: make([]composeImageBuildOutput, 0, len(plans))}
 	for _, plan := range plans {
-		item, err := buildImage(cmd.Context(), cmd.OutOrStdout(), cli.JSON, clients.imageStream, plan)
+		item, err := buildImage(cmd.Context(), cmd.OutOrStdout(), cli.JSON, clients.image, plan)
 		if err != nil {
 			return commandExitErrorForConnect(fmt.Errorf("build image %s: %w", firstNonEmptyString(plan.GetTags()...), err))
 		}

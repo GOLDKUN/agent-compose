@@ -36,7 +36,10 @@ import (
 
 type daemonRunner func(context.Context) error
 
-const daemonStatusTimeout = 5 * time.Second
+const (
+	daemonStatusTimeout = 5 * time.Second
+	daemonDialTimeout   = 30 * time.Second
+)
 
 type DaemonOptions struct {
 	LoadDotEnv      bool
@@ -496,25 +499,13 @@ func formatDaemonStatusTime(timestamp float64, timezone string, timezoneOffset *
 }
 
 func newDaemonHTTPClient(clientConfig cliClientConfig) *http.Client {
-	return newDaemonHTTPClientWithTimeout(clientConfig, 10*time.Minute)
-}
-
-func newDaemonAttachHTTPClient(clientConfig cliClientConfig) *http.Client {
-	return newDaemonHTTPClientWithTimeout(clientConfig, 0)
-}
-
-func newDaemonStreamingHTTPClient(clientConfig cliClientConfig) *http.Client {
-	return newDaemonHTTPClientWithTimeout(clientConfig, 0)
-}
-
-func newDaemonHTTPClientWithTimeout(clientConfig cliClientConfig, timeout time.Duration) *http.Client {
 	roundTripper := http.RoundTripper(newDaemonBaseRoundTripper(clientConfig))
 	if !clientConfig.UseUnixSocket && clientConfig.AuthToken != "" {
 		roundTripper = bearerAuthRoundTripper{token: clientConfig.AuthToken, next: roundTripper}
 	}
 	return &http.Client{
 		Transport: roundTripper,
-		Timeout:   timeout,
+		Timeout:   clientConfig.Timeout,
 	}
 }
 
@@ -523,7 +514,7 @@ func newDaemonBaseRoundTripper(clientConfig cliClientConfig) http.RoundTripper {
 	if clientConfig.UseUnixSocket {
 		socketPath := clientConfig.SocketPath
 		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			var dialer net.Dialer
+			dialer := net.Dialer{Timeout: daemonDialTimeout, KeepAlive: 30 * time.Second}
 			return dialer.DialContext(ctx, "unix", socketPath)
 		}
 	}
@@ -537,7 +528,7 @@ func newDaemonBaseRoundTripper(clientConfig cliClientConfig) http.RoundTripper {
 				network = "unix"
 				addr = clientConfig.SocketPath
 			}
-			var dialer net.Dialer
+			dialer := net.Dialer{Timeout: daemonDialTimeout, KeepAlive: 30 * time.Second}
 			return dialer.DialContext(ctx, network, addr)
 		},
 	}

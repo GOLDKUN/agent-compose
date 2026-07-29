@@ -23,6 +23,7 @@ Global options are placed between `agent-compose` and the subcommand, and apply 
 | `--host <endpoint>` | Daemon HTTP endpoint. This can target a local daemon or a remote daemon. |
 | `--project-name <name>` | Select an existing daemon project by name. It is not supported by `up` or `project up` and never changes the project name declared by a compose file. |
 | `--json` | Print machine-readable JSON for scripts, AI agents, and automation. |
+| `--timeout <duration>` | Maximum total duration of each CLI-to-daemon RPC, including streaming responses. The default `0` disables the total RPC timeout. |
 
 Examples:
 
@@ -39,6 +40,9 @@ Rules:
 - Local authoring commands use the project name declared by the compose file (or derived from its directory). `up` and `project up` reject `--project-name` instead of silently ignoring it; `config` never uses it to override the compose project name.
 - With `-f`, the CLI can operate on a project from any working directory.
 - `--host` only selects the daemon. Sandboxes run in the daemon environment.
+- `--timeout` accepts Go durations such as `30s`, `15m`, and `2h`. It applies independently to each unary, server-streaming, or bidirectional RPC; `0` waits until the RPC completes or the user cancels it.
+- Connection establishment and explicit health probes retain their own bounded timeouts even when `--timeout` is `0`.
+- `--timeout` only controls the CLI request. Daemon-side limits such as `AGENT_TIMEOUT`, `SANDBOX_START_TIMEOUT`, and `SANDBOX_STOP_TIMEOUT` remain independent.
 - Automation should use `--json` and avoid parsing human-readable tables.
 
 ### Daemon authentication
