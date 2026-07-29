@@ -97,8 +97,8 @@ func TestV2MigrationDesignPreservesManagedHistory(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&historyCount); err != nil {
 		t.Fatalf("count v2 migration history: %v", err)
 	}
-	if historyCount != 7 {
-		t.Fatalf("v2 migration history count = %d, want 7", historyCount)
+	if historyCount != 8 {
+		t.Fatalf("v2 migration history count = %d, want 8", historyCount)
 	}
 }
 
@@ -345,14 +345,56 @@ func TestHistoricalMigrationChecksumsRemainImmutable(t *testing.T) {
 	}
 }
 
+func TestCronLocalTimezoneMigrationOnlyUpdatesDeclarativeSchedulers(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		schedulerSpec string
+		wantTimezone  string
+		wantNextFire  int64
+	}{
+		{name: "declarative", schedulerSpec: `{"enabled":true,"triggers":[{"kind":"cron","cron":"0 9 * * *"}]}`, wantTimezone: "Local", wantNextFire: 0},
+		{name: "script", schedulerSpec: `{"enabled":true,"script":"scheduler.cron('0 9 * * *', run, { timezone: 'UTC' })"}`, wantTimezone: "UTC", wantNextFire: 2000},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			db := newMemoryDB(t)
+			chain := loadV2MigrationDesignChain(t)
+			if err := applyMigrationSet(ctx, db, chain[:4]); err != nil {
+				t.Fatalf("apply v4 prefix: %v", err)
+			}
+			seedManagedV4Fixture(t, db)
+			if err := applyMigrationSet(ctx, db, chain[:7]); err != nil {
+				t.Fatalf("apply v7 prefix: %v", err)
+			}
+			if _, err := db.ExecContext(ctx, `UPDATE project_scheduler SET spec_json = ? WHERE id = 'scheduler-1'`, tt.schedulerSpec); err != nil {
+				t.Fatalf("set scheduler spec: %v", err)
+			}
+			if _, err := db.ExecContext(ctx, `UPDATE scheduler_trigger SET spec_json = '{"kind":"cron","expr":"0 9 * * *","timezone":"UTC"}', next_fire_at = 2000 WHERE scheduler_id = 'scheduler-1'`); err != nil {
+				t.Fatalf("set cron trigger: %v", err)
+			}
+			if err := applyMigrationSet(ctx, db, chain); err != nil {
+				t.Fatalf("apply local timezone migration: %v", err)
+			}
+			var specJSON string
+			var nextFire int64
+			if err := db.QueryRowContext(ctx, `SELECT spec_json, next_fire_at FROM scheduler_trigger WHERE scheduler_id = 'scheduler-1'`).Scan(&specJSON, &nextFire); err != nil {
+				t.Fatalf("read migrated cron trigger: %v", err)
+			}
+			if !strings.Contains(specJSON, `"timezone":"`+tt.wantTimezone+`"`) || nextFire != tt.wantNextFire {
+				t.Fatalf("migrated cron trigger = %s/%d, want timezone %s and next fire %d", specJSON, nextFire, tt.wantTimezone, tt.wantNextFire)
+			}
+		})
+	}
+}
+
 func loadV2MigrationDesignChain(t *testing.T) []migration {
 	t.Helper()
 	chain, err := loadMigrations(embeddedMigrations)
 	if err != nil {
 		t.Fatalf("load migrations: %v", err)
 	}
-	if len(chain) != 7 {
-		t.Fatalf("migration count = %d, want 7", len(chain))
+	if len(chain) != 8 {
+		t.Fatalf("migration count = %d, want 8", len(chain))
 	}
 	return chain
 }

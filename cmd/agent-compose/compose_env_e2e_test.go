@@ -29,6 +29,7 @@ func TestE2EDockerComposeSandboxEnvContract(t *testing.T) {
 	composeData := readRepoFileForComposeEnvTest(t, root, "docker-compose.yml")
 	envExample := string(readRepoFileForComposeEnvTest(t, root, ".env.example"))
 	dockerfile := string(readRepoFileForComposeEnvTest(t, root, "Dockerfile"))
+	localDockerfile := string(readRepoFileForComposeEnvTest(t, root, "Dockerfile.agent-compose-local"))
 
 	var composeFile composeEnvContractFile
 	if err := yaml.Unmarshal(composeData, &composeFile); err != nil {
@@ -49,7 +50,7 @@ func TestE2EDockerComposeSandboxEnvContract(t *testing.T) {
 			t.Fatalf("compose service still exposes legacy session root env %q", key)
 		}
 	}
-	for _, volume := range []string{"/var/run/docker.sock:/var/run/docker.sock", "${AGENT_COMPOSE_DATA_DIR:-./data}:/data", "./.env:/data/work/.env:ro"} {
+	for _, volume := range []string{"/var/run/docker.sock:/var/run/docker.sock", "/etc/localtime:/etc/localtime:ro", "${AGENT_COMPOSE_DATA_DIR:-./data}:/data", "./.env:/data/work/.env:ro"} {
 		if !stringSliceContains(service.Volumes, volume) {
 			t.Fatalf("agent-compose volumes = %#v, want %q", service.Volumes, volume)
 		}
@@ -82,6 +83,9 @@ func TestE2EDockerComposeSandboxEnvContract(t *testing.T) {
 	}
 	if strings.Contains(dockerfile, "ENV SESSION_ROOT=") {
 		t.Fatalf("Dockerfile still defines legacy SESSION_ROOT")
+	}
+	if strings.Contains(dockerfile, "/usr/share/zoneinfo/Asia/Shanghai") || strings.Contains(localDockerfile, "/usr/share/zoneinfo/Asia/Shanghai") {
+		t.Fatal("daemon Dockerfiles must not hard-code the timezone")
 	}
 }
 

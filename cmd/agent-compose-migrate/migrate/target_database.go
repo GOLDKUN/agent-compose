@@ -41,7 +41,7 @@ func prepareTargetDatabase(
 			return nil, nil, nil, err
 		}
 	}
-	if version < 1 || version > 7 {
+	if version < 1 || version > currentSchemaVersion {
 		return nil, nil, nil, fmt.Errorf("target database has an unknown migration version %d", version)
 	}
 	if err := validateVersionedPrefix(ctx, db, version); err != nil {
@@ -398,8 +398,8 @@ func verifyLatestTargetDatabase(ctx context.Context, path string) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	if version != 7 {
-		return 0, fmt.Errorf("resumable target database is schema v%d, want v7", version)
+	if version != currentSchemaVersion {
+		return 0, fmt.Errorf("resumable target database is schema v%d, want v%d", version, currentSchemaVersion)
 	}
 	if err := validateVersionedPrefix(ctx, db, version); err != nil {
 		return 0, fmt.Errorf("validate resumable target database: %w", err)

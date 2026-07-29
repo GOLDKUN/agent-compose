@@ -174,11 +174,12 @@ func (controllerTestEngine) Execute(context.Context, SchedulerExecutionRequest, 
 }
 
 type controllerTestStore struct {
-	schedulers map[string]domain.Scheduler
-	runs       []domain.SchedulerRunSummary
-	events     []domain.SchedulerEvent
-	deliveries []domain.EventDelivery
-	replaceErr error
+	schedulers  map[string]domain.Scheduler
+	runs        []domain.SchedulerRunSummary
+	events      []domain.SchedulerEvent
+	deliveries  []domain.EventDelivery
+	replaceErr  error
+	nextFireErr error
 }
 
 func newControllerTestStore() *controllerTestStore {
@@ -236,6 +237,20 @@ func (s *controllerTestStore) SetSchedulerTriggerEnabled(_ context.Context, sche
 	for i := range scheduler.Triggers {
 		if scheduler.Triggers[i].ID == triggerID {
 			scheduler.Triggers[i].Enabled = enabled
+		}
+	}
+	s.schedulers[schedulerID] = scheduler
+	return nil
+}
+
+func (s *controllerTestStore) SetSchedulerTriggerNextFireAt(_ context.Context, schedulerID, triggerID string, nextFireAt time.Time) error {
+	if s.nextFireErr != nil {
+		return s.nextFireErr
+	}
+	scheduler := s.schedulers[schedulerID]
+	for i := range scheduler.Triggers {
+		if scheduler.Triggers[i].ID == triggerID {
+			scheduler.Triggers[i].NextFireAt = nextFireAt
 		}
 	}
 	s.schedulers[schedulerID] = scheduler

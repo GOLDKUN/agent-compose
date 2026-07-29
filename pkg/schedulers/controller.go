@@ -27,6 +27,7 @@ type ControllerStore interface {
 	ListSchedulers(ctx context.Context) ([]domain.Scheduler, error)
 	GetScheduler(ctx context.Context, schedulerID string) (domain.Scheduler, error)
 	ReplaceSchedulerTriggers(ctx context.Context, schedulerID string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error)
+	SetSchedulerTriggerNextFireAt(ctx context.Context, schedulerID, triggerID string, nextFireAt time.Time) error
 	SetSchedulerEnabled(ctx context.Context, schedulerID string, enabled bool) error
 	SetSchedulerTriggerEnabled(ctx context.Context, schedulerID, triggerID string, enabled bool) error
 	AddSchedulerEvent(ctx context.Context, event domain.SchedulerEvent) error
@@ -217,6 +218,9 @@ func (c *Controller) ScheduleLoop() {
 func (c *Controller) Refresh(ctx context.Context) error {
 	items, err := c.deps.Store.ListSchedulers(ctx)
 	if err != nil {
+		return err
+	}
+	if err := c.initializeCronSchedules(ctx, items); err != nil {
 		return err
 	}
 	next := make(map[string]domain.Scheduler, len(items))

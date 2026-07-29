@@ -196,6 +196,7 @@ func (s ScriptSource) MarshalYAML() (any, error) {
 type TriggerSpec struct {
 	Name          string            `yaml:"name,omitempty" json:"name,omitempty"`
 	Cron          string            `yaml:"cron,omitempty" json:"cron,omitempty"`
+	Timezone      string            `yaml:"timezone,omitempty" json:"timezone,omitempty"`
 	Interval      string            `yaml:"interval,omitempty" json:"interval,omitempty"`
 	Timeout       string            `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 	Event         *EventTriggerSpec `yaml:"event,omitempty" json:"event,omitempty"`
@@ -741,6 +742,7 @@ func validateTrigger(node *yaml.Node, path string) error {
 	return validateMapping(node, path, map[string]nodeValidator{
 		"name":           validateScalar,
 		"cron":           validateScalar,
+		"timezone":       validateScalar,
 		"interval":       validateScalar,
 		"timeout":        validateScalar,
 		"event":          validateEventTrigger,

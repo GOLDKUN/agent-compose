@@ -322,6 +322,23 @@ func (s *schedulerStore) MarkSchedulerTriggerFired(ctx context.Context, schedule
 	return nil
 }
 
+func (s *schedulerStore) SetSchedulerTriggerNextFireAt(ctx context.Context, schedulerID, triggerID string, nextFireAt time.Time) error {
+	schedulerID = strings.TrimSpace(schedulerID)
+	triggerID = strings.TrimSpace(triggerID)
+	if schedulerID == "" || triggerID == "" {
+		return fmt.Errorf("loader trigger id is required")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE scheduler_trigger SET next_fire_at = ? WHERE scheduler_id = ? AND trigger_id = ?`, domain.NonZeroTimeUnixMilli(nextFireAt), schedulerID, triggerID)
+	if err != nil {
+		return fmt.Errorf("update loader trigger next fire time: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		id := schedulerID + "/" + triggerID
+		return domain.ResourceError(domain.ErrNotFound, "loader trigger", id, fmt.Sprintf("loader trigger %s not found", id), nil)
+	}
+	return nil
+}
+
 func (s *schedulerStore) CreateSchedulerRun(ctx context.Context, run domain.SchedulerRunSummary) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO scheduler_run(
         scheduler_id, run_id, trigger_id, trigger_kind, trigger_source, status, started_at, completed_at, duration_ms, error, result_json, payload_json, source_script_sha256, artifacts_dir

@@ -10,7 +10,7 @@ import (
 	cronlib "github.com/robfig/cron/v3"
 )
 
-const schedulerDefaultCronTimezone = "UTC"
+const schedulerDefaultCronTimezone = "Local"
 
 type schedulerCronSpec struct {
 	Kind     string `json:"kind,omitempty"`

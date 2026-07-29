@@ -538,6 +538,15 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if err := store.MarkSchedulerTriggerFired(ctx, loader.Summary.ID, "interval", time.Now().UTC(), time.Now().UTC().Add(time.Hour)); err != nil {
 		t.Fatalf("MarkSchedulerTriggerFired returned error: %v", err)
 	}
+	if err := store.SetSchedulerTriggerNextFireAt(ctx, loader.Summary.ID, "interval", time.Now().UTC().Add(2*time.Hour)); err != nil {
+		t.Fatalf("SetSchedulerTriggerNextFireAt returned error: %v", err)
+	}
+	if err := store.SetSchedulerTriggerNextFireAt(ctx, loader.Summary.ID, "missing", time.Now().UTC()); err == nil {
+		t.Fatal("SetSchedulerTriggerNextFireAt missing trigger returned nil error")
+	}
+	if err := store.SetSchedulerTriggerNextFireAt(ctx, "", "interval", time.Now().UTC()); err == nil {
+		t.Fatal("SetSchedulerTriggerNextFireAt empty scheduler returned nil error")
+	}
 	if err := store.UpdateSchedulerLastError(ctx, loader.Summary.ID, "last error"); err != nil {
 		t.Fatalf("UpdateSchedulerLastError returned error: %v", err)
 	}

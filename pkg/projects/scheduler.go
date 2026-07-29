@@ -56,16 +56,20 @@ func ProjectSchedulerTriggerAndRegistration(id, agentName string, trigger compos
 	callback := fmt.Sprintf("async function(event) { return %s; }", agentCall)
 	switch trigger.Kind {
 	case "cron":
-		specJSON, err := schedulers.SchedulerCronSpecJSON(trigger.Cron, "")
+		specJSON, err := schedulers.SchedulerCronSpecJSON(trigger.Cron, trigger.Timezone)
 		if err != nil {
 			return domain.SchedulerTrigger{}, "", err
+		}
+		options := ""
+		if trigger.Timezone != "" {
+			options = fmt.Sprintf(", { timezone: %s }", JSStringLiteral(trigger.Timezone))
 		}
 		return domain.SchedulerTrigger{
 			ID:       id,
 			Kind:     domain.SchedulerTriggerKindCron,
 			Enabled:  true,
 			SpecJSON: specJSON,
-		}, fmt.Sprintf("scheduler.cron(%s, %s, %s);\n", JSStringLiteral(id), JSStringLiteral(trigger.Cron), callback), nil
+		}, fmt.Sprintf("scheduler.cron(%s, %s, %s%s);\n", JSStringLiteral(id), JSStringLiteral(trigger.Cron), callback, options), nil
 	case "interval":
 		interval, err := time.ParseDuration(trigger.Interval)
 		if err != nil {

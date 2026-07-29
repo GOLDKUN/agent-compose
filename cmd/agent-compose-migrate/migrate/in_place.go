@@ -198,7 +198,7 @@ func continueInPlaceMigration(ctx context.Context, report Report, root, runtimeR
 		}
 	}
 	report.Stage = "complete"
-	report.TargetVersion = 7
+	report.TargetVersion = currentSchemaVersion
 	report.Warnings = append([]string(nil), state.Warnings...)
 	writeMigrationProgress(progress, "complete", "in-place migration completed")
 	return report, nil
@@ -338,7 +338,7 @@ func switchInPlaceDatabase(ctx context.Context, root string) error {
 	converted := filepath.Join(backupRoot, inPlaceConvertedDB)
 	if version, err := databaseVersionIfPresent(ctx, current); err != nil {
 		return err
-	} else if version == 7 {
+	} else if version == currentSchemaVersion {
 		if err := os.Remove(converted); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove redundant converted database: %w", err)
 		}

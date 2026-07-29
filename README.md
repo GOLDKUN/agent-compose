@@ -419,6 +419,11 @@ overlay:
 docker compose -f docker-compose.yml -f docker-compose.kvm.yml up -d
 ```
 
+The daemon also mounts the Linux host's `/etc/localtime` read-only. Cron
+triggers without an explicit `timezone` therefore follow the host timezone.
+Set `TZ` in `.env` only to override it, and restart the daemon after changing
+the timezone.
+
 The installer checks for `/dev/kvm` on a new installation and persists either
 the base file or the base-plus-KVM file set as `COMPOSE_FILE` in `.env`. This is
 deployment selection, not proof that KVM or either native runtime is healthy.

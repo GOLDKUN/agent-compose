@@ -791,6 +791,7 @@ scheduler:
   triggers:
     - name: nightly
       cron: "0 2 * * *"
+      timezone: Asia/Shanghai
       prompt: Run the nightly review.
     - name: heartbeat
       interval: 30m
@@ -808,12 +809,15 @@ scheduler:
 | 字段 | 类型 | 必填 | 作用 |
 | --- | --- | --- | --- |
 | `name` | string | 否 | 可读的稳定名称；同一 Scheduler 中非空名称不可重复。省略时 ID 会结合列表位置稳定派生。 |
-| `cron` | string | 四选一 | 5 字段 cron，支持可选秒字段和 robfig/cron descriptor。声明式 cron trigger 使用 UTC。 |
+| `cron` | string | 四选一 | 5 字段 cron，支持可选秒字段和 robfig/cron descriptor。默认使用 daemon 的本地时区。 |
+| `timezone` | string | 否 | `cron` trigger 使用的 IANA 时区，例如 `UTC` 或 `Asia/Shanghai`。`Local` 或省略该字段时使用 daemon 本地时区；其他 trigger 类型不能使用。 |
 | `interval` | duration | 四选一 | 周期，例如 `30s`、`5m`、`2h`；必须大于 0，实际注册精度至少 1ms。 |
 | `timeout` | duration | 四选一 | 一次性延迟，例如 `15s`；必须大于 0，实际注册精度至少 1ms。 |
 | `event.topic` | string | 四选一 | 内层 `topic` 是订阅的非空 topic，可使用如 `webhook.github.push`。 |
 | `prompt` | string | 否 | 触发后发送给 Agent 的 prompt；空值默认为 `Run agent <name>.`。 |
 | `sandbox_policy` | string | 否 | 本次 Agent 调用使用 `sticky` 或 `new`；省略时不在生成的调用中显式覆盖。 |
+
+Daemon 本地时区优先取 `TZ`，未设置时取操作系统的 `/etc/localtime`。项目提供的 Docker Compose 会以只读方式挂载宿主机 `/etc/localtime`；仅当 daemon 需要有意使用不同于宿主机的时区时，才在 `.env` 中设置 `TZ`。修改时区后需要重启 daemon。持久化时间戳仍统一使用 UTC。
 
 #### 内联脚本
 

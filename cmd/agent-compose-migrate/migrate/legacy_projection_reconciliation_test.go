@@ -101,7 +101,7 @@ func TestRunReconcilesExistingLegacyProjectProjections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v (%+v)", err, report)
 	}
-	if report.TargetVersion != 7 || report.Stage != "complete" {
+	if report.TargetVersion != currentSchemaVersion || report.Stage != "complete" {
 		t.Fatalf("report = %+v", report)
 	}
 	for _, warning := range []string{

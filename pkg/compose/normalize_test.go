@@ -741,6 +741,60 @@ agents:
 	}
 }
 
+func TestNormalizeCronTimezone(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: cron-timezone
+agents:
+  reviewer:
+    scheduler:
+      triggers:
+        - cron: "0 9 * * *"
+          timezone: asia/shanghai
+`)
+
+	_, err := Normalize(spec, NormalizeOptions{})
+	if err == nil || !strings.Contains(err.Error(), "triggers[0].timezone") {
+		t.Fatalf("Normalize invalid timezone error = %v", err)
+	}
+
+	spec = mustParseCompose(t, `
+name: cron-timezone
+agents:
+  reviewer:
+    scheduler:
+      triggers:
+        - cron: "0 9 * * *"
+          timezone: local
+        - cron: "0 1 * * *"
+          timezone: Asia/Shanghai
+`)
+	normalized, err := Normalize(spec, NormalizeOptions{})
+	if err != nil {
+		t.Fatalf("Normalize returned error: %v", err)
+	}
+	triggers := normalized.Agents[0].Scheduler.Triggers
+	if triggers[0].Timezone != "Local" || triggers[1].Timezone != "Asia/Shanghai" {
+		t.Fatalf("normalized cron timezones = %q, %q", triggers[0].Timezone, triggers[1].Timezone)
+	}
+}
+
+func TestNormalizeRejectsTimezoneOnNonCronTrigger(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: interval-timezone
+agents:
+  reviewer:
+    scheduler:
+      triggers:
+        - interval: 1m
+          timezone: UTC
+`)
+
+	_, err := Normalize(spec, NormalizeOptions{})
+	if err == nil || !strings.Contains(err.Error(), "triggers[0].timezone") || !strings.Contains(err.Error(), "only supported for cron") {
+		t.Fatalf("Normalize non-cron timezone error = %v", err)
+	}
+}
+
 func TestNormalizePreservesSchedulerScript(t *testing.T) {
 	spec := mustParseCompose(t, `
 name: inline-script

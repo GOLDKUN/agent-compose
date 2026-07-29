@@ -786,6 +786,7 @@ scheduler:
   triggers:
     - name: nightly
       cron: "0 2 * * *"
+      timezone: Asia/Shanghai
       prompt: Run the nightly review.
     - name: heartbeat
       interval: 30m
@@ -803,12 +804,15 @@ scheduler:
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
 | `name` | string | No | Readable stable name. Non-empty names must be unique within the scheduler. If omitted, identity also incorporates list position. |
-| `cron` | string | One of four | Five-field cron expression with optional seconds and robfig/cron descriptors. Declarative cron triggers use UTC. |
+| `cron` | string | One of four | Five-field cron expression with optional seconds and robfig/cron descriptors. By default it uses the daemon's local timezone. |
+| `timezone` | string | No | IANA timezone for a `cron` trigger, such as `UTC` or `Asia/Shanghai`. `Local` and an omitted value use the daemon's local timezone. It is invalid for other trigger kinds. |
 | `interval` | duration | One of four | Positive period such as `30s`, `5m`, or `2h`; registration precision is at least 1 ms. |
 | `timeout` | duration | One of four | Positive one-shot delay such as `15s`; registration precision is at least 1 ms. |
 | `event.topic` | string | One of four | The nested `topic` is the non-empty subscribed topic, for example `webhook.github.push`. |
 | `prompt` | string | No | Prompt sent to the agent. An empty prompt becomes `Run agent <name>.` |
 | `sandbox_policy` | string | No | `sticky` or `new` for this generated agent call. If omitted, no call-level override is emitted. |
+
+The daemon local timezone comes from `TZ` when it is set, otherwise from the operating system's `/etc/localtime`. The shipped Docker Compose deployment mounts the host's `/etc/localtime` read-only. Set `TZ` in `.env` only when the daemon should intentionally differ from the host. Restart the daemon after changing its timezone. Stored timestamps remain UTC.
 
 #### Inline script
 
