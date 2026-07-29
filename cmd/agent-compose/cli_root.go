@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
@@ -40,6 +41,12 @@ func newRootCommand(out, errOut io.Writer, runDaemon daemonRunner) *cobra.Comman
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+			if options.Timeout < 0 {
+				return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("--timeout must not be negative")}
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
@@ -55,6 +62,7 @@ func newRootCommand(out, errOut io.Writer, runDaemon daemonRunner) *cobra.Comman
 	root.PersistentFlags().StringVarP(&options.ComposeFile, "file", "f", "", "Path to agent-compose.yml")
 	root.PersistentFlags().StringVar(&options.ProjectName, "project-name", "", "Select a deployed project by name (not supported by up or project up)")
 	root.PersistentFlags().BoolVar(&options.JSON, "json", false, "Print machine-readable JSON")
+	root.PersistentFlags().DurationVar(&options.Timeout, "timeout", 0, "Maximum duration of each daemon RPC, including streams; 0 disables the timeout")
 
 	commands := []*cobra.Command{
 		newCLIDaemonCommand(runDaemon),
@@ -93,6 +101,7 @@ type cliOptions struct {
 	ComposeFile string
 	ProjectName string
 	JSON        bool
+	Timeout     time.Duration
 }
 
 func hideOptionalFlagNoValueInUsage(cmd *cobra.Command, flagNames ...string) {
@@ -166,6 +175,8 @@ func commandExitErrorForConnect(err error) error {
 		}
 	}
 	switch connect.CodeOf(err) {
+	case connect.CodeDeadlineExceeded:
+		return commandExitError{Code: exitCodeGeneral, Err: fmt.Errorf("%w; increase --timeout or set --timeout 0, and check daemon-side operation timeouts", err)}
 	case connect.CodeUnimplemented:
 		return commandExitError{Code: exitCodeUnsupported, Err: err}
 	case connect.CodeUnavailable:

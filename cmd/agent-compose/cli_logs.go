@@ -56,7 +56,7 @@ func runComposeLogsCommand(cmd *cobra.Command, cli cliOptions, options composeLo
 	}
 	if strings.TrimSpace(normalizedOptions.RunID) != "" {
 		if !cli.JSON {
-			return followRunLogStream(cmd.Context(), cmd.OutOrStdout(), clients.runStream, projectID, &agentcomposev2.RunSummary{RunId: normalizedOptions.RunID}, normalizedOptions)
+			return followRunLogStream(cmd.Context(), cmd.OutOrStdout(), clients.run, projectID, &agentcomposev2.RunSummary{RunId: normalizedOptions.RunID}, normalizedOptions)
 		}
 		run, err := getRunDetail(cmd.Context(), clients.run, projectID, normalizedOptions.RunID)
 		if err != nil {
@@ -160,7 +160,7 @@ func followOrPrintProjectLogs(cmd *cobra.Command, cli cliOptions, clients cliSer
 		}
 		sort.SliceStable(runs, func(i, j int) bool { return logRunSummaryLess(runs[i], runs[j]) })
 		for _, summary := range runs {
-			if err := followRunLogStream(cmd.Context(), cmd.OutOrStdout(), clients.runStream, projectID, summary, options); err != nil {
+			if err := followRunLogStream(cmd.Context(), cmd.OutOrStdout(), clients.run, projectID, summary, options); err != nil {
 				return err
 			}
 		}

@@ -14,7 +14,7 @@ func TestE2ECLIHelpCoversUserWorkflowCommandSurface(t *testing.T) {
 		{
 			name: "root",
 			args: []string{"--help"},
-			want: []string{"agent-compose daemon and CLI", "--host", "--file", "--project-name", "--json", "Available Commands"},
+			want: []string{"agent-compose daemon and CLI", "--host", "--file", "--project-name", "--json", "--timeout", "Available Commands"},
 		},
 		{
 			name: "config",

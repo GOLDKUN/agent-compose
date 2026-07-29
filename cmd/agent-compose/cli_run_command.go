@@ -95,7 +95,7 @@ func runComposeUpCommand(cmd *cobra.Command, cli cliOptions) error {
 	if err != nil {
 		return fmt.Errorf("%s: hash normalized compose spec: %w", composePath, err)
 	}
-	clientConfig, err := resolveCLIClientConfig(cli.Host)
+	clientConfig, err := resolveCLIServiceClientConfig(cli)
 	if err != nil {
 		return err
 	}
@@ -347,21 +347,16 @@ func runComposeRunCommand(cmd *cobra.Command, cli cliOptions, options composeRun
 	if normalizedOptions.Detach {
 		return startDetachedRun(cmd, cli, runtimeProject.name(), client, runReq)
 	}
-	client = clients.runStream
 	if normalizedOptions.Interactive {
 		if normalizedOptions.TTY {
-			attachClient, err := newCLIAttachAgentRunServiceClient(cli)
-			if err != nil {
-				return err
-			}
 			if promptFlagChanged {
 				runReq.Prompt = prompt
 				runReq.Command = ""
-				return runComposeRunPromptAttachCommand(cmd, runtimeProject.name(), connectAttachAgentRunClient{client: attachClient}, runReq)
+				return runComposeRunPromptAttachCommand(cmd, runtimeProject.name(), connectAttachAgentRunClient{client: clients.run}, runReq)
 			}
 			runReq.Prompt = ""
 			runReq.Command = commandText
-			return runComposeAttachAgentRunCommand(cmd, runtimeProject.name(), connectAttachAgentRunClient{client: attachClient}, runReq, normalizedOptions)
+			return runComposeAttachAgentRunCommand(cmd, runtimeProject.name(), connectAttachAgentRunClient{client: clients.run}, runReq, normalizedOptions)
 		}
 		runReq.Prompt = ""
 		runReq.Command = ""

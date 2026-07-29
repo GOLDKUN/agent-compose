@@ -726,22 +726,6 @@ func execResultFromAttachResult(result *agentcomposev2.AttachResult) *agentcompo
 	}
 }
 
-func newCLIAttachAgentRunServiceClient(cli cliOptions) (agentcomposev2connect.RunServiceClient, error) {
-	clientConfig, err := resolveCLIClientConfig(cli.Host)
-	if err != nil {
-		return nil, err
-	}
-	return agentcomposev2connect.NewRunServiceClient(newDaemonAttachHTTPClient(clientConfig), clientConfig.BaseURL), nil
-}
-
-func newCLIAttachExecServiceClient(cli cliOptions) (agentcomposev2connect.ExecServiceClient, error) {
-	clientConfig, err := resolveCLIClientConfig(cli.Host)
-	if err != nil {
-		return nil, err
-	}
-	return agentcomposev2connect.NewExecServiceClient(newDaemonAttachHTTPClient(clientConfig), clientConfig.BaseURL), nil
-}
-
 func isAttachHTTP2TransportMismatch(err error) bool {
 	if err == nil {
 		return false

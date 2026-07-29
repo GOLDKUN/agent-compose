@@ -3,11 +3,13 @@ package main
 import (
 	"agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -81,6 +83,7 @@ func TestCommandExitErrorForConnectClassifiesRPCFailures(t *testing.T) {
 		{name: "failed precondition", err: connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("stopped")), code: exitCodeUsage},
 		{name: "unavailable", err: connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon down")), code: exitCodeUnavailable},
 		{name: "unsupported", err: connect.NewError(connect.CodeUnimplemented, fmt.Errorf("stats unsupported")), code: exitCodeUnsupported},
+		{name: "deadline exceeded", err: connect.NewError(connect.CodeDeadlineExceeded, context.DeadlineExceeded), code: exitCodeGeneral},
 		{name: "ordinary failure", err: connect.NewError(connect.CodeInternal, fmt.Errorf("boom")), code: exitCodeGeneral},
 	}
 	for _, tc := range tests {
@@ -90,5 +93,15 @@ func TestCommandExitErrorForConnectClassifiesRPCFailures(t *testing.T) {
 				t.Fatalf("exit code = %d, want %d; err=%v", got, tc.code, err)
 			}
 		})
+	}
+}
+
+func TestCLITimeoutRejectsNegativeDuration(t *testing.T) {
+	stdout, stderr, _, exitCode := executeCLICommand("--timeout", "-1s", "version")
+	if exitCode != exitCodeUsage {
+		t.Fatalf("negative --timeout exit code = %d, want %d; stderr=%q", exitCode, exitCodeUsage, stderr)
+	}
+	if stdout != "" || !strings.Contains(stderr, "--timeout must not be negative") {
+		t.Fatalf("negative --timeout stdout/stderr = %q / %q", stdout, stderr)
 	}
 }

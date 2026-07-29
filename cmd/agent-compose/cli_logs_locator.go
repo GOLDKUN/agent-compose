@@ -45,7 +45,7 @@ func runComposeLogsForResourceID(cmd *cobra.Command, cli cliOptions, options com
 	}
 	if options.RunID != "" {
 		if !cli.JSON {
-			return followRunLogStream(cmd.Context(), cmd.OutOrStdout(), clients.runStream, projectID, &agentcomposev2.RunSummary{RunId: options.RunID}, options)
+			return followRunLogStream(cmd.Context(), cmd.OutOrStdout(), clients.run, projectID, &agentcomposev2.RunSummary{RunId: options.RunID}, options)
 		}
 		run, err := getRunDetail(cmd.Context(), clients.run, projectID, options.RunID)
 		if err != nil {

@@ -120,23 +120,15 @@ func runComposeExecCommand(cmd *cobra.Command, cli cliOptions, options composeEx
 		return err
 	}
 	if options.Interactive {
-		attachClient, err := newCLIAttachExecServiceClient(cli)
-		if err != nil {
-			return err
-		}
 		if strings.TrimSpace(options.Prompt) != "" {
-			return runComposeExecPromptAttachCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: attachClient}, req, options)
+			return runComposeExecPromptAttachCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: clients.exec}, req, options)
 		}
-		return runComposeAttachExecCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: attachClient}, req, options)
+		return runComposeAttachExecCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: clients.exec}, req, options)
 	}
 	if strings.TrimSpace(options.Prompt) != "" {
-		attachClient, err := newCLIAttachExecServiceClient(cli)
-		if err != nil {
-			return err
-		}
-		return runComposeExecPromptOnceCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: attachClient}, req, options, cli.JSON)
+		return runComposeExecPromptOnceCommand(cmd, runtimeProject.name(), connectAttachExecClient{client: clients.exec}, req, options, cli.JSON)
 	}
-	stream, err := clients.execStream.StreamExec(cmd.Context(), connect.NewRequest(req))
+	stream, err := clients.exec.StreamExec(cmd.Context(), connect.NewRequest(req))
 	if err != nil {
 		return commandExitErrorForConnect(fmt.Errorf("exec project %s: %w", runtimeProject.name(), err))
 	}

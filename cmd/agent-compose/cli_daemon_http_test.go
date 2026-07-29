@@ -184,18 +184,47 @@ func TestDaemonHTTPClientAttachAgentRunBidiUsesH2C(t *testing.T) {
 	}
 }
 
-func TestDaemonStreamingAndAttachHTTPClientsHaveNoRequestTimeout(t *testing.T) {
-	regular := newDaemonHTTPClient(cliClientConfig{BaseURL: "http://127.0.0.1:7410"})
-	if regular.Timeout != 10*time.Minute {
-		t.Fatalf("regular daemon client timeout = %v, want 10m", regular.Timeout)
+func TestDaemonHTTPClientUsesConfiguredRPCTimeout(t *testing.T) {
+	client := newDaemonHTTPClient(cliClientConfig{BaseURL: "http://127.0.0.1:7410"})
+	if client.Timeout != 0 {
+		t.Fatalf("default daemon client timeout = %v, want none", client.Timeout)
 	}
-	attach := newDaemonAttachHTTPClient(cliClientConfig{BaseURL: "http://127.0.0.1:7410"})
-	if attach.Timeout != 0 {
-		t.Fatalf("attach daemon client timeout = %v, want none", attach.Timeout)
+
+	client = newDaemonHTTPClient(cliClientConfig{BaseURL: "http://127.0.0.1:7410", Timeout: 45 * time.Second})
+	if client.Timeout != 45*time.Second {
+		t.Fatalf("configured daemon client timeout = %v, want 45s", client.Timeout)
 	}
-	streaming := newDaemonStreamingHTTPClient(cliClientConfig{BaseURL: "http://127.0.0.1:7410"})
-	if streaming.Timeout != 0 {
-		t.Fatalf("streaming daemon client timeout = %v, want none", streaming.Timeout)
+}
+
+func TestDaemonHTTPClientConfiguredTimeoutCoversServerStream(t *testing.T) {
+	server := newRunServiceStubServer(t, runServiceStub{
+		runAgentStream: func(ctx context.Context, _ *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
+			if err := stream.Send(&agentcomposev2.StreamAgentRunResponse{EventType: agentcomposev2.StreamAgentRunEventType_STREAM_AGENT_RUN_EVENT_TYPE_STARTED}); err != nil {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(5 * time.Second):
+				return nil
+			}
+		},
+	})
+	defer server.Close()
+
+	client := agentcomposev2connect.NewRunServiceClient(newDaemonHTTPClient(cliClientConfig{BaseURL: server.URL, Timeout: 250 * time.Millisecond}), server.URL)
+	stream, err := client.StreamAgentRun(context.Background(), connect.NewRequest(&agentcomposev2.RunAgentRequest{}))
+	if err != nil {
+		t.Fatalf("StreamAgentRun returned error before receiving the first frame: %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("StreamAgentRun did not receive the first frame: %v", stream.Err())
+	}
+	if stream.Receive() {
+		t.Fatal("StreamAgentRun received an unexpected frame after its configured timeout")
+	}
+	if err := stream.Err(); err == nil || connect.CodeOf(err) != connect.CodeDeadlineExceeded {
+		t.Fatalf("StreamAgentRun error = %v, want deadline_exceeded", err)
 	}
 }
 
