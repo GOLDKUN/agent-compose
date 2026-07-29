@@ -314,7 +314,9 @@ Idempotency rules:
 - Same `topic + idempotency_key` with identical `payload_hash` returns the
   existing event and `202 Accepted`.
 - Same `topic + idempotency_key` with different `payload_hash` returns
-  `409 Conflict`.
+  `409 Conflict`. The response uses code `idempotency_payload_mismatch` and
+  includes the existing event metadata so an authorized publisher can recover
+  the accepted delivery without creating a second event.
 
 ## Dispatcher Semantics
 

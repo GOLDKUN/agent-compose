@@ -1,11 +1,19 @@
 package webhooks
 
+const idempotencyPayloadMismatchCode = "idempotency_payload_mismatch"
+
 type AcceptedResponse struct {
 	Accepted      bool   `json:"accepted"`
 	Topic         string `json:"topic"`
 	EventID       string `json:"event_id"`
 	Sequence      int64  `json:"sequence"`
 	CorrelationID string `json:"correlation_id"`
+}
+
+type idempotencyConflictResponse struct {
+	Code          string           `json:"code"`
+	Error         string           `json:"error"`
+	ExistingEvent AcceptedResponse `json:"existing_event"`
 }
 
 type TopicEventResponse struct {

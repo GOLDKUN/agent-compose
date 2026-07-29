@@ -103,15 +103,9 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook event"})
 	} else if ok {
 		if ExistingBodyHash(existing.PayloadJSON) != domain.TopicEventPayloadSHA256(compactBody) {
-			return c.JSON(http.StatusConflict, map[string]string{"error": "idempotency key conflicts with existing payload"})
+			return c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
 		}
-		return c.JSON(http.StatusAccepted, AcceptedResponse{
-			Accepted:      true,
-			Topic:         existing.Topic,
-			EventID:       existing.ID,
-			Sequence:      existing.Sequence,
-			CorrelationID: existing.CorrelationID,
-		})
+		return c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
 	}
 
 	eventID := h.newEventID()
@@ -141,17 +135,24 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrConflict) {
-			return c.JSON(http.StatusConflict, map[string]string{"error": "idempotency key conflicts with existing payload"})
+			existing, ok, lookupErr := h.store().FindEventByIdempotencyKey(c.Request().Context(), topic, idempotencyKey)
+			if lookupErr != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load conflicting webhook event"})
+			}
+			if ok {
+				if ExistingBodyHash(existing.PayloadJSON) == domain.TopicEventPayloadSHA256(compactBody) {
+					return c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
+				}
+				return c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
+			}
+			return c.JSON(http.StatusConflict, map[string]string{
+				"code":  idempotencyPayloadMismatchCode,
+				"error": idempotencyPayloadMismatchMessage,
+			})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to store webhook event"})
 	}
-	return c.JSON(http.StatusAccepted, AcceptedResponse{
-		Accepted:      true,
-		Topic:         created.Topic,
-		EventID:       created.ID,
-		Sequence:      created.Sequence,
-		CorrelationID: created.CorrelationID,
-	})
+	return c.JSON(http.StatusAccepted, acceptedResponseFor(created))
 }
 
 func (h routeHandler) handleGetEvent(c echo.Context) error {
