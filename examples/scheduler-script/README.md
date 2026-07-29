@@ -6,7 +6,7 @@
 
 - 顶层代码尽量只做函数定义和触发器注册。
 - 真实工作放在 `main(payload)` 或共享 helper 函数里。
-- 返回值必须能被 JSON 序列化，成功运行后会写入 `resultJson`。
+- 返回值必须能被 JSON 序列化，成功运行后会写入 scheduler run 的 `result_json`。
 - 每个触发器都写显式、稳定的 `triggerId`。
 - 需要长期暂停触发器时，用 UI 或 API 禁用触发器。`scheduler.clearInterval(...)` 和 `scheduler.clearTimeout(...)` 只会移除当前脚本求值期间注册出来的触发器，不会持久禁用已经保存的触发器。
 
@@ -113,7 +113,7 @@ scheduler.schedule(triggerId, expression, callback, options);
 
 手动运行时，agent-compose 会优先调用全局 `main(payload)`。如果没有 `main()` 且脚本只注册了一个触发器，则会调用这个触发器的 callback；如果有多个触发器，必须显式选择触发器或定义 `main()`。
 
-- 手动运行的 `payload` 来自 `RunScheduler.payloadJson`。
+- 手动运行的 `payload` 来自 `agent-compose scheduler invoke <scheduler> --payload '<json>'`；对应 API 字段为 `InvokeSchedulerRequest.payload_json`。
 - `scheduler.on(...)` handler 收到事件 envelope：`{ topic, createdAt, payload }`。
 - interval、timeout、cron handler 默认收到 `undefined`，除非你在脚本里自己转发自定义上下文。
 
