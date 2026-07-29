@@ -470,6 +470,16 @@ for daemon_dockerfile in "$ROOT_DIR/Dockerfile" "$ROOT_DIR/Dockerfile.agent-comp
     "sandbox root override in $(basename "$daemon_dockerfile"); daemon images must use the DATA_ROOT-derived application default"
 done
 
+daemon_dockerfile_source=$(<"$ROOT_DIR/Dockerfile")
+require_regex "$daemon_dockerfile_source" '^ARG[[:space:]]+GITHUB_MIRROR=https://github\.com$' \
+  'default GitHub download mirror in daemon Dockerfile'
+require_regex "$daemon_dockerfile_source" '\$\{GITHUB_MIRROR\}/boxlite-ai/boxlite/releases/' \
+  'configurable BoxLite release download mirror'
+require_regex "$daemon_dockerfile_source" '\$\{GITHUB_MIRROR\}/superradcompany/microsandbox/releases/' \
+  'configurable Microsandbox release download mirror'
+forbid_regex "$daemon_dockerfile_source" 'https://github\.com/(boxlite-ai/boxlite|superradcompany/microsandbox)/releases/' \
+  'hard-coded GitHub native runtime release downloads'
+
 image_verifier_source=$(<"$ROOT_DIR/scripts/verify-agent-compose-image.sh")
 forbid_regex "$image_verifier_source" 'agent-compose-migrate' \
   'transitional storage migrator check in the published daemon image verifier'
