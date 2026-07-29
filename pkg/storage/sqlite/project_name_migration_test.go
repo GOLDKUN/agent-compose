@@ -324,9 +324,9 @@ func TestUniqueProjectNameMigrationRollsBackMalformedCurrentRevision(t *testing.
 	}
 	var migrationCount int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version=9`).Scan(&migrationCount); err != nil {
-		t.Fatalf("query v8 history after rollback: %v", err)
+		t.Fatalf("query v9 history after rollback: %v", err)
 	}
 	if migrationCount != 0 {
-		t.Fatalf("v8 migration history count after rollback = %d, want 0", migrationCount)
+		t.Fatalf("v9 migration history count after rollback = %d, want 0", migrationCount)
 	}
 }
