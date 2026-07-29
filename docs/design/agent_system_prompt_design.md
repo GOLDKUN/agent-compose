@@ -55,7 +55,7 @@ skills discovery.
 - Compose Agent Identity **before** the MPI catalog when both are present
 - Remain backward compatible when `system_prompt` is empty or no agent binding exists
 - Pass live combined context on Codex resume (via constructor-level config)
-- Cover loader runs and managed project runs that bind an agent definition
+- Cover scheduler runs and managed project runs that bind an agent definition
 
 ### Deferred (see [Next Steps](#next-steps))
 
@@ -84,7 +84,7 @@ Implemented composition for provider system / developer instructions:
 │  └────────────────────────────────────────────────────────┘  │
 ├──────────────────────────────────────────────────────────────┤
 │ Per-turn user message (--message-file)                       │
-│ Chat text, loader script prompt, structured task input       │
+│ Chat text, scheduler script prompt, structured task input    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -153,7 +153,7 @@ run in the same sandbox cannot read stale identity text.
 
 Primary files: `pkg/agentcompose/adapters/agent_runner.go`,
 `pkg/agentcompose/adapters/agent_executor.go`,
-`pkg/agentcompose/adapters/loader_host.go`, and `pkg/runs/controller.go`.
+`pkg/agentcompose/adapters/scheduler_host.go`, and `pkg/runs/controller.go`.
 
 ### Resolve agent system prompt
 
@@ -190,8 +190,8 @@ runtime provider normalization. Discovery mirrors MPI convention-based lookup un
 
 `ExecuteAgentRequest` gains `AgentDefinitionID string`:
 
-- **Loader runs** (`loader_manager.go`): set from resolved agent definition id
-  or `loader.Summary.AgentID` fallback.
+- **Scheduler runs** (`pkg/schedulers/run_host.go`): set from the resolved agent
+  definition id or `scheduler.Summary.AgentID` fallback.
 - **Managed project runs** (`run_service.go`): set from `run.ManagedAgentID`.
 - **v1 session chat compatibility runs**: rely on sandbox tags when no explicit
   id is passed.
@@ -324,7 +324,7 @@ the system prompt wiring scope.
 | Run type | How agent identity is resolved |
 | --- | --- |
 | v1 agent session chat compatibility | Sandbox tags `source=agent` + `agent_id` |
-| Loader script `agent()` call | `AgentDefinitionID` from loader-bound agent |
+| Scheduler script `agent()` call | `AgentDefinitionID` from scheduler-bound agent |
 | Managed project run (v2) | `run.ManagedAgentID` |
 | Bare provider string, no agent | No agent identity; MPI-only if catalog exists |
 
@@ -375,7 +375,7 @@ or changed context state.
 | --- | --- |
 | `pkg/agentcompose/adapters/agent_runner.go` | `resolveAgentSystemPrompt`, `BuildAgentExecSpec`, agent prompt file handling |
 | `pkg/execution/model.go` | `AgentDefinitionID` on `ExecuteAgentRequest` |
-| `pkg/agentcompose/adapters/loader_host.go` | Pass agent definition id into agent execution |
+| `pkg/agentcompose/adapters/scheduler_host.go` | Pass agent definition id into agent execution |
 | `pkg/runs/controller.go` | Pass `ManagedAgentID` into agent execution |
 | `pkg/agentcompose/adapters/agent_runner_test.go` | Host resolution, fixed-path write/remove tests |
 | `runtime/javascript/src/system-context.ts` | **new** — `agentSystemPromptPath`, composition, file read helpers |
@@ -398,7 +398,7 @@ or changed context state.
 2. Empty `system_prompt` → identical to pre-change MPI-only behavior.
 3. Codex provider state starts a new thread after prompt or skill-context edits,
    guaranteeing that the first turn uses the new instructions.
-4. Loader bound to an agent definition inherits `system_prompt`.
+4. Scheduler bound to an agent definition inherits `system_prompt`.
 5. `task test`, runtime JS tests, and `task lint` pass on touched packages.
 
 ## Next Steps

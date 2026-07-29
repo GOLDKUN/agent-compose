@@ -207,7 +207,7 @@ func TestSandboxRPCBridgeCreateSandboxInheritsSchedulerAgentEnvironment(t *testi
 		AgentDefinitionID: definition.ID,
 		Provider:          "claude",
 	})
-	responseJSON, err := bridge.CallJSONWithSource(ctx, "CreateSandbox", `{"title":"scheduler child","envItems":[{"name":"REQUEST_ENV","value":"from-script"}]}`, domain.SandboxTypeScript+":loader-1")
+	responseJSON, err := bridge.CallJSONWithSource(ctx, "CreateSandbox", `{"title":"scheduler child","envItems":[{"name":"REQUEST_ENV","value":"from-script"}]}`, domain.SandboxTypeScript+":scheduler-1")
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}

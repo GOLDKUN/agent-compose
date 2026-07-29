@@ -10,7 +10,7 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func TestCompareAndSwapLoaderBindingAllowsSingleConcurrentClaim(t *testing.T) {
+func TestCompareAndSwapSchedulerBindingAllowsSingleConcurrentClaim(t *testing.T) {
 	ctx := context.Background()
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "bindings.db"))
 	if err != nil {
@@ -33,7 +33,7 @@ func TestCompareAndSwapLoaderBindingAllowsSingleConcurrentClaim(t *testing.T) {
 			defer wg.Done()
 			<-start
 			claimed, err := store.CompareAndSwapSchedulerBinding(ctx, nil, domain.SchedulerBinding{
-				SchedulerID:       "loader-1",
+				SchedulerID:       "scheduler-1",
 				TriggerID:         "trigger-1",
 				SandboxID:         sandboxID,
 				SandboxConfigHash: "sha256:config",

@@ -127,6 +127,7 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	t.Setenv("CODEX_STREAM_MAX_RETRIES", "7")
 	t.Setenv("CODEX_STREAM_IDLE_TIMEOUT", "250ms")
 	t.Setenv("AGENT_TIMEOUT", "8s")
+	t.Setenv("SCHEDULER_RUN_TIMEOUT", "11s")
 	t.Setenv("RUNTIME_DRIVER", "docker-engine")
 	t.Setenv("DEFAULT_IMAGE", "box:latest")
 	t.Setenv("DOCKER_DEFAULT_IMAGE", "docker:latest")
@@ -173,8 +174,8 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	if config.LLMAPIEndpoint != "https://llm.example" || config.LLMAPIProtocol != "chat_completions" || config.LLMAPIKey != "llm-key" || config.LLMModel != "model-x" {
 		t.Fatalf("llm config = %#v", config)
 	}
-	if config.LLMTimeout != 7*time.Second || config.AgentTimeout != 8*time.Second {
-		t.Fatalf("timeouts = %s/%s", config.LLMTimeout, config.AgentTimeout)
+	if config.LLMTimeout != 7*time.Second || config.AgentTimeout != 8*time.Second || config.SchedulerRunTimeout != 11*time.Second {
+		t.Fatalf("timeouts = %s/%s/%s", config.LLMTimeout, config.AgentTimeout, config.SchedulerRunTimeout)
 	}
 	if config.CodexRequestMaxRetries != 0 || config.CodexStreamMaxRetries != 7 || config.CodexStreamIdleTimeout != 250*time.Millisecond {
 		t.Fatalf("Codex runtime config = %d/%d/%s", config.CodexRequestMaxRetries, config.CodexStreamMaxRetries, config.CodexStreamIdleTimeout)
@@ -214,6 +215,34 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	}
 	if got := strings.Join(config.ImageInsecureRegistries, "|"); got != "oci-one.example|oci-two.example|oci-three.example" {
 		t.Fatalf("image insecure registries = %q", got)
+	}
+}
+
+func TestNewConfigSchedulerRunTimeoutPrecedence(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		scheduler string
+		legacy    string
+		want      time.Duration
+	}{
+		{name: "scheduler value", scheduler: "7s", want: 7 * time.Second},
+		{name: "legacy fallback", legacy: "8s", want: 8 * time.Second},
+		{name: "scheduler precedes legacy", scheduler: "9s", legacy: "10s", want: 9 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("DATA_ROOT", filepath.Join(t.TempDir(), "data"))
+			t.Setenv("SCHEDULER_RUN_TIMEOUT", test.scheduler)
+			t.Setenv("LOADER_RUN_TIMEOUT", test.legacy)
+			di := do.New()
+			do.ProvideValue(di, slog.Default())
+			config, err := NewConfig(di)
+			if err != nil {
+				t.Fatalf("NewConfig returned error: %v", err)
+			}
+			if config.SchedulerRunTimeout != test.want {
+				t.Fatalf("SchedulerRunTimeout = %s, want %s", config.SchedulerRunTimeout, test.want)
+			}
+		})
 	}
 }
 

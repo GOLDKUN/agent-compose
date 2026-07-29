@@ -8,9 +8,9 @@ completed. Relevant implementation lives mainly in:
 - Topic event model: `pkg/model/`
 - SQLite store: `pkg/storage/configstore/topic_event_store.go`
 - Dispatcher: `pkg/events/dispatcher.go`
-- Loader bus: `pkg/bus/`
-- Loader JS API: `pkg/loaders/engine.go`
-- Loader run host: `pkg/loaders/run_host.go` with daemon adapters in `pkg/agentcompose/adapters/loader_host.go`
+- Scheduler bus: `pkg/schedulers/bus.go`
+- Scheduler JS API: `pkg/schedulers/engine.go`
+- Scheduler run host: `pkg/schedulers/run_host.go` with daemon adapters in `pkg/agentcompose/adapters/scheduler_host.go`
 
 ## Overall Flow
 
@@ -20,21 +20,21 @@ Current implementation:
 HTTP webhook ingress
   -> event
   -> EventDispatcher
-  -> LoaderBus
-  -> loader scheduler.on(...)
+  -> SchedulerBus
+  -> scheduler.on(...)
   -> optional scheduler.event.publish(...)
   -> event
 ```
 
-Webhook handler and loader `scheduler.event.publish(...)` both write only to
+Webhook handler and scheduler `scheduler.event.publish(...)` both write only to
 `event`, initially with `pending` status. Background `EventDispatcher` scans
-pending events by sequence and publishes them to the in-process `LoaderBus`.
-Current code lets `LoaderManager` ack the event when either no loader matches,
-or when the matching loader run record has been created, and marks the event as
+pending events by sequence and publishes them to the in-process scheduler bus.
+Current code lets the scheduler controller ack the event when either no scheduler
+matches, or when the matching scheduler run record has been created, and marks the event as
 `published_to_bus`.
 
 `published_to_bus` only means current in-process delivery has been acknowledged.
-It does not mean a matching loader exists, and it does not mean the loader
+It does not mean a matching scheduler exists, and it does not mean the scheduler
 business logic has completed.
 
 ## Topic Policy
@@ -52,10 +52,10 @@ Current prefix boundaries:
 | Publisher | Allowed topic |
 | --- | --- |
 | External webhook ingress | `webhook.*` |
-| Loader `scheduler.event.publish` | `runtime.*`, `workflow.*`, `external.*` |
+| Scheduler `scheduler.event.publish` | `runtime.*`, `workflow.*`, `external.*` |
 | Go internal lifecycle events | `agent-compose.*` |
 
-`scheduler.on(...)` reuses loader topic matching and supports exact match and
+`scheduler.on(...)` reuses scheduler topic matching and supports exact match and
 prefix wildcard:
 
 ```js
@@ -96,7 +96,7 @@ Successful response:
 }
 ```
 
-The endpoint still returns `202 Accepted` when no loader subscribes to that
+The endpoint still returns `202 Accepted` when no scheduler subscribes to that
 topic.
 
 After source configuration is completed, the same publish endpoint should still
@@ -216,7 +216,7 @@ Webhook payload written to `event.payload_json` uses camelCase:
 }
 ```
 
-`LoaderTopicEvent` shape received by loader callback:
+`SchedulerTopicEvent` shape received by a scheduler callback:
 
 ```json
 {
@@ -243,7 +243,7 @@ Webhook payload written to `event.payload_json` uses camelCase:
 3. Top-level JSON body `correlationId`
 4. New event's own `event_id`
 
-`provider` for `webhook.<provider>.*` uses the second segment. Loader-derived
+`provider` for `webhook.<provider>.*` uses the second segment. Scheduler-derived
 events read `provider` from the top-level payload field.
 
 Headers keep only an allowlist:
@@ -275,8 +275,8 @@ Core fields:
 | `sequence` | Globally increasing cursor, SQLite autoincrement |
 | `id` | Event id, using `evt_<uuid>` |
 | `topic` | Event topic |
-| `source` | `webhook`, `loader`, `system` |
-| `provider` | Webhook provider or loader payload provider |
+| `source` | `webhook`, `scheduler`, `system` |
+| `provider` | Webhook provider or scheduler payload provider |
 | `intent` | Metadata such as `notification`, `command` |
 | `correlation_id` | Business flow id |
 | `idempotency_key` | Idempotency key |
@@ -285,9 +285,9 @@ Core fields:
 | `payload_json` | Standard event payload |
 | `dispatch_status` | Currently `pending` or `published_to_bus`; target delivery states below |
 | `parent_event_id` | Upstream event for derived events |
-| `publisher_type` | `webhook`, `loader`, `system` |
-| `publisher_id` | Loader id and similar ids |
-| `publisher_run_id` | Loader run id |
+| `publisher_type` | `webhook`, `scheduler`, `system` |
+| `publisher_id` | Scheduler id and similar ids |
+| `publisher_run_id` | Scheduler run id |
 | `created_at` | Unix milli |
 | `dispatched_at` | Unix milli |
 
@@ -322,9 +322,9 @@ Idempotency rules:
 
 1. Scan `pending` events by `sequence` ascending.
 2. Decode `payload_json` into map.
-3. Call `LoaderBus.Publish(LoaderTopicEvent)`.
-4. After `LoaderManager` consumes the bus event, if no loader matches or the
-   matching loader run has been created, it calls event ack.
+3. Call `SchedulerBus.Publish(SchedulerTopicEvent)`.
+4. After the scheduler controller consumes the bus event, if no scheduler
+   matches or the matching scheduler run has been created, it calls event ack.
 5. After ack succeeds, mark `published_to_bus` and `dispatched_at`.
 6. If bus is full or publish fails, keep `pending` for the next retry.
 
@@ -334,20 +334,20 @@ multi-replica deployment.
 
 Known unreliable windows:
 
-- After an event is written to bus, if the process exits before the loader event
+- After an event is written to bus, if the process exits before the scheduler event
   loop consumes it, the event may need pending retry; if it was already acked,
   it will not be replayed automatically.
-- After an event creates a loader run and is acked, if the process exits before
-  loader business action completes, Event log does not know loader-side result.
+- After an event creates a scheduler run and is acked, if the process exits before
+  scheduler business action completes, Event log does not know scheduler-side result.
 - If an event is already published to bus but the process exits before updating
   `published_to_bus`, restart may publish it again.
 
-Loader callbacks, external adapters, and business callbacks should all be
+Scheduler callbacks, external adapters, and business callbacks should all be
 idempotent by `eventId`, `correlationId`, or business id.
 
 ### Dispatch State Completion
 
-Event delivery state and loader business state need to be separated.
+Event delivery state and scheduler business state need to be separated.
 `dispatch_status` should not mean "business completed".
 
 Suggested first phase: extend current event table `dispatch_status` to delivery
@@ -358,7 +358,7 @@ states:
 | `pending` | Written and waiting for dispatcher scan |
 | `publishing_to_bus` | Claimed by current dispatcher and being published to bus |
 | `published_to_bus` | Current in-process bus delivery acknowledged |
-| `no_subscriber` | No matching loader; event needs no business handling |
+| `no_subscriber` | No matching scheduler; event needs no business handling |
 | `retrying` | This publish or ack attempt failed; waiting for retry |
 | `dead_letter` | Retry exhausted or payload cannot be decoded; needs manual handling |
 
@@ -380,15 +380,15 @@ atomic claim through a single conditional update. After claim expiry, other
 processes may claim again.
 
 Add `event_delivery` table to represent one event's processing result for
-multiple loader triggers, avoiding loss of multi-subscriber information in a
+multiple scheduler triggers, avoiding loss of multi-subscriber information in a
 single event row:
 
 | Field | Description |
 | --- | --- |
 | `event_id` | Source event |
-| `loader_id` | Matched loader |
+| `scheduler_id` | Matched scheduler |
 | `trigger_id` | Matched event trigger |
-| `run_id` | Created loader run |
+| `scheduler_run_id` | Created scheduler run |
 | `status` | `matched`, `run_started`, `run_succeeded`, `run_failed`, `skipped` |
 | `error` | Failure reason |
 | `created_at` / `updated_at` | Metadata |
@@ -398,21 +398,21 @@ Suggested schema:
 ```sql
 CREATE TABLE event_delivery (
   event_id TEXT NOT NULL,
-  loader_id TEXT NOT NULL,
+  scheduler_id TEXT NOT NULL,
   trigger_id TEXT NOT NULL,
-  run_id TEXT NOT NULL DEFAULT '',
+  scheduler_run_id TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL,
   error TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY(event_id, loader_id, trigger_id)
+  PRIMARY KEY(event_id, scheduler_id, trigger_id)
 );
 
-CREATE INDEX idx_event_delivery_run ON event_delivery(run_id);
+CREATE INDEX idx_event_delivery_scheduler_run ON event_delivery(scheduler_run_id);
 CREATE INDEX idx_event_delivery_status ON event_delivery(status, updated_at);
 ```
 
-Delivery is written as `matched` when loader trigger matches, updated to
+Delivery is written as `matched` when a scheduler trigger matches, updated to
 `run_started` after run creation, then updated to `run_succeeded` /
 `run_failed` / `skipped` after run completion.
 
@@ -432,7 +432,7 @@ GET /api/webhook-sources
 GET /api/webhook-sources/:source_id/stats
 ```
 
-`trace` returns event, parent/child events, delivery, loader run, loader event,
+`trace` returns event, parent/child events, delivery, scheduler run, scheduler event,
 and related sandbox. `sandboxes` returns only sandboxes created or operated by
 the flow triggered by the event, suitable for external systems to look up
 sandboxes by `event_id`. The implemented
@@ -456,7 +456,7 @@ Metrics to expose:
 
 UI should add a "Webhook Events" view under automation/runs: filter by
 source/topic/status and display event id, correlation id, delivery id, matched
-loader, run status, related sandbox, and replay entry.
+scheduler, run status, related sandbox, and replay entry.
 
 ## Event To Sandbox Query
 
@@ -464,12 +464,12 @@ The system needs the ability to find sandboxes by `event_id`. Some existing path
 can be reused:
 
 - Webhook event payload contains `eventId` / `correlationId`.
-- When event triggers a loader run, run `payload_json` stores the triggering
+- When event triggers a scheduler run, run `payload_json` stores the triggering
   event envelope.
-- When loader creates or operates sandboxes through the v1-compatible session
-  RPC bridge, it writes loader events with `linked_sandbox_id`.
-- Loader-derived events write `parent_event_id` and `publisher_run_id`.
-- Sandbox itself has `trigger_source=script:<loader_id>`, but lacks direct
+- When a scheduler creates or operates sandboxes through the compatibility
+  RPC bridge, it writes scheduler events with `linked_sandbox_id`.
+- Scheduler-derived events write `parent_event_id` and `publisher_run_id`.
+- Sandbox itself has `trigger_source=script:<scheduler_id>`, but lacks direct
   event/run relation.
 
 Suggested query semantics:
@@ -487,11 +487,11 @@ Response:
   "sandboxes": [
     {
       "sandbox_id": "sandbox_xxx",
-      "relation": "created_by_loader_run",
-      "loader_id": "loader-1",
-      "run_id": "run-1",
+      "relation": "created_by_scheduler_run",
+      "scheduler_id": "scheduler-1",
+      "scheduler_run_id": "run-1",
       "trigger_id": "on-webhook",
-      "loader_event_id": "loader_event_id",
+      "scheduler_event_id": "scheduler_event_id",
       "created_at": "2026-05-28T10:00:00Z"
     }
   ]
@@ -501,9 +501,9 @@ Response:
 Existing tables can help manual troubleshooting, but are not suitable as the
 main implementation path for a formal API:
 
-- `loader_run.payload_json` contains the triggering event envelope, but has no
+- `scheduler_run.payload_json` contains the triggering event envelope, but has no
   event id index.
-- `loader_event.linked_sandbox_id` can find sandboxes, but the related run must
+- `scheduler_event.linked_sandbox_id` can find sandboxes, but the related run must
   be known first.
 - `correlation_id` may cover multiple derived events and runs; it is only a
   trace helper and cannot be used alone as an exact relation.
@@ -519,25 +519,25 @@ CREATE TABLE event_sandbox_link (
   event_id TEXT NOT NULL,
   sandbox_id TEXT NOT NULL,
   relation TEXT NOT NULL,
-  loader_id TEXT NOT NULL DEFAULT '',
-  run_id TEXT NOT NULL DEFAULT '',
+  scheduler_id TEXT NOT NULL DEFAULT '',
+  scheduler_run_id TEXT NOT NULL DEFAULT '',
   trigger_id TEXT NOT NULL DEFAULT '',
-  loader_event_id TEXT NOT NULL DEFAULT '',
+  scheduler_event_id TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
-  PRIMARY KEY(event_id, sandbox_id, relation, run_id)
+  PRIMARY KEY(event_id, sandbox_id, relation, scheduler_run_id)
 );
 
 CREATE INDEX idx_event_sandbox_link_sandbox ON event_sandbox_link(sandbox_id, created_at);
-CREATE INDEX idx_event_sandbox_link_run ON event_sandbox_link(run_id);
+CREATE INDEX idx_event_sandbox_link_scheduler_run ON event_sandbox_link(scheduler_run_id);
 ```
 
 Write timing:
 
-- When loader event trigger matches and creates a run, write
-  `event_delivery(event_id, loader_id, trigger_id, run_id, status=run_started)`.
-- When `loaderRunHost.CallSessionRPC` sees `linked_sandbox_id`, also write
+- When a scheduler event trigger matches and creates a run, write
+  `event_delivery(event_id, scheduler_id, trigger_id, scheduler_run_id, status=run_started)`.
+- When the scheduler run host sees `linked_sandbox_id`, also write
   `event_id -> sandbox_id`.
-- When loader derives events, write `parent_event_id`. Query
+- When a scheduler derives events, write `parent_event_id`. Query
   `GET /api/events/:event_id/sandboxes` should expand descendant events by
   `parent_event_id`, then aggregate `event_sandbox_link` for those events.
 - If business wants the original webhook event to find sandboxes created by
@@ -545,9 +545,9 @@ Write timing:
   write duplicate ancestor links.
 - Manual runs without `event_id` do not write this table.
 
-## Loader API
+## Scheduler API
 
-Loader runtime provides:
+Scheduler runtime provides:
 
 ```js
 scheduler.event.publish(topic, payload)
@@ -558,18 +558,18 @@ Semantics:
 - `topic` must satisfy topic policy.
 - `payload` must be a JSON object.
 - Only `runtime.*`, `workflow.*`, and `external.*` are allowed.
-- Write Event log with `source=loader`, `publisher_type=loader`.
+- Write Event log with `source=scheduler`, `publisher_type=scheduler`.
 - Inherit `correlationId` and `parent_event_id` from the current triggering
   event.
 - For manual runs with no current triggering event, if payload lacks
   `correlationId`, use the new event's own `eventId`.
-- Do not call `LoaderBus` directly; `EventDispatcher` performs unified dispatch.
+- Do not call the scheduler bus directly; `EventDispatcher` performs unified dispatch.
 - JS call returns `{ eventId, sequence, topic, correlationId }`.
 - Unavailable during validation and returns
   `scheduler.event.publish is unavailable during validation`.
 
 Go internal `agent-compose.*` lifecycle events still use direct
-`LoaderBus.Publish` path and do not enter `event`. Therefore not every
+`schedulers.Bus.Publish` path and do not enter `event`. Therefore not every
 `agent-compose.*` event can be queried through `/api/events`.
 
 ## Error Responses

@@ -34,7 +34,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 		Summary: domain.SandboxSummary{
 			ID:            "session-branch",
 			Title:         "Branch Sandbox",
-			TriggerSource: "script:loader-1",
+			TriggerSource: "script:scheduler-1",
 			Driver:        driverpkg.RuntimeDriverDocker,
 			VMStatus:      domain.VMStatusRunning,
 			WorkspacePath: "/workspaces/branch",
@@ -46,7 +46,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 	}
 	if !domain.SandboxMatchesListOptions(session, domain.SandboxListOptions{
 		SandboxType:        domain.SandboxTypeScript,
-		TriggerSourceQuery: "loader",
+		TriggerSourceQuery: "scheduler",
 		TitleQuery:         "branch",
 		WorkspaceQuery:     "workspace one",
 		Driver:             driverpkg.RuntimeDriverDocker,
@@ -78,7 +78,10 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 		t.Fatalf("nil session matched list options")
 	}
 	if got := domain.NormalizeSandboxTriggerSource("", []domain.SandboxTag{{Name: "origin", Value: "loader"}, {Name: "loader_id", Value: "loader-9"}}); got != "script:loader-9" {
-		t.Fatalf("NormalizeSandboxTriggerSource tags = %q", got)
+		t.Fatalf("NormalizeSandboxTriggerSource legacy tags = %q", got)
+	}
+	if got := domain.NormalizeSandboxTriggerSource("", []domain.SandboxTag{{Name: "origin", Value: "scheduler"}, {Name: "scheduler_id", Value: "scheduler-9"}}); got != "script:scheduler-9" {
+		t.Fatalf("NormalizeSandboxTriggerSource scheduler tags = %q", got)
 	}
 	if got := domain.PaginateSandboxes([]*domain.Sandbox{session}, 5, 10); got != nil {
 		t.Fatalf("PaginateSandboxes beyond end = %#v", got)
@@ -120,7 +123,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 	if domain.NormalizeSchedulerRunStatus("bad") != domain.SchedulerRunStatusRunning {
 		t.Fatalf("NormalizeSchedulerRunStatus bad did not default")
 	}
-	if !domain.SchedulerTriggerTopicMatches("agent-compose.session.*", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("agent-compose.loader", "") {
+	if !domain.SchedulerTriggerTopicMatches("agent-compose.session.*", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("agent-compose.scheduler", "") {
 		t.Fatalf("SchedulerTriggerTopicMatches returned unexpected values")
 	}
 	if domain.SchedulerTriggerTopicMatches("adp.session.*", "agent-compose.session.created") {
@@ -136,7 +139,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 		t.Fatalf("SchedulerTriggerScheduledAt returned unexpected values")
 	}
 	if domain.DefaultSchedulerName(now) == "" || !strings.Contains(domain.DefaultSchedulerScript(), "scheduler.interval") || domain.SchedulerSourceSHA("script") == "" || domain.SchedulerTriggerStableID("kind", "topic", 1, "cb", 0) == "" {
-		t.Fatalf("loader default/hash helpers returned empty values")
+		t.Fatalf("scheduler default/hash helpers returned empty values")
 	}
 	if err := domain.ValidateTopicEventName("runtime.topic-1"); err != nil {
 		t.Fatalf("ValidateTopicEventName returned error: %v", err)
@@ -233,7 +236,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 		t.Fatalf("expected published event")
 	}
 	if (*schedulers.Bus)(nil).Events() != nil || (*schedulers.Bus)(nil).Publish(domain.SchedulerTopicEvent{Topic: "runtime.test"}) {
-		t.Fatalf("nil loader bus helpers returned unexpected values")
+		t.Fatalf("nil scheduler bus helpers returned unexpected values")
 	}
 
 	ctx := context.Background()

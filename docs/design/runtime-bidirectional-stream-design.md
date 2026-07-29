@@ -8,13 +8,13 @@ The current execution boundary from the agent-compose daemon to the runtime is c
 ExecStream(context.Context, *Session, VMState, ExecSpec, ExecStreamWriter) (ExecResult, error)
 ```
 
-This interface can express "one-shot start parameters plus a runtime-to-daemon output stream", but it cannot express ongoing interaction such as stdin, TTY, terminal resize, signal/cancel, multi-turn agent input, or structured runtime events. As a result, `exec`, `run --command`, loader commands, cells, and agent prompts currently rely on file protocols such as `command-request.json`, prompt files, script files, stdout markers, and result files to carry control semantics.
+This interface can express "one-shot start parameters plus a runtime-to-daemon output stream", but it cannot express ongoing interaction such as stdin, TTY, terminal resize, signal/cancel, multi-turn agent input, or structured runtime events. As a result, `exec`, `run --command`, scheduler commands, cells, and agent prompts currently rely on file protocols such as `command-request.json`, prompt files, script files, stdout markers, and result files to carry control semantics.
 
 This design upgrades the lower execution boundary to an interactive runtime stream without breaking existing command behavior or artifact layout. The first phase implements the full Docker driver path. Microsandbox and BoxLite are left for later integration through a clear capability contract.
 
 ## Goals
 
-1. Keep existing behavior unchanged for regular `exec`, `run --command`, `run --prompt`, loaders, and cells.
+1. Keep existing behavior unchanged for regular `exec`, `run --command`, `run --prompt`, schedulers, and cells.
 2. Add a lower-level bidirectional stream that supports `stdin`, `stdin EOF`, `TTY`, `resize`, `signal/cancel`, `stdout/stderr`, `result`, and `agent event`.
 3. Prioritize the Docker `exec/run -it` path.
 4. Define separate semantics for `--command -it` and `--prompt -it`:

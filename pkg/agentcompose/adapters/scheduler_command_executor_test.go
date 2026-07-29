@@ -16,49 +16,49 @@ import (
 	"agent-compose/pkg/storage/sandboxstore"
 )
 
-type fakeLoaderCommandRuntime struct{}
+type fakeSchedulerCommandRuntime struct{}
 
-func (r fakeLoaderCommandRuntime) EnsureSandbox(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
+func (r fakeSchedulerCommandRuntime) EnsureSandbox(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
 	return domain.SandboxVMInfo{}, nil
 }
 
-func (r fakeLoaderCommandRuntime) StopSandbox(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
+func (r fakeSchedulerCommandRuntime) StopSandbox(context.Context, *domain.Sandbox, domain.VMState) (bool, error) {
 	return false, nil
 }
 
-func (r fakeLoaderCommandRuntime) RemoveSandbox(context.Context, *domain.Sandbox, domain.VMState) error {
+func (r fakeSchedulerCommandRuntime) RemoveSandbox(context.Context, *domain.Sandbox, domain.VMState) error {
 	return nil
 }
 
-func (r fakeLoaderCommandRuntime) Exec(context.Context, *domain.Sandbox, domain.VMState, domain.ExecSpec) (domain.ExecResult, error) {
+func (r fakeSchedulerCommandRuntime) Exec(context.Context, *domain.Sandbox, domain.VMState, domain.ExecSpec) (domain.ExecResult, error) {
 	return domain.ExecResult{}, nil
 }
 
-func (r fakeLoaderCommandRuntime) ExecStream(_ context.Context, _ *domain.Sandbox, _ domain.VMState, _ domain.ExecSpec, stream domain.ExecStreamWriter) (domain.ExecResult, error) {
+func (r fakeSchedulerCommandRuntime) ExecStream(_ context.Context, _ *domain.Sandbox, _ domain.VMState, _ domain.ExecSpec, stream domain.ExecStreamWriter) (domain.ExecResult, error) {
 	commandResult := domain.RuntimeCommandResult{
-		Stdout:   "loader stdout\n",
-		Stderr:   "loader stderr\n",
-		Output:   "loader stdout\nloader stderr\n",
+		Stdout:   "scheduler stdout\n",
+		Stderr:   "scheduler stderr\n",
+		Output:   "scheduler stdout\nscheduler stderr\n",
 		ExitCode: 0,
 		Success:  true,
 	}
 	payloadBytes, _ := json.Marshal(commandResult)
 	payload := execution.CommandResultPrefix + string(payloadBytes) + "\n"
 	if stream != nil {
-		stream(domain.ExecChunk{Text: "loader stdout\n"})
-		stream(domain.ExecChunk{Text: "loader stderr\n", Stream: domain.StdioStderr})
+		stream(domain.ExecChunk{Text: "scheduler stdout\n"})
+		stream(domain.ExecChunk{Text: "scheduler stderr\n", Stream: domain.StdioStderr})
 		stream(domain.ExecChunk{Text: payload})
 	}
 	return domain.ExecResult{
-		Stdout:   "loader stdout\n" + payload,
-		Stderr:   "loader stderr\n",
-		Output:   "loader stdout\nloader stderr\n" + payload,
+		Stdout:   "scheduler stdout\n" + payload,
+		Stderr:   "scheduler stderr\n",
+		Output:   "scheduler stdout\nscheduler stderr\n" + payload,
 		ExitCode: 0,
 		Success:  true,
 	}, nil
 }
 
-func TestLoaderCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t *testing.T) {
+func TestSchedulerCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	config := &appconfig.Config{
@@ -76,7 +76,7 @@ func TestLoaderCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t *te
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
-	session, err := store.CreateSandbox(ctx, "loader command sandbox", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeScript, nil, nil, nil)
+	session, err := store.CreateSandbox(ctx, "scheduler command sandbox", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeScript, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSession returned error: %v", err)
 	}
@@ -87,17 +87,17 @@ func TestLoaderCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t *te
 	streams := sandboxes.NewStreamBrokerForTest()
 	ch, unsubscribe := streams.Subscribe(session.Summary.ID)
 	defer unsubscribe()
-	executor := NewSchedulerCommandExecutor(config, store, nil, fakeRuntimeProvider{runtime: fakeLoaderCommandRuntime{}}, streams)
+	executor := NewSchedulerCommandExecutor(config, store, nil, fakeRuntimeProvider{runtime: fakeSchedulerCommandRuntime{}}, streams)
 
 	result, err := executor.ExecuteSchedulerCommand(ctx, session, domain.SchedulerCommandRequest{
 		Mode:   "shell",
-		Script: "echo loader",
+		Script: "echo scheduler",
 	})
 	if err != nil {
 		t.Fatalf("ExecuteSchedulerCommand returned error: %v", err)
 	}
-	if !result.Success || result.Stdout != "loader stdout\n" || result.Stderr != "loader stderr\n" {
-		t.Fatalf("loader result = %#v", result)
+	if !result.Success || result.Stdout != "scheduler stdout\n" || result.Stderr != "scheduler stderr\n" {
+		t.Fatalf("scheduler result = %#v", result)
 	}
 
 	var outputText strings.Builder
@@ -116,7 +116,7 @@ func TestLoaderCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t *te
 	}
 
 drained:
-	if got := outputText.String(); !strings.Contains(got, "loader stdout\n") || !strings.Contains(got, "loader stderr\n") {
+	if got := outputText.String(); !strings.Contains(got, "scheduler stdout\n") || !strings.Contains(got, "scheduler stderr\n") {
 		t.Fatalf("stream output = %q", got)
 	}
 	cells, err := store.ListCells(ctx, session.Summary.ID)

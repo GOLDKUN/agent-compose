@@ -7,9 +7,9 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func TestLoaderBindingsMatchComparesStickyState(t *testing.T) {
+func TestSchedulerBindingsMatchComparesStickyState(t *testing.T) {
 	current := domain.SchedulerBinding{
-		SchedulerID:       "loader-1",
+		SchedulerID:       "scheduler-1",
 		TriggerID:         "trigger-1",
 		SandboxID:         "sandbox-1",
 		SandboxConfigHash: "sha256:current",
@@ -17,7 +17,7 @@ func TestLoaderBindingsMatchComparesStickyState(t *testing.T) {
 		UpdatedAt:         time.Unix(2, 0),
 	}
 	expected := current
-	expected.SchedulerID = " loader-1 "
+	expected.SchedulerID = " scheduler-1 "
 	expected.TriggerID = " trigger-1 "
 	expected.SandboxID = " sandbox-1 "
 	expected.SandboxConfigHash = " sha256:current "
@@ -28,7 +28,7 @@ func TestLoaderBindingsMatchComparesStickyState(t *testing.T) {
 	}
 
 	for name, mutate := range map[string]func(*domain.SchedulerBinding){
-		"loader":      func(binding *domain.SchedulerBinding) { binding.SchedulerID = "loader-2" },
+		"scheduler":   func(binding *domain.SchedulerBinding) { binding.SchedulerID = "scheduler-2" },
 		"trigger":     func(binding *domain.SchedulerBinding) { binding.TriggerID = "trigger-2" },
 		"sandbox":     func(binding *domain.SchedulerBinding) { binding.SandboxID = "sandbox-2" },
 		"config hash": func(binding *domain.SchedulerBinding) { binding.SandboxConfigHash = "sha256:other" },
@@ -43,9 +43,9 @@ func TestLoaderBindingsMatchComparesStickyState(t *testing.T) {
 	}
 }
 
-func TestRetiringLoaderBindingPreservesSandboxAndTracksDesiredConfig(t *testing.T) {
+func TestRetiringSchedulerBindingPreservesSandboxAndTracksDesiredConfig(t *testing.T) {
 	binding := domain.SchedulerBinding{
-		SchedulerID:       "loader-1",
+		SchedulerID:       "scheduler-1",
 		TriggerID:         "trigger-1",
 		SandboxID:         "sandbox-1",
 		SandboxConfigHash: "sha256:old",
@@ -62,9 +62,9 @@ func TestRetiringLoaderBindingPreservesSandboxAndTracksDesiredConfig(t *testing.
 	}
 }
 
-func TestAdoptLegacyLoaderBindingConfigHash(t *testing.T) {
+func TestAdoptLegacySchedulerBindingConfigHash(t *testing.T) {
 	binding := domain.SchedulerBinding{
-		SchedulerID: "loader-1",
+		SchedulerID: "scheduler-1",
 		TriggerID:   "trigger-1",
 		SandboxID:   "sandbox-1",
 	}

@@ -2,7 +2,7 @@
 
 ## 背景与目标
 
-agent-compose 当前已经具备 guest runtime、provider runner、runtime SDK、loader scheduler 和 LLM facade 等基础能力，但还没有 Claude Code 风格的 dynamic workflow 编排能力。现有脚本可以通过 `runtime.agent()` 主动调用单个 agent，也可以通过普通 Node.js 代码自行组合多个调用；这类组合缺少统一的 workflow 脚本形态、内置函数、运行时 phase、并发控制、失败语义、结构化结果、恢复缓存和进度协议。
+agent-compose 当前已经具备 guest runtime、provider runner、runtime SDK、scheduler 和 LLM facade 等基础能力，但还没有 Claude Code 风格的 dynamic workflow 编排能力。现有脚本可以通过 `runtime.agent()` 主动调用单个 agent，也可以通过普通 Node.js 代码自行组合多个调用；这类组合缺少统一的 workflow 脚本形态、内置函数、运行时 phase、并发控制、失败语义、结构化结果、恢复缓存和进度协议。
 
 本方案目标是在 guest runtime 内实现一套动态工作流能力：
 
@@ -13,7 +13,7 @@ agent-compose 当前已经具备 guest runtime、provider runner、runtime SDK�
 - workflow 可以通过 CLI 协议输出最终结果和流式进度事件，SDK 可以解析这些协议并暴露给调用方。
 - `agent(..., { isolation: "worktree" })` 首版提供真实 git worktree 隔离，不做静默降级。
 
-首版范围限定为 `runtime/javascript` 和 `runtime/agent-compose-runtime-sdk`。Go daemon、Connect proto、Web UI、loader QJS scheduler 不新增 workflow API。host 仍只看到外层 runtime 命令或 agent cell 的 stdout、stderr、output 和 artifacts。
+首版范围限定为 `runtime/javascript` 和 `runtime/agent-compose-runtime-sdk`。Go daemon、Connect proto、Web UI、QJS scheduler 不新增 workflow API。host 仍只看到外层 runtime 命令或 agent cell 的 stdout、stderr、output 和 artifacts。
 
 ## 现状和 harness 约束
 
@@ -69,15 +69,15 @@ task test
 - `workflow` 子命令。
 - `__WORKFLOW_RESULT__` stdout 协议。
 - scheduler 到 Node workflow 的专用 bridge token。
-- 让 Node workflow 直接操作 loader state/event/artifact 的 context object。
+- 让 Node workflow 直接操作 scheduler state/event/artifact 的 context object。
 
 本方案实现后需要同步更新该设计文档，避免文档继续描述“未实现”状态。
 
-### 现有 loader scheduler 边界
+### 现有 scheduler 边界
 
-`docs/design/agent-compose_design.md` 定义 loader runtime 是 QJS `scheduler`，负责 trigger 注册、轻量 state、event publish，以及把需要 sandbox 能力的工作委托给 runtime sandbox。该层不是复杂 Node.js workflow、npm dependencies 或长耗时业务逻辑的承载点。
+`docs/design/agent-compose_design.md` 定义 scheduler runtime 使用 QJS，负责 trigger 注册、轻量 state、event publish，以及把需要 sandbox 能力的工作委托给 runtime sandbox。该层不是复杂 Node.js workflow、npm dependencies 或长耗时业务逻辑的承载点。
 
-因此 dynamic workflow 首版不把 `scheduler` 扩展成完整 workflow engine。若 loader 要触发 workflow，应通过已有 `scheduler.exec` / `scheduler.shell` 运行 workspace Node.js 脚本，脚本再使用 `@chaitin-ai/agent-compose-runtime-sdk` 的 workflow API。
+因此 dynamic workflow 首版不把 `scheduler` 扩展成完整 workflow engine。若 scheduler 要触发 workflow，应通过已有 `scheduler.exec` / `scheduler.shell` 运行 workspace Node.js 脚本，脚本再使用 `@chaitin-ai/agent-compose-runtime-sdk` 的 workflow API。
 
 ## 核心概念或领域模型
 
@@ -188,7 +188,7 @@ Nested Workflow 是 workflow 内调用另一个 workflow。首版只允许一层
 - `src/workflow/worktree.ts`：git worktree 创建、状态读取、错误处理。
 - `src/workflow/command.ts`：`runWorkflowCommand()`，连接 CLI 参数、文件读取、engine 执行和协议输出。
 
-这些模块只属于 guest runtime，不依赖 Go 代码，也不依赖 loader QJS。
+这些模块只属于 guest runtime，不依赖 Go 代码，也不依赖 scheduler QJS。
 
 `src/cli.ts` 新增 `workflow` 子命令。现有 `prompt` 和 `exec` 命令保持兼容。
 
@@ -239,9 +239,9 @@ interface PromptCommandOptions {
 
 `src/index.ts` 将新函数加入 named exports 和 `runtime` default object。现有 `exec`、`shell`、`agent`、`llm`、`report`、`ssh` API 不变。
 
-### Go daemon 和 loader
+### Go daemon 和 scheduler
 
-Go daemon 不新增 API，不修改 proto。loader scheduler 首版不新增 `scheduler.workflow`。如果项目需要 loader 触发 workflow，推荐路径是：
+Go daemon 不新增 API，不修改 proto。scheduler 首版不新增 `scheduler.workflow`。如果项目需要 scheduler 触发 workflow，推荐路径是：
 
 ```js
 function main() {
@@ -850,7 +850,7 @@ workflow result must be JSON-serializable; did you forget to await agent(), para
 - `runtime/javascript/README.md`：新增 `workflow` CLI 使用和协议说明。
 - `runtime/agent-compose-runtime-sdk/README.md`：新增 `runtime.workflow()`、`runtime.workflowFile()` 示例和类型说明。
 - `docs/design/agent-compose-runtime_contract.md`：把“没有 workflow 子命令/协议”更新为新契约。
-- `docs/design/agent-compose_design.md`：保留 loader QJS 不承载复杂 workflow 的边界，并说明推荐通过 runtime SDK 运行。
+- `docs/design/agent-compose_design.md`：保留 scheduler QJS 不承载复杂 workflow 的边界，并说明推荐通过 runtime SDK 运行。
 
 ### 质量门禁
 
@@ -882,8 +882,8 @@ task image:agent-compose-guest
 - Go `WorkflowService`。
 - Connect proto 或 proto-client 变更。
 - Web UI `/workflows` 管理器。
-- loader `scheduler.workflow`。
-- workflow phase/agent progress 写入 loader event 表。
+- scheduler `scheduler.workflow`。
+- workflow phase/agent progress 写入 scheduler event 记录。
 - host-side workflow run 查询、停止、恢复 API。
 - worktree 自动 merge、自动 PR、自动 conflict resolution。
 - 分布式 workflow 队列。

@@ -65,7 +65,7 @@ func (a FSArtifacts) safeRunArtifactsPath(schedulerID, runID, recordedDir string
 	schedulerID = strings.TrimSpace(schedulerID)
 	runID = strings.TrimSpace(runID)
 	if !identity.IsID(schedulerID) || !identity.IsID(runID) {
-		return "", fmt.Errorf("loader and run ids must be complete resource ids")
+		return "", fmt.Errorf("scheduler and run ids must be complete resource ids")
 	}
 	if strings.TrimSpace(a.DataRoot) == "" {
 		return "", fmt.Errorf("scheduler run artifacts data root is empty")

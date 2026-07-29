@@ -102,7 +102,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerPaths(t *testing.T) {
 		markProjectRunWorkspaceReady(t, fixture, sandbox)
 		readyAt := sandbox.WorkspaceProvisioning.UpdatedAt
 		fixture.configDB.bindings = map[string]domain.SchedulerBinding{
-			"loader-1/trigger-1": {SchedulerID: "loader-1", TriggerID: "trigger-1", SandboxID: sandbox.Summary.ID},
+			"scheduler-1/trigger-1": {SchedulerID: "scheduler-1", TriggerID: "trigger-1", SandboxID: sandbox.Summary.ID},
 		}
 		ensurer := projectRunEnsurerBeforeDriver(t, fixture)
 		ensurer.markReady = false
@@ -112,7 +112,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerPaths(t *testing.T) {
 			fixture.ctx,
 			projectRunEnsurerRecord("run-sticky"),
 			Preparation{Workspace: projectRunWorkspaceSnapshot("prepared-conflict")},
-			RunAgentRequest{StickyBindingSchedulerID: "loader-1", StickyBindingTriggerID: "trigger-1"},
+			RunAgentRequest{StickyBindingSchedulerID: "scheduler-1", StickyBindingTriggerID: "trigger-1"},
 		)
 		if err != nil {
 			t.Fatalf("ensureProjectRunSandbox returned error: %v", err)
@@ -123,7 +123,7 @@ func TestRunsControllerProjectRunWorkspaceEnsurerPaths(t *testing.T) {
 		assertProjectRunEnsurerCall(t, ensurer, sandbox.Summary.ID, original)
 		assertProjectRunWorkspaceSnapshot(t, "sticky sandbox", result.Sandbox.Workspace, original)
 		assertProjectRunReadyUnchanged(t, "sticky sandbox", result.Sandbox, readyAt)
-		if binding := fixture.configDB.bindings["loader-1/trigger-1"]; binding.SandboxID != sandbox.Summary.ID {
+		if binding := fixture.configDB.bindings["scheduler-1/trigger-1"]; binding.SandboxID != sandbox.Summary.ID {
 			t.Fatalf("sticky binding = %#v, want sandbox %q", binding, sandbox.Summary.ID)
 		}
 	})

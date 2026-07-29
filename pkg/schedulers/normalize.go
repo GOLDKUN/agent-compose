@@ -19,7 +19,7 @@ func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler,
 		item.Summary.ID = uuid.NewString()
 	}
 	if item.Summary.ID == "" {
-		return domain.Scheduler{}, fmt.Errorf("loader id is required")
+		return domain.Scheduler{}, fmt.Errorf("scheduler id is required")
 	}
 	item.Summary.Name = strings.TrimSpace(item.Summary.Name)
 	if item.Summary.Name == "" {
@@ -33,7 +33,7 @@ func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler,
 	item.Summary.Runtime = runtime
 	item.Script = strings.ReplaceAll(item.Script, "\r\n", "\n")
 	if strings.TrimSpace(item.Script) == "" {
-		return domain.Scheduler{}, fmt.Errorf("loader script is required")
+		return domain.Scheduler{}, fmt.Errorf("scheduler script is required")
 	}
 	item.Summary.WorkspaceID = strings.TrimSpace(item.Summary.WorkspaceID)
 	item.Summary.AgentID = strings.TrimSpace(item.Summary.AgentID)
@@ -62,16 +62,16 @@ func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler,
 		item.Summary.ProjectSchedulerID = ""
 	} else {
 		if item.Summary.AgentName == "" || item.Summary.ProjectSchedulerID == "" {
-			return domain.Scheduler{}, fmt.Errorf("managed loader agent name and scheduler id are required")
+			return domain.Scheduler{}, fmt.Errorf("managed scheduler agent name and scheduler id are required")
 		}
 		if item.Summary.ProjectRevision < 0 {
-			return domain.Scheduler{}, fmt.Errorf("managed loader project revision cannot be negative")
+			return domain.Scheduler{}, fmt.Errorf("managed scheduler project revision cannot be negative")
 		}
 	}
 	item.EnvItems = domain.NormalizeEnvItems(item.EnvItems)
 	volumes, err := domain.NormalizeVolumeMountSpecs(item.Volumes)
 	if err != nil {
-		return domain.Scheduler{}, fmt.Errorf("loader volumes: %w", err)
+		return domain.Scheduler{}, fmt.Errorf("scheduler volumes: %w", err)
 	}
 	item.Volumes = volumes
 	item.Triggers = append([]domain.SchedulerTrigger(nil), item.Triggers...)
@@ -82,10 +82,10 @@ func NormalizeSchedulerTrigger(schedulerID string, trigger domain.SchedulerTrigg
 	trigger.SchedulerID = strings.TrimSpace(schedulerID)
 	trigger.ID = strings.TrimSpace(trigger.ID)
 	if trigger.SchedulerID == "" {
-		return domain.SchedulerTrigger{}, fmt.Errorf("loader id is required")
+		return domain.SchedulerTrigger{}, fmt.Errorf("scheduler id is required")
 	}
 	if trigger.ID == "" {
-		return domain.SchedulerTrigger{}, fmt.Errorf("loader trigger id is required")
+		return domain.SchedulerTrigger{}, fmt.Errorf("scheduler trigger id is required")
 	}
 	kind, err := domain.NormalizeSchedulerTriggerKind(trigger.Kind)
 	if err != nil {
@@ -96,17 +96,17 @@ func NormalizeSchedulerTrigger(schedulerID string, trigger domain.SchedulerTrigg
 	switch trigger.Kind {
 	case domain.SchedulerTriggerKindInterval:
 		if trigger.IntervalMs <= 0 {
-			return domain.SchedulerTrigger{}, fmt.Errorf("loader interval trigger %s requires a positive interval", trigger.ID)
+			return domain.SchedulerTrigger{}, fmt.Errorf("scheduler interval trigger %s requires a positive interval", trigger.ID)
 		}
 		trigger.Topic = ""
 	case domain.SchedulerTriggerKindEvent:
 		if trigger.Topic == "" {
-			return domain.SchedulerTrigger{}, fmt.Errorf("loader event trigger %s requires a topic", trigger.ID)
+			return domain.SchedulerTrigger{}, fmt.Errorf("scheduler event trigger %s requires a topic", trigger.ID)
 		}
 		trigger.IntervalMs = 0
 	case domain.SchedulerTriggerKindTimeout:
 		if trigger.IntervalMs <= 0 {
-			return domain.SchedulerTrigger{}, fmt.Errorf("loader timeout trigger %s requires a positive delay", trigger.ID)
+			return domain.SchedulerTrigger{}, fmt.Errorf("scheduler timeout trigger %s requires a positive delay", trigger.ID)
 		}
 		trigger.Topic = ""
 	case domain.SchedulerTriggerKindCron:
@@ -114,7 +114,7 @@ func NormalizeSchedulerTrigger(schedulerID string, trigger domain.SchedulerTrigg
 		trigger.IntervalMs = 0
 		normalizedSpecJSON, err := NormalizeSchedulerCronSpecJSON(trigger.SpecJSON)
 		if err != nil {
-			return domain.SchedulerTrigger{}, fmt.Errorf("loader cron trigger %s: %w", trigger.ID, err)
+			return domain.SchedulerTrigger{}, fmt.Errorf("scheduler cron trigger %s: %w", trigger.ID, err)
 		}
 		trigger.SpecJSON = normalizedSpecJSON
 	}

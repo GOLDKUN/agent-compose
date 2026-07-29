@@ -16,18 +16,18 @@ import (
 	"agent-compose/pkg/volumes"
 )
 
-func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
+func TestSchedulerSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
 	bridge.config.RuntimeBaseURL = "http://agent-compose.test:7410"
 	bridge.config.LLMAPIEndpoint = "https://llm.example.test/v1"
 	bridge.config.LLMAPIKey = "provider-key"
-	bridge.config.LLMModel = "gpt-loader-retry"
+	bridge.config.LLMModel = "gpt-scheduler-retry"
 	bridge.config.LLMAPIProtocol = "responses"
-	publisher := &loaderSessionPublisherFake{}
+	publisher := &schedulerSessionPublisherFake{}
 	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
 
-	running, err := bridge.store.CreateSandbox(ctx, "running", "", driverpkg.RuntimeDriverBoxlite, "", "", "loader", nil, nil, nil)
+	running, err := bridge.store.CreateSandbox(ctx, "running", "", driverpkg.RuntimeDriverBoxlite, "", "", "scheduler", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSession running returned error: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 		t.Fatalf("LoadOrResume running resumed=%#v event=%q err=%v starts=%#v", resumed, eventType, err, driver.startCalls)
 	}
 
-	stopped, err := bridge.store.CreateSandbox(ctx, "stopped", "", driverpkg.RuntimeDriverBoxlite, "", "", "loader", nil, nil, nil)
+	stopped, err := bridge.store.CreateSandbox(ctx, "stopped", "", driverpkg.RuntimeDriverBoxlite, "", "", "scheduler", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSession stopped returned error: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 		t.Fatalf("LoadOrResume stopped resumed=%#v event=%q err=%v starts=%#v", resumed, eventType, err, driver.startCalls)
 	}
 	if token := domain.SandboxEnvMap(driver.startSessions[0].RuntimeEnvItems)["AGENT_COMPOSE_SANDBOX_TOKEN"]; token == "" {
-		t.Fatal("fresh loader retry started without an agent token")
+		t.Fatal("fresh scheduler retry started without an agent token")
 	}
 	if len(publisher.events) != 1 || publisher.events[0].Topic != "agent-compose.session.resumed" {
 		t.Fatalf("resume publisher events=%#v", publisher.events)
@@ -93,7 +93,7 @@ func TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 	if driverName, err := runner.driver(domain.SchedulerAgentRequest{Driver: driverpkg.RuntimeDriverDocker}, domain.Scheduler{}, nil); err != nil || driverName != driverpkg.RuntimeDriverDocker {
 		t.Fatalf("driver override=%q err=%v", driverName, err)
 	}
-	if image := runner.guestImage(domain.SchedulerAgentRequest{GuestImage: "request:latest"}, domain.Scheduler{Summary: domain.SchedulerSummary{GuestImage: "loader:latest"}}, &domain.AgentDefinition{GuestImage: "agent:latest"}, driverpkg.RuntimeDriverDocker); image != "request:latest" {
+	if image := runner.guestImage(domain.SchedulerAgentRequest{GuestImage: "request:latest"}, domain.Scheduler{Summary: domain.SchedulerSummary{GuestImage: "scheduler:latest"}}, &domain.AgentDefinition{GuestImage: "agent:latest"}, driverpkg.RuntimeDriverDocker); image != "request:latest" {
 		t.Fatalf("guestImage = %q", image)
 	}
 }
@@ -143,7 +143,7 @@ func TestSchedulerSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *te
 	bridge, driver := newTestSandboxRPCBridge(t)
 	releaseErr := errors.New("runtime release failed")
 	driver.releaseErr = releaseErr
-	publisher := &loaderSessionPublisherFake{}
+	publisher := &schedulerSessionPublisherFake{}
 	resolver := NewCapabilitySandboxResolver(bridge.store)
 	resolver.initialized = true
 	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, publisher, resolver, bridge.agentExecutor)
@@ -200,11 +200,11 @@ func TestSchedulerSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *te
 	}
 }
 
-func TestLoaderSandboxRunnerRejectsUnsupportedStickyResumeBeforeSideEffects(t *testing.T) {
+func TestSchedulerSandboxRunnerRejectsUnsupportedStickyResumeBeforeSideEffects(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
 	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
-	session, err := bridge.store.CreateSandbox(ctx, "historical sticky", "", driverpkg.RuntimeDriverMicrosandbox, "", "", "loader", nil, nil, nil)
+	session, err := bridge.store.CreateSandbox(ctx, "historical sticky", "", driverpkg.RuntimeDriverMicrosandbox, "", "", "scheduler", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestLoaderSandboxRunnerRejectsUnsupportedStickyResumeBeforeSideEffects(t *t
 	}
 }
 
-func TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testing.T) {
+func TestSchedulerSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testing.T) {
 	for _, runtimeDriver := range []string{driverpkg.RuntimeDriverBoxlite, driverpkg.RuntimeDriverMicrosandbox} {
 		t.Run(runtimeDriver, func(t *testing.T) {
 			rawErr := driverpkg.ValidateCompiledRuntimeDriver(runtimeDriver)
@@ -244,21 +244,21 @@ func TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testing.
 			}
 			ctx := context.Background()
 			bridge, sandboxDriver := newTestSandboxRPCBridge(t)
-			publisher := &loaderSessionPublisherFake{}
+			publisher := &schedulerSessionPublisherFake{}
 			runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, sandboxDriver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
-			loader := domain.Scheduler{Summary: domain.SchedulerSummary{
-				ID:            "loader-uncompiled-" + runtimeDriver,
+			scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
+				ID:            "scheduler-uncompiled-" + runtimeDriver,
 				Name:          "Uncompiled " + runtimeDriver,
 				Driver:        runtimeDriver,
 				SandboxPolicy: domain.SchedulerSandboxPolicySticky,
 			}}
-			loader = createNativeTestScheduler(t, ctx, bridge.configDB, loader)
+			scheduler = createNativeTestScheduler(t, ctx, bridge.configDB, scheduler)
 			triggerID := "trigger-uncompiled"
-			originalBinding := domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: triggerID, SandboxID: "missing-original-sandbox"}
+			originalBinding := domain.SchedulerBinding{SchedulerID: scheduler.Summary.ID, TriggerID: triggerID, SandboxID: "missing-original-sandbox"}
 			if err := bridge.configDB.UpsertSchedulerBinding(ctx, originalBinding); err != nil {
 				t.Fatalf("UpsertSchedulerBinding returned error: %v", err)
 			}
-			originalBinding, found, err := bridge.configDB.GetSchedulerBinding(ctx, loader.Summary.ID, triggerID)
+			originalBinding, found, err := bridge.configDB.GetSchedulerBinding(ctx, scheduler.Summary.ID, triggerID)
 			if err != nil || !found {
 				t.Fatalf("GetSchedulerBinding before Ensure returned binding=%#v found=%v err=%v", originalBinding, found, err)
 			}
@@ -267,7 +267,7 @@ func TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testing.
 				t.Fatalf("ListSandboxes before Ensure returned error: %v", err)
 			}
 			beforeEntries := sandboxRootEntryNames(t, bridge.config.SandboxRoot)
-			_, _, err = runner.Ensure(ctx, loader, domain.SchedulerAgentRequest{BindingTriggerID: triggerID}, false)
+			_, _, err = runner.Ensure(ctx, scheduler, domain.SchedulerAgentRequest{BindingTriggerID: triggerID}, false)
 			if !errors.Is(err, driverpkg.ErrRuntimeDriverNotCompiled) || !errors.Is(err, domain.ErrUnsupported) {
 				t.Fatalf("Ensure error = %v, want typed unsupported error", err)
 			}
@@ -279,11 +279,11 @@ func TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testing.
 			if err != nil || len(afterSandboxes.Sandboxes) != len(beforeSandboxes.Sandboxes) {
 				t.Fatalf("sandboxes changed: before=%d after=%d err=%v", len(beforeSandboxes.Sandboxes), len(afterSandboxes.Sandboxes), err)
 			}
-			binding, found, err := bridge.configDB.GetSchedulerBinding(ctx, loader.Summary.ID, triggerID)
+			binding, found, err := bridge.configDB.GetSchedulerBinding(ctx, scheduler.Summary.ID, triggerID)
 			if err != nil || !found || binding != originalBinding {
 				t.Fatalf("binding changed: got=%#v found=%v err=%v, want %#v", binding, found, err, originalBinding)
 			}
-			events, err := bridge.configDB.ListSchedulerEvents(ctx, loader.Summary.ID, 100)
+			events, err := bridge.configDB.ListSchedulerEvents(ctx, scheduler.Summary.ID, 100)
 			if err != nil || len(events) != 0 || len(publisher.events) != 0 {
 				t.Fatalf("events changed: persisted=%#v published=%#v err=%v", events, publisher.events, err)
 			}
@@ -310,11 +310,11 @@ func sandboxRootEntryNames(t *testing.T, root string) []string {
 	return names
 }
 
-func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
+func TestSchedulerSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
 	hostPath := t.TempDir()
-	resolver := &loaderVolumeResolverFake{
+	resolver := &schedulerVolumeResolverFake{
 		mounts: []domain.SandboxVolumeMount{{
 			ID:       "mount-cache",
 			Type:     domain.VolumeMountTypeVolume,
@@ -339,11 +339,11 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 	if err := bridge.configDB.UpsertProjectVolume(ctx, "project-1", "request-cache", projectVolume.ID, false); err != nil {
 		t.Fatalf("UpsertProjectVolume returned error: %v", err)
 	}
-	loader := domain.Scheduler{
-		Summary: domain.SchedulerSummary{ID: "loader-1", Name: "Scheduler", Driver: driverpkg.RuntimeDriverDocker, ProjectID: "project-1", AgentName: "reviewer", ProjectSchedulerID: "scheduler-1"},
+	scheduler := domain.Scheduler{
+		Summary: domain.SchedulerSummary{ID: "scheduler-1", Name: "Scheduler", Driver: driverpkg.RuntimeDriverDocker, ProjectID: "project-1", AgentName: "reviewer", ProjectSchedulerID: "scheduler-1"},
 		Volumes: []domain.VolumeMountSpec{{
 			Type:   domain.VolumeMountTypeVolume,
-			Source: "loader-cache",
+			Source: "scheduler-cache",
 			Target: "/cache",
 		}},
 	}
@@ -355,7 +355,7 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 			Target: "/cache",
 		}},
 	}
-	session, eventType, err := runner.Ensure(ctx, loader, request, false)
+	session, eventType, err := runner.Ensure(ctx, scheduler, request, false)
 	if err != nil {
 		t.Fatalf("Ensure returned error: %v", err)
 	}
@@ -378,7 +378,7 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 	for _, tag := range session.Summary.Tags {
 		tags[tag.Name] = tag.Value
 	}
-	if tags["origin"] != "scheduler" || tags["project"] != "project-1" || tags["project_id"] != "project-1" || tags["agent"] != "reviewer" || tags["scheduler_id"] != "scheduler-1" {
+	if tags["origin"] != "scheduler" || tags["project"] != "project-1" || tags["project_id"] != "project-1" || tags["agent"] != "reviewer" || tags["scheduler_id"] != "scheduler-1" || tags["scheduler_name"] != "Scheduler" || tags["loader_id"] != "" || tags["loader_name"] != "" {
 		t.Fatalf("managed scheduler sandbox tags = %#v", tags)
 	}
 	events, err := bridge.store.ListEvents(ctx, session.Summary.ID)
@@ -396,30 +396,30 @@ func TestLoaderSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 	}
 }
 
-func TestIntegrationLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
-	TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t)
-	TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t)
-	TestLoaderSandboxRunnerResolvesVolumeMounts(t)
+func TestIntegrationSchedulerSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
+	TestSchedulerSandboxRunnerLoadResumeAndShutdownCoverage(t)
+	TestSchedulerSandboxRunnerRejectsUncompiledDriverBeforePersistence(t)
+	TestSchedulerSandboxRunnerResolvesVolumeMounts(t)
 }
 
-func TestE2ELoaderSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
-	TestLoaderSandboxRunnerLoadResumeAndShutdownCoverage(t)
-	TestLoaderSandboxRunnerRejectsUncompiledDriverBeforePersistence(t)
-	TestLoaderSandboxRunnerResolvesVolumeMounts(t)
+func TestE2ESchedulerSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
+	TestSchedulerSandboxRunnerLoadResumeAndShutdownCoverage(t)
+	TestSchedulerSandboxRunnerRejectsUncompiledDriverBeforePersistence(t)
+	TestSchedulerSandboxRunnerResolvesVolumeMounts(t)
 }
 
-type loaderSessionPublisherFake struct {
+type schedulerSessionPublisherFake struct {
 	events []domain.SchedulerTopicEvent
 }
 
-func (p *loaderSessionPublisherFake) Publish(event domain.SchedulerTopicEvent) bool {
+func (p *schedulerSessionPublisherFake) Publish(event domain.SchedulerTopicEvent) bool {
 	p.events = append(p.events, event)
 	return true
 }
 
-var _ schedulers.ControllerPublisher = (*loaderSessionPublisherFake)(nil)
+var _ schedulers.ControllerPublisher = (*schedulerSessionPublisherFake)(nil)
 
-type loaderVolumeResolverFake struct {
+type schedulerVolumeResolverFake struct {
 	specs    []domain.VolumeMountSpec
 	options  volumes.ResolveOptions
 	mounts   []domain.SandboxVolumeMount
@@ -427,7 +427,7 @@ type loaderVolumeResolverFake struct {
 	err      error
 }
 
-func (r *loaderVolumeResolverFake) ResolveMounts(_ context.Context, specs []domain.VolumeMountSpec, options volumes.ResolveOptions) ([]domain.SandboxVolumeMount, []string, error) {
+func (r *schedulerVolumeResolverFake) ResolveMounts(_ context.Context, specs []domain.VolumeMountSpec, options volumes.ResolveOptions) ([]domain.SandboxVolumeMount, []string, error) {
 	r.specs = append([]domain.VolumeMountSpec(nil), specs...)
 	r.options = options
 	if r.err != nil {

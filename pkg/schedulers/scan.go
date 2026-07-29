@@ -16,7 +16,7 @@ func ScanSchedulerTrigger(scan func(dest ...any) error) (domain.SchedulerTrigger
 	var nextFireAtRaw any
 	var lastFiredAtRaw any
 	if err := scan(&item.SchedulerID, &item.ID, &item.Kind, &item.Topic, &item.IntervalMs, &enabled, &autoID, &item.SpecJSON, &nextFireAtRaw, &lastFiredAtRaw); err != nil {
-		return domain.SchedulerTrigger{}, fmt.Errorf("scan loader trigger: %w", err)
+		return domain.SchedulerTrigger{}, fmt.Errorf("scan scheduler trigger: %w", err)
 	}
 	item.Enabled = enabled != 0
 	item.AutoID = autoID != 0
@@ -30,7 +30,7 @@ func ScanSchedulerRun(scan func(dest ...any) error) (domain.SchedulerRunSummary,
 	var startedAtRaw any
 	var completedAtRaw any
 	if err := scan(&item.SchedulerID, &item.ID, &item.TriggerID, &item.TriggerKind, &item.TriggerSource, &item.Status, &startedAtRaw, &completedAtRaw, &item.DurationMs, &item.Error, &item.ResultJSON, &item.PayloadJSON, &item.SourceScriptHash, &item.ArtifactsDir); err != nil {
-		return domain.SchedulerRunSummary{}, fmt.Errorf("scan loader run: %w", err)
+		return domain.SchedulerRunSummary{}, fmt.Errorf("scan scheduler run: %w", err)
 	}
 	item.StartedAt = parseStoredTime(startedAtRaw)
 	item.CompletedAt = parseStoredTime(completedAtRaw)
@@ -41,7 +41,7 @@ func ScanSchedulerEvent(scan func(dest ...any) error) (domain.SchedulerEvent, er
 	var item domain.SchedulerEvent
 	var createdAtRaw any
 	if err := scan(&item.SchedulerID, &item.ID, &item.RunID, &item.TriggerID, &item.Type, &item.Level, &item.Message, &item.PayloadJSON, &item.LinkedSandboxID, &item.LinkedCellID, &item.LinkedAgentThreadID, &createdAtRaw); err != nil {
-		return domain.SchedulerEvent{}, fmt.Errorf("scan loader event: %w", err)
+		return domain.SchedulerEvent{}, fmt.Errorf("scan scheduler event: %w", err)
 	}
 	item.CreatedAt = parseStoredTime(createdAtRaw)
 	return item, nil
@@ -52,7 +52,7 @@ func ScanSchedulerBinding(scan func(dest ...any) error) (domain.SchedulerBinding
 	var createdAtRaw any
 	var updatedAtRaw any
 	if err := scan(&item.SchedulerID, &item.TriggerID, &item.SandboxID, &item.SandboxConfigHash, &createdAtRaw, &updatedAtRaw); err != nil {
-		return domain.SchedulerBinding{}, fmt.Errorf("scan loader binding: %w", err)
+		return domain.SchedulerBinding{}, fmt.Errorf("scan scheduler binding: %w", err)
 	}
 	item.CreatedAt = parseStoredTime(createdAtRaw)
 	item.UpdatedAt = parseStoredTime(updatedAtRaw)

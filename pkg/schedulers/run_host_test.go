@@ -14,10 +14,10 @@ import (
 
 func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 	ctx := context.Background()
-	loader := domain.Scheduler{
-		Summary: domain.SchedulerSummary{ID: "loader-host", Name: "Scheduler Host", Runtime: domain.SchedulerRuntimeScheduler, DefaultAgent: "gemini"},
+	scheduler := domain.Scheduler{
+		Summary: domain.SchedulerSummary{ID: "scheduler-host", Name: "Scheduler Host", Runtime: domain.SchedulerRuntimeScheduler, DefaultAgent: "gemini"},
 	}
-	run := &domain.SchedulerRunSummary{ID: "run-host", SchedulerID: loader.Summary.ID, TriggerID: "trigger-host"}
+	run := &domain.SchedulerRunSummary{ID: "run-host", SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-host"}
 	store := &hostStoreFake{}
 	events := &hostEventsFake{}
 	sandboxes := &hostSessionsFake{
@@ -59,7 +59,7 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 			}
 			return ""
 		},
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
 
 	agentResult, err := host.Agent(ctx, "summarize", domain.SchedulerAgentRequest{})
 	if err != nil {
@@ -109,7 +109,7 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CallSandboxRPC returned error: %v", err)
 	}
-	if responseJSON != rpc.response || rpc.source != domain.SandboxTypeScript+":"+loader.Summary.ID {
+	if responseJSON != rpc.response || rpc.source != domain.SandboxTypeScript+":"+scheduler.Summary.ID {
 		t.Fatalf("rpc response/source = %q/%q", responseJSON, rpc.source)
 	}
 	if rpc.creation.Provider != "gemini" || rpc.creation.AgentDefinitionID != "" {
@@ -122,13 +122,13 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 
 func TestRuntimeHostProjectAgentPath(t *testing.T) {
 	ctx := context.Background()
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
-		ID:                 "loader-project",
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
+		ID:                 "scheduler-project",
 		ProjectID:          "project-1",
 		AgentName:          "reviewer",
 		ProjectSchedulerID: "scheduler-1",
 	}}
-	run := &domain.SchedulerRunSummary{ID: "run-project", SchedulerID: loader.Summary.ID, TriggerID: "trigger-1"}
+	run := &domain.SchedulerRunSummary{ID: "run-project", SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-1"}
 	events := &hostEventsFake{}
 	projectRunner := &hostProjectAgentRunnerFake{run: domain.ProjectRunRecord{
 		RunID:      "project-run",
@@ -145,9 +145,9 @@ func TestRuntimeHostProjectAgentPath(t *testing.T) {
 		Events:             events,
 		ProjectAgentRunner: projectRunner,
 		Publisher:          publisher,
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
 
-	expectedConfigHash, err := schedulers.SchedulerSandboxConfigHash(loader)
+	expectedConfigHash, err := schedulers.SchedulerSandboxConfigHash(scheduler)
 	if err != nil {
 		t.Fatalf("SchedulerSandboxConfigHash returned error: %v", err)
 	}
@@ -161,32 +161,32 @@ func TestRuntimeHostProjectAgentPath(t *testing.T) {
 	if !events.contains("scheduler.agent.completed") || len(publisher.events) != 1 || publisher.events[0].payload["projectRunId"] != "project-run" {
 		t.Fatalf("events/publisher = %#v/%#v", events.types(), publisher.events)
 	}
-	if publisher.events[0].payload["loaderRunId"] != run.ID {
+	if publisher.events[0].payload["schedulerRunId"] != run.ID {
 		t.Fatalf("trigger execution publisher payload = %#v", publisher.events[0].payload)
 	}
 	invocationPublisher := &hostPublisherFake{}
 	invocationHost := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
 		ProjectAgentRunner: projectRunner,
 		Publisher:          invocationPublisher,
-	}, loader, schedulers.RuntimeExecutionContext{ID: "invocation-correlation", Kind: schedulers.ExecutionKindInvocation}, schedulers.TriggerEventMetadata{})
+	}, scheduler, schedulers.RuntimeExecutionContext{ID: "invocation-correlation", Kind: schedulers.ExecutionKindInvocation}, schedulers.TriggerEventMetadata{})
 	if _, err := invocationHost.Agent(ctx, "review", domain.SchedulerAgentRequest{}); err != nil {
 		t.Fatalf("Invocation Project Agent returned error: %v", err)
 	}
 	if len(invocationPublisher.events) != 1 || invocationPublisher.events[0].payload["projectRunId"] != "project-run" {
 		t.Fatalf("invocation publisher = %#v", invocationPublisher.events)
 	}
-	if _, ok := invocationPublisher.events[0].payload["loaderRunId"]; ok {
-		t.Fatalf("invocation payload exposed correlation id as loader run: %#v", invocationPublisher.events[0].payload)
+	if _, ok := invocationPublisher.events[0].payload["schedulerRunId"]; ok {
+		t.Fatalf("invocation payload exposed correlation id as scheduler run: %#v", invocationPublisher.events[0].payload)
 	}
 }
 
 func TestRuntimeHostProjectAgentUsesUniqueRequestIDs(t *testing.T) {
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
-		ID:        "loader-project",
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
+		ID:        "scheduler-project",
 		ProjectID: "project-1",
 		AgentName: "reviewer",
 	}}
-	run := &domain.SchedulerRunSummary{ID: "run-project", SchedulerID: loader.Summary.ID, TriggerID: "trigger-1"}
+	run := &domain.SchedulerRunSummary{ID: "run-project", SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-1"}
 	projectRunner := &hostProjectAgentRunnerFake{run: domain.ProjectRunRecord{
 		RunID:     "project-run",
 		ProjectID: "project-1",
@@ -195,7 +195,7 @@ func TestRuntimeHostProjectAgentUsesUniqueRequestIDs(t *testing.T) {
 	}}
 	host := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
 		ProjectAgentRunner: projectRunner,
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
 
 	for range 2 {
 		if _, err := host.Agent(context.Background(), "review", domain.SchedulerAgentRequest{}); err != nil {
@@ -210,10 +210,10 @@ func TestRuntimeHostProjectAgentUsesUniqueRequestIDs(t *testing.T) {
 
 func TestRuntimeHostErrorBranches(t *testing.T) {
 	ctx := context.Background()
-	loader := domain.Scheduler{
-		Summary: domain.SchedulerSummary{ID: "loader-errors", Name: "Scheduler Errors", Runtime: domain.SchedulerRuntimeScheduler, DefaultAgent: "codex"},
+	scheduler := domain.Scheduler{
+		Summary: domain.SchedulerSummary{ID: "scheduler-errors", Name: "Scheduler Errors", Runtime: domain.SchedulerRuntimeScheduler, DefaultAgent: "codex"},
 	}
-	run := &domain.SchedulerRunSummary{ID: "run-errors", SchedulerID: loader.Summary.ID, TriggerID: "trigger-errors"}
+	run := &domain.SchedulerRunSummary{ID: "run-errors", SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-errors"}
 
 	events := &hostEventsFake{}
 	host := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
@@ -228,14 +228,14 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 			err:  errors.New("agent failed"),
 		},
 		Publisher: &hostPublisherFake{},
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
 	agentResult, err := host.Agent(ctx, "prompt", domain.SchedulerAgentRequest{})
 	if err == nil || agentResult.Text != "agent stderr" || !events.contains("scheduler.agent.failed") || !events.contains("scheduler.sandbox.stop_failed") {
 		t.Fatalf("agent error result=%#v err=%v events=%#v", agentResult, err, events.types())
 	}
 
 	projectEvents := &hostEventsFake{}
-	projectLoader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-project-errors", ProjectID: "project-1", AgentName: "reviewer"}}
+	projectScheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-project-errors", ProjectID: "project-1", AgentName: "reviewer"}}
 	projectHost := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
 		Events: projectEvents,
 		ProjectAgentRunner: &hostProjectAgentRunnerFake{run: domain.ProjectRunRecord{
@@ -246,14 +246,14 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 			Error:     "project failed",
 		}},
 		Publisher: &hostPublisherFake{},
-	}, projectLoader, triggerExecution(run), schedulers.TriggerEventMetadata{})
+	}, projectScheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
 	projectResult, err := projectHost.Agent(ctx, "prompt", domain.SchedulerAgentRequest{})
 	if err != nil || projectResult.Text != "project failed" || !projectEvents.contains("scheduler.agent.failed") {
 		t.Fatalf("project failed result=%#v err=%v events=%#v", projectResult, err, projectEvents.types())
 	}
 	projectHost = schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
 		ProjectAgentRunner: &hostProjectAgentRunnerFake{err: errors.New("project unavailable")},
-	}, projectLoader, triggerExecution(run), schedulers.TriggerEventMetadata{})
+	}, projectScheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
 	if _, err := projectHost.Agent(ctx, "prompt", domain.SchedulerAgentRequest{}); err == nil {
 		t.Fatalf("project runner error returned nil")
 	}
@@ -265,7 +265,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 			session:   &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-command", VMStatus: domain.VMStatusRunning}},
 			ensureErr: errors.New("ensure failed"),
 		},
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
 	if _, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "echo"}); err == nil || !commandEvents.contains("scheduler.command.failed") {
 		t.Fatalf("command ensure err=%v events=%#v", err, commandEvents.types())
 	}
@@ -274,7 +274,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 		Events:          commandEvents,
 		Sessions:        &hostSessionsFake{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-command", VMStatus: domain.VMStatusRunning}}},
 		CommandExecutor: &hostCommandExecutorFake{err: errors.New("command failed"), result: domain.SchedulerCommandResult{SandboxID: "session-command", CellID: "cell-command", Output: "partial"}},
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
 	if result, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "false"}); err == nil || result.Output != "partial" || !commandEvents.contains("scheduler.command.failed") {
 		t.Fatalf("command executor result=%#v err=%v events=%#v", result, err, commandEvents.types())
 	}
@@ -283,24 +283,24 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 		Events:          commandEvents,
 		Sessions:        &hostSessionsFake{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-command", VMStatus: domain.VMStatusRunning}}},
 		CommandExecutor: &hostCommandExecutorFake{result: domain.SchedulerCommandResult{Output: "bad", Success: false, SandboxID: "session-command"}},
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
 	if result, err := commandHost.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "false"}); err != nil || result.Success || !commandEvents.contains("scheduler.command.completed") {
 		t.Fatalf("command nonzero result=%#v err=%v events=%#v", result, err, commandEvents.types())
 	}
 
-	if _, err := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{}).LLM(ctx, "prompt", domain.SchedulerLLMRequest{}); err == nil {
+	if _, err := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{}).LLM(ctx, "prompt", domain.SchedulerLLMRequest{}); err == nil {
 		t.Fatalf("nil LLM returned nil error")
 	}
 	llmEvents := &hostEventsFake{}
 	llmHost := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
 		Events: llmEvents,
 		LLM:    &hostLLMFake{err: errors.New("llm failed")},
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
 	if _, err := llmHost.LLM(ctx, "prompt", domain.SchedulerLLMRequest{Model: "model-a"}); err == nil || !llmEvents.contains("scheduler.llm.failed") {
 		t.Fatalf("llm err=%v events=%#v", err, llmEvents.types())
 	}
 
-	if _, err := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{}).CallSandboxRPC(ctx, "GetSandbox", `{}`); err == nil {
+	if _, err := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{}).CallSandboxRPC(ctx, "GetSandbox", `{}`); err == nil {
 		t.Fatalf("nil session RPC returned nil error")
 	}
 	rpcEvents := &hostEventsFake{}
@@ -315,7 +315,7 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 			}
 			return ""
 		},
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "topic-event"})
 	if _, err := rpcHost.CallSandboxRPC(ctx, "GetSandbox", `{"sandboxId":"sandbox-rpc"}`); err == nil || !rpcEvents.contains("scheduler.sandbox.rpc.failed") || !rpcStore.containsLink("sandbox-rpc", "sandbox_rpc_failed") {
 		t.Fatalf("rpc err=%v events=%#v links=%#v", err, rpcEvents.types(), rpcStore.links)
 	}
@@ -323,14 +323,14 @@ func TestRuntimeHostErrorBranches(t *testing.T) {
 
 func TestRuntimeHostLogPublishEventAndState(t *testing.T) {
 	ctx := context.Background()
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-state", Name: "State Scheduler"}}
-	run := &domain.SchedulerRunSummary{ID: "run-state", SchedulerID: loader.Summary.ID, TriggerID: "trigger-state"}
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-state", Name: "State Scheduler"}}
+	run := &domain.SchedulerRunSummary{ID: "run-state", SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-state"}
 	store := &hostStoreFake{}
 	events := &hostEventsFake{}
 	host := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
 		Store:  store,
 		Events: events,
-	}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{
+	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{
 		EventID:       "trigger-event",
 		CorrelationID: "correlation-1",
 	})
@@ -356,7 +356,7 @@ func TestRuntimeHostLogPublishEventAndState(t *testing.T) {
 		t.Fatalf("events after PublishEvent = %#v", events.types())
 	}
 	invocationStore := &hostStoreFake{}
-	invocationHost := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{Store: invocationStore}, loader, schedulers.RuntimeExecutionContext{
+	invocationHost := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{Store: invocationStore}, scheduler, schedulers.RuntimeExecutionContext{
 		ID: "invocation-correlation", Kind: schedulers.ExecutionKindInvocation,
 	}, schedulers.TriggerEventMetadata{})
 	invocationEvent, err := invocationHost.PublishEvent(ctx, "runtime.demo", `{"value":2}`)
@@ -381,7 +381,7 @@ func TestRuntimeHostLogPublishEventAndState(t *testing.T) {
 		t.Fatalf("StateGet after delete ok=%v err=%v", ok, err)
 	}
 
-	missingStoreHost := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{}, loader, triggerExecution(run), schedulers.TriggerEventMetadata{})
+	missingStoreHost := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
 	if _, err := missingStoreHost.PublishEvent(ctx, "runtime.demo", `{}`); err == nil || !strings.Contains(err.Error(), "event store is unavailable") {
 		t.Fatalf("PublishEvent missing store error = %v", err)
 	}

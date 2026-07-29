@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	TopicEventSourceWebhook = "webhook"
-	TopicEventSourceLoader  = "loader"
-	TopicEventSourceSystem  = "system"
+	TopicEventSourceWebhook   = "webhook"
+	TopicEventSourceScheduler = "scheduler"
+	TopicEventSourceSystem    = "system"
+
+	legacyTopicEventSourceLoader = "loader"
 
 	TopicEventDispatchPending        = "pending"
 	TopicEventDispatchPublishing     = "publishing_to_bus"
@@ -85,7 +87,7 @@ type WebhookSource struct {
 
 type EventDelivery struct {
 	EventID     string    `json:"event_id"`
-	SchedulerID string    `json:"loader_id"`
+	SchedulerID string    `json:"scheduler_id"`
 	TriggerID   string    `json:"trigger_id"`
 	RunID       string    `json:"run_id,omitempty"`
 	Status      string    `json:"status"`
@@ -98,20 +100,20 @@ type EventSandboxLink struct {
 	EventID          string    `json:"event_id"`
 	SandboxID        string    `json:"sandbox_id"`
 	Relation         string    `json:"relation"`
-	SchedulerID      string    `json:"loader_id,omitempty"`
+	SchedulerID      string    `json:"scheduler_id,omitempty"`
 	RunID            string    `json:"run_id,omitempty"`
 	TriggerID        string    `json:"trigger_id,omitempty"`
-	SchedulerEventID string    `json:"loader_event_id,omitempty"`
+	SchedulerEventID string    `json:"scheduler_event_id,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
 type EventSandboxTraceItem struct {
 	SandboxID        string    `json:"sandbox_id"`
 	Relation         string    `json:"relation"`
-	SchedulerID      string    `json:"loader_id,omitempty"`
+	SchedulerID      string    `json:"scheduler_id,omitempty"`
 	RunID            string    `json:"run_id,omitempty"`
 	TriggerID        string    `json:"trigger_id,omitempty"`
-	SchedulerEventID string    `json:"loader_event_id,omitempty"`
+	SchedulerEventID string    `json:"scheduler_event_id,omitempty"`
 	EventID          string    `json:"event_id"`
 	CreatedAt        time.Time `json:"created_at"`
 }
@@ -145,8 +147,8 @@ func NormalizeTopicEventSource(source string) string {
 	switch strings.ToLower(strings.TrimSpace(source)) {
 	case TopicEventSourceWebhook:
 		return TopicEventSourceWebhook
-	case TopicEventSourceLoader:
-		return TopicEventSourceLoader
+	case TopicEventSourceScheduler, legacyTopicEventSourceLoader:
+		return TopicEventSourceScheduler
 	case TopicEventSourceSystem:
 		return TopicEventSourceSystem
 	default:

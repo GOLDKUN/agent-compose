@@ -9,7 +9,7 @@ It verifies the scheduler control-plane flow:
 
 - parse a cron trigger from `agent-compose.yml`
 - apply the project to the daemon
-- create a managed project scheduler and loader
+- create a managed project scheduler
 - show the scheduler as enabled
 - disable the scheduler with `agent-compose down`
 
@@ -80,10 +80,10 @@ go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/a
 Expected result:
 
 - `config` prints the trigger as `kind: cron`.
-- `up` creates `project_scheduler` and `loader` resources.
+- `up` creates one `scheduler` resource per configured scheduler.
 - `ps` shows the scheduler as `enabled`.
 - `inspect project` shows `scheduler_count: 1` and `trigger_count: 1`.
-- `down` disables the managed scheduler and loader.
+- `down` disables the managed scheduler.
 
 ## Making the trigger easier to observe
 
@@ -144,8 +144,7 @@ created  project            docker-scheduler-cron                               
 created  project_revision   sha256:609b72e32d33488851496faefccbe2e3487cf2247e5218dd5cde9ae31d57e964  project-docker-scheduler-cron-034aaf526f91/1
 created  project_agent      reviewer                                                                 agent-reviewer-4bff2fb6372a
 created  agent_definition   reviewer                                                                 agent-reviewer-4bff2fb6372a
-created  project_scheduler  reviewer                                                                 scheduler-reviewer-default-ed0b5bed0daa
-created  loader             docker-scheduler-cron/reviewer scheduler                                 loader-reviewer-default-ed0b5bed0daa
+created  scheduler          reviewer                                                                 scheduler-reviewer-default-ed0b5bed0daa
 ```
 
 ### 3. Scheduler status
@@ -193,6 +192,5 @@ Status: down
 Failed session stops: 0
 
 ACTION   TYPE               NAME      ID                                       MESSAGE
-updated  project_scheduler  reviewer  scheduler-reviewer-default-ed0b5bed0daa  disabled by project down
-updated  loader             reviewer  loader-reviewer-default-ed0b5bed0daa     disabled by project down
+updated  scheduler          reviewer  scheduler-reviewer-default-ed0b5bed0daa  disabled by project down
 ```

@@ -60,7 +60,7 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 	cellID := uuid.NewString()
 	hostCellDir := filepath.Join(execution.HostSandboxDir(session), "state", "cells", cellID)
 	if err := os.MkdirAll(hostCellDir, 0o755); err != nil {
-		return domain.SchedulerCommandResult{}, fmt.Errorf("create loader command cell state dir: %w", err)
+		return domain.SchedulerCommandResult{}, fmt.Errorf("create scheduler command cell state dir: %w", err)
 	}
 	guestCellDir := filepath.Join(e.Config.GuestStateRoot, "cells", cellID)
 	source := schedulers.CommandCellSource(request)
@@ -153,7 +153,7 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 			ID:        uuid.NewString(),
 			Type:      "kernel.cell.failed",
 			Level:     "error",
-			Message:   firstNonEmpty(recovered.Stderr, fmt.Sprintf("loader command failed with exit code %d", recovered.ExitCode), finalErr.Error()),
+			Message:   firstNonEmpty(recovered.Stderr, fmt.Sprintf("scheduler command failed with exit code %d", recovered.ExitCode), finalErr.Error()),
 			CreatedAt: time.Now().UTC(),
 		}
 		_ = e.Store.AddEvent(ctx, session.Summary.ID, event)
@@ -164,7 +164,7 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 	runtimeRequest := execution.RuntimeCommandRequestPayload(e.Config, request, guestCellDir)
 	hostRequestPath := filepath.Join(hostCellDir, "command-request.json")
 	if err := execution.WriteJSONArtifact(hostRequestPath, runtimeRequest); err != nil {
-		return domain.SchedulerCommandResult{}, fmt.Errorf("write loader command request artifact: %w", err)
+		return domain.SchedulerCommandResult{}, fmt.Errorf("write scheduler command request artifact: %w", err)
 	}
 
 	streamWriter := func(chunk domain.ExecChunk) {
@@ -222,11 +222,11 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 
 	eventLevel := "info"
 	eventType := "kernel.cell.succeeded"
-	eventMessage := "executed loader command in agent-compose guest"
+	eventMessage := "executed scheduler command in agent-compose guest"
 	if !commandResult.Success {
 		eventLevel = "error"
 		eventType = "kernel.cell.failed"
-		eventMessage = firstNonEmpty(commandResult.Stderr, fmt.Sprintf("loader command failed with exit code %d", commandResult.ExitCode))
+		eventMessage = firstNonEmpty(commandResult.Stderr, fmt.Sprintf("scheduler command failed with exit code %d", commandResult.ExitCode))
 	}
 	event := domain.SandboxEvent{
 		ID:        uuid.NewString(),
@@ -273,7 +273,7 @@ func (e *SchedulerCommandExecutor) prepareSchedulerCommandLLMFacadeEnv(ctx conte
 	}
 	execSession.ProviderEnvItems = domain.MergeEnvItems(execSession.ProviderEnvItems, domain.SchedulerCommandSandboxEnv(request))
 
-	managedEnv, err := runtimefacade.EnsureSessionLLMFacadeConfig(ctx, e.Config, facadeStoreFor(e.ConfigDB), &execSession, agent, model, runtimefacade.TokenSourceLoaderCommand, runID)
+	managedEnv, err := runtimefacade.EnsureSessionLLMFacadeConfig(ctx, e.Config, facadeStoreFor(e.ConfigDB), &execSession, agent, model, runtimefacade.TokenSourceSchedulerCommand, runID)
 	if err != nil {
 		return nil, "", err
 	}

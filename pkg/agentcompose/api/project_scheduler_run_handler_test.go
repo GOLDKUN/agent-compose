@@ -76,7 +76,7 @@ func TestProjectHandlerRunSchedulerValidatesPayloadAndMissingTrigger(t *testing.
 
 	request.PayloadJson = `{}`
 	request.TriggerId = "missing"
-	runtime.runErr = domain.ResourceError(domain.ErrNotFound, "loader trigger", "missing", "loader trigger missing not found", nil)
+	runtime.runErr = domain.ResourceError(domain.ErrNotFound, "scheduler trigger", "missing", "scheduler trigger missing not found", nil)
 	if _, err := handler.RunScheduler(context.Background(), connect.NewRequest(request)); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("missing trigger code=%v err=%v", connect.CodeOf(err), err)
 	}
@@ -91,8 +91,8 @@ func TestProjectHandlerInvokeSchedulerReturnsValueWithoutRunResource(t *testing.
 	if err != nil || response.Msg.GetResultJson() != `{"ok":true}` || response.Msg.GetDurationMs() != 42 || len(response.Msg.GetWarnings()) != 1 {
 		t.Fatalf("InvokeScheduler response=%#v err=%v", response, err)
 	}
-	if runtime.invokeLoaderID != store.scheduler.ID || runtime.invokePayload != `{"value":true}` {
-		t.Fatalf("invocation loader/payload=%q/%q", runtime.invokeLoaderID, runtime.invokePayload)
+	if runtime.invokeSchedulerID != store.scheduler.ID || runtime.invokePayload != `{"value":true}` {
+		t.Fatalf("invocation scheduler/payload=%q/%q", runtime.invokeSchedulerID, runtime.invokePayload)
 	}
 	store.scheduler.SpecJSON = `{"triggers":[{"name":"nightly"}]}`
 	if _, err := handler.InvokeScheduler(context.Background(), connect.NewRequest(&agentcomposev2.InvokeSchedulerRequest{
@@ -179,9 +179,9 @@ func TestProjectHandlerBatchGetsLatestSchedulerRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BatchGetLatestSchedulerRuns returned error: %v", err)
 	}
-	if !slices.Equal(store.lastBatchLoaderIDs, []string{store.scheduler.ID}) ||
+	if !slices.Equal(store.lastBatchSchedulerIDs, []string{store.scheduler.ID}) ||
 		!slices.Equal(store.lastBatchSandboxIDs, []string{"sandbox-a", "sandbox-missing"}) {
-		t.Fatalf("batch filters=%#v/%#v", store.lastBatchLoaderIDs, store.lastBatchSandboxIDs)
+		t.Fatalf("batch filters=%#v/%#v", store.lastBatchSchedulerIDs, store.lastBatchSandboxIDs)
 	}
 	results := response.Msg.GetResults()
 	if len(results) != 2 || results[0].GetSandboxId() != "sandbox-a" || results[0].GetRun().GetRunId() != run.ID ||
@@ -275,7 +275,7 @@ func newSchedulerRunHandlerFixture() (*schedulerRunProjectStoreFake, *schedulerR
 			ProjectID:   "project-1",
 			AgentName:   "agent-1",
 			SchedulerID: "scheduler-1",
-			ID:          "loader-1",
+			ID:          "scheduler-1",
 			Revision:    1,
 			Enabled:     false,
 			SpecJSON:    `{"sandbox_policy":"new","concurrency_policy":"skip","script":"function main() {}"}`,
@@ -286,16 +286,16 @@ func newSchedulerRunHandlerFixture() (*schedulerRunProjectStoreFake, *schedulerR
 }
 
 type schedulerRunProjectStoreFake struct {
-	project             domain.ProjectRecord
-	scheduler           domain.ProjectSchedulerRecord
-	schedulers          []domain.ProjectSchedulerRecord
-	runs                []domain.SchedulerRunSummary
-	events              []domain.SchedulerEvent
-	sandboxIDs          map[schedulers.SchedulerRunKey][]string
-	lastRunFilter       schedulers.SchedulerRunPageFilter
-	batchRunsBySandbox  map[string]domain.SchedulerRunSummary
-	lastBatchLoaderIDs  []string
-	lastBatchSandboxIDs []string
+	project               domain.ProjectRecord
+	scheduler             domain.ProjectSchedulerRecord
+	schedulers            []domain.ProjectSchedulerRecord
+	runs                  []domain.SchedulerRunSummary
+	events                []domain.SchedulerEvent
+	sandboxIDs            map[schedulers.SchedulerRunKey][]string
+	lastRunFilter         schedulers.SchedulerRunPageFilter
+	batchRunsBySandbox    map[string]domain.SchedulerRunSummary
+	lastBatchSchedulerIDs []string
+	lastBatchSandboxIDs   []string
 }
 
 func (s *schedulerRunProjectStoreFake) ListSchedulerEventsPage(_ context.Context, filter schedulers.SchedulerEventPageFilter) ([]domain.SchedulerEvent, error) {
@@ -305,22 +305,22 @@ func (s *schedulerRunProjectStoreFake) ListSchedulerEventsPage(_ context.Context
 			(strings.TrimSpace(filter.TriggerID) != "" && event.TriggerID != filter.TriggerID) || (strings.TrimSpace(filter.RunID) != "" && event.RunID != filter.RunID) {
 			continue
 		}
-		if !filter.BeforeCreatedAt.IsZero() && compareLoaderEventKey(event, filter.BeforeCreatedAt, filter.BeforeSchedulerID, filter.BeforeEventID) >= 0 {
+		if !filter.BeforeCreatedAt.IsZero() && compareSchedulerEventKey(event, filter.BeforeCreatedAt, filter.BeforeSchedulerID, filter.BeforeEventID) >= 0 {
 			continue
 		}
-		if !filter.AfterCreatedAt.IsZero() && compareLoaderEventKey(event, filter.AfterCreatedAt, filter.AfterSchedulerID, filter.AfterEventID) <= 0 {
+		if !filter.AfterCreatedAt.IsZero() && compareSchedulerEventKey(event, filter.AfterCreatedAt, filter.AfterSchedulerID, filter.AfterEventID) <= 0 {
 			continue
 		}
-		if !filter.FromCreatedAt.IsZero() && compareLoaderEventKey(event, filter.FromCreatedAt, filter.FromSchedulerID, filter.FromEventID) < 0 {
+		if !filter.FromCreatedAt.IsZero() && compareSchedulerEventKey(event, filter.FromCreatedAt, filter.FromSchedulerID, filter.FromEventID) < 0 {
 			continue
 		}
-		if !filter.ThroughCreatedAt.IsZero() && compareLoaderEventKey(event, filter.ThroughCreatedAt, filter.ThroughSchedulerID, filter.ThroughEventID) > 0 {
+		if !filter.ThroughCreatedAt.IsZero() && compareSchedulerEventKey(event, filter.ThroughCreatedAt, filter.ThroughSchedulerID, filter.ThroughEventID) > 0 {
 			continue
 		}
 		items = append(items, event)
 	}
 	sort.Slice(items, func(i, j int) bool {
-		comparison := compareLoaderEventKey(items[i], items[j].CreatedAt, items[j].SchedulerID, items[j].ID)
+		comparison := compareSchedulerEventKey(items[i], items[j].CreatedAt, items[j].SchedulerID, items[j].ID)
 		if filter.Ascending {
 			return comparison < 0
 		}
@@ -338,14 +338,14 @@ func (s *schedulerRunProjectStoreFake) CountSchedulerEventsPage(_ context.Contex
 	return len(items), err
 }
 
-func compareLoaderEventKey(event domain.SchedulerEvent, createdAt time.Time, loaderID, eventID string) int {
+func compareSchedulerEventKey(event domain.SchedulerEvent, createdAt time.Time, schedulerID, eventID string) int {
 	if !event.CreatedAt.Equal(createdAt) {
 		if event.CreatedAt.Before(createdAt) {
 			return -1
 		}
 		return 1
 	}
-	if comparison := strings.Compare(event.SchedulerID, loaderID); comparison != 0 {
+	if comparison := strings.Compare(event.SchedulerID, schedulerID); comparison != 0 {
 		return comparison
 	}
 	return strings.Compare(event.ID, eventID)
@@ -374,18 +374,18 @@ func (s *schedulerRunProjectStoreFake) GetProjectRevision(context.Context, strin
 	return domain.ProjectRevisionRecord{}, nil
 }
 
-func (s *schedulerRunProjectStoreFake) GetSchedulerRunForSchedulers(_ context.Context, loaderIDs []string, runID string) (domain.SchedulerRunSummary, error) {
+func (s *schedulerRunProjectStoreFake) GetSchedulerRunForSchedulers(_ context.Context, schedulerIDs []string, runID string) (domain.SchedulerRunSummary, error) {
 	for _, run := range s.runs {
 		if run.ID != runID {
 			continue
 		}
-		for _, loaderID := range loaderIDs {
-			if run.SchedulerID == loaderID {
+		for _, schedulerID := range schedulerIDs {
+			if run.SchedulerID == schedulerID {
 				return run, nil
 			}
 		}
 	}
-	return domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrNotFound, "loader run", runID, fmt.Sprintf("loader run %s not found", runID), nil)
+	return domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrNotFound, "scheduler run", runID, fmt.Sprintf("scheduler run %s not found", runID), nil)
 }
 
 func (s *schedulerRunProjectStoreFake) ListSchedulerRunsPage(_ context.Context, filter schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error) {
@@ -412,28 +412,28 @@ func (s *schedulerRunProjectStoreFake) ListSchedulerRunSandboxIDs(_ context.Cont
 	return s.sandboxIDs, nil
 }
 
-func (s *schedulerRunProjectStoreFake) BatchGetLatestSchedulerRunsBySandboxIDs(_ context.Context, loaderIDs, sandboxIDs []string) (map[string]domain.SchedulerRunSummary, error) {
-	s.lastBatchLoaderIDs = append([]string(nil), loaderIDs...)
+func (s *schedulerRunProjectStoreFake) BatchGetLatestSchedulerRunsBySandboxIDs(_ context.Context, schedulerIDs, sandboxIDs []string) (map[string]domain.SchedulerRunSummary, error) {
+	s.lastBatchSchedulerIDs = append([]string(nil), schedulerIDs...)
 	s.lastBatchSandboxIDs = append([]string(nil), sandboxIDs...)
 	return s.batchRunsBySandbox, nil
 }
 
 type schedulerRunRuntimeFake struct {
-	runResult      domain.SchedulerRunSummary
-	startResult    domain.SchedulerRunSummary
-	getResult      domain.SchedulerRunSummary
-	stopResult     domain.SchedulerRunSummary
-	runErr         error
-	stopRequested  bool
-	runCalls       int
-	lastRequest    schedulers.SchedulerRunRequest
-	stopReason     string
-	invokeResult   schedulers.InvocationResult
-	invokeLoaderID string
-	invokePayload  string
-	pruneRequest   schedulers.SchedulerRunPruneRequest
-	pruneResult    schedulers.SchedulerRunPruneResult
-	pruneErr       error
+	runResult         domain.SchedulerRunSummary
+	startResult       domain.SchedulerRunSummary
+	getResult         domain.SchedulerRunSummary
+	stopResult        domain.SchedulerRunSummary
+	runErr            error
+	stopRequested     bool
+	runCalls          int
+	lastRequest       schedulers.SchedulerRunRequest
+	stopReason        string
+	invokeResult      schedulers.InvocationResult
+	invokeSchedulerID string
+	invokePayload     string
+	pruneRequest      schedulers.SchedulerRunPruneRequest
+	pruneResult       schedulers.SchedulerRunPruneResult
+	pruneErr          error
 }
 
 func (f *schedulerRunRuntimeFake) PruneSchedulerRuns(_ context.Context, request schedulers.SchedulerRunPruneRequest) (schedulers.SchedulerRunPruneResult, error) {
@@ -441,8 +441,8 @@ func (f *schedulerRunRuntimeFake) PruneSchedulerRuns(_ context.Context, request 
 	return f.pruneResult, f.pruneErr
 }
 
-func (f *schedulerRunRuntimeFake) InvokeScheduler(_ context.Context, loaderID, payloadJSON string) (schedulers.InvocationResult, error) {
-	f.invokeLoaderID = loaderID
+func (f *schedulerRunRuntimeFake) InvokeScheduler(_ context.Context, schedulerID, payloadJSON string) (schedulers.InvocationResult, error) {
+	f.invokeSchedulerID = schedulerID
 	f.invokePayload = payloadJSON
 	return f.invokeResult, nil
 }

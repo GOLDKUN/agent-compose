@@ -18,6 +18,9 @@ import (
 )
 
 type stickyProjectRunSandboxConfig struct {
+	// loader_config_hash is a frozen canonical-hash schema key. The one-shot
+	// migrator carries stored binding hashes forward but cannot recompute them;
+	// renaming this key would retire every existing sticky sandbox.
 	SchedulerConfigHash string                      `json:"loader_config_hash"`
 	ProjectID           string                      `json:"project_id"`
 	ProjectRevision     int64                       `json:"project_revision"`
@@ -133,7 +136,7 @@ func (c *Controller) resolveStickySchedulerBinding(ctx context.Context, store st
 			}
 			return "", &retiringBinding, nil, fmt.Errorf("retire stale sticky sandbox %s: %w", binding.SandboxID, err)
 		}
-		return "", &retiringBinding, []string{fmt.Sprintf("sticky sandbox %s used stale loader configuration; created a replacement", binding.SandboxID)}, nil
+		return "", &retiringBinding, []string{fmt.Sprintf("sticky sandbox %s used stale scheduler configuration; created a replacement", binding.SandboxID)}, nil
 	}
 	return "", nil, nil, fmt.Errorf("sticky sandbox binding changed concurrently")
 }

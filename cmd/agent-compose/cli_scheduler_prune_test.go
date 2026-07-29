@@ -78,7 +78,7 @@ func TestIntegrationCLISchedulerPruneMapsFiltersAndJSONStats(t *testing.T) {
 			return connect.NewResponse(&agentcomposev2.PruneSchedulerRunsResponse{
 				DryRun: true,
 				Matched: &agentcomposev2.SchedulerRunPruneStats{
-					Runs: 2, LoaderEvents: 5, EventDeliveries: 1, EventSandboxLinks: 1, ArtifactDirs: 2, ArtifactBytes: 19,
+					Runs: 2, SchedulerEvents: 5, EventDeliveries: 1, EventSandboxLinks: 1, ArtifactDirs: 2, ArtifactBytes: 19,
 				},
 			}), nil
 		},
@@ -107,6 +107,9 @@ func TestIntegrationCLISchedulerPruneMapsFiltersAndJSONStats(t *testing.T) {
 	if !output.DryRun || output.Matched.Runs != 2 || output.Matched.SchedulerEvents != 5 || output.Matched.ArtifactBytes != 19 ||
 		output.Scheduler != "reviewer" || output.TriggerID != captured.GetTriggerId() || !slices.Equal(output.Statuses, []string{"failed", "succeeded"}) {
 		t.Fatalf("output=%#v", output)
+	}
+	if !strings.Contains(stdout, `"scheduler_events": 5`) || strings.Contains(stdout, `"loader_events"`) {
+		t.Fatalf("prune JSON does not use scheduler event terminology:\n%s", stdout)
 	}
 	assertSchedulerProjectJSONMatchesSummary(t, stdout, testSchedulerProjectSummary(t, "scheduler-prune-test", composePath))
 }
@@ -149,7 +152,7 @@ func TestIntegrationCLISchedulerPruneForcePartialResultIsNonZero(t *testing.T) {
 				Matched:     &agentcomposev2.SchedulerRunPruneStats{Runs: 3, ArtifactDirs: 2},
 				Removed:     &agentcomposev2.SchedulerRunPruneStats{Runs: 2, ArtifactDirs: 1},
 				SkippedRuns: 1,
-				Residues:    []*agentcomposev2.SchedulerRunPruneResidue{{LoaderId: "loader-1", RunId: "run-1", Path: "/runs/run-1", Error: "permission denied"}},
+				Residues:    []*agentcomposev2.SchedulerRunPruneResidue{{SchedulerId: "scheduler-1", RunId: "run-1", Path: "/runs/run-1", Error: "permission denied"}},
 			}), nil
 		},
 	}})
@@ -162,6 +165,9 @@ func TestIntegrationCLISchedulerPruneForcePartialResultIsNonZero(t *testing.T) {
 	var output composeSchedulerPruneOutput
 	if err := json.Unmarshal([]byte(stdout), &output); err != nil || output.Removed.Runs != 2 || output.SkippedRuns != 1 || len(output.Residues) != 1 {
 		t.Fatalf("partial output=%#v err=%v", output, err)
+	}
+	if !strings.Contains(stdout, `"scheduler_id": "scheduler-1"`) || strings.Contains(stdout, `"loader_id"`) {
+		t.Fatalf("prune residue JSON does not use scheduler identity terminology:\n%s", stdout)
 	}
 }
 

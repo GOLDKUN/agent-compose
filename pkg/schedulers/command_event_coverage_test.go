@@ -28,11 +28,11 @@ func TestCommandAndEventHelperWorkflows(t *testing.T) {
 			t.Fatalf("expected validation error for %#v", req)
 		}
 	}
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{SandboxPolicy: domain.SchedulerSandboxPolicyReuse}}
-	if CommandRequestRequiresCleanup(loader, domain.SchedulerCommandRequest{}) {
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{SandboxPolicy: domain.SchedulerSandboxPolicyReuse}}
+	if CommandRequestRequiresCleanup(scheduler, domain.SchedulerCommandRequest{}) {
 		t.Fatalf("reuse policy without overrides should not require cleanup")
 	}
-	if !CommandRequestRequiresCleanup(loader, domain.SchedulerCommandRequest{SandboxPolicy: domain.SchedulerSandboxPolicyNew}) {
+	if !CommandRequestRequiresCleanup(scheduler, domain.SchedulerCommandRequest{SandboxPolicy: domain.SchedulerSandboxPolicyNew}) {
 		t.Fatalf("new policy should require cleanup")
 	}
 	if !CommandRequestOverridesSandbox(domain.SchedulerCommandRequest{Driver: "docker"}) ||
@@ -40,7 +40,7 @@ func TestCommandAndEventHelperWorkflows(t *testing.T) {
 		t.Fatalf("expected sandbox override detection")
 	}
 
-	published, err := NewPublishedTopicEvent("runtime.demo", `{"correlation_id":"corr","parentEventId":"parent","provider":"test","ok":true}`, TriggerEventMetadata{EventID: "trigger-event"}, "loader-1", "run-1")
+	published, err := NewPublishedTopicEvent("runtime.demo", `{"correlation_id":"corr","parentEventId":"parent","provider":"test","ok":true}`, TriggerEventMetadata{EventID: "trigger-event"}, "scheduler-1", "run-1")
 	if err != nil {
 		t.Fatalf("NewPublishedTopicEvent returned error: %v", err)
 	}
@@ -82,13 +82,13 @@ func TestCommandAndEventHelperWorkflows(t *testing.T) {
 		t.Fatalf("metadata helpers failed")
 	}
 
-	loaders := []domain.Scheduler{
-		{Summary: domain.SchedulerSummary{ID: "loader-1", Enabled: true, ConcurrencyPolicy: domain.SchedulerConcurrencyPolicySkip}, Triggers: []domain.SchedulerTrigger{{ID: "trigger-1", Enabled: true, Kind: domain.SchedulerTriggerKindEvent, Topic: "runtime.*"}}},
-		{Summary: domain.SchedulerSummary{ID: "loader-2", Enabled: false}, Triggers: []domain.SchedulerTrigger{{ID: "disabled-loader", Enabled: true, Kind: domain.SchedulerTriggerKindEvent, Topic: "runtime.demo"}}},
-		{Summary: domain.SchedulerSummary{ID: "loader-3", Enabled: true}, Triggers: []domain.SchedulerTrigger{{ID: "disabled-trigger", Enabled: false, Kind: domain.SchedulerTriggerKindEvent, Topic: "runtime.demo"}}},
+	schedulers := []domain.Scheduler{
+		{Summary: domain.SchedulerSummary{ID: "scheduler-1", Enabled: true, ConcurrencyPolicy: domain.SchedulerConcurrencyPolicySkip}, Triggers: []domain.SchedulerTrigger{{ID: "trigger-1", Enabled: true, Kind: domain.SchedulerTriggerKindEvent, Topic: "runtime.*"}}},
+		{Summary: domain.SchedulerSummary{ID: "scheduler-2", Enabled: false}, Triggers: []domain.SchedulerTrigger{{ID: "disabled-scheduler", Enabled: true, Kind: domain.SchedulerTriggerKindEvent, Topic: "runtime.demo"}}},
+		{Summary: domain.SchedulerSummary{ID: "scheduler-3", Enabled: true}, Triggers: []domain.SchedulerTrigger{{ID: "disabled-trigger", Enabled: false, Kind: domain.SchedulerTriggerKindEvent, Topic: "runtime.demo"}}},
 	}
-	targets := CollectEventTargets(loaders, "runtime.demo")
-	if len(targets) != 1 || targets[0].Scheduler.Summary.ID != "loader-1" {
+	targets := CollectEventTargets(schedulers, "runtime.demo")
+	if len(targets) != 1 || targets[0].Scheduler.Summary.ID != "scheduler-1" {
 		t.Fatalf("targets = %#v", targets)
 	}
 	duplicated := append(targets, targets...)
@@ -96,11 +96,11 @@ func TestCommandAndEventHelperWorkflows(t *testing.T) {
 	if len(deduped) != 1 {
 		t.Fatalf("deduped targets = %#v", deduped)
 	}
-	if !AnyTargetBusy(targets, map[string]int{"loader-1": 1}) {
+	if !AnyTargetBusy(targets, map[string]int{"scheduler-1": 1}) {
 		t.Fatalf("expected busy target")
 	}
 	targets[0].Scheduler.Summary.ConcurrencyPolicy = domain.SchedulerConcurrencyPolicyParallel
-	if AnyTargetBusy(targets, map[string]int{"loader-1": 1}) {
+	if AnyTargetBusy(targets, map[string]int{"scheduler-1": 1}) {
 		t.Fatalf("parallel target should not be busy")
 	}
 }

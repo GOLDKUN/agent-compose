@@ -42,7 +42,7 @@ func TestE2EDockerSchedulerScriptHelloWorldFlow(t *testing.T) {
 	t.Setenv("DOCKER_DEFAULT_IMAGE", guestImage)
 	t.Setenv("SANDBOX_START_TIMEOUT", "90s")
 	t.Setenv("SANDBOX_STOP_TIMEOUT", "15s")
-	t.Setenv("LOADER_RUN_TIMEOUT", "2m")
+	t.Setenv("SCHEDULER_RUN_TIMEOUT", "2m")
 	t.Setenv("LLM_API_ENDPOINT", "")
 	t.Setenv("BOXLITE_HOME", filepath.Join(root, "boxlite"))
 	t.Setenv("BOXLITE_RUNTIME_DIR", filepath.Join(root, "boxlite-runtime"))
@@ -296,7 +296,7 @@ func waitForScheduledHelloRun(t *testing.T, projectClient agentcomposev2connect.
 		}
 		for _, event := range eventsResp.Msg.GetEvents() {
 			if event.GetType() == "scheduler.run.failed" {
-				lastErr = fmt.Errorf("loader run %s failed: %s", event.GetRunId(), event.GetMessage())
+				lastErr = fmt.Errorf("scheduler run %s failed: %s", event.GetRunId(), event.GetMessage())
 				continue
 			}
 			if event.GetRunId() != "" && event.GetType() == "scheduler.command.completed" && event.GetLevel() == "info" && strings.Contains(event.GetMessage(), helloText) {

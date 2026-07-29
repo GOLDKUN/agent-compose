@@ -1,10 +1,13 @@
 # Protobuf v2 field layout freeze
 
 The `agentcompose.v2` contract uses a compact field layout as its freeze
-baseline. This is the final lockstep breaking change before v2 compatibility is
-enforced. CLI, Web clients, and the daemon must therefore be generated from and
-deployed with the same revision; rolling or mixed-version deployment across
-this change is unsupported.
+baseline. A reviewed terminology correction subsequently renamed the prune
+response fields `loader_events` and `loader_id` to `scheduler_events` and
+`scheduler_id` without changing their field numbers. The descriptor containing
+that correction is the enforced compatibility baseline. CLI, Web clients, and
+the daemon must therefore be generated from and deployed with the same
+revision; rolling or mixed-version deployment across this change is
+unsupported.
 
 ## Decision
 

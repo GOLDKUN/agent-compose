@@ -11,6 +11,6 @@ function main(payload) {
     input: input,
   };
 
-  scheduler.log("manual loader executed", result);
+  scheduler.log("manual scheduler executed", result);
   return result;
 }

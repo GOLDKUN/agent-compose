@@ -48,7 +48,7 @@ func (d *EventDispatcher) Dispatch(event domain.SchedulerTopicEvent) {
 		"payload":   event.Payload,
 	})
 	if err != nil {
-		slog.Warn("failed to encode loader topic event payload", "topic", event.Topic, "error", err)
+		slog.Warn("failed to encode scheduler topic event payload", "topic", event.Topic, "error", err)
 		return
 	}
 	targets := d.collectTargets(event.Topic)
@@ -58,7 +58,7 @@ func (d *EventDispatcher) Dispatch(event domain.SchedulerTopicEvent) {
 		return
 	}
 	if d.shouldRetryForBusy(event, targets) {
-		d.retry(event, "loader is already running")
+		d.retry(event, "scheduler is already running")
 		return
 	}
 	reservations, ok := d.reserveQueueSlots(event, len(targets))
@@ -88,7 +88,7 @@ func (d *EventDispatcher) ackNoSubscriber(event domain.SchedulerTopicEvent) {
 	}
 	if ack != nil {
 		if err := ack(d.rootCtx()); err != nil {
-			slog.Warn("failed to mark unmatched loader topic event published", "event_id", event.EventID, "topic", event.Topic, "error", err)
+			slog.Warn("failed to mark unmatched scheduler topic event published", "event_id", event.EventID, "topic", event.Topic, "error", err)
 		}
 	}
 }
@@ -104,10 +104,10 @@ func (d *EventDispatcher) dispatchTargets(event domain.SchedulerTopicEvent, targ
 			defer reservation.Release()
 			if _, err := d.deps.Run(runCtx, target.Scheduler, &target.Trigger, payloadJSON, topic, RunOptions{RetryWhenBusy: event.Source == domain.TopicEventSourceWebhook}, ack); err != nil {
 				if errors.Is(err, ErrRunBusyForRetry) {
-					d.retry(event, "loader is already running")
+					d.retry(event, "scheduler is already running")
 					return
 				}
-				slog.Warn("loader event run failed", "loader_id", target.Scheduler.Summary.ID, "trigger_id", target.Trigger.ID, "topic", topic, "error", err)
+				slog.Warn("scheduler event run failed", "scheduler_id", target.Scheduler.Summary.ID, "trigger_id", target.Trigger.ID, "topic", topic, "error", err)
 				if release != nil {
 					release()
 				}
@@ -126,7 +126,7 @@ func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEven
 			for _, reservation := range reservations {
 				reservation.Release()
 			}
-			d.retry(event, "loader is already running")
+			d.retry(event, "scheduler is already running")
 			return
 		}
 		acquiredSchedulerIDs = append(acquiredSchedulerIDs, target.Scheduler.Summary.ID)
@@ -146,7 +146,7 @@ func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEven
 			}
 			reason := err.Error()
 			if errors.Is(err, ErrRunBusyForRetry) {
-				reason = "loader is already running"
+				reason = "scheduler is already running"
 			}
 			d.retry(event, reason)
 			return
@@ -155,7 +155,7 @@ func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEven
 	}
 	if event.Ack != nil {
 		if err := event.Ack(d.rootCtx()); err != nil {
-			slog.Warn("failed to mark loader topic event published", "event_id", event.EventID, "topic", event.Topic, "error", err)
+			slog.Warn("failed to mark scheduler topic event published", "event_id", event.EventID, "topic", event.Topic, "error", err)
 		}
 	}
 	for index, item := range prepared {
@@ -168,7 +168,7 @@ func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEven
 			defer cancel()
 			defer reservation.Release()
 			if _, err := d.deps.Execute(runCtx, item); err != nil {
-				slog.Warn("loader event run failed", "loader_id", item.Scheduler.Summary.ID, "trigger_id", item.Run.TriggerID, "topic", event.Topic, "error", err)
+				slog.Warn("scheduler event run failed", "scheduler_id", item.Scheduler.Summary.ID, "trigger_id", item.Run.TriggerID, "topic", event.Topic, "error", err)
 			}
 		}(item, reservation)
 	}
@@ -184,18 +184,18 @@ func (d *EventDispatcher) recordMatched(event domain.SchedulerTopicEvent, target
 		TriggerID:   target.Trigger.ID,
 		Status:      domain.EventDeliveryStatusMatched,
 	}); err != nil {
-		slog.Warn("failed to record event delivery match", "event_id", event.EventID, "loader_id", target.Scheduler.Summary.ID, "trigger_id", target.Trigger.ID, "error", err)
+		slog.Warn("failed to record event delivery match", "event_id", event.EventID, "scheduler_id", target.Scheduler.Summary.ID, "trigger_id", target.Trigger.ID, "error", err)
 	}
 }
 
 func (d *EventDispatcher) retry(event domain.SchedulerTopicEvent, reason string) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
-		reason = "loader topic event retry requested"
+		reason = "scheduler topic event retry requested"
 	}
 	if event.Retry != nil {
 		if err := event.Retry(d.rootCtx(), reason, time.Now().UTC().Add(time.Second)); err != nil {
-			slog.Warn("failed to retry loader topic event", "event_id", event.EventID, "topic", event.Topic, "reason", reason, "error", err)
+			slog.Warn("failed to retry scheduler topic event", "event_id", event.EventID, "topic", event.Topic, "reason", reason, "error", err)
 		}
 		return
 	}

@@ -22,7 +22,7 @@ func TestProjectHandlerPruneSchedulerRunsMapsRequestAndResult(t *testing.T) {
 			Runs: 3, SchedulerEvents: 4, EventDeliveries: 5, EventSandboxLinks: 6, ArtifactDirs: 2, ArtifactBytes: 17,
 		},
 		SkippedRuns: 1,
-		Residues:    []schedulers.SchedulerRunPruneResidue{{SchedulerID: "loader-1", RunID: "run-1", Path: "/runs/run-1", Error: "failed"}},
+		Residues:    []schedulers.SchedulerRunPruneResidue{{SchedulerID: "scheduler-1", RunID: "run-1", Path: "/runs/run-1", Error: "failed"}},
 		Warnings:    []string{"warning"},
 	}
 	response, err := handler.PruneSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
@@ -55,10 +55,10 @@ func TestProjectHandlerPruneSchedulerRunsUsesCurrentProjectSchedulers(t *testing
 	store, runtime, handler := newSchedulerRunHandlerFixture()
 	currentSecond := store.scheduler
 	currentSecond.AgentName = "agent-2"
-	currentSecond.ID = "loader-2"
+	currentSecond.ID = "scheduler-2"
 	stale := store.scheduler
 	stale.AgentName = "old-agent"
-	stale.ID = "loader-old"
+	stale.ID = "scheduler-old"
 	stale.Revision = store.project.CurrentRevision - 1
 	store.schedulers = []domain.ProjectSchedulerRecord{store.scheduler, stale, currentSecond}
 
@@ -68,7 +68,7 @@ func TestProjectHandlerPruneSchedulerRunsUsesCurrentProjectSchedulers(t *testing
 	if err != nil {
 		t.Fatalf("PruneSchedulerRuns: %v", err)
 	}
-	if !slices.Equal(runtime.pruneRequest.SchedulerIDs, []string{"loader-1", "loader-2"}) || !runtime.pruneRequest.Force {
+	if !slices.Equal(runtime.pruneRequest.SchedulerIDs, []string{"scheduler-1", "scheduler-2"}) || !runtime.pruneRequest.Force {
 		t.Fatalf("runtime request = %#v", runtime.pruneRequest)
 	}
 }

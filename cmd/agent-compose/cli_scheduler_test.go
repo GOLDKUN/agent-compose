@@ -185,7 +185,7 @@ func TestIntegrationCLIUpAppliesInlineSchedulerScriptAndPSJSON(t *testing.T) {
 	if firstErr != "" {
 		t.Fatalf("up inline first stderr = %q, want empty", firstErr)
 	}
-	for _, want := range []string{"ID", "NAME", "TYPE", "ACTION", "trigger"} {
+	for _, want := range []string{"ID", "NAME", "TYPE", "ACTION", "scheduler"} {
 		if !strings.Contains(firstOut, want) {
 			t.Fatalf("up inline first stdout %q does not contain %q", firstOut, want)
 		}
@@ -205,7 +205,7 @@ func TestIntegrationCLIUpAppliesInlineSchedulerScriptAndPSJSON(t *testing.T) {
 	if !repeated.Applied || !repeated.Unchanged || repeated.Revision.Revision != 1 {
 		t.Fatalf("up inline repeated state = applied %v unchanged %v revision %#v", repeated.Applied, repeated.Unchanged, repeated.Revision)
 	}
-	assertComposeUpChange(t, repeated.Changes, "unchanged", "project_scheduler", "reviewer")
+	assertComposeUpChange(t, repeated.Changes, "unchanged", "scheduler", "reviewer")
 
 	psOut, psErr, _, psCode := executeCLICommand("ps", "--file", composePath, "--json")
 	if psCode != 0 {
@@ -760,15 +760,15 @@ agents:
 	}
 }
 
-func TestIntegrationCLISchedulerInspectLoaderRegisteredTrigger(t *testing.T) {
+func TestIntegrationCLISchedulerInspectSchedulerRegisteredTrigger(t *testing.T) {
 	composePath := writeComposeFile(t, t.TempDir(), `
-name: cli-scheduler-loader
+name: cli-scheduler-runtime
 agents:
   reviewer:
     provider: codex
     scheduler:
       script: |
-        scheduler.interval("loader-every-minute", async function() {}, 60000);
+        scheduler.interval("scheduler-every-minute", async function() {}, 60000);
 `)
 	var requestedAgent string
 	server := newComposeServiceStubServer(t, composeServiceStubs{
@@ -779,17 +779,17 @@ agents:
 			},
 			getScheduler: func(_ context.Context, req *connect.Request[agentcomposev2.GetSchedulerRequest]) (*connect.Response[agentcomposev2.GetSchedulerResponse], error) {
 				requestedAgent = req.Msg.GetAgentName()
-				return connect.NewResponse(&agentcomposev2.GetSchedulerResponse{Triggers: []*agentcomposev2.ResolvedTrigger{{TriggerId: "loader-every-minute", Enabled: true, Spec: &agentcomposev2.TriggerSpec{Kind: agentcomposev2.TriggerKind_TRIGGER_KIND_INTERVAL, Interval: "1m"}, NextFireAt: timestamppb.New(time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)), LastFiredAt: timestamppb.New(time.Date(2026, 7, 6, 11, 59, 0, 0, time.UTC))}}}), nil
+				return connect.NewResponse(&agentcomposev2.GetSchedulerResponse{Triggers: []*agentcomposev2.ResolvedTrigger{{TriggerId: "scheduler-every-minute", Enabled: true, Spec: &agentcomposev2.TriggerSpec{Kind: agentcomposev2.TriggerKind_TRIGGER_KIND_INTERVAL, Interval: "1m"}, NextFireAt: timestamppb.New(time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)), LastFiredAt: timestamppb.New(time.Date(2026, 7, 6, 11, 59, 0, 0, time.UTC))}}}), nil
 			},
 		},
 	})
 	defer server.Close()
 
-	stdout, stderr, _, exitCode := executeCLICommand("scheduler", "inspect", "--host", server.URL, "--file", composePath, "--scheduler", "reviewer", "loader-every-minute")
+	stdout, stderr, _, exitCode := executeCLICommand("scheduler", "inspect", "--host", server.URL, "--file", composePath, "--scheduler", "reviewer", "scheduler-every-minute")
 	if exitCode != 0 || stderr != "" {
-		t.Fatalf("scheduler inspect loader code/stderr = %d / %q", exitCode, stderr)
+		t.Fatalf("scheduler inspect scheduler code/stderr = %d / %q", exitCode, stderr)
 	}
-	if requestedAgent != "reviewer" || !strings.Contains(stdout, "trigger_id: loader-every-minute") || !strings.Contains(stdout, "interval_ms: 60000") || !strings.Contains(stdout, "kind: interval") {
+	if requestedAgent != "reviewer" || !strings.Contains(stdout, "trigger_id: scheduler-every-minute") || !strings.Contains(stdout, "interval_ms: 60000") || !strings.Contains(stdout, "kind: interval") {
 		t.Fatalf("requestedAgent=%q stdout=%q", requestedAgent, stdout)
 	}
 }

@@ -704,7 +704,7 @@ message PruneSchedulerRunsRequest {
 
 message SchedulerRunPruneStats {
   uint64 runs = 1;
-  uint64 loader_events = 2;
+  uint64 scheduler_events = 2;
   uint64 event_deliveries = 3;
   uint64 event_sandbox_links = 4;
   uint64 artifact_dirs = 5;
@@ -712,7 +712,7 @@ message SchedulerRunPruneStats {
 }
 
 message SchedulerRunPruneResidue {
-  string loader_id = 1;
+  string scheduler_id = 1;
   string run_id = 2;
   string path = 3;
   string error = 4;

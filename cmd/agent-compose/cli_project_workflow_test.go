@@ -315,7 +315,7 @@ agents:
 							Project: project,
 							Changes: []*agentcomposev2.ProjectChange{
 								{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_REMOVED, ResourceType: "project", ResourceId: "project-down", Name: "cli-down-demo", Message: "removed by project down"},
-								{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UPDATED, ResourceType: "project_scheduler", ResourceId: "scheduler-reviewer", Name: "reviewer", Message: "disabled by project down"},
+								{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UPDATED, ResourceType: "scheduler", ResourceId: "scheduler-reviewer", Name: "reviewer", Message: "disabled by project down"},
 								{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UPDATED, ResourceType: "sandbox", ResourceId: "session-1", Name: "reviewer run", Message: "stopped by project down"},
 							},
 						}), nil
@@ -330,7 +330,7 @@ agents:
 		if exitCode != 0 || stderr != "" {
 			t.Fatalf("down first code/stderr = %d / %q", exitCode, stderr)
 		}
-		for _, want := range []string{"ID", "NAME", "TYPE", "ACTION", "MESSAGE", "project-down", "cli-down-demo", "removed", "trigger", "hourly", "session-1", "stopped by project down"} {
+		for _, want := range []string{"ID", "NAME", "TYPE", "ACTION", "MESSAGE", "project-down", "cli-down-demo", "removed", "scheduler", "reviewer", "session-1", "stopped by project down"} {
 			if !strings.Contains(stdout, want) {
 				t.Fatalf("down first stdout %q does not contain %q", stdout, want)
 			}

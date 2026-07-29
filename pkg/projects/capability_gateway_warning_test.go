@@ -28,7 +28,7 @@ func TestGlobalCapabilityGatewayWarning(t *testing.T) {
 			controller := NewController(ControllerDependencies{
 				Config:     &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
 				Store:      &controllerCoverageStore{},
-				Schedulers: controllerCoverageLoaderValidator{},
+				Schedulers: controllerCoverageSchedulerValidator{},
 				Gateway:    staticCapabilityGatewaySource{settings: tt.gateway},
 			})
 

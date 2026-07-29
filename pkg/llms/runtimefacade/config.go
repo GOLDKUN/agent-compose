@@ -25,8 +25,8 @@ type FacadeStore interface {
 }
 
 const (
-	TokenSourceAgent         = "agent"
-	TokenSourceLoaderCommand = "loader_command"
+	TokenSourceAgent            = "agent"
+	TokenSourceSchedulerCommand = "scheduler_command"
 )
 
 type AgentRuntimeConfig struct {

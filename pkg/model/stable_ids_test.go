@@ -39,9 +39,12 @@ func TestProjectStableIDHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("domain.StableProjectSchedulerID returned error: %v", err)
 	}
-	loaderID, err := domain.StableProjectSchedulerID(projectID, "reviewer", "")
+	sameSchedulerID, err := domain.StableProjectSchedulerID(projectID, "reviewer", "")
 	if err != nil {
 		t.Fatalf("domain.StableProjectSchedulerID returned error: %v", err)
+	}
+	if sameSchedulerID != schedulerID {
+		t.Fatalf("stable scheduler id = %q, want %q", sameSchedulerID, schedulerID)
 	}
 	runID, err := domain.StableProjectRunID(projectID, "reviewer", domain.ProjectRunSourceManual, "client-request-1")
 	if err != nil {
@@ -55,7 +58,6 @@ func TestProjectStableIDHelpers(t *testing.T) {
 		"project":   projectID,
 		"agent":     agentID,
 		"scheduler": schedulerID,
-		"loader":    loaderID,
 		"run":       runID,
 	} {
 		if !identity.IsID(id) {

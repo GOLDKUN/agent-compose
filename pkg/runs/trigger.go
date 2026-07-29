@@ -120,7 +120,7 @@ type capturedManualTriggerAgentRequest struct {
 
 func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, definition domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON string) (capturedManualTriggerAgentRequest, error) {
 	if c.schedulerEngine == nil {
-		return capturedManualTriggerAgentRequest{}, fmt.Errorf("loader engine is required")
+		return capturedManualTriggerAgentRequest{}, fmt.Errorf("scheduler engine is required")
 	}
 	payloadJSON = strings.TrimSpace(payloadJSON)
 	if payloadJSON == "" {

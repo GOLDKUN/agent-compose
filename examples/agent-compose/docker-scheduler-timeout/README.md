@@ -8,7 +8,7 @@ It verifies that agent-compose can:
 
 - parse a timeout trigger from `agent-compose.yml`
 - apply the project to the daemon
-- create a managed scheduler and loader
+- create a managed scheduler
 - let the scheduler fire automatically
 - start a Docker-backed agent runtime session
 - run the configured agent prompt
@@ -81,11 +81,11 @@ Replace `<run-id>` with the run id shown in the `ps` output.
 Expected result:
 
 - `config` prints the trigger as `kind: timeout`.
-- `up` creates or updates the managed scheduler and loader.
+- `up` creates or updates one `scheduler` resource per configured scheduler.
 - After the timeout fires once, `ps` shows a scheduler-created run.
 - `inspect run <run-id>` shows `source: scheduler`, `status: succeeded`, `driver: docker`, and output from the agent.
 - `logs --run <run-id>` prints the agent output.
-- `down` disables the managed scheduler and loader.
+- `down` disables the managed scheduler.
 
 ## Verification output
 
@@ -130,8 +130,7 @@ created  project            docker-scheduler-timeout                            
 created  project_revision   sha256:3b8a286e2cf7df774375a5eeeef1a87f9fad75921bde212e539a15c9081b196f  project-docker-scheduler-timeout-3a00cafbae27/1
 created  project_agent      reviewer                                                                 agent-reviewer-a0befcb745b8
 created  agent_definition   reviewer                                                                 agent-reviewer-a0befcb745b8
-created  project_scheduler  reviewer                                                                 scheduler-reviewer-default-181247660dc1
-created  loader             docker-scheduler-timeout/reviewer scheduler                              loader-reviewer-default-181247660dc1
+created  scheduler          reviewer                                                                 scheduler-reviewer-default-181247660dc1
 ```
 
 ### 3. Successful scheduled run
@@ -180,6 +179,5 @@ Status: down
 Failed session stops: 0
 
 ACTION   TYPE               NAME      ID                                       MESSAGE
-updated  project_scheduler  reviewer  scheduler-reviewer-default-181247660dc1  disabled by project down
-updated  loader             reviewer  loader-reviewer-default-181247660dc1     disabled by project down
+updated  scheduler          reviewer  scheduler-reviewer-default-181247660dc1  disabled by project down
 ```

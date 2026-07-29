@@ -31,7 +31,7 @@ type EventRunsResponse struct {
 
 type EventRunJSON struct {
 	EventID     string `json:"event_id"`
-	SchedulerID string `json:"loader_id"`
+	SchedulerID string `json:"scheduler_id"`
 	RunID       string `json:"run_id,omitempty"`
 	TriggerID   string `json:"trigger_id"`
 	Status      string `json:"status"`
@@ -43,10 +43,10 @@ type EventRunJSON struct {
 type EventSandboxJSON struct {
 	SandboxID        string `json:"sandbox_id"`
 	Relation         string `json:"relation"`
-	SchedulerID      string `json:"loader_id,omitempty"`
+	SchedulerID      string `json:"scheduler_id,omitempty"`
 	RunID            string `json:"run_id,omitempty"`
 	TriggerID        string `json:"trigger_id,omitempty"`
-	SchedulerEventID string `json:"loader_event_id,omitempty"`
+	SchedulerEventID string `json:"scheduler_event_id,omitempty"`
 	EventID          string `json:"event_id"`
 	CreatedAt        string `json:"created_at"`
 }

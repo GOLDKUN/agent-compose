@@ -13,7 +13,7 @@ import (
 func TestNormalizeSchedulerRunPruneFilter(t *testing.T) {
 	now := time.Date(2026, 7, 22, 10, 0, 0, 0, time.FixedZone("test", 8*60*60))
 	filter, err := normalizeSchedulerRunPruneFilter(SchedulerRunPruneRequest{
-		SchedulerIDs: []string{" loader-b ", "loader-a", "loader-b"},
+		SchedulerIDs: []string{" scheduler-b ", "scheduler-a", "scheduler-b"},
 		Statuses:     []string{" FAILED ", "succeeded", "failed"},
 		TriggerID:    " trigger-a ",
 		OlderThan:    24 * time.Hour,
@@ -21,7 +21,7 @@ func TestNormalizeSchedulerRunPruneFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize filter: %v", err)
 	}
-	if strings.Join(filter.SchedulerIDs, ",") != "loader-a,loader-b" || strings.Join(filter.Statuses, ",") != "failed,succeeded" {
+	if strings.Join(filter.SchedulerIDs, ",") != "scheduler-a,scheduler-b" || strings.Join(filter.Statuses, ",") != "failed,succeeded" {
 		t.Fatalf("normalized filter = %#v", filter)
 	}
 	if filter.TriggerID != "trigger-a" || filter.OlderThan != 24*time.Hour || !filter.Now.Equal(now.UTC()) {
@@ -49,17 +49,17 @@ func TestNormalizeSchedulerRunPruneFilter(t *testing.T) {
 func TestControllerPruneSchedulerRunsDryRunCountsWithoutDeleting(t *testing.T) {
 	store := &schedulerRunPruneStoreFake{
 		runs: []domain.SchedulerRunSummary{
-			{ID: "run-a", SchedulerID: "loader-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/a"},
-			{ID: "run-b", SchedulerID: "loader-b", TriggerID: "trigger-b", ArtifactsDir: "/recorded/b"},
+			{ID: "run-a", SchedulerID: "scheduler-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/a"},
+			{ID: "run-b", SchedulerID: "scheduler-b", TriggerID: "trigger-b", ArtifactsDir: "/recorded/b"},
 		},
 		counted: SchedulerRunPruneDatabaseStats{Runs: 2, SchedulerEvents: 5, EventDeliveries: 1, EventSandboxLinks: 2},
 	}
 	artifacts := &schedulerRunArtifactPrunerFake{inspected: map[string]SchedulerRunArtifactInfo{
-		"loader-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 7},
-		"loader-b/run-b": {Path: "/recorded/b", Exists: true, Bytes: 11},
+		"scheduler-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 7},
+		"scheduler-b/run-b": {Path: "/recorded/b", Exists: true, Bytes: 11},
 	}}
 	controller := newSchedulerRunPruneController(store, artifacts, nil)
-	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"loader-b", "loader-a"}})
+	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"scheduler-b", "scheduler-a"}})
 	if err != nil {
 		t.Fatalf("prune dry-run: %v", err)
 	}
@@ -78,23 +78,23 @@ func TestControllerPruneSchedulerRunsDryRunCountsWithoutDeleting(t *testing.T) {
 func TestControllerPruneSchedulerRunsForceRemovesDatabaseAndArtifacts(t *testing.T) {
 	store := &schedulerRunPruneStoreFake{
 		runs: []domain.SchedulerRunSummary{
-			{ID: "run-a", SchedulerID: "loader-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/a"},
-			{ID: "run-b", SchedulerID: "loader-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/b"},
+			{ID: "run-a", SchedulerID: "scheduler-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/a"},
+			{ID: "run-b", SchedulerID: "scheduler-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/b"},
 		},
 		counted: SchedulerRunPruneDatabaseStats{Runs: 2, SchedulerEvents: 4},
 		deleted: SchedulerRunPruneDatabaseStats{Runs: 2, SchedulerEvents: 4},
 	}
 	artifacts := &schedulerRunArtifactPrunerFake{
 		inspected: map[string]SchedulerRunArtifactInfo{
-			"loader-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 13},
-			"loader-a/run-b": {Path: "/recorded/b"},
+			"scheduler-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 13},
+			"scheduler-a/run-b": {Path: "/recorded/b"},
 		},
 		removeResults: map[string]SchedulerRunArtifactInfo{
-			"loader-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 13},
+			"scheduler-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 13},
 		},
 	}
 	controller := newSchedulerRunPruneController(store, artifacts, nil)
-	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"loader-a"}, Force: true})
+	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"scheduler-a"}, Force: true})
 	if err != nil {
 		t.Fatalf("force prune: %v", err)
 	}
@@ -110,16 +110,16 @@ func TestControllerPruneSchedulerRunsForceRemovesDatabaseAndArtifacts(t *testing
 func TestControllerPruneSchedulerRunsSkipsBusyAndUnsafeRuns(t *testing.T) {
 	store := &schedulerRunPruneStoreFake{
 		runs: []domain.SchedulerRunSummary{
-			{ID: "run-busy", SchedulerID: "loader-busy", TriggerID: "trigger-a"},
-			{ID: "run-unsafe", SchedulerID: "loader-free", TriggerID: "trigger-a"},
+			{ID: "run-busy", SchedulerID: "scheduler-busy", TriggerID: "trigger-a"},
+			{ID: "run-unsafe", SchedulerID: "scheduler-free", TriggerID: "trigger-a"},
 		},
 		counted: SchedulerRunPruneDatabaseStats{Runs: 2, SchedulerEvents: 2},
 	}
 	artifacts := &schedulerRunArtifactPrunerFake{inspectErrors: map[string]error{
-		"loader-free/run-unsafe": errors.New("recorded path mismatch"),
+		"scheduler-free/run-unsafe": errors.New("recorded path mismatch"),
 	}}
-	controller := newSchedulerRunPruneController(store, artifacts, map[string]int{"loader-busy": 1})
-	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"loader-busy", "loader-free"}, Force: true})
+	controller := newSchedulerRunPruneController(store, artifacts, map[string]int{"scheduler-busy": 1})
+	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"scheduler-busy", "scheduler-free"}, Force: true})
 	if err != nil {
 		t.Fatalf("force prune: %v", err)
 	}
@@ -133,38 +133,38 @@ func TestControllerPruneSchedulerRunsSkipsBusyAndUnsafeRuns(t *testing.T) {
 
 func TestControllerPruneSchedulerRunsReportsArtifactResidue(t *testing.T) {
 	store := &schedulerRunPruneStoreFake{
-		runs:    []domain.SchedulerRunSummary{{ID: "run-a", SchedulerID: "loader-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/a"}},
+		runs:    []domain.SchedulerRunSummary{{ID: "run-a", SchedulerID: "scheduler-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/a"}},
 		counted: SchedulerRunPruneDatabaseStats{Runs: 1},
 		deleted: SchedulerRunPruneDatabaseStats{Runs: 1},
 	}
 	artifacts := &schedulerRunArtifactPrunerFake{
-		inspected:    map[string]SchedulerRunArtifactInfo{"loader-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 9}},
-		removeErrors: map[string]error{"loader-a/run-a": errors.New("permission denied")},
+		inspected:    map[string]SchedulerRunArtifactInfo{"scheduler-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 9}},
+		removeErrors: map[string]error{"scheduler-a/run-a": errors.New("permission denied")},
 	}
 	controller := newSchedulerRunPruneController(store, artifacts, nil)
-	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"loader-a"}, Force: true})
+	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"scheduler-a"}, Force: true})
 	if err != nil {
 		t.Fatalf("force prune: %v", err)
 	}
 	if result.Removed.Runs != 1 || result.Removed.ArtifactDirs != 0 || len(result.Residues) != 1 {
 		t.Fatalf("result=%#v", result)
 	}
-	if result.Residues[0].SchedulerID != "loader-a" || result.Residues[0].RunID != "run-a" || !strings.Contains(result.Residues[0].Error, "permission denied") {
+	if result.Residues[0].SchedulerID != "scheduler-a" || result.Residues[0].RunID != "run-a" || !strings.Contains(result.Residues[0].Error, "permission denied") {
 		t.Fatalf("residue=%#v", result.Residues[0])
 	}
 }
 
 func TestControllerPruneSchedulerRunsKeepsArtifactsForForceRecheckSkip(t *testing.T) {
 	store := &schedulerRunPruneStoreFake{
-		runs:        []domain.SchedulerRunSummary{{ID: "run-a", SchedulerID: "loader-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/a"}},
+		runs:        []domain.SchedulerRunSummary{{ID: "run-a", SchedulerID: "scheduler-a", TriggerID: "trigger-a", ArtifactsDir: "/recorded/a"}},
 		counted:     SchedulerRunPruneDatabaseStats{Runs: 1},
 		removedKeys: []SchedulerRunKey{},
 	}
 	artifacts := &schedulerRunArtifactPrunerFake{
-		inspected: map[string]SchedulerRunArtifactInfo{"loader-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 9}},
+		inspected: map[string]SchedulerRunArtifactInfo{"scheduler-a/run-a": {Path: "/recorded/a", Exists: true, Bytes: 9}},
 	}
 	controller := newSchedulerRunPruneController(store, artifacts, nil)
-	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"loader-a"}, Force: true})
+	result, err := controller.PruneSchedulerRuns(context.Background(), SchedulerRunPruneRequest{SchedulerIDs: []string{"scheduler-a"}, Force: true})
 	if err != nil {
 		t.Fatalf("force prune: %v", err)
 	}
@@ -176,8 +176,8 @@ func TestControllerPruneSchedulerRunsKeepsArtifactsForForceRecheckSkip(t *testin
 func TestControllerRecoverInterruptedRunsMarksFailedAndRecordsEvent(t *testing.T) {
 	startedAt := time.Date(2026, 7, 22, 9, 0, 0, 0, time.UTC)
 	store := &schedulerRunPruneStoreFake{interrupted: []domain.SchedulerRunSummary{
-		{ID: "run-a", SchedulerID: "loader-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusRunning, StartedAt: startedAt},
-		{ID: "run-b", SchedulerID: "loader-b", TriggerID: "trigger-b", Status: domain.SchedulerRunStatusRunning, StartedAt: startedAt.Add(10 * time.Minute)},
+		{ID: "run-a", SchedulerID: "scheduler-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusRunning, StartedAt: startedAt},
+		{ID: "run-b", SchedulerID: "scheduler-b", TriggerID: "trigger-b", Status: domain.SchedulerRunStatusRunning, StartedAt: startedAt.Add(10 * time.Minute)},
 	}}
 	controller := newSchedulerRunPruneController(store, nil, nil)
 	controller.deps.NewID = func() string { return "recovery-event" }

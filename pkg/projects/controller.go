@@ -700,7 +700,7 @@ func applyChanges(project, existing domain.ProjectRecord, found bool, revision d
 	}
 }
 
-func dryRunChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, definitions []domain.Scheduler) []Change {
+func dryRunChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, _ []domain.Scheduler) []Change {
 	changes := []Change{{Action: ChangeActionCreated, ResourceType: "project", ResourceID: project.ID, Name: project.Name}}
 	for _, agent := range agents {
 		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "project_agent", ResourceID: agent.ID, Name: agent.AgentName})
@@ -709,10 +709,7 @@ func dryRunChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRec
 		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "agent_definition", ResourceID: agent.ID, Name: agent.Name})
 	}
 	for _, scheduler := range schedulers {
-		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "project_scheduler", ResourceID: scheduler.SchedulerID, Name: scheduler.AgentName})
-	}
-	for _, definition := range definitions {
-		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "loader", ResourceID: definition.Summary.ID, Name: definition.Summary.Name})
+		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "scheduler", ResourceID: scheduler.ID, Name: scheduler.AgentName})
 	}
 	return changes
 }

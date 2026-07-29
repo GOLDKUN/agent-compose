@@ -31,7 +31,7 @@ Integration tests may use:
 - controlled Docker or sandbox dependencies when explicitly marked and isolated
 
 Integration tests should prove that service boundaries, persistence, proxying,
-configuration, loader scheduling, and runtime-driver interactions work together.
+configuration, scheduler execution, and runtime-driver interactions work together.
 
 ### E2E Tests
 
@@ -41,7 +41,7 @@ a production-like local service instance.
 E2E tests should cover critical workflows such as:
 - creating, resuming, stopping, and proxying sessions
 - executing notebook or kernel actions through the public API surface
-- loader trigger and run workflows
+- scheduler trigger and run workflows
 - frontend flows that depend on generated protocol clients
 - authentication and configuration workflows where applicable
 

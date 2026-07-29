@@ -1704,7 +1704,7 @@ func TestE2ERunsControllerRemoveOnCompletionWorkflows(t *testing.T) {
 func TestRunsControllerRunProjectAgentManualTriggerResolution(t *testing.T) {
 	fixture := newControllerRunFixture(t)
 	trigger := domain.SchedulerTrigger{
-		SchedulerID: "loader-1",
+		SchedulerID: "scheduler-1",
 		ID:          "trigger-1",
 		Kind:        domain.SchedulerTriggerKindInterval,
 		IntervalMs:  1000,
@@ -1715,14 +1715,14 @@ func TestRunsControllerRunProjectAgentManualTriggerResolution(t *testing.T) {
 		ProjectID:    "project-1",
 		SchedulerID:  "scheduler-1",
 		AgentName:    "worker",
-		ID:           "loader-1",
+		ID:           "scheduler-1",
 		Enabled:      true,
 		TriggerCount: 1,
 	}}
-	fixture.configDB.loaders = map[string]domain.Scheduler{
-		"loader-1": {
+	fixture.configDB.schedulerDefinitions = map[string]domain.Scheduler{
+		"scheduler-1": {
 			Summary: domain.SchedulerSummary{
-				ID:                 "loader-1",
+				ID:                 "scheduler-1",
 				Enabled:            true,
 				Runtime:            domain.SchedulerRuntimeScheduler,
 				ProjectID:          "project-1",
@@ -1761,7 +1761,7 @@ func TestRunsControllerRunProjectAgentManualTriggerResolution(t *testing.T) {
 func TestRunsControllerRunProjectAgentManualTriggerPayload(t *testing.T) {
 	fixture := newControllerRunFixture(t)
 	trigger := domain.SchedulerTrigger{
-		SchedulerID: "loader-1",
+		SchedulerID: "scheduler-1",
 		ID:          "trigger-1",
 		Kind:        domain.SchedulerTriggerKindInterval,
 		IntervalMs:  1000,
@@ -1772,14 +1772,14 @@ func TestRunsControllerRunProjectAgentManualTriggerPayload(t *testing.T) {
 		ProjectID:    "project-1",
 		SchedulerID:  "scheduler-1",
 		AgentName:    "worker",
-		ID:           "loader-1",
+		ID:           "scheduler-1",
 		Enabled:      true,
 		TriggerCount: 1,
 	}}
-	fixture.configDB.loaders = map[string]domain.Scheduler{
-		"loader-1": {
+	fixture.configDB.schedulerDefinitions = map[string]domain.Scheduler{
+		"scheduler-1": {
 			Summary: domain.SchedulerSummary{
-				ID:                 "loader-1",
+				ID:                 "scheduler-1",
 				Enabled:            true,
 				Runtime:            domain.SchedulerRuntimeScheduler,
 				ProjectID:          "project-1",
@@ -1813,7 +1813,7 @@ func TestRunsControllerRunProjectAgentManualTriggerPayload(t *testing.T) {
 func TestRunsControllerRunProjectAgentManualTriggerPromptOverride(t *testing.T) {
 	fixture := newControllerRunFixture(t)
 	trigger := domain.SchedulerTrigger{
-		SchedulerID: "loader-1",
+		SchedulerID: "scheduler-1",
 		ID:          "trigger-1",
 		Kind:        domain.SchedulerTriggerKindInterval,
 		IntervalMs:  1000,
@@ -1824,14 +1824,14 @@ func TestRunsControllerRunProjectAgentManualTriggerPromptOverride(t *testing.T) 
 		ProjectID:    "project-1",
 		SchedulerID:  "scheduler-1",
 		AgentName:    "worker",
-		ID:           "loader-1",
+		ID:           "scheduler-1",
 		Enabled:      true,
 		TriggerCount: 1,
 	}}
-	fixture.configDB.loaders = map[string]domain.Scheduler{
-		"loader-1": {
+	fixture.configDB.schedulerDefinitions = map[string]domain.Scheduler{
+		"scheduler-1": {
 			Summary: domain.SchedulerSummary{
-				ID:                 "loader-1",
+				ID:                 "scheduler-1",
 				Enabled:            true,
 				Runtime:            domain.SchedulerRuntimeScheduler,
 				ProjectID:          "project-1",
@@ -1868,13 +1868,13 @@ func TestRunsControllerRunProjectAgentManualTriggerMissingDoesNotCreateRun(t *te
 		ProjectID:   "project-1",
 		SchedulerID: "scheduler-1",
 		AgentName:   "worker",
-		ID:          "loader-1",
+		ID:          "scheduler-1",
 		Enabled:     true,
 	}}
-	fixture.configDB.loaders = map[string]domain.Scheduler{
-		"loader-1": {
+	fixture.configDB.schedulerDefinitions = map[string]domain.Scheduler{
+		"scheduler-1": {
 			Summary: domain.SchedulerSummary{
-				ID:                 "loader-1",
+				ID:                 "scheduler-1",
 				Enabled:            true,
 				Runtime:            domain.SchedulerRuntimeScheduler,
 				ProjectID:          "project-1",
@@ -1882,7 +1882,7 @@ func TestRunsControllerRunProjectAgentManualTriggerMissingDoesNotCreateRun(t *te
 				ProjectSchedulerID: "scheduler-1",
 			},
 			Script:   `scheduler.interval("trigger-1", async function() { return scheduler.agent("resolved prompt"); }, 1000);`,
-			Triggers: []domain.SchedulerTrigger{{SchedulerID: "loader-1", ID: "trigger-1", Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 1000, Enabled: true}},
+			Triggers: []domain.SchedulerTrigger{{SchedulerID: "scheduler-1", ID: "trigger-1", Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 1000, Enabled: true}},
 		},
 	}
 	run, execErr, err := fixture.controller.RunProjectAgent(fixture.ctx, RunAgentRequest{
@@ -1913,7 +1913,7 @@ func TestRunsControllerStickyBindingsAreScopedByTrigger(t *testing.T) {
 			TriggerID:                triggerID,
 			ClientRequestID:          requestID,
 			CleanupPolicy:            agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING,
-			StickyBindingSchedulerID: "loader-1",
+			StickyBindingSchedulerID: "scheduler-1",
 			StickyBindingTriggerID:   triggerID,
 		}, nil)
 		if err != nil || execErr != nil {
@@ -1931,13 +1931,13 @@ func TestRunsControllerStickyBindingsAreScopedByTrigger(t *testing.T) {
 	if other.SandboxID == first.SandboxID {
 		t.Fatalf("different triggers shared sandbox %q", other.SandboxID)
 	}
-	if fixture.configDB.bindings["loader-1/trigger-a"].SandboxID != first.SandboxID || fixture.configDB.bindings["loader-1/trigger-b"].SandboxID != other.SandboxID {
+	if fixture.configDB.bindings["scheduler-1/trigger-a"].SandboxID != first.SandboxID || fixture.configDB.bindings["scheduler-1/trigger-b"].SandboxID != other.SandboxID {
 		t.Fatalf("bindings = %#v", fixture.configDB.bindings)
 	}
 
-	fixture.configDB.bindings["loader-1/stale"] = domain.SchedulerBinding{SchedulerID: "loader-1", TriggerID: "stale", SandboxID: "missing-sandbox"}
+	fixture.configDB.bindings["scheduler-1/stale"] = domain.SchedulerBinding{SchedulerID: "scheduler-1", TriggerID: "stale", SandboxID: "missing-sandbox"}
 	replacement := runSticky("stale", "sticky-stale-1")
-	if replacement.SandboxID == "missing-sandbox" || fixture.configDB.bindings["loader-1/stale"].SandboxID != replacement.SandboxID {
+	if replacement.SandboxID == "missing-sandbox" || fixture.configDB.bindings["scheduler-1/stale"].SandboxID != replacement.SandboxID {
 		t.Fatalf("stale replacement run=%#v bindings=%#v", replacement, fixture.configDB.bindings)
 	}
 	if len(replacement.Warnings) == 0 || !strings.Contains(replacement.Warnings[0], "unavailable") {
@@ -1945,11 +1945,11 @@ func TestRunsControllerStickyBindingsAreScopedByTrigger(t *testing.T) {
 	}
 }
 
-func TestRunsControllerStickyLoaderConfigChangeCreatesReplacement(t *testing.T) {
+func TestRunsControllerStickySchedulerConfigChangeCreatesReplacement(t *testing.T) {
 	fixture := newControllerRunFixture(t)
-	loader := domain.Scheduler{
+	scheduler := domain.Scheduler{
 		Summary: domain.SchedulerSummary{
-			ID:                 "loader-1",
+			ID:                 "scheduler-1",
 			Name:               "Scheduler",
 			Runtime:            domain.SchedulerRuntimeScheduler,
 			DefaultAgent:       "codex",
@@ -1973,7 +1973,7 @@ func TestRunsControllerStickyLoaderConfigChangeCreatesReplacement(t *testing.T) 
 			TriggerID:                "trigger-a",
 			ClientRequestID:          requestID,
 			CleanupPolicy:            agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING,
-			StickyBindingSchedulerID: loader.Summary.ID,
+			StickyBindingSchedulerID: scheduler.Summary.ID,
 			StickyBindingTriggerID:   "trigger-a",
 			StickyBindingConfigHash:  configHash,
 		}, nil)
@@ -1984,21 +1984,21 @@ func TestRunsControllerStickyLoaderConfigChangeCreatesReplacement(t *testing.T) 
 	}
 
 	fixture.configDB.revision.SpecJSON = `{"agents":[{"name":"worker","env":[{"name":"BUG_VALUE","value":"A"}]}]}`
-	firstHash, err := schedulers.SchedulerSandboxConfigHash(loader)
+	firstHash, err := schedulers.SchedulerSandboxConfigHash(scheduler)
 	if err != nil {
 		t.Fatalf("SchedulerSandboxConfigHash(A) returned error: %v", err)
 	}
 	first := runSticky("sticky-config-a", firstHash)
-	firstBindingHash := fixture.configDB.bindings["loader-1/trigger-a"].SandboxConfigHash
+	firstBindingHash := fixture.configDB.bindings["scheduler-1/trigger-a"].SandboxConfigHash
 	if firstBindingHash == "" {
 		t.Fatal("first managed sticky binding has no effective sandbox config hash")
 	}
 
-	loader.EnvItems[0].Value = "B"
-	loader.Summary.ProjectRevision = 2
+	scheduler.EnvItems[0].Value = "B"
+	scheduler.Summary.ProjectRevision = 2
 	fixture.configDB.revision = domain.ProjectRevisionRecord{ProjectID: "project-1", Revision: 2, SpecJSON: `{"agents":[{"name":"worker","env":[{"name":"BUG_VALUE","value":"B"}]}]}`}
 	fixture.configDB.project.CurrentRevision = 2
-	secondHash, err := schedulers.SchedulerSandboxConfigHash(loader)
+	secondHash, err := schedulers.SchedulerSandboxConfigHash(scheduler)
 	if err != nil {
 		t.Fatalf("SchedulerSandboxConfigHash(B) returned error: %v", err)
 	}
@@ -2020,7 +2020,7 @@ func TestRunsControllerStickyLoaderConfigChangeCreatesReplacement(t *testing.T) 
 	if got := domain.SandboxEnvMap(newSandbox.EnvItems)["BUG_VALUE"]; got != "B" {
 		t.Fatalf("new sandbox BUG_VALUE = %q, want B", got)
 	}
-	binding := fixture.configDB.bindings["loader-1/trigger-a"]
+	binding := fixture.configDB.bindings["scheduler-1/trigger-a"]
 	if binding.SandboxID != second.SandboxID || binding.SandboxConfigHash == firstBindingHash {
 		t.Fatalf("replacement binding = %#v, want sandbox %q with a new effective config hash", binding, second.SandboxID)
 	}
@@ -2037,8 +2037,8 @@ func TestRunsControllerRejectsUncompiledScheduledSandboxBeforePersistence(t *tes
 				fixture := newControllerRunFixture(t)
 				volumeResolver := &fakeVolumeResolver{}
 				fixture.controller.volumes = volumeResolver
-				bindingKey := "loader-uncompiled/trigger-uncompiled"
-				originalBinding := domain.SchedulerBinding{SchedulerID: "loader-uncompiled", TriggerID: "trigger-uncompiled", SandboxID: "missing-original-sandbox"}
+				bindingKey := "scheduler-uncompiled/trigger-uncompiled"
+				originalBinding := domain.SchedulerBinding{SchedulerID: "scheduler-uncompiled", TriggerID: "trigger-uncompiled", SandboxID: "missing-original-sandbox"}
 				fixture.configDB.bindings = map[string]domain.SchedulerBinding{bindingKey: originalBinding}
 				beforeSandboxes, err := fixture.store.ListSandboxes(fixture.ctx, domain.SandboxListOptions{})
 				if err != nil {
@@ -2049,7 +2049,7 @@ func TestRunsControllerRejectsUncompiledScheduledSandboxBeforePersistence(t *tes
 				result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, domain.ProjectRunRecord{
 					RunID: "run-uncompiled", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", Driver: runtimeDriver, ImageRef: "guest:latest",
 				}, Preparation{Volumes: []domain.VolumeMountSpec{{Type: domain.VolumeMountTypeBind, Source: t.TempDir(), Target: "/blocked"}}}, RunAgentRequest{
-					StickyBindingSchedulerID: "loader-uncompiled", StickyBindingTriggerID: "trigger-uncompiled",
+					StickyBindingSchedulerID: "scheduler-uncompiled", StickyBindingTriggerID: "trigger-uncompiled",
 				})
 				assertRunsRuntimeNotCompiled(t, err, runtimeDriver)
 				if result.Sandbox != nil || result.Created {
@@ -2087,8 +2087,8 @@ func TestRunsControllerRejectsUncompiledScheduledSandboxBeforePersistence(t *tes
 				if err := fixture.store.SaveProxyState(sandbox.Summary.ID, originalProxy); err != nil {
 					t.Fatalf("SaveProxyState historical returned error: %v", err)
 				}
-				bindingKey := "loader-history/trigger-history"
-				originalBinding := domain.SchedulerBinding{SchedulerID: "loader-history", TriggerID: "trigger-history", SandboxID: sandbox.Summary.ID}
+				bindingKey := "scheduler-history/trigger-history"
+				originalBinding := domain.SchedulerBinding{SchedulerID: "scheduler-history", TriggerID: "trigger-history", SandboxID: sandbox.Summary.ID}
 				fixture.configDB.bindings = map[string]domain.SchedulerBinding{bindingKey: originalBinding}
 				beforeArtifacts := snapshotRunSandboxTree(t, fixture.config.SandboxRoot)
 				beforeEvents, err := fixture.store.ListEvents(fixture.ctx, sandbox.Summary.ID)
@@ -2099,7 +2099,7 @@ func TestRunsControllerRejectsUncompiledScheduledSandboxBeforePersistence(t *tes
 				result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, domain.ProjectRunRecord{
 					RunID: "run-history", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", Driver: runtimeDriver, ImageRef: "guest:latest",
 				}, Preparation{}, RunAgentRequest{
-					StickyBindingSchedulerID: "loader-history", StickyBindingTriggerID: "trigger-history", Jupyter: &agentcomposev2.RunJupyterSpec{Enabled: true},
+					StickyBindingSchedulerID: "scheduler-history", StickyBindingTriggerID: "trigger-history", Jupyter: &agentcomposev2.RunJupyterSpec{Enabled: true},
 				})
 				assertRunsRuntimeNotCompiled(t, err, runtimeDriver)
 				if result.Sandbox == nil || result.Sandbox.Summary.ID != sandbox.Summary.ID || result.Created {
@@ -2540,18 +2540,18 @@ func (s fakeSandboxStatusStore) GetSandbox(_ context.Context, id string) (*domai
 }
 
 type fakeControllerStore struct {
-	project        domain.ProjectRecord
-	projectAgent   domain.ProjectAgentRecord
-	managed        domain.AgentDefinition
-	revision       domain.ProjectRevisionRecord
-	agent          domain.AgentDefinition
-	global         []domain.SandboxEnvVar
-	projectVolumes map[string]domain.VolumeRecord
-	runs           map[string]domain.ProjectRunRecord
-	schedulers     []domain.ProjectSchedulerRecord
-	loaders        map[string]domain.Scheduler
-	bindings       map[string]domain.SchedulerBinding
-	events         []domain.ProjectRunEventRecord
+	project              domain.ProjectRecord
+	projectAgent         domain.ProjectAgentRecord
+	managed              domain.AgentDefinition
+	revision             domain.ProjectRevisionRecord
+	agent                domain.AgentDefinition
+	global               []domain.SandboxEnvVar
+	projectVolumes       map[string]domain.VolumeRecord
+	runs                 map[string]domain.ProjectRunRecord
+	schedulers           []domain.ProjectSchedulerRecord
+	schedulerDefinitions map[string]domain.Scheduler
+	bindings             map[string]domain.SchedulerBinding
+	events               []domain.ProjectRunEventRecord
 }
 
 func (s *fakeControllerStore) GetProject(context.Context, string) (domain.ProjectRecord, error) {
@@ -2635,19 +2635,19 @@ func (s *fakeControllerStore) ListProjectSchedulers(_ context.Context, projectID
 	return items, nil
 }
 
-func (s *fakeControllerStore) GetScheduler(_ context.Context, loaderID string) (domain.Scheduler, error) {
-	if s.loaders == nil {
+func (s *fakeControllerStore) GetScheduler(_ context.Context, schedulerID string) (domain.Scheduler, error) {
+	if s.schedulerDefinitions == nil {
 		return domain.Scheduler{}, domain.ErrNotFound
 	}
-	loader, ok := s.loaders[loaderID]
+	scheduler, ok := s.schedulerDefinitions[schedulerID]
 	if !ok {
 		return domain.Scheduler{}, domain.ErrNotFound
 	}
-	return loader, nil
+	return scheduler, nil
 }
 
-func (s *fakeControllerStore) GetSchedulerBinding(_ context.Context, loaderID, triggerID string) (domain.SchedulerBinding, bool, error) {
-	binding, ok := s.bindings[loaderID+"/"+triggerID]
+func (s *fakeControllerStore) GetSchedulerBinding(_ context.Context, schedulerID, triggerID string) (domain.SchedulerBinding, bool, error) {
+	binding, ok := s.bindings[schedulerID+"/"+triggerID]
 	return binding, ok, nil
 }
 

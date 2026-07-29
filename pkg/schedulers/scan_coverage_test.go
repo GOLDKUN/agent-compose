@@ -7,32 +7,32 @@ import (
 )
 
 func TestSchedulerScanFunctionsAndStoredTimeEdges(t *testing.T) {
-	trigger, err := ScanSchedulerTrigger(assignScanValues("loader-1", "trigger-1", "interval", "topic", int64(1000), 1, 1, `{}`, "1700000000", []byte("2026-07-01T02:03:04Z")))
+	trigger, err := ScanSchedulerTrigger(assignScanValues("scheduler-1", "trigger-1", "interval", "topic", int64(1000), 1, 1, `{}`, "1700000000", []byte("2026-07-01T02:03:04Z")))
 	if err != nil {
 		t.Fatalf("ScanSchedulerTrigger returned error: %v", err)
 	}
 	if trigger.ID != "trigger-1" || !trigger.Enabled || !trigger.AutoID || trigger.NextFireAt.IsZero() || trigger.LastFiredAt.IsZero() {
 		t.Fatalf("trigger = %#v", trigger)
 	}
-	run, err := ScanSchedulerRun(assignScanValues("loader-1", "run-1", "trigger-1", "interval", "manual", "succeeded", int(1700000000), "2026-07-01T02:03:04Z", int64(10), "", `{}`, `{}`, "hash", "/tmp/artifacts"))
+	run, err := ScanSchedulerRun(assignScanValues("scheduler-1", "run-1", "trigger-1", "interval", "manual", "succeeded", int(1700000000), "2026-07-01T02:03:04Z", int64(10), "", `{}`, `{}`, "hash", "/tmp/artifacts"))
 	if err != nil {
 		t.Fatalf("ScanSchedulerRun returned error: %v", err)
 	}
 	if run.ID != "run-1" || run.StartedAt.IsZero() || run.CompletedAt.IsZero() {
 		t.Fatalf("run = %#v", run)
 	}
-	event, err := ScanSchedulerEvent(assignScanValues("loader-1", "event-1", "run-1", "trigger-1", "type", "info", "message", `{}`, "session-1", "cell-1", "agent-session", []byte("1700000000")))
+	event, err := ScanSchedulerEvent(assignScanValues("scheduler-1", "event-1", "run-1", "trigger-1", "type", "info", "message", `{}`, "session-1", "cell-1", "agent-session", []byte("1700000000")))
 	if err != nil {
 		t.Fatalf("ScanSchedulerEvent returned error: %v", err)
 	}
 	if event.ID != "event-1" || event.CreatedAt.IsZero() {
 		t.Fatalf("event = %#v", event)
 	}
-	binding, err := ScanSchedulerBinding(assignScanValues("loader-1", "trigger-1", "session-1", "sha256:config", "2026-07-01T02:03:04.000Z", nil))
+	binding, err := ScanSchedulerBinding(assignScanValues("scheduler-1", "trigger-1", "session-1", "sha256:config", "2026-07-01T02:03:04.000Z", nil))
 	if err != nil {
 		t.Fatalf("ScanSchedulerBinding returned error: %v", err)
 	}
-	if binding.SchedulerID != "loader-1" || binding.SandboxConfigHash != "sha256:config" || binding.CreatedAt.IsZero() || !binding.UpdatedAt.IsZero() {
+	if binding.SchedulerID != "scheduler-1" || binding.SandboxConfigHash != "sha256:config" || binding.CreatedAt.IsZero() || !binding.UpdatedAt.IsZero() {
 		t.Fatalf("binding = %#v", binding)
 	}
 

@@ -15,9 +15,9 @@ The current code facts are anchored by these entry points:
   `pkg/storage/configstore/run_coordinator_store.go`; shared storage helpers in
   `pkg/storage/`
 - Jupyter proxy: `pkg/agentcompose/proxy/proxy.go`
-- Loader runtime and scheduling: owner helpers in `pkg/loaders/`; daemon
-  orchestration in `pkg/agentcompose/app/loader_controller.go` and
-  `pkg/agentcompose/adapters/loader_session_runner.go`
+- Scheduler runtime and scheduling: owner behavior in `pkg/schedulers/`; daemon
+  orchestration in `pkg/agentcompose/app/scheduler_controller.go` and
+  `pkg/agentcompose/adapters/scheduler_session_runner.go`
 - Domain model helpers: `pkg/model/`
 - Project/run owner helpers: `pkg/projects/` and `pkg/runs/`
 - Sandbox execution owner helpers: `pkg/sessions/` compatibility lifecycle
@@ -53,7 +53,7 @@ agent-compose daemon
   |
   | v1/v2 Connect handlers, HTTP routes, scheduler, store
   v
-project / run / loader / sandbox control plane
+project / run / scheduler / sandbox control plane
   |
   | runtime driver
   v
@@ -80,7 +80,7 @@ Daemon construction has been split into testable app construction:
 - Register `/api/version`, v1/v2 Connect handlers, webhook/event routes,
   workspace HTTP routes, and Jupyter proxy routes.
 - Register the service graph through `agentcompose.Register(di)`.
-- Start the loader manager, event dispatcher, capability proxy, and startup
+- Start the scheduler controller, event dispatcher, capability proxy, and startup
   sandbox reconciliation through `agentcompose.StartBackground(di)`.
 - On graceful shutdown, close all listeners and remove the Unix socket file.
 
@@ -113,10 +113,10 @@ Current main commands:
 - `config`: parse and normalize local `agent-compose.yml`; supports `--json`
   and `--quiet`; does not connect to the daemon.
 - `up`: call `ProjectService.ApplyProject`; create or update the project,
-  revision, managed agent definitions, and scheduler/loader; does not directly
+  revision, managed agent definitions, and scheduler; does not directly
   create a run or sandbox.
-- `down`: call `ProjectService.RemoveProject`; disable managed
-  scheduler/loader and stop running sandboxes for the project; preserves project,
+- `down`: call `ProjectService.RemoveProject`; disable managed schedulers and
+  stop running sandboxes for the project; preserves project,
   run, and sandbox history by default.
 - `ps`: query project, agent, latest run, and running sandbox state.
 - `run <agent>`: call `RunService.StreamAgentRun` for a manual agent run;
@@ -182,7 +182,7 @@ agents:
 
 ```
 
-The same scheduler can also declare a loader script directly with inline QJS:
+The same scheduler can also declare a scheduler script directly with inline QJS:
 
 ```yaml
 agents:
@@ -213,7 +213,7 @@ agents:
 Scheme-less relative and absolute paths, `file://`, `http://`, and `https://`
 are supported. `config` and `up` resolve the source on the CLI host and replace
 it with an inline snapshot before hashing or sending the v2 request. The daemon,
-v2 API, stored revisions, and loader runtime continue to accept script text
+v2 API, stored revisions, and scheduler runtime continue to accept script text
 only; a URL is not a runtime import and is fetched again only by a later
 `config` or `up` invocation.
 
@@ -229,14 +229,20 @@ Normalization rules:
   specify exactly one type.
 - `scheduler.sandbox_policy` accepts `new` or `sticky` and defaults to `new`.
   A trigger may set `sandbox_policy` to override the scheduler default.
-- Sticky scheduler runs are scoped by loader and trigger. Repeated runs of one
+- Sticky scheduler runs are scoped by scheduler and trigger. Repeated runs of one
   trigger reuse its sandbox, while different triggers do not share sandboxes.
-  Scheduler script calls outside a trigger callback use the loader-level sticky
+  Scheduler script calls outside a trigger callback use the scheduler-level sticky
   sandbox. Inline scripts may continue to override individual calls with
   `scheduler.agent(prompt, { sandboxPolicy: "..." })`.
+- The canonical sticky-sandbox hash envelope permanently retains the internal
+  JSON key `loader_config_hash` in both scheduler-trigger and project-run paths.
+  It is a frozen historical hash-schema member, not a Loader resource or public
+  payload. Renaming it would change every existing binding hash; the one-shot
+  migrator carries those hashes forward but cannot reconstruct their original
+  runtime inputs.
 - `scheduler.script` is either an inline QJS scalar or an explicit mapping with
   the single non-empty field `url`. URL content is normalized into the same
-  inline managed-loader `script` snapshot. Blank inline scripts are unset;
+  inline managed-scheduler `script` snapshot. Blank inline scripts are unset;
   blank URL content is an error.
 - `scheduler.script` and non-empty `scheduler.triggers` are mutually exclusive.
   Scalar values are never auto-detected as URLs. `scheduler.script_file`,
@@ -263,27 +269,12 @@ Workspace providers currently supported during project run preparation:
 
 ## API Boundaries
 
-### v1 Connect API
-
-The v1 API is the stable interface for the existing Web/UI and compatibility
-clients. The daemon currently registers:
-
-- `SessionService`
-- `KernelService`
-- `AgentService`
-- `AgentDefinitionService`
-- `LLMService`
-- `ConfigService`
-- `LoaderService`
-- `DashboardService`
-- `CapabilityService`
-
-v1 still covers session, cell, agent event, global env, workspace config,
-loader, dashboard overview, and capability management.
-
 ### v2 Connect API
 
-The v2 API is for project/run/image/exec workflows:
+The maintained API source is `proto/agentcompose/v2/agentcompose.proto`. It
+covers project, scheduler, run, sandbox, image, cache, volume, exec, settings,
+dashboard, capability, LLM, and resource workflows. Scheduler operations are
+owned by `ProjectService` alongside project reconciliation:
 
 - `ProjectService`
   - `ValidateProject`
@@ -292,6 +283,9 @@ The v2 API is for project/run/image/exec workflows:
   - `ListProjects`
   - `RemoveProject`
   - `WatchProject` is currently covered only by an unimplemented handler.
+  - `GetScheduler`
+  - `ListSchedulers`
+  - scheduler invocation, run/event query, pruning, stop, and enable operations
 - `RunService`
   - `RunAgent`
   - `StreamAgentRun`
@@ -396,17 +390,17 @@ through the Loader runtime precedence of global environment, Agent environment,
 Loader environment, and per-request environment, from lowest to highest.
 
 `ValidateProject` and `ApplyProject` use the same scheduler construction path.
-Declarative schedulers only receive compose and loader trigger structure
-validation. Inline QJS schedulers call existing
-`LoaderManager.Validate(ctx, "scheduler", script)`, where the QJS loader engine
+Declarative schedulers only receive compose and scheduler trigger structure
+validation. Inline QJS schedulers call
+`schedulers.Controller.Validate(ctx, "scheduler", script)`, where the QJS scheduler engine
 evaluates the script and collects triggers registered through
 `scheduler.interval`, `scheduler.timeout`, `scheduler.on`, and
 `scheduler.cron`. Syntax errors, duplicate trigger names, and invalid
 timer/cron/event parameters are converted into project validation issues at the
 path `agents.<name>.scheduler.script`.
 
-Reconcile order is conservative: stage `ProjectScheduler` and managed `Loader`
-as disabled, replace loader triggers, then enable the loader and scheduler. If
+Reconcile order is conservative: stage `ProjectScheduler` as disabled, replace
+scheduler triggers, then enable the scheduler. If
 trigger replacement or enablement fails, cleanup runs to avoid leaving an
 enabled scheduler whose trigger/script state is inconsistent.
 
@@ -686,8 +680,8 @@ materialized rootfs.
 - global env
 - workspace config
 - agent definition
-- loader / loader trigger / loader binding
-- loader run / loader event
+- scheduler trigger / scheduler sandbox binding
+- scheduler run / scheduler event
 - webhook topic event
 - project / project_revision / project_agent / project_scheduler / project_run
 
@@ -797,7 +791,7 @@ exposed through `SandboxSummary`, the public API, or list filters.
 
 The process-level `Provisioner` is shared by every lifecycle path that can start
 or restart a workspace-backed sandbox: v1 session create/resume,
-`sessions.Lifecycle.ResumeLoaded` and Jupyter `EnsureProxyReady`, loader sandbox
+`sessions.Lifecycle.ResumeLoaded` and Jupyter `EnsureProxyReady`, scheduler sandbox
 create/sticky resume, and project-run sandbox create/reuse. It reloads persisted
 metadata and makes the decision from provisioning state, rather than from a
 create/resume flag or workspace directory contents. For `pending` and `failed`,
@@ -888,9 +882,9 @@ For the more detailed mount manifest design, see
 [runtime_mount_manifest_design.md](runtime_mount_manifest_design.md) and
 [runtime_mount_manifest_driver_specific_design.md](runtime_mount_manifest_driver_specific_design.md).
 
-## Loader Runtime
+## Scheduler Runtime
 
-The current loader runtime is `scheduler`, supporting:
+The current scheduler runtime uses QJS and supports:
 
 - `interval`
 - `timeout`
@@ -904,14 +898,14 @@ dependencies, such as `scheduler.agent`, `scheduler.llm`, `scheduler.exec`,
 bridge, should be used in
 `main()` or trigger callbacks.
 
-`scheduler` is the only product-level global object in the loader QJS
+`scheduler` is the only product-level global object in the scheduler QJS
 environment. Its responsibilities are trigger registration, lightweight state,
 event publishing, and delegating work that needs sandbox capabilities to runtime
 sandboxes. The QJS layer is not intended to host complex Node.js workflows, npm
 dependencies, or long-running business logic.
 
 When full Node.js capabilities are needed, the current implementation calls
-workspace scripts inside the loader sandbox through `scheduler.exec` /
+workspace scripts inside the scheduler sandbox through `scheduler.exec` /
 `scheduler.shell`, or uses existing agent and LLM capabilities through
 `scheduler.agent` / `scheduler.llm`. Standalone `scheduler.run(file, input,
 options)`, runtime workflow context, workflow bridge token, and an
@@ -919,7 +913,7 @@ options)`, runtime workflow context, workflow bridge token, and an
 contract. Design documents should not present those draft interfaces as
 implemented capabilities.
 
-`LoaderManager.Start()` starts the schedule loop and event loop during daemon
+`schedulers.Controller.Start()` starts the schedule loop and event loop during daemon
 background startup.
 
 Main JavaScript APIs:
@@ -974,7 +968,7 @@ Guest agent providers (`codex`, `claude`, `gemini`, `opencode`, `pi`) remain sep
 inside guest containers with their own API keys and provider-native session
 state.
 
-The loader's primary sandbox lifecycle API is:
+The scheduler's primary sandbox lifecycle API is:
 
 - `scheduler.sandbox.createSandbox(request)`
 - `scheduler.sandbox.resumeSandbox(request)`
@@ -984,7 +978,7 @@ The loader's primary sandbox lifecycle API is:
 - `scheduler.sandbox.getSandboxProxy(request)`
 
 These methods expose sandbox-shaped request and response JSON while currently
-bridging to the v1 lifecycle service internally. The loader also retains these
+bridging to the compatibility lifecycle service internally. The scheduler also retains these
 deprecated v1 `SessionService` aliases:
 
 - `scheduler.session.createSession(request)`
@@ -1069,7 +1063,7 @@ For shared playground build, deployment, and verification flow, see
 - `up` manages definitions and scheduler. It is not the same as running an
   agent.
 - `run` is a one-shot execution. It stops runtime by default after completion.
-- `down` disables managed scheduler/loader and stops running project sandboxes.
+- `down` disables managed schedulers and stops running project sandboxes.
   It does not delete history by default.
 - The v1 API must remain compatible. The v2 API carries the primary
   project/run/exec/image path.

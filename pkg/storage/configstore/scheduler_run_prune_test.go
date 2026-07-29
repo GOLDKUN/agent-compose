@@ -9,30 +9,30 @@ import (
 	"agent-compose/pkg/schedulers"
 )
 
-func TestLoaderRunPruneFiltersAndDeletesDirectRunData(t *testing.T) {
+func TestSchedulerRunPruneFiltersAndDeletesDirectRunData(t *testing.T) {
 	ctx := context.Background()
 	store := FromDB(newMemoryDB(t))
 	if err := store.initSchema(ctx); err != nil {
 		t.Fatalf("init schema: %v", err)
 	}
-	createPruneTestLoader(t, store, "loader-a")
-	createPruneTestLoader(t, store, "loader-b")
+	createPruneTestScheduler(t, store, "scheduler-a")
+	createPruneTestScheduler(t, store, "scheduler-b")
 	now := time.Date(2026, 7, 22, 10, 0, 0, 0, time.UTC)
 	old := now.Add(-48 * time.Hour)
 	newer := now.Add(-time.Hour)
 	for _, run := range []domain.SchedulerRunSummary{
-		{ID: "run-old-success", SchedulerID: "loader-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: old, CompletedAt: old.Add(time.Minute)},
-		{ID: "run-new-failed", SchedulerID: "loader-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusFailed, StartedAt: newer, CompletedAt: newer.Add(time.Minute)},
-		{ID: "run-old-other-trigger", SchedulerID: "loader-a", TriggerID: "trigger-b", Status: domain.SchedulerRunStatusFailed, StartedAt: old.Add(time.Minute), CompletedAt: old.Add(2 * time.Minute)},
-		{ID: "run-running", SchedulerID: "loader-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusRunning, StartedAt: old},
-		{ID: "run-invocation", SchedulerID: "loader-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: old, CompletedAt: old.Add(time.Minute)},
-		{ID: "run-other-loader", SchedulerID: "loader-b", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: old, CompletedAt: old.Add(time.Minute)},
+		{ID: "run-old-success", SchedulerID: "scheduler-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: old, CompletedAt: old.Add(time.Minute)},
+		{ID: "run-new-failed", SchedulerID: "scheduler-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusFailed, StartedAt: newer, CompletedAt: newer.Add(time.Minute)},
+		{ID: "run-old-other-trigger", SchedulerID: "scheduler-a", TriggerID: "trigger-b", Status: domain.SchedulerRunStatusFailed, StartedAt: old.Add(time.Minute), CompletedAt: old.Add(2 * time.Minute)},
+		{ID: "run-running", SchedulerID: "scheduler-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusRunning, StartedAt: old},
+		{ID: "run-invocation", SchedulerID: "scheduler-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: old, CompletedAt: old.Add(time.Minute)},
+		{ID: "run-other-scheduler", SchedulerID: "scheduler-b", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: old, CompletedAt: old.Add(time.Minute)},
 	} {
 		if err := store.CreateSchedulerRun(ctx, run); err != nil {
 			t.Fatalf("create run %s: %v", run.ID, err)
 		}
 	}
-	addPruneTestRelations(t, store, "loader-a", "run-old-success", "trigger-a")
+	addPruneTestRelations(t, store, "scheduler-a", "run-old-success", "trigger-a")
 	if _, err := store.CreateEvent(ctx, domain.TopicEventRecord{
 		ID: "topic-event", Topic: "topic.test", Source: domain.TopicEventSourceSystem,
 		CorrelationID: "correlation-test", PayloadJSON: `{}`, CreatedAt: old,
@@ -41,14 +41,14 @@ func TestLoaderRunPruneFiltersAndDeletesDirectRunData(t *testing.T) {
 	}
 
 	filtered, err := store.ListSchedulerRunsForPrune(ctx, schedulers.SchedulerRunPruneFilter{
-		SchedulerIDs: []string{"loader-a"}, TriggerID: "trigger-a",
+		SchedulerIDs: []string{"scheduler-a"}, TriggerID: "trigger-a",
 		Statuses:  []string{domain.SchedulerRunStatusSucceeded, domain.SchedulerRunStatusFailed},
 		OlderThan: 24 * time.Hour, Now: now,
 	})
 	if err != nil || len(filtered) != 1 || filtered[0].ID != "run-old-success" {
 		t.Fatalf("filtered runs=%#v err=%v", filtered, err)
 	}
-	keys := []schedulers.SchedulerRunKey{{SchedulerID: "loader-a", RunID: "run-old-success"}}
+	keys := []schedulers.SchedulerRunKey{{SchedulerID: "scheduler-a", RunID: "run-old-success"}}
 	counted, err := store.CountSchedulerRunPruneData(ctx, keys)
 	if err != nil {
 		t.Fatalf("count prune data: %v", err)
@@ -63,13 +63,13 @@ func TestLoaderRunPruneFiltersAndDeletesDirectRunData(t *testing.T) {
 	if removed.Stats != counted || len(removed.RemovedKeys) != 1 || removed.RemovedKeys[0] != keys[0] {
 		t.Fatalf("removed=%#v, want stats %#v and key %#v", removed, counted, keys[0])
 	}
-	if remaining, err := store.ListSchedulerRunsForPrune(ctx, schedulers.SchedulerRunPruneFilter{SchedulerIDs: []string{"loader-a", "loader-b"}}); err != nil || len(remaining) != 4 {
+	if remaining, err := store.ListSchedulerRunsForPrune(ctx, schedulers.SchedulerRunPruneFilter{SchedulerIDs: []string{"scheduler-a", "scheduler-b"}}); err != nil || len(remaining) != 4 {
 		t.Fatalf("remaining trigger runs=%#v err=%v", remaining, err)
 	}
 	for table, where := range map[string]string{
-		"scheduler_event":    "scheduler_id = 'loader-a' AND scheduler_run_id = 'run-old-success'",
-		"event_delivery":     "scheduler_id = 'loader-a' AND scheduler_run_id = 'run-old-success'",
-		"event_sandbox_link": "scheduler_id = 'loader-a' AND scheduler_run_id = 'run-old-success'",
+		"scheduler_event":    "scheduler_id = 'scheduler-a' AND scheduler_run_id = 'run-old-success'",
+		"event_delivery":     "scheduler_id = 'scheduler-a' AND scheduler_run_id = 'run-old-success'",
+		"event_sandbox_link": "scheduler_id = 'scheduler-a' AND scheduler_run_id = 'run-old-success'",
 	} {
 		assertPruneTestRowCount(t, store, table, where, 0)
 	}
@@ -78,25 +78,25 @@ func TestLoaderRunPruneFiltersAndDeletesDirectRunData(t *testing.T) {
 	assertPruneTestRowCount(t, store, "scheduler_run", "run_id = 'run-running'", 1)
 }
 
-func TestDeleteLoaderRunPruneDataRollsBackWholeTransaction(t *testing.T) {
+func TestDeleteSchedulerRunPruneDataRollsBackWholeTransaction(t *testing.T) {
 	ctx := context.Background()
 	store := FromDB(newMemoryDB(t))
 	if err := store.initSchema(ctx); err != nil {
 		t.Fatalf("init schema: %v", err)
 	}
-	createPruneTestLoader(t, store, "loader-a")
+	createPruneTestScheduler(t, store, "scheduler-a")
 	now := time.Now().UTC()
 	for _, runID := range []string{"run-ok", "run-fail"} {
-		if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{ID: runID, SchedulerID: "loader-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: now, CompletedAt: now}); err != nil {
+		if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{ID: runID, SchedulerID: "scheduler-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: now, CompletedAt: now}); err != nil {
 			t.Fatalf("create run %s: %v", runID, err)
 		}
-		addPruneTestRelations(t, store, "loader-a", runID, "trigger-a")
+		addPruneTestRelations(t, store, "scheduler-a", runID, "trigger-a")
 	}
 	if _, err := store.db.ExecContext(ctx, `CREATE TRIGGER block_prune_event BEFORE DELETE ON scheduler_event
 		WHEN OLD.scheduler_run_id = 'run-fail' BEGIN SELECT RAISE(ABORT, 'blocked prune'); END`); err != nil {
 		t.Fatalf("create failure trigger: %v", err)
 	}
-	keys := []schedulers.SchedulerRunKey{{SchedulerID: "loader-a", RunID: "run-ok"}, {SchedulerID: "loader-a", RunID: "run-fail"}}
+	keys := []schedulers.SchedulerRunKey{{SchedulerID: "scheduler-a", RunID: "run-ok"}, {SchedulerID: "scheduler-a", RunID: "run-fail"}}
 	if _, err := store.DeleteSchedulerRunPruneData(ctx, keys); err == nil {
 		t.Fatal("DeleteSchedulerRunPruneData returned nil error")
 	}
@@ -108,23 +108,23 @@ func TestDeleteLoaderRunPruneDataRollsBackWholeTransaction(t *testing.T) {
 	}
 }
 
-func TestDeleteLoaderRunPruneDataRechecksTerminalTriggerRun(t *testing.T) {
+func TestDeleteSchedulerRunPruneDataRechecksTerminalTriggerRun(t *testing.T) {
 	ctx := context.Background()
 	store := FromDB(newMemoryDB(t))
 	if err := store.initSchema(ctx); err != nil {
 		t.Fatalf("init schema: %v", err)
 	}
-	createPruneTestLoader(t, store, "loader-a")
+	createPruneTestScheduler(t, store, "scheduler-a")
 	for _, run := range []domain.SchedulerRunSummary{
-		{ID: "run-running", SchedulerID: "loader-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusRunning, StartedAt: time.Now().UTC()},
-		{ID: "run-empty-trigger", SchedulerID: "loader-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: time.Now().UTC(), CompletedAt: time.Now().UTC()},
+		{ID: "run-running", SchedulerID: "scheduler-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusRunning, StartedAt: time.Now().UTC()},
+		{ID: "run-empty-trigger", SchedulerID: "scheduler-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: time.Now().UTC(), CompletedAt: time.Now().UTC()},
 	} {
 		if err := store.CreateSchedulerRun(ctx, run); err != nil {
 			t.Fatalf("create run %s: %v", run.ID, err)
 		}
-		addPruneTestRelations(t, store, "loader-a", run.ID, run.TriggerID)
+		addPruneTestRelations(t, store, "scheduler-a", run.ID, run.TriggerID)
 	}
-	keys := []schedulers.SchedulerRunKey{{SchedulerID: "loader-a", RunID: "run-running"}, {SchedulerID: "loader-a", RunID: "run-empty-trigger"}}
+	keys := []schedulers.SchedulerRunKey{{SchedulerID: "scheduler-a", RunID: "run-running"}, {SchedulerID: "scheduler-a", RunID: "run-empty-trigger"}}
 	if counted, err := store.CountSchedulerRunPruneData(ctx, keys); err != nil || counted != (schedulers.SchedulerRunPruneDatabaseStats{}) {
 		t.Fatalf("counted=%#v err=%v", counted, err)
 	}
@@ -139,7 +139,7 @@ func TestDeleteLoaderRunPruneDataRechecksTerminalTriggerRun(t *testing.T) {
 	}
 }
 
-func createPruneTestLoader(t *testing.T, store *ConfigStore, schedulerID string) {
+func createPruneTestScheduler(t *testing.T, store *ConfigStore, schedulerID string) {
 	t.Helper()
 	if _, err := upsertNativeTestScheduler(context.Background(), store, domain.Scheduler{
 		Summary: domain.SchedulerSummary{
@@ -148,15 +148,15 @@ func createPruneTestLoader(t *testing.T, store *ConfigStore, schedulerID string)
 		},
 		Script: "function main() {}",
 	}); err != nil {
-		t.Fatalf("create loader %s: %v", schedulerID, err)
+		t.Fatalf("create scheduler %s: %v", schedulerID, err)
 	}
 }
 
 func addPruneTestRelations(t *testing.T, store *ConfigStore, schedulerID, runID, triggerID string) {
 	t.Helper()
 	ctx := context.Background()
-	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "loader-event-" + runID, SchedulerID: schedulerID, RunID: runID, TriggerID: triggerID, Type: "scheduler.run.completed", CreatedAt: time.Now().UTC()}); err != nil {
-		t.Fatalf("add loader event: %v", err)
+	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "scheduler-event-" + runID, SchedulerID: schedulerID, RunID: runID, TriggerID: triggerID, Type: "scheduler.run.completed", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("add scheduler event: %v", err)
 	}
 	if _, err := store.db.ExecContext(ctx, `INSERT INTO event_delivery(event_id, scheduler_id, trigger_id, scheduler_run_id, status, created_at, updated_at) VALUES(?, ?, ?, ?, 'run_succeeded', 1, 1)`, "event-"+runID, schedulerID, triggerID, runID); err != nil {
 		t.Fatalf("add event delivery: %v", err)

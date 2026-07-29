@@ -1,6 +1,6 @@
 function buildEventPrompt(event) {
   return [
-    "You are an automation helper running inside a agent-compose loader.",
+    "You are an automation helper running inside an agent-compose scheduler.",
     "Read the event JSON below and produce:",
     "1. A one line summary.",
     "2. A short next-step recommendation.",
@@ -17,7 +17,7 @@ function handleEvent(event) {
     payload: event?.payload ?? event ?? null,
   };
 
-  scheduler.log("processing loader event", {
+  scheduler.log("processing scheduler event", {
     topic: envelope.topic,
     createdAt: envelope.createdAt,
   });

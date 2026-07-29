@@ -13,13 +13,13 @@ import (
 	"agent-compose/pkg/workspaces"
 )
 
-func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) {
+func TestIntegrationSchedulerStickyResumePreservesReadyFileWorkspace(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
 	const (
-		workspaceID = "loader-sticky-resume-workspace"
-		loaderID    = "loader-sticky-resume"
-		triggerID   = "loader-sticky-trigger"
+		workspaceID = "scheduler-sticky-resume-workspace"
+		schedulerID = "scheduler-sticky-resume"
+		triggerID   = "scheduler-sticky-trigger"
 	)
 
 	sourceRoot, err := workspaces.DefaultFileWorkspaceContentRoot(bridge.config, workspaceID)
@@ -29,7 +29,7 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 	if err := os.MkdirAll(filepath.Join(sourceRoot, "docs"), 0o755); err != nil {
 		t.Fatalf("create file workspace source: %v", err)
 	}
-	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "editable.txt"), "loader source v1\n", 0o644)
+	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "editable.txt"), "scheduler source v1\n", 0o644)
 	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "template.txt"), "remove in sandbox\n", 0o644)
 	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "docs", "guide.txt"), "guide v1\n", 0o644)
 
@@ -48,16 +48,16 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 		Type:       workspaceConfig.Type,
 		ConfigJSON: workspaceConfig.ConfigJSON,
 	}
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{
-		ID:            loaderID,
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
+		ID:            schedulerID,
 		Name:          "Scheduler Sticky Resume",
 		WorkspaceID:   workspaceID,
 		Driver:        driverpkg.RuntimeDriverDocker,
 		SandboxPolicy: domain.SchedulerSandboxPolicySticky,
 	}}
-	loader = createNativeTestScheduler(t, ctx, bridge.configDB, loader)
+	scheduler = createNativeTestScheduler(t, ctx, bridge.configDB, scheduler)
 	request := domain.SchedulerAgentRequest{BindingTriggerID: triggerID}
-	publisher := &loaderSessionPublisherFake{}
+	publisher := &schedulerSessionPublisherFake{}
 	runner := NewSchedulerSandboxRunner(
 		bridge.config,
 		bridge.store,
@@ -72,7 +72,7 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 		bridge.agentExecutor,
 	)
 
-	created, eventType, err := runner.Ensure(ctx, loader, request, false)
+	created, eventType, err := runner.Ensure(ctx, scheduler, request, false)
 	if err != nil {
 		t.Fatalf("first sticky Ensure returned error: %v", err)
 	}
@@ -82,41 +82,41 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 	if created.Summary.ID == "" {
 		t.Fatal("first sticky Ensure returned an empty sandbox ID")
 	}
-	assertIntegrationWorkspaceReady(t, created, "after loader create")
+	assertIntegrationWorkspaceReady(t, created, "after scheduler create")
 	if !reflect.DeepEqual(created.Workspace, originalWorkspace) {
 		t.Fatalf("created workspace snapshot = %#v, want %#v", created.Workspace, originalWorkspace)
 	}
 	sandboxID := created.Summary.ID
 	workspaceRoot := created.Summary.WorkspacePath
 	readyUpdatedAt := created.WorkspaceProvisioning.UpdatedAt
-	bindingBefore, ok, err := bridge.configDB.GetSchedulerBinding(ctx, loaderID, triggerID)
+	bindingBefore, ok, err := bridge.configDB.GetSchedulerBinding(ctx, schedulerID, triggerID)
 	if err != nil {
 		t.Fatalf("GetSchedulerBinding after create returned error: %v", err)
 	}
 	if !ok || bindingBefore.SandboxID != sandboxID {
-		t.Fatalf("loader binding after create = %#v ok=%v, want sandbox %q", bindingBefore, ok, sandboxID)
+		t.Fatalf("scheduler binding after create = %#v ok=%v, want sandbox %q", bindingBefore, ok, sandboxID)
 	}
 	if got := len(driver.startCalls); got != 1 || driver.startCalls[0] != sandboxID {
 		t.Fatalf("driver start calls after create = %#v, want [%q]", driver.startCalls, sandboxID)
 	}
 
-	writeIntegrationWorkspaceFile(t, filepath.Join(workspaceRoot, "editable.txt"), "loader-generated content\n", 0o600)
+	writeIntegrationWorkspaceFile(t, filepath.Join(workspaceRoot, "editable.txt"), "scheduler-generated content\n", 0o600)
 	if err := os.Remove(filepath.Join(workspaceRoot, "template.txt")); err != nil {
 		t.Fatalf("remove template file from sandbox workspace: %v", err)
 	}
 	if err := os.Mkdir(filepath.Join(workspaceRoot, "generated"), 0o750); err != nil {
 		t.Fatalf("create generated sandbox directory: %v", err)
 	}
-	writeIntegrationWorkspaceFile(t, filepath.Join(workspaceRoot, "generated", "result.txt"), "loader result\n", 0o640)
+	writeIntegrationWorkspaceFile(t, filepath.Join(workspaceRoot, "generated", "result.txt"), "scheduler result\n", 0o640)
 	if err := os.Symlink(filepath.Join("generated", "result.txt"), filepath.Join(workspaceRoot, "result-link")); err != nil {
 		t.Fatalf("create sandbox workspace symlink: %v", err)
 	}
 	beforeShutdown, err := testutil.WorkspaceManifest(workspaceRoot)
 	if err != nil {
-		t.Fatalf("manifest loader workspace before shutdown: %v", err)
+		t.Fatalf("manifest scheduler workspace before shutdown: %v", err)
 	}
 
-	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "editable.txt"), "conflicting loader source v2\n", 0o644)
+	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "editable.txt"), "conflicting scheduler source v2\n", 0o644)
 	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "template.txt"), "source v2 would revive this file\n", 0o644)
 	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "docs", "guide.txt"), "conflicting guide v2\n", 0o644)
 	writeIntegrationWorkspaceFile(t, filepath.Join(sourceRoot, "source-only-v2.txt"), "must not contaminate resumed sandbox\n", 0o644)
@@ -126,30 +126,30 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 	}
 	stopped, err := bridge.store.GetSandbox(ctx, sandboxID)
 	if err != nil {
-		t.Fatalf("GetSandbox after loader Shutdown returned error: %v", err)
+		t.Fatalf("GetSandbox after scheduler Shutdown returned error: %v", err)
 	}
 	if stopped.Summary.VMStatus != domain.VMStatusStopped {
-		t.Fatalf("sandbox VM status after loader Shutdown = %q, want %q", stopped.Summary.VMStatus, domain.VMStatusStopped)
+		t.Fatalf("sandbox VM status after scheduler Shutdown = %q, want %q", stopped.Summary.VMStatus, domain.VMStatusStopped)
 	}
-	assertIntegrationWorkspaceReady(t, stopped, "after loader shutdown")
+	assertIntegrationWorkspaceReady(t, stopped, "after scheduler shutdown")
 	if !stopped.WorkspaceProvisioning.UpdatedAt.Equal(readyUpdatedAt) {
-		t.Fatalf("ready UpdatedAt after loader Shutdown = %s, want %s", stopped.WorkspaceProvisioning.UpdatedAt, readyUpdatedAt)
+		t.Fatalf("ready UpdatedAt after scheduler Shutdown = %s, want %s", stopped.WorkspaceProvisioning.UpdatedAt, readyUpdatedAt)
 	}
 	if !reflect.DeepEqual(stopped.Workspace, originalWorkspace) {
 		t.Fatalf("stopped workspace snapshot = %#v, want %#v", stopped.Workspace, originalWorkspace)
 	}
 	if info, statErr := os.Stat(workspaceRoot); statErr != nil || !info.IsDir() {
-		t.Fatalf("loader Shutdown removed workspace %q: info=%#v err=%v", workspaceRoot, info, statErr)
+		t.Fatalf("scheduler Shutdown removed workspace %q: info=%#v err=%v", workspaceRoot, info, statErr)
 	}
 	afterShutdown, err := testutil.WorkspaceManifest(workspaceRoot)
 	if err != nil {
-		t.Fatalf("manifest loader workspace after shutdown: %v", err)
+		t.Fatalf("manifest scheduler workspace after shutdown: %v", err)
 	}
 	if !reflect.DeepEqual(afterShutdown, beforeShutdown) {
-		t.Fatalf("loader Shutdown changed workspace manifest:\n got: %#v\nwant: %#v", afterShutdown, beforeShutdown)
+		t.Fatalf("scheduler Shutdown changed workspace manifest:\n got: %#v\nwant: %#v", afterShutdown, beforeShutdown)
 	}
 	if got := len(driver.stopCalls); got != 1 || driver.stopCalls[0] != sandboxID {
-		t.Fatalf("driver stop calls after loader Shutdown = %#v, want [%q]", driver.stopCalls, sandboxID)
+		t.Fatalf("driver stop calls after scheduler Shutdown = %#v, want [%q]", driver.stopCalls, sandboxID)
 	}
 
 	resumeStartChecks := 0
@@ -158,7 +158,7 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 		if sandbox.Summary.ID != sandboxID {
 			t.Errorf("sandbox ID at resume driver start = %q, want %q", sandbox.Summary.ID, sandboxID)
 		}
-		assertIntegrationWorkspaceReady(t, sandbox, "at loader resume driver start")
+		assertIntegrationWorkspaceReady(t, sandbox, "at scheduler resume driver start")
 		if !sandbox.WorkspaceProvisioning.UpdatedAt.Equal(readyUpdatedAt) {
 			t.Errorf("ready UpdatedAt at resume driver start = %s, want %s", sandbox.WorkspaceProvisioning.UpdatedAt, readyUpdatedAt)
 		}
@@ -167,14 +167,14 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 		}
 		atStart, manifestErr := testutil.WorkspaceManifest(sandbox.Summary.WorkspacePath)
 		if manifestErr != nil {
-			t.Errorf("manifest loader workspace at resume driver start: %v", manifestErr)
+			t.Errorf("manifest scheduler workspace at resume driver start: %v", manifestErr)
 			return
 		}
 		if !reflect.DeepEqual(atStart, beforeShutdown) {
-			t.Errorf("loader workspace changed before resume driver start:\n got: %#v\nwant: %#v", atStart, beforeShutdown)
+			t.Errorf("scheduler workspace changed before resume driver start:\n got: %#v\nwant: %#v", atStart, beforeShutdown)
 		}
 	}
-	resumed, eventType, err := runner.Ensure(ctx, loader, request, false)
+	resumed, eventType, err := runner.Ensure(ctx, scheduler, request, false)
 	if err != nil {
 		t.Fatalf("second sticky Ensure returned error: %v", err)
 	}
@@ -187,33 +187,33 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 	if resumeStartChecks != 1 {
 		t.Fatalf("resume driver start checks = %d, want 1", resumeStartChecks)
 	}
-	assertIntegrationWorkspaceReady(t, resumed, "after loader resume")
+	assertIntegrationWorkspaceReady(t, resumed, "after scheduler resume")
 	if !resumed.WorkspaceProvisioning.UpdatedAt.Equal(readyUpdatedAt) {
-		t.Fatalf("ready UpdatedAt after loader resume = %s, want %s", resumed.WorkspaceProvisioning.UpdatedAt, readyUpdatedAt)
+		t.Fatalf("ready UpdatedAt after scheduler resume = %s, want %s", resumed.WorkspaceProvisioning.UpdatedAt, readyUpdatedAt)
 	}
 	if !reflect.DeepEqual(resumed.Workspace, originalWorkspace) {
 		t.Fatalf("resumed workspace snapshot = %#v, want %#v", resumed.Workspace, originalWorkspace)
 	}
 	afterResume, err := testutil.WorkspaceManifest(workspaceRoot)
 	if err != nil {
-		t.Fatalf("manifest loader workspace after resume: %v", err)
+		t.Fatalf("manifest scheduler workspace after resume: %v", err)
 	}
 	if !reflect.DeepEqual(afterResume, beforeShutdown) {
-		t.Fatalf("loader workspace changed across sticky resume:\n got: %#v\nwant: %#v", afterResume, beforeShutdown)
+		t.Fatalf("scheduler workspace changed across sticky resume:\n got: %#v\nwant: %#v", afterResume, beforeShutdown)
 	}
 	if _, statErr := os.Lstat(filepath.Join(workspaceRoot, "source-only-v2.txt")); !os.IsNotExist(statErr) {
-		t.Fatalf("resumed loader workspace contains source-only v2 file, stat error = %v", statErr)
+		t.Fatalf("resumed scheduler workspace contains source-only v2 file, stat error = %v", statErr)
 	}
 	if _, statErr := os.Lstat(filepath.Join(workspaceRoot, "template.txt")); !os.IsNotExist(statErr) {
-		t.Fatalf("resumed loader workspace revived deleted template file, stat error = %v", statErr)
+		t.Fatalf("resumed scheduler workspace revived deleted template file, stat error = %v", statErr)
 	}
 
-	bindingAfter, ok, err := bridge.configDB.GetSchedulerBinding(ctx, loaderID, triggerID)
+	bindingAfter, ok, err := bridge.configDB.GetSchedulerBinding(ctx, schedulerID, triggerID)
 	if err != nil {
 		t.Fatalf("GetSchedulerBinding after resume returned error: %v", err)
 	}
 	if !ok || !reflect.DeepEqual(bindingAfter, bindingBefore) {
-		t.Fatalf("loader binding changed across sticky resume:\n got: %#v ok=%v\nwant: %#v", bindingAfter, ok, bindingBefore)
+		t.Fatalf("scheduler binding changed across sticky resume:\n got: %#v ok=%v\nwant: %#v", bindingAfter, ok, bindingBefore)
 	}
 	if got := driver.startCalls; !reflect.DeepEqual(got, []string{sandboxID, sandboxID}) {
 		t.Fatalf("driver start calls = %#v, want two starts for %q", got, sandboxID)
@@ -252,6 +252,6 @@ func TestIntegrationLoaderStickyResumePreservesReadyFileWorkspace(t *testing.T) 
 		gotTopics[i] = event.Topic
 	}
 	if !reflect.DeepEqual(gotTopics, wantTopics) {
-		t.Fatalf("loader lifecycle topics = %#v, want %#v", gotTopics, wantTopics)
+		t.Fatalf("scheduler lifecycle topics = %#v, want %#v", gotTopics, wantTopics)
 	}
 }

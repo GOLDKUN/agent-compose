@@ -21,19 +21,21 @@ func TestV2FieldNumbersHaveNoUnexplainedGaps(t *testing.T) {
 
 func TestV2FreezeFieldLayout(t *testing.T) {
 	want := map[protoreflect.FullName]map[protoreflect.Name]protoreflect.FieldNumber{
-		"agentcompose.v2.ProjectScheduler":       {"enabled": 4, "description": 7},
-		"agentcompose.v2.ProjectSpec":            {"agents": 3, "octobus_servers": 7},
-		"agentcompose.v2.RunAgentRequest":        {"env": 5, "payload_json": 16},
-		"agentcompose.v2.ListRunsRequest":        {"scheduler_id": 3, "sandbox_id": 10},
-		"agentcompose.v2.RunSummary":             {"exit_code": 11, "sandbox_short_id": 21},
-		"agentcompose.v2.TranscriptEvent":        {"name": 3, "created_at": 5},
-		"agentcompose.v2.ListImagesResponse":     {"store_status": 3},
-		"agentcompose.v2.PruneCachesRequest":     {"force": 2},
-		"agentcompose.v2.CacheItem":              {"status": 10, "warnings": 16},
-		"agentcompose.v2.AttachAgentRunRequest":  {"start": 1, "cancel": 7, "client_frame_id": 15},
-		"agentcompose.v2.AttachAgentRunResponse": {"started": 1, "error": 6, "server_frame_id": 15, "created_at": 16},
-		"agentcompose.v2.AttachExecRequest":      {"start": 1, "human_message": 7, "client_frame_id": 15},
-		"agentcompose.v2.AttachExecResponse":     {"started": 1, "agent_turn_completed": 6, "server_frame_id": 15, "created_at": 16},
+		"agentcompose.v2.ProjectScheduler":         {"enabled": 4, "description": 7},
+		"agentcompose.v2.ProjectSpec":              {"agents": 3, "octobus_servers": 7},
+		"agentcompose.v2.RunAgentRequest":          {"env": 5, "payload_json": 16},
+		"agentcompose.v2.ListRunsRequest":          {"scheduler_id": 3, "sandbox_id": 10},
+		"agentcompose.v2.RunSummary":               {"exit_code": 11, "sandbox_short_id": 21},
+		"agentcompose.v2.TranscriptEvent":          {"name": 3, "created_at": 5},
+		"agentcompose.v2.ListImagesResponse":       {"store_status": 3},
+		"agentcompose.v2.PruneCachesRequest":       {"force": 2},
+		"agentcompose.v2.CacheItem":                {"status": 10, "warnings": 16},
+		"agentcompose.v2.SchedulerRunPruneStats":   {"scheduler_events": 2},
+		"agentcompose.v2.SchedulerRunPruneResidue": {"scheduler_id": 1},
+		"agentcompose.v2.AttachAgentRunRequest":    {"start": 1, "cancel": 7, "client_frame_id": 15},
+		"agentcompose.v2.AttachAgentRunResponse":   {"started": 1, "error": 6, "server_frame_id": 15, "created_at": 16},
+		"agentcompose.v2.AttachExecRequest":        {"start": 1, "human_message": 7, "client_frame_id": 15},
+		"agentcompose.v2.AttachExecResponse":       {"started": 1, "agent_turn_completed": 6, "server_frame_id": 15, "created_at": 16},
 	}
 
 	messages := File_agentcompose_v2_agentcompose_proto.Messages()
@@ -57,6 +59,38 @@ func TestV2FreezeFieldLayout(t *testing.T) {
 	value := File_agentcompose_v2_agentcompose_proto.Enums().ByName("CacheDomain").Values().ByName("CACHE_DOMAIN_SKILL_ARTIFACT_CACHE")
 	if value.Number() != 4 {
 		t.Errorf("CACHE_DOMAIN_SKILL_ARTIFACT_CACHE number = %d, want 4", value.Number())
+	}
+}
+
+func TestV2SchedulerPruneFieldRenameContract(t *testing.T) {
+	tests := []struct {
+		messageName protoreflect.Name
+		fieldName   protoreflect.Name
+		legacyName  protoreflect.Name
+		number      protoreflect.FieldNumber
+		jsonName    string
+	}{
+		{messageName: "SchedulerRunPruneStats", fieldName: "scheduler_events", legacyName: "loader_events", number: 2, jsonName: "schedulerEvents"},
+		{messageName: "SchedulerRunPruneResidue", fieldName: "scheduler_id", legacyName: "loader_id", number: 1, jsonName: "schedulerId"},
+	}
+	messages := File_agentcompose_v2_agentcompose_proto.Messages()
+	for _, tt := range tests {
+		t.Run(string(tt.messageName), func(t *testing.T) {
+			message := messages.ByName(tt.messageName)
+			if message == nil {
+				t.Fatalf("message %s not found", tt.messageName)
+			}
+			field := message.Fields().ByName(tt.fieldName)
+			if field == nil {
+				t.Fatalf("field %s.%s not found", tt.messageName, tt.fieldName)
+			}
+			if field.Number() != tt.number || field.JSONName() != tt.jsonName {
+				t.Errorf("%s.%s number/json_name = %d/%q, want %d/%q", tt.messageName, tt.fieldName, field.Number(), field.JSONName(), tt.number, tt.jsonName)
+			}
+			if legacy := message.Fields().ByName(tt.legacyName); legacy != nil {
+				t.Errorf("legacy field %s.%s is still present", tt.messageName, tt.legacyName)
+			}
+		})
 	}
 }
 

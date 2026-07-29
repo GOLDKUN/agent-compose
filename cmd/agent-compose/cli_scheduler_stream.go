@@ -45,7 +45,7 @@ func streamComposeSchedulerRuns(ctx context.Context, clients cliServiceClients, 
 			}
 			scheduler, resolveErr := resolveComposeScheduler(normalized, projectID, run.GetAgentName())
 			if resolveErr == nil {
-				items = append(items, schedulerRuntimeRunItem(scheduler.SchedulerID, scheduler.ManagedLoaderID, run))
+				items = append(items, schedulerRuntimeRunItem(scheduler.SchedulerID, run))
 			}
 		}
 		if len(items) > 0 {

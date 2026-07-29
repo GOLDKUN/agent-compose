@@ -53,7 +53,7 @@ func NewPublishedTopicEvent(topic, payloadJSON string, trigger TriggerEventMetad
 	envelope := map[string]any{
 		"eventId":       eventID,
 		"sequence":      int64(0),
-		"source":        domain.TopicEventSourceLoader,
+		"source":        domain.TopicEventSourceScheduler,
 		"provider":      provider,
 		"topic":         topic,
 		"correlationId": correlationID,
@@ -70,14 +70,14 @@ func NewPublishedTopicEvent(topic, payloadJSON string, trigger TriggerEventMetad
 		Record: domain.TopicEventRecord{
 			ID:             eventID,
 			Topic:          topic,
-			Source:         domain.TopicEventSourceLoader,
+			Source:         domain.TopicEventSourceScheduler,
 			Provider:       provider,
 			CorrelationID:  correlationID,
 			PayloadHash:    domain.TopicEventPayloadSHA256(envelopeJSON),
 			PayloadJSON:    envelopeJSON,
 			DispatchStatus: domain.TopicEventDispatchPending,
 			ParentEventID:  parentEventID,
-			PublisherType:  domain.TopicEventSourceLoader,
+			PublisherType:  domain.TopicEventSourceScheduler,
 			PublisherID:    strings.TrimSpace(schedulerID),
 			PublisherRunID: strings.TrimSpace(runID),
 		},
@@ -125,7 +125,7 @@ func ValidatePublishTopic(topic string) error {
 	if strings.HasPrefix(topic, "runtime.") || strings.HasPrefix(topic, "workflow.") || strings.HasPrefix(topic, "external.") {
 		return nil
 	}
-	return fmt.Errorf("loader event topic must use runtime.*, workflow.*, or external.* prefix")
+	return fmt.Errorf("scheduler event topic must use runtime.*, workflow.*, or external.* prefix")
 }
 
 func ParseJSONObject(payloadJSON string) (map[string]any, error) {

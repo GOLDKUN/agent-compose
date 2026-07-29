@@ -81,7 +81,7 @@ func TestNormalizeTopicEventScanHelpers(t *testing.T) {
 		publisher_run_id, replay_of_event_id, claim_id, claim_until, attempt_count, next_attempt_at,
 		last_error, dead_letter_at, created_at, dispatched_at
 	) VALUES (1, 'event-1', 'runtime.topic', 'source', 'provider', 'intent', 'corr', 'idem', 'delivery',
-		'hash', '{"ok":true}', 'pending', '', 'loader', 'loader-1', 'run-1', '', 'claim-1',
+		'hash', '{"ok":true}', 'pending', '', 'scheduler', 'scheduler-1', 'run-1', '', 'claim-1',
 		1700000000, 2, 1700000001, '', 0, 1700000002, 1700000003)`); err != nil {
 		t.Fatalf("insert event: %v", err)
 	}

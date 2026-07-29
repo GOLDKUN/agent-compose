@@ -16,7 +16,7 @@ func ParseRunTimeout(raw string) (time.Duration, error) {
 		return 0, err
 	}
 	if timeout <= 0 {
-		return 0, fmt.Errorf("loader run timeout must be positive")
+		return 0, fmt.Errorf("scheduler run timeout must be positive")
 	}
 	return timeout, nil
 }

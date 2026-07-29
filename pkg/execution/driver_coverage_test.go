@@ -88,7 +88,7 @@ func TestDriverConversionWorkflows(t *testing.T) {
 	}
 	execSpec := BuildSchedulerCommandExecSpec(config, session, "/state/cells/cell-1/request.json", "/home/agent")
 	if execSpec.Command != "sh" || len(execSpec.Args) != 2 || !strings.Contains(execSpec.Args[1], "agent-compose-runtime exec") || execSpec.Cwd != "/workspace" {
-		t.Fatalf("loader command spec = %#v", execSpec)
+		t.Fatalf("scheduler command spec = %#v", execSpec)
 	}
 	artifactDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(artifactDir, "stdout.txt"), []byte("existing"), 0o644); err != nil {

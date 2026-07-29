@@ -15,10 +15,10 @@ import (
 
 func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 	ctx := context.Background()
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "script"}
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1", Runtime: domain.SchedulerRuntimeScheduler}, Script: "script"}
 	trigger := domain.SchedulerTrigger{ID: "trigger-1", Kind: domain.SchedulerTriggerKindEvent}
 	store := &runStoreFake{}
-	engine := &loaderEngineFake{result: schedulers.SchedulerExecutionResult{ResultJSON: `{"ok":true}`, Warnings: []string{"scheduler.session.getSession is deprecated; use scheduler.sandbox.getSandbox"}}}
+	engine := &schedulerEngineFake{result: schedulers.SchedulerExecutionResult{ResultJSON: `{"ok":true}`, Warnings: []string{"scheduler.session.getSession is deprecated; use scheduler.sandbox.getSandbox"}}}
 	var events []string
 	var deliveries []domain.SchedulerRunSummary
 	var notifications []string
@@ -59,14 +59,14 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 		},
 	})
 
-	run, err := executor.Run(ctx, loader, &trigger, `{"eventId":"evt-1"}`, "manual", schedulers.RunOptions{})
+	run, err := executor.Run(ctx, scheduler, &trigger, `{"eventId":"evt-1"}`, "manual", schedulers.RunOptions{})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
 	if run.Status != domain.SchedulerRunStatusSucceeded || run.ResultJSON != `{"ok":true}` || run.TriggerID != trigger.ID {
 		t.Fatalf("run = %#v", run)
 	}
-	if len(store.created) != 1 || len(store.updated) != 1 || store.lastError[loader.Summary.ID] != "" {
+	if len(store.created) != 1 || len(store.updated) != 1 || store.lastError[scheduler.Summary.ID] != "" {
 		t.Fatalf("store state = %#v/%#v/%#v", store.created, store.updated, store.lastError)
 	}
 	if !containsString(events, "scheduler.run.started") || !containsString(events, "scheduler.run.completed") || !containsString(events, "scheduler.deprecated_alias.warning") {
@@ -93,14 +93,14 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 		UpdateTriggerEventDelivery: func(context.Context, domain.SchedulerRunSummary) {},
 		Notify:                     func(string) {},
 	})
-	skipped, err := busyExecutor.Run(ctx, loader, nil, `{}`, "manual", schedulers.RunOptions{})
+	skipped, err := busyExecutor.Run(ctx, scheduler, nil, `{}`, "manual", schedulers.RunOptions{})
 	if err != nil {
 		t.Fatalf("busy Run returned error: %v", err)
 	}
-	if skipped.Status != domain.SchedulerRunStatusSkipped || skipped.Error == "" || busyStore.lastError[loader.Summary.ID] == "" {
+	if skipped.Status != domain.SchedulerRunStatusSkipped || skipped.Error == "" || busyStore.lastError[scheduler.Summary.ID] == "" {
 		t.Fatalf("skipped run/store = %#v/%#v", skipped, busyStore.lastError)
 	}
-	if _, err := busyExecutor.Run(ctx, loader, nil, `{}`, "manual", schedulers.RunOptions{RetryWhenBusy: true}); !errors.Is(err, schedulers.ErrRunBusyForRetry) {
+	if _, err := busyExecutor.Run(ctx, scheduler, nil, `{}`, "manual", schedulers.RunOptions{RetryWhenBusy: true}); !errors.Is(err, schedulers.ErrRunBusyForRetry) {
 		t.Fatalf("busy retry err = %v", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 func TestEventDispatcherWorkflows(t *testing.T) {
 	ctx := context.Background()
 	store := &eventDeliveryStoreFake{}
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1", Enabled: true}, Triggers: []domain.SchedulerTrigger{{
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1", Enabled: true}, Triggers: []domain.SchedulerTrigger{{
 		ID:      "trigger-1",
 		Kind:    domain.SchedulerTriggerKindEvent,
 		Topic:   "topic.one",
@@ -134,7 +134,7 @@ func TestEventDispatcherWorkflows(t *testing.T) {
 	dispatcher = schedulers.NewEventDispatcher(schedulers.EventDispatcherDependencies{
 		RootCtx: ctx,
 		Targets: func(string) []schedulers.EventTarget {
-			return []schedulers.EventTarget{{Scheduler: loader, Trigger: loader.Triggers[0]}}
+			return []schedulers.EventTarget{{Scheduler: scheduler, Trigger: scheduler.Triggers[0]}}
 		},
 		IsBusy: func([]schedulers.EventTarget) bool { return true },
 	})
@@ -142,7 +142,7 @@ func TestEventDispatcherWorkflows(t *testing.T) {
 		retryReason = reason
 		return nil
 	}})
-	if retryReason != "loader is already running" {
+	if retryReason != "scheduler is already running" {
 		t.Fatalf("retry reason = %q", retryReason)
 	}
 
@@ -153,7 +153,7 @@ func TestEventDispatcherWorkflows(t *testing.T) {
 		RootCtx: ctx,
 		Store:   store,
 		Targets: func(string) []schedulers.EventTarget {
-			return []schedulers.EventTarget{{Scheduler: loader, Trigger: loader.Triggers[0]}}
+			return []schedulers.EventTarget{{Scheduler: scheduler, Trigger: scheduler.Triggers[0]}}
 		},
 		ReserveSlots: func(domain.SchedulerTopicEvent, int) ([]*webhooks.Reservation, bool) {
 			return webhooks.NoopReservations(1), true
@@ -198,13 +198,13 @@ func TestEventDispatcherWorkflows(t *testing.T) {
 
 func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 	ctx := context.Background()
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1", Enabled: true}, Triggers: []domain.SchedulerTrigger{{
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1", Enabled: true}, Triggers: []domain.SchedulerTrigger{{
 		ID:      "trigger-1",
 		Kind:    domain.SchedulerTriggerKindEvent,
 		Topic:   "topic.webhook",
 		Enabled: true,
 	}}}
-	target := schedulers.EventTarget{Scheduler: loader, Trigger: loader.Triggers[0]}
+	target := schedulers.EventTarget{Scheduler: scheduler, Trigger: scheduler.Triggers[0]}
 
 	acked := false
 	released := false
@@ -249,14 +249,14 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 			return webhooks.NoopReservations(1), true
 		},
 		RunTimeout: func(time.Duration) time.Duration { return time.Second },
-		Prepare: func(_ context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options schedulers.RunOptions) (schedulers.PreparedRun, error) {
+		Prepare: func(_ context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options schedulers.RunOptions) (schedulers.PreparedRun, error) {
 			if !options.AlreadyEntered || source != "topic.webhook" || !strings.Contains(payloadJSON, `"topic":"topic.webhook"`) {
 				t.Fatalf("Prepare source/options/payload = %q/%#v/%q", source, options, payloadJSON)
 			}
 			return schedulers.PreparedRun{
-				Scheduler:   loader,
+				Scheduler:   scheduler,
 				Trigger:     trigger,
-				Run:         domain.SchedulerRunSummary{SchedulerID: loader.Summary.ID, TriggerID: trigger.ID},
+				Run:         domain.SchedulerRunSummary{SchedulerID: scheduler.Summary.ID, TriggerID: trigger.ID},
 				PayloadJSON: payloadJSON,
 			}, nil
 		},
@@ -271,7 +271,7 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 	}})
 	select {
 	case got := <-executed:
-		if got != "loader-1/trigger-1" {
+		if got != "scheduler-1/trigger-1" {
 			t.Fatalf("executed target = %q", got)
 		}
 	case <-time.After(time.Second):
@@ -287,8 +287,8 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 	dispatcher = schedulers.NewEventDispatcher(schedulers.EventDispatcherDependencies{
 		RootCtx: ctx,
 		Targets: func(string) []schedulers.EventTarget {
-			second := loader
-			second.Summary.ID = "loader-2"
+			second := scheduler
+			second.Summary.ID = "scheduler-2"
 			return []schedulers.EventTarget{target, {Scheduler: second, Trigger: second.Triggers[0]}}
 		},
 		ReserveSlots: func(domain.SchedulerTopicEvent, int) ([]*webhooks.Reservation, bool) {
@@ -306,7 +306,7 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 		retryReason = reason
 		return nil
 	}})
-	if retryReason != "loader is already running" || len(left) != 1 || left[0] != "loader-1" {
+	if retryReason != "scheduler is already running" || len(left) != 1 || left[0] != "scheduler-1" {
 		t.Fatalf("enter retry/left = %q/%#v", retryReason, left)
 	}
 
@@ -315,21 +315,21 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 	dispatcher = schedulers.NewEventDispatcher(schedulers.EventDispatcherDependencies{
 		RootCtx: ctx,
 		Targets: func(string) []schedulers.EventTarget {
-			second := loader
-			second.Summary.ID = "loader-2"
+			second := scheduler
+			second.Summary.ID = "scheduler-2"
 			return []schedulers.EventTarget{target, {Scheduler: second, Trigger: second.Triggers[0]}}
 		},
 		ReserveSlots: func(domain.SchedulerTopicEvent, int) ([]*webhooks.Reservation, bool) {
 			return webhooks.NoopReservations(2), true
 		},
-		Prepare: func(_ context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, _ string, _ schedulers.RunOptions) (schedulers.PreparedRun, error) {
-			if loader.Summary.ID == "loader-2" {
+		Prepare: func(_ context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, _ string, _ schedulers.RunOptions) (schedulers.PreparedRun, error) {
+			if scheduler.Summary.ID == "scheduler-2" {
 				return schedulers.PreparedRun{}, errors.New("prepare failed")
 			}
 			return schedulers.PreparedRun{
-				Scheduler:   loader,
+				Scheduler:   scheduler,
 				Trigger:     trigger,
-				Run:         domain.SchedulerRunSummary{SchedulerID: loader.Summary.ID, TriggerID: trigger.ID},
+				Run:         domain.SchedulerRunSummary{SchedulerID: scheduler.Summary.ID, TriggerID: trigger.ID},
 				PayloadJSON: payloadJSON,
 			}, nil
 		},
@@ -343,7 +343,7 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 	}})
 	select {
 	case got := <-aborted:
-		if got != "loader-1:prepare failed" {
+		if got != "scheduler-1:prepare failed" {
 			t.Fatalf("abort call = %q", got)
 		}
 	case <-time.After(time.Second):
@@ -357,17 +357,17 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 func TestSchedulerCollectDueAndDispatch(t *testing.T) {
 	now := time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC)
 	store := &schedulerStoreFake{}
-	loader := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "loader-1", Enabled: true}, Triggers: []domain.SchedulerTrigger{{
+	schedulerDefinition := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1", Enabled: true}, Triggers: []domain.SchedulerTrigger{{
 		ID:         "interval-1",
 		Kind:       domain.SchedulerTriggerKindInterval,
 		Enabled:    true,
 		IntervalMs: 1000,
 		NextFireAt: now.Add(-time.Second),
 	}}}
-	cached := map[string]domain.Scheduler{loader.Summary.ID: loader}
+	cached := map[string]domain.Scheduler{schedulerDefinition.Summary.ID: schedulerDefinition}
 	var replaced map[string]domain.Scheduler
 	runCalled := make(chan string, 1)
-	scheduler := schedulers.NewScheduler(schedulers.SchedulerDependencies{
+	scheduleLoop := schedulers.NewScheduler(schedulers.SchedulerDependencies{
 		RootCtx: context.Background(),
 		Store:   store,
 		Snapshot: func() map[string]domain.Scheduler {
@@ -380,28 +380,28 @@ func TestSchedulerCollectDueAndDispatch(t *testing.T) {
 			}
 		},
 		RunTimeout: func(time.Duration) time.Duration { return time.Second },
-		Run: func(_ context.Context, loader domain.Scheduler, trigger *domain.SchedulerTrigger, _ string, source string, _ schedulers.RunOptions, _ ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-			runCalled <- loader.Summary.ID + "/" + trigger.ID + "/" + source
+		Run: func(_ context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, _ string, source string, _ schedulers.RunOptions, _ ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+			runCalled <- scheduler.Summary.ID + "/" + trigger.ID + "/" + source
 			return domain.SchedulerRunSummary{}, nil
 		},
 	})
 
-	jobs := scheduler.CollectDue(now)
+	jobs := scheduleLoop.CollectDue(now)
 	if len(jobs) != 1 || jobs[0].Trigger.ID != "interval-1" || jobs[0].Source != "interval:1000" {
 		t.Fatalf("jobs = %#v", jobs)
 	}
 	if len(replaced) != 1 || len(store.fired) != 1 {
 		t.Fatalf("replaced/fired = %#v/%#v", replaced, store.fired)
 	}
-	next, ok := scheduler.NextFireAt()
+	next, ok := scheduleLoop.NextFireAt()
 	if !ok || !next.After(now) {
 		t.Fatalf("next fire = %s/%v", next, ok)
 	}
 
-	scheduler.Dispatch(jobs)
+	scheduleLoop.Dispatch(jobs)
 	select {
 	case got := <-runCalled:
-		if got != "loader-1/interval-1/interval:1000" {
+		if got != "scheduler-1/interval-1/interval:1000" {
 			t.Fatalf("run call = %q", got)
 		}
 	case <-time.After(time.Second):
@@ -433,16 +433,16 @@ func (s *runStoreFake) UpdateSchedulerLastError(_ context.Context, schedulerID, 
 	return nil
 }
 
-type loaderEngineFake struct {
+type schedulerEngineFake struct {
 	result schedulers.SchedulerExecutionResult
 	err    error
 }
 
-func (e *loaderEngineFake) Validate(context.Context, string, string) (schedulers.SchedulerValidationResult, error) {
+func (e *schedulerEngineFake) Validate(context.Context, string, string) (schedulers.SchedulerValidationResult, error) {
 	return schedulers.SchedulerValidationResult{}, nil
 }
 
-func (e *loaderEngineFake) Execute(context.Context, schedulers.SchedulerExecutionRequest, schedulers.SchedulerHost) (schedulers.SchedulerExecutionResult, error) {
+func (e *schedulerEngineFake) Execute(context.Context, schedulers.SchedulerExecutionRequest, schedulers.SchedulerHost) (schedulers.SchedulerExecutionResult, error) {
 	return e.result, e.err
 }
 

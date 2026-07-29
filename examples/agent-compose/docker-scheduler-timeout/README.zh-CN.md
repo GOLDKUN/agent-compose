@@ -8,7 +8,7 @@
 
 - 从 `agent-compose.yml` 解析 timeout trigger
 - 将 project 应用到 daemon
-- 创建 managed scheduler 和 loader
+- 创建 managed scheduler
 - 由 scheduler 自动触发运行
 - 启动 Docker-backed agent runtime session
 - 执行配置的 agent prompt
@@ -80,11 +80,11 @@ go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeou
 预期结果：
 
 - `config` 显示 trigger 为 `kind: timeout`。
-- `up` 创建或更新 managed scheduler 和 loader。
+- `up` 为每个已配置 scheduler 创建或更新一条 `scheduler` 资源。
 - 等待 timeout 触发一次后，`ps` 显示 scheduler 创建的 run。
 - `inspect run <run-id>` 显示 `source: scheduler`、`status: succeeded`、`driver: docker`，并包含 agent 输出。
 - `logs --run <run-id>` 输出 agent 日志。
-- `down` 禁用 managed scheduler 和 loader。
+- `down` 禁用 managed scheduler。
 
 ## 验证输出
 
@@ -128,8 +128,7 @@ created  project            docker-scheduler-timeout                            
 created  project_revision   sha256:3b8a286e2cf7df774375a5eeeef1a87f9fad75921bde212e539a15c9081b196f  project-docker-scheduler-timeout-3a00cafbae27/1
 created  project_agent      reviewer                                                                 agent-reviewer-a0befcb745b8
 created  agent_definition   reviewer                                                                 agent-reviewer-a0befcb745b8
-created  project_scheduler  reviewer                                                                 scheduler-reviewer-default-181247660dc1
-created  loader             docker-scheduler-timeout/reviewer scheduler                              loader-reviewer-default-181247660dc1
+created  scheduler          reviewer                                                                 scheduler-reviewer-default-181247660dc1
 ```
 
 ### 3. 成功的 scheduled run
@@ -178,6 +177,5 @@ Status: down
 Failed session stops: 0
 
 ACTION   TYPE               NAME      ID                                       MESSAGE
-updated  project_scheduler  reviewer  scheduler-reviewer-default-181247660dc1  disabled by project down
-updated  loader             reviewer  loader-reviewer-default-181247660dc1     disabled by project down
+updated  scheduler          reviewer  scheduler-reviewer-default-181247660dc1  disabled by project down
 ```

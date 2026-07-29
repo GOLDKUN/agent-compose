@@ -69,7 +69,7 @@ type Scheduler struct {
 }
 
 type SchedulerTrigger struct {
-	SchedulerID string    `json:"loader_id"`
+	SchedulerID string    `json:"scheduler_id"`
 	ID          string    `json:"id"`
 	Kind        string    `json:"kind"`
 	Topic       string    `json:"topic,omitempty"`
@@ -83,7 +83,7 @@ type SchedulerTrigger struct {
 
 type SchedulerRunSummary struct {
 	ID               string    `json:"id"`
-	SchedulerID      string    `json:"loader_id"`
+	SchedulerID      string    `json:"scheduler_id"`
 	TriggerID        string    `json:"trigger_id,omitempty"`
 	TriggerKind      string    `json:"trigger_kind,omitempty"`
 	TriggerSource    string    `json:"trigger_source,omitempty"`
@@ -100,7 +100,7 @@ type SchedulerRunSummary struct {
 
 type SchedulerEvent struct {
 	ID                  string    `json:"id"`
-	SchedulerID         string    `json:"loader_id"`
+	SchedulerID         string    `json:"scheduler_id"`
 	RunID               string    `json:"run_id,omitempty"`
 	TriggerID           string    `json:"trigger_id,omitempty"`
 	Type                string    `json:"type"`
@@ -114,7 +114,7 @@ type SchedulerEvent struct {
 }
 
 type SchedulerBinding struct {
-	SchedulerID       string    `json:"loader_id"`
+	SchedulerID       string    `json:"scheduler_id"`
 	TriggerID         string    `json:"trigger_id,omitempty"`
 	SandboxID         string    `json:"sandbox_id"`
 	SandboxConfigHash string    `json:"sandbox_config_hash,omitempty"`
@@ -217,7 +217,7 @@ func NormalizeSchedulerRuntime(runtime string) (string, error) {
 	case "", SchedulerRuntimeScheduler:
 		return SchedulerRuntimeScheduler, nil
 	default:
-		return "", fmt.Errorf("unsupported loader runtime %q", runtime)
+		return "", fmt.Errorf("unsupported scheduler runtime %q", runtime)
 	}
 }
 
@@ -232,7 +232,7 @@ func NormalizeSchedulerTriggerKind(kind string) (string, error) {
 	case SchedulerTriggerKindCron:
 		return SchedulerTriggerKindCron, nil
 	default:
-		return "", fmt.Errorf("unsupported loader trigger kind %q", kind)
+		return "", fmt.Errorf("unsupported scheduler trigger kind %q", kind)
 	}
 }
 
@@ -354,7 +354,7 @@ func DefaultSchedulerScript() string {
     now: new Date().toISOString(),
     payload: payload ?? null,
   };
-  scheduler.log("loader ready", result);
+  scheduler.log("scheduler ready", result);
   return result;
 }
 

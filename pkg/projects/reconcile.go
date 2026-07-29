@@ -38,8 +38,6 @@ type ReconcileSchedulerOptions struct {
 }
 
 func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, project domain.ProjectRecord, schedulers []domain.ProjectSchedulerRecord, definitions []domain.Scheduler, options ReconcileSchedulerOptions) ([]Change, bool, error) {
-	// Change resource names and error text are observable CLI output. Historical
-	// loader spellings remain stable while internal identifiers use scheduler.
 	if store == nil {
 		return nil, false, fmt.Errorf("config store is required")
 	}
@@ -48,7 +46,7 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 	for _, definition := range definitions {
 		definitionsByID[definition.Summary.ID] = definition
 	}
-	changes := make([]Change, 0, len(schedulers)+len(definitions))
+	changes := make([]Change, 0, len(schedulers))
 	unchanged := true
 	for _, scheduler := range schedulers {
 		currentByID[scheduler.SchedulerID] = scheduler
@@ -58,7 +56,7 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 		}
 		definition, ok := definitionsByID[scheduler.ID]
 		if !ok {
-			return changes, false, fmt.Errorf("managed loader %s for scheduler %s missing", scheduler.ID, scheduler.SchedulerID)
+			return changes, false, fmt.Errorf("scheduler definition %s for scheduler %s is missing", scheduler.ID, scheduler.SchedulerID)
 		}
 		var existingScheduler domain.Scheduler
 		if found {
@@ -70,14 +68,9 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 		if found && SchedulerRecordUnchanged(existing, scheduler) && SchedulerDefinitionUnchanged(existingScheduler, definition) {
 			changes = append(changes, Change{
 				Action:       ChangeActionUnchanged,
-				ResourceType: "project_scheduler",
-				ResourceID:   scheduler.SchedulerID,
+				ResourceType: "scheduler",
+				ResourceID:   scheduler.ID,
 				Name:         scheduler.AgentName,
-			}, Change{
-				Action:       ChangeActionUnchanged,
-				ResourceType: "loader",
-				ResourceID:   definition.Summary.ID,
-				Name:         definition.Summary.Name,
 			})
 			continue
 		}
@@ -93,33 +86,28 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 			return changes, false, fmt.Errorf("replace scheduler triggers %s: %w", saved.ID, err)
 		}
 		if scheduler.Enabled {
-			saved, err = store.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, true)
-			if err != nil {
+			enabledScheduler, enableErr := store.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, true)
+			if enableErr != nil {
 				cleanupFailedScheduler(ctx, options, stagedScheduler, saved.ID)
-				return changes, false, fmt.Errorf("enable project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
+				return changes, false, fmt.Errorf("enable project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, enableErr)
 			}
+			saved = enabledScheduler
 		} else {
 			saved = stagedScheduler
 		}
 		action := SchedulerChangeAction(existing, found, scheduler)
+		schedulerAction := SchedulerDefinitionChangeAction(existingScheduler, found, definition)
+		if schedulerAction != ChangeActionUnchanged {
+			action = schedulerAction
+		}
 		if action != ChangeActionUnchanged {
 			unchanged = false
 		}
 		changes = append(changes, Change{
 			Action:       action,
-			ResourceType: "project_scheduler",
-			ResourceID:   saved.SchedulerID,
+			ResourceType: "scheduler",
+			ResourceID:   saved.ID,
 			Name:         saved.AgentName,
-		})
-		schedulerAction := SchedulerDefinitionChangeAction(existingScheduler, found, definition)
-		if schedulerAction != ChangeActionUnchanged {
-			unchanged = false
-		}
-		changes = append(changes, Change{
-			Action:       schedulerAction,
-			ResourceType: "loader",
-			ResourceID:   definition.Summary.ID,
-			Name:         definition.Summary.Name,
 		})
 	}
 	existingSchedulers, err := store.ListProjectSchedulers(ctx, project.ID)
@@ -140,21 +128,15 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 		unchanged = false
 		changes = append(changes, Change{
 			Action:       ChangeActionRemoved,
-			ResourceType: "project_scheduler",
-			ResourceID:   disabled.SchedulerID,
+			ResourceType: "scheduler",
+			ResourceID:   disabled.ID,
 			Name:         disabled.AgentName,
-			Message:      "disabled because the scheduler is no longer present in the project spec",
-		}, Change{
-			Action:       ChangeActionRemoved,
-			ResourceType: "loader",
-			ResourceID:   existing.ID,
-			Name:         existing.AgentName,
 			Message:      "disabled because the scheduler is no longer present in the project spec",
 		})
 	}
 	if options.RefreshSchedulers != nil {
 		if err := options.RefreshSchedulers(ctx); err != nil {
-			return changes, false, fmt.Errorf("refresh loader manager: %w", err)
+			return changes, false, fmt.Errorf("refresh scheduler controller: %w", err)
 		}
 	}
 	return changes, unchanged, nil

@@ -13,8 +13,6 @@ import (
 )
 
 // schedulerStore owns scheduler execution state, triggers, runs, and events.
-// Its error text intentionally retains historical loader wording because
-// callers can expose these errors through the existing CLI and API contract.
 type schedulerStore struct {
 	db *sql.DB
 }
@@ -22,7 +20,7 @@ type schedulerStore struct {
 func (s *schedulerStore) ListSchedulerSummaries(ctx context.Context) ([]domain.SchedulerSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM project_scheduler ORDER BY updated_at DESC, created_at DESC, id DESC`)
 	if err != nil {
-		return nil, fmt.Errorf("query loaders: %w", err)
+		return nil, fmt.Errorf("query schedulers: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -35,7 +33,7 @@ func (s *schedulerStore) ListSchedulerSummaries(ctx context.Context) ([]domain.S
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate loaders: %w", err)
+		return nil, fmt.Errorf("iterate schedulers: %w", err)
 	}
 	items := make([]domain.SchedulerSummary, 0, len(ids))
 	for _, id := range ids {
@@ -82,7 +80,7 @@ func (s *schedulerStore) hydrateSchedulerSummaryCounts(ctx context.Context, summ
 	var eventCount int
 	var latestRunAtRaw any
 	if err := row.Scan(&triggerCount, &runCount, &eventCount, &latestRunAtRaw); err != nil {
-		return fmt.Errorf("load loader summary counts: %w", err)
+		return fmt.Errorf("load scheduler summary counts: %w", err)
 	}
 	summary.TriggerCount = triggerCount
 	summary.RunCount = runCount
@@ -94,7 +92,7 @@ func (s *schedulerStore) hydrateSchedulerSummaryCounts(ctx context.Context, summ
 func (s *schedulerStore) ReplaceSchedulerTriggers(ctx context.Context, schedulerID string, triggers []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
 	schedulerID = strings.TrimSpace(schedulerID)
 	if schedulerID == "" {
-		return nil, fmt.Errorf("loader id is required")
+		return nil, fmt.Errorf("scheduler id is required")
 	}
 	existing, err := s.listSchedulerTriggers(ctx, schedulerID)
 	if err != nil {
@@ -114,7 +112,7 @@ func (s *schedulerStore) ReplaceSchedulerTriggers(ctx context.Context, scheduler
 			return nil, err
 		}
 		if _, ok := seen[current.ID]; ok {
-			return nil, fmt.Errorf("duplicate loader trigger id %q", current.ID)
+			return nil, fmt.Errorf("duplicate scheduler trigger id %q", current.ID)
 		}
 		seen[current.ID] = struct{}{}
 		sameSchedule := false
@@ -153,12 +151,12 @@ func (s *schedulerStore) ReplaceSchedulerTriggers(ctx context.Context, scheduler
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("begin loader trigger tx: %w", err)
+		return nil, fmt.Errorf("begin scheduler trigger tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM scheduler_trigger WHERE scheduler_id = ?`, schedulerID); err != nil {
-		return nil, fmt.Errorf("reset loader triggers: %w", err)
+		return nil, fmt.Errorf("reset scheduler triggers: %w", err)
 	}
 	for _, trigger := range normalized {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO scheduler_trigger(
@@ -175,14 +173,14 @@ func (s *schedulerStore) ReplaceSchedulerTriggers(ctx context.Context, scheduler
 			domain.NonZeroTimeUnixMilli(trigger.NextFireAt),
 			domain.NonZeroTimeUnixMilli(trigger.LastFiredAt),
 		); err != nil {
-			return nil, fmt.Errorf("insert loader trigger %s/%s: %w", schedulerID, trigger.ID, err)
+			return nil, fmt.Errorf("insert scheduler trigger %s/%s: %w", schedulerID, trigger.ID, err)
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE project_scheduler SET updated_at = ? WHERE id = ?`, time.Now().UTC().Unix(), schedulerID); err != nil {
-		return nil, fmt.Errorf("touch loader after trigger replace: %w", err)
+		return nil, fmt.Errorf("touch scheduler after trigger replace: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit loader trigger tx: %w", err)
+		return nil, fmt.Errorf("commit scheduler trigger tx: %w", err)
 	}
 	sort.Slice(normalized, func(i, j int) bool {
 		if normalized[i].Kind != normalized[j].Kind {
@@ -196,7 +194,7 @@ func (s *schedulerStore) ReplaceSchedulerTriggers(ctx context.Context, scheduler
 func (s *schedulerStore) listSchedulerTriggers(ctx context.Context, schedulerID string) ([]domain.SchedulerTrigger, error) {
 	rows, err := s.db.QueryContext(ctx, schedulers.SelectSchedulerTriggerSQL()+` WHERE scheduler_id = ? ORDER BY kind ASC, trigger_id ASC`, schedulerID)
 	if err != nil {
-		return nil, fmt.Errorf("query loader triggers: %w", err)
+		return nil, fmt.Errorf("query scheduler triggers: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -209,7 +207,7 @@ func (s *schedulerStore) listSchedulerTriggers(ctx context.Context, schedulerID 
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate loader triggers: %w", err)
+		return nil, fmt.Errorf("iterate scheduler triggers: %w", err)
 	}
 	return items, nil
 }
@@ -217,7 +215,7 @@ func (s *schedulerStore) listSchedulerTriggers(ctx context.Context, schedulerID 
 func (s *schedulerStore) SetSchedulerEnabled(ctx context.Context, schedulerID string, enabled bool) error {
 	schedulerID = strings.TrimSpace(schedulerID)
 	if schedulerID == "" {
-		return fmt.Errorf("loader id is required")
+		return fmt.Errorf("scheduler id is required")
 	}
 	var (
 		triggers []domain.SchedulerTrigger
@@ -232,16 +230,16 @@ func (s *schedulerStore) SetSchedulerEnabled(ctx context.Context, schedulerID st
 	now := time.Now().UTC()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin loader enable tx: %w", err)
+		return fmt.Errorf("begin scheduler enable tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	result, err := tx.ExecContext(ctx, `UPDATE project_scheduler SET enabled = ?, updated_at = ? WHERE id = ?`, BoolToInt(enabled), now.Unix(), schedulerID)
 	if err != nil {
-		return fmt.Errorf("update loader enabled state: %w", err)
+		return fmt.Errorf("update scheduler enabled state: %w", err)
 	}
 	if rows, _ := result.RowsAffected(); rows == 0 {
-		return domain.ResourceError(domain.ErrNotFound, "loader", schedulerID, fmt.Sprintf("loader %s not found", schedulerID), nil)
+		return domain.ResourceError(domain.ErrNotFound, "scheduler", schedulerID, fmt.Sprintf("scheduler %s not found", schedulerID), nil)
 	}
 	if enabled {
 		for _, trigger := range triggers {
@@ -250,19 +248,19 @@ func (s *schedulerStore) SetSchedulerEnabled(ctx context.Context, schedulerID st
 			}
 			nextFireAt, err := schedulers.SchedulerTriggerNextFireAt(now, trigger, false)
 			if err != nil {
-				return fmt.Errorf("schedule loader trigger %s/%s: %w", schedulerID, trigger.ID, err)
+				return fmt.Errorf("schedule scheduler trigger %s/%s: %w", schedulerID, trigger.ID, err)
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE scheduler_trigger SET next_fire_at = ? WHERE scheduler_id = ? AND trigger_id = ?`, domain.NonZeroTimeUnixMilli(nextFireAt), schedulerID, trigger.ID); err != nil {
-				return fmt.Errorf("schedule loader trigger %s/%s: %w", schedulerID, trigger.ID, err)
+				return fmt.Errorf("schedule scheduler trigger %s/%s: %w", schedulerID, trigger.ID, err)
 			}
 		}
 	} else {
 		if _, err := tx.ExecContext(ctx, `UPDATE scheduler_trigger SET next_fire_at = 0 WHERE scheduler_id = ? AND kind IN (?, ?, ?)`, schedulerID, domain.SchedulerTriggerKindInterval, domain.SchedulerTriggerKindTimeout, domain.SchedulerTriggerKindCron); err != nil {
-			return fmt.Errorf("pause loader scheduled triggers: %w", err)
+			return fmt.Errorf("pause scheduler triggers: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit loader enable tx: %w", err)
+		return fmt.Errorf("commit scheduler enable tx: %w", err)
 	}
 	return nil
 }
@@ -271,14 +269,14 @@ func (s *schedulerStore) SetSchedulerTriggerEnabled(ctx context.Context, schedul
 	schedulerID = strings.TrimSpace(schedulerID)
 	triggerID = strings.TrimSpace(triggerID)
 	if schedulerID == "" || triggerID == "" {
-		return fmt.Errorf("loader trigger id is required")
+		return fmt.Errorf("scheduler trigger id is required")
 	}
 	row := s.db.QueryRowContext(ctx, schedulers.SelectSchedulerTriggerSQL()+` WHERE scheduler_id = ? AND trigger_id = ?`, schedulerID, triggerID)
 	trigger, err := schedulers.ScanSchedulerTrigger(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			id := schedulerID + "/" + triggerID
-			return domain.ResourceError(domain.ErrNotFound, "loader trigger", id, fmt.Sprintf("loader trigger %s not found", id), err)
+			return domain.ResourceError(domain.ErrNotFound, "scheduler trigger", id, fmt.Sprintf("scheduler trigger %s not found", id), err)
 		}
 		return err
 	}
@@ -286,17 +284,17 @@ func (s *schedulerStore) SetSchedulerTriggerEnabled(ctx context.Context, schedul
 	if enabled && domain.SchedulerTriggerUsesSchedule(trigger.Kind) {
 		scheduledAt, err := schedulers.SchedulerTriggerNextFireAt(time.Now().UTC(), trigger, false)
 		if err != nil {
-			return fmt.Errorf("schedule loader trigger %s/%s: %w", schedulerID, triggerID, err)
+			return fmt.Errorf("schedule scheduler trigger %s/%s: %w", schedulerID, triggerID, err)
 		}
 		nextFireAt = domain.NonZeroTimeUnixMilli(scheduledAt)
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE scheduler_trigger SET enabled = ?, next_fire_at = ? WHERE scheduler_id = ? AND trigger_id = ?`, BoolToInt(enabled), nextFireAt, schedulerID, triggerID)
 	if err != nil {
-		return fmt.Errorf("update loader trigger enabled state: %w", err)
+		return fmt.Errorf("update scheduler trigger enabled state: %w", err)
 	}
 	if rows, _ := result.RowsAffected(); rows == 0 {
 		id := schedulerID + "/" + triggerID
-		return domain.ResourceError(domain.ErrNotFound, "loader trigger", id, fmt.Sprintf("loader trigger %s not found", id), nil)
+		return domain.ResourceError(domain.ErrNotFound, "scheduler trigger", id, fmt.Sprintf("scheduler trigger %s not found", id), nil)
 	}
 	_, _ = s.db.ExecContext(ctx, `UPDATE project_scheduler SET updated_at = ? WHERE id = ?`, time.Now().UTC().Unix(), schedulerID)
 	return nil
@@ -305,11 +303,11 @@ func (s *schedulerStore) SetSchedulerTriggerEnabled(ctx context.Context, schedul
 func (s *schedulerStore) UpdateSchedulerLastError(ctx context.Context, schedulerID, lastError string) error {
 	schedulerID = strings.TrimSpace(schedulerID)
 	if schedulerID == "" {
-		return fmt.Errorf("loader id is required")
+		return fmt.Errorf("scheduler id is required")
 	}
 	_, err := s.db.ExecContext(ctx, `UPDATE project_scheduler SET last_error = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(lastError), time.Now().UTC().Unix(), schedulerID)
 	if err != nil {
-		return fmt.Errorf("update loader last error: %w", err)
+		return fmt.Errorf("update scheduler last error: %w", err)
 	}
 	return nil
 }
@@ -317,7 +315,7 @@ func (s *schedulerStore) UpdateSchedulerLastError(ctx context.Context, scheduler
 func (s *schedulerStore) MarkSchedulerTriggerFired(ctx context.Context, schedulerID, triggerID string, lastFiredAt, nextFireAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE scheduler_trigger SET last_fired_at = ?, next_fire_at = ? WHERE scheduler_id = ? AND trigger_id = ?`, domain.NonZeroTimeUnixMilli(lastFiredAt), domain.NonZeroTimeUnixMilli(nextFireAt), strings.TrimSpace(schedulerID), strings.TrimSpace(triggerID))
 	if err != nil {
-		return fmt.Errorf("update loader trigger fire state: %w", err)
+		return fmt.Errorf("update scheduler trigger fire state: %w", err)
 	}
 	return nil
 }
@@ -326,15 +324,15 @@ func (s *schedulerStore) SetSchedulerTriggerNextFireAt(ctx context.Context, sche
 	schedulerID = strings.TrimSpace(schedulerID)
 	triggerID = strings.TrimSpace(triggerID)
 	if schedulerID == "" || triggerID == "" {
-		return fmt.Errorf("loader trigger id is required")
+		return fmt.Errorf("scheduler trigger id is required")
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE scheduler_trigger SET next_fire_at = ? WHERE scheduler_id = ? AND trigger_id = ?`, domain.NonZeroTimeUnixMilli(nextFireAt), schedulerID, triggerID)
 	if err != nil {
-		return fmt.Errorf("update loader trigger next fire time: %w", err)
+		return fmt.Errorf("update scheduler trigger next fire time: %w", err)
 	}
 	if rows, _ := result.RowsAffected(); rows == 0 {
 		id := schedulerID + "/" + triggerID
-		return domain.ResourceError(domain.ErrNotFound, "loader trigger", id, fmt.Sprintf("loader trigger %s not found", id), nil)
+		return domain.ResourceError(domain.ErrNotFound, "scheduler trigger", id, fmt.Sprintf("scheduler trigger %s not found", id), nil)
 	}
 	return nil
 }
@@ -359,7 +357,7 @@ func (s *schedulerStore) CreateSchedulerRun(ctx context.Context, run domain.Sche
 		strings.TrimSpace(run.ArtifactsDir),
 	)
 	if err != nil {
-		return fmt.Errorf("insert loader run %s/%s: %w", run.SchedulerID, run.ID, err)
+		return fmt.Errorf("insert scheduler run %s/%s: %w", run.SchedulerID, run.ID, err)
 	}
 	return nil
 }
@@ -384,11 +382,11 @@ func (s *schedulerStore) UpdateSchedulerRun(ctx context.Context, run domain.Sche
 		strings.TrimSpace(run.ID),
 	)
 	if err != nil {
-		return fmt.Errorf("update loader run %s/%s: %w", run.SchedulerID, run.ID, err)
+		return fmt.Errorf("update scheduler run %s/%s: %w", run.SchedulerID, run.ID, err)
 	}
 	if rows, _ := result.RowsAffected(); rows == 0 {
 		id := strings.TrimSpace(run.SchedulerID) + "/" + strings.TrimSpace(run.ID)
-		return domain.ResourceError(domain.ErrNotFound, "loader run", id, fmt.Sprintf("loader run %s not found", id), nil)
+		return domain.ResourceError(domain.ErrNotFound, "scheduler run", id, fmt.Sprintf("scheduler run %s not found", id), nil)
 	}
 	return nil
 }
@@ -399,7 +397,7 @@ func (s *schedulerStore) GetSchedulerRun(ctx context.Context, schedulerID, runID
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			id := strings.TrimSpace(schedulerID) + "/" + strings.TrimSpace(runID)
-			return domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrNotFound, "loader run", id, fmt.Sprintf("loader run %s not found", id), err)
+			return domain.SchedulerRunSummary{}, domain.ResourceError(domain.ErrNotFound, "scheduler run", id, fmt.Sprintf("scheduler run %s not found", id), err)
 		}
 		return domain.SchedulerRunSummary{}, err
 	}
@@ -412,7 +410,7 @@ func (s *schedulerStore) ListSchedulerRuns(ctx context.Context, schedulerID stri
 	}
 	rows, err := s.db.QueryContext(ctx, schedulers.SelectSchedulerRunSQL()+` WHERE scheduler_id = ? ORDER BY started_at DESC, run_id DESC LIMIT ?`, strings.TrimSpace(schedulerID), limit)
 	if err != nil {
-		return nil, fmt.Errorf("query loader runs: %w", err)
+		return nil, fmt.Errorf("query scheduler runs: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -425,7 +423,7 @@ func (s *schedulerStore) ListSchedulerRuns(ctx context.Context, schedulerID stri
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate loader runs: %w", err)
+		return nil, fmt.Errorf("iterate scheduler runs: %w", err)
 	}
 	return items, nil
 }
@@ -436,7 +434,7 @@ func (s *schedulerStore) ListRecentSchedulerRuns(ctx context.Context, limit int)
 	}
 	rows, err := s.db.QueryContext(ctx, schedulers.SelectSchedulerRunSQL()+` ORDER BY started_at DESC, scheduler_id DESC, run_id DESC LIMIT ?`, limit)
 	if err != nil {
-		return nil, fmt.Errorf("query recent loader runs: %w", err)
+		return nil, fmt.Errorf("query recent scheduler runs: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -449,7 +447,7 @@ func (s *schedulerStore) ListRecentSchedulerRuns(ctx context.Context, limit int)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate recent loader runs: %w", err)
+		return nil, fmt.Errorf("iterate recent scheduler runs: %w", err)
 	}
 	return items, nil
 }
@@ -472,7 +470,7 @@ func (s *schedulerStore) AddSchedulerEvent(ctx context.Context, event domain.Sch
 		event.CreatedAt.UTC().UnixMilli(),
 	)
 	if err != nil {
-		return fmt.Errorf("insert loader event %s/%s: %w", event.SchedulerID, event.ID, err)
+		return fmt.Errorf("insert scheduler event %s/%s: %w", event.SchedulerID, event.ID, err)
 	}
 	return nil
 }
@@ -496,7 +494,7 @@ func (s *schedulerStore) ListSchedulerEventsBefore(ctx context.Context, schedule
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query loader events: %w", err)
+		return nil, fmt.Errorf("query scheduler events: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -509,7 +507,7 @@ func (s *schedulerStore) ListSchedulerEventsBefore(ctx context.Context, schedule
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate loader events: %w", err)
+		return nil, fmt.Errorf("iterate scheduler events: %w", err)
 	}
 	return items, nil
 }
@@ -521,7 +519,7 @@ func (s *schedulerStore) GetSchedulerState(ctx context.Context, schedulerID, key
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", false, nil
 		}
-		return "", false, fmt.Errorf("query loader state: %w", err)
+		return "", false, fmt.Errorf("query scheduler state: %w", err)
 	}
 	return value, true, nil
 }
@@ -530,12 +528,12 @@ func (s *schedulerStore) SetSchedulerState(ctx context.Context, schedulerID, key
 	schedulerID = strings.TrimSpace(schedulerID)
 	key = strings.TrimSpace(key)
 	if schedulerID == "" || key == "" {
-		return fmt.Errorf("loader state key is required")
+		return fmt.Errorf("scheduler state key is required")
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO scheduler_state(scheduler_id, key, value_json, updated_at) VALUES(?, ?, ?, ?)
         ON CONFLICT(scheduler_id, key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`, schedulerID, key, strings.TrimSpace(valueJSON), time.Now().UTC().Unix())
 	if err != nil {
-		return fmt.Errorf("upsert loader state: %w", err)
+		return fmt.Errorf("upsert scheduler state: %w", err)
 	}
 	return nil
 }
@@ -543,7 +541,7 @@ func (s *schedulerStore) SetSchedulerState(ctx context.Context, schedulerID, key
 func (s *schedulerStore) DeleteSchedulerState(ctx context.Context, schedulerID, key string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM scheduler_state WHERE scheduler_id = ? AND key = ?`, strings.TrimSpace(schedulerID), strings.TrimSpace(key))
 	if err != nil {
-		return fmt.Errorf("delete loader state: %w", err)
+		return fmt.Errorf("delete scheduler state: %w", err)
 	}
 	return nil
 }
@@ -566,7 +564,7 @@ func (s *schedulerStore) UpsertSchedulerBinding(ctx context.Context, binding dom
 	binding.SandboxID = strings.TrimSpace(binding.SandboxID)
 	binding.SandboxConfigHash = strings.TrimSpace(binding.SandboxConfigHash)
 	if binding.SchedulerID == "" || binding.SandboxID == "" {
-		return fmt.Errorf("loader binding requires loader id and sandbox id")
+		return fmt.Errorf("scheduler binding requires scheduler id and sandbox id")
 	}
 	now := time.Now().UTC()
 	if binding.CreatedAt.IsZero() {
@@ -576,7 +574,7 @@ func (s *schedulerStore) UpsertSchedulerBinding(ctx context.Context, binding dom
 	_, err := s.db.ExecContext(ctx, `INSERT INTO scheduler_sandbox_binding(scheduler_id, trigger_id, sandbox_id, sandbox_config_hash, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?)
 		ON CONFLICT(scheduler_id, trigger_id) DO UPDATE SET sandbox_id = excluded.sandbox_id, sandbox_config_hash = excluded.sandbox_config_hash, updated_at = excluded.updated_at`, binding.SchedulerID, binding.TriggerID, binding.SandboxID, binding.SandboxConfigHash, binding.CreatedAt.Unix(), binding.UpdatedAt.Unix())
 	if err != nil {
-		return fmt.Errorf("upsert loader binding: %w", err)
+		return fmt.Errorf("upsert scheduler binding: %w", err)
 	}
 	return nil
 }
@@ -587,20 +585,20 @@ func (s *schedulerStore) CompareAndSwapSchedulerBinding(ctx context.Context, exp
 	replacement.SandboxID = strings.TrimSpace(replacement.SandboxID)
 	replacement.SandboxConfigHash = strings.TrimSpace(replacement.SandboxConfigHash)
 	if replacement.SchedulerID == "" || replacement.SandboxID == "" {
-		return false, fmt.Errorf("loader binding requires loader id and sandbox id")
+		return false, fmt.Errorf("scheduler binding requires scheduler id and sandbox id")
 	}
 	now := time.Now().UTC()
 	if expected == nil {
 		result, err := s.db.ExecContext(ctx, `INSERT INTO scheduler_sandbox_binding(scheduler_id, trigger_id, sandbox_id, sandbox_config_hash, created_at, updated_at)
 			VALUES(?, ?, ?, ?, ?, ?) ON CONFLICT(scheduler_id, trigger_id) DO NOTHING`, replacement.SchedulerID, replacement.TriggerID, replacement.SandboxID, replacement.SandboxConfigHash, now.Unix(), now.Unix())
 		if err != nil {
-			return false, fmt.Errorf("claim loader binding: %w", err)
+			return false, fmt.Errorf("claim scheduler binding: %w", err)
 		}
 		rows, _ := result.RowsAffected()
 		return rows == 1, nil
 	}
 	if strings.TrimSpace(expected.SchedulerID) != replacement.SchedulerID || strings.TrimSpace(expected.TriggerID) != replacement.TriggerID {
-		return false, fmt.Errorf("loader binding replacement key does not match expected binding")
+		return false, fmt.Errorf("scheduler binding replacement key does not match expected binding")
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE scheduler_sandbox_binding
 		SET sandbox_id = ?, sandbox_config_hash = ?, updated_at = ?
@@ -614,7 +612,7 @@ func (s *schedulerStore) CompareAndSwapSchedulerBinding(ctx context.Context, exp
 		strings.TrimSpace(expected.SandboxConfigHash),
 	)
 	if err != nil {
-		return false, fmt.Errorf("replace loader binding: %w", err)
+		return false, fmt.Errorf("replace scheduler binding: %w", err)
 	}
 	rows, _ := result.RowsAffected()
 	return rows == 1, nil

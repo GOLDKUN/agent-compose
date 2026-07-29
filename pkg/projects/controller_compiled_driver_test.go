@@ -179,17 +179,17 @@ func (s *compiledDriverBoundaryStore) SetProjectSchedulerEnabled(_ context.Conte
 	return domain.ProjectSchedulerRecord{}, nil
 }
 
-func (s *compiledDriverBoundaryStore) UpsertManagedLoader(_ context.Context, item domain.Scheduler) (domain.Scheduler, error) {
-	s.recordWrite("loader")
+func (s *compiledDriverBoundaryStore) UpsertManagedScheduler(_ context.Context, item domain.Scheduler) (domain.Scheduler, error) {
+	s.recordWrite("scheduler")
 	return item, nil
 }
 
 func (s *compiledDriverBoundaryStore) ReplaceSchedulerTriggers(_ context.Context, _ string, _ []domain.SchedulerTrigger) ([]domain.SchedulerTrigger, error) {
-	s.recordWrite("loader_triggers")
+	s.recordWrite("scheduler_triggers")
 	return nil, nil
 }
 
 func (s *compiledDriverBoundaryStore) SetSchedulerEnabled(_ context.Context, _ string, _ bool) error {
-	s.recordWrite("loader_enabled")
+	s.recordWrite("scheduler_enabled")
 	return nil
 }

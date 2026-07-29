@@ -106,23 +106,23 @@ func TestProjectRecordsCarryVolumeMountSpecs(t *testing.T) {
 	if len(definition.Volumes) != 2 || !definition.Volumes[1].ReadOnly {
 		t.Fatalf("agent definition volumes = %#v", definition.Volumes)
 	}
-	scheduler, ok, err := NewSchedulerRecordFromSpec(project.ID, 1, agent)
+	schedulerRecord, ok, err := NewSchedulerRecordFromSpec(project.ID, 1, agent)
 	if err != nil || !ok {
-		t.Fatalf("NewSchedulerRecordFromSpec = %#v/%v/%v", scheduler, ok, err)
+		t.Fatalf("NewSchedulerRecordFromSpec = %#v/%v/%v", schedulerRecord, ok, err)
 	}
-	loader, err := NewSchedulerDefinition(project, scheduler, agent)
+	schedulerDefinition, err := NewSchedulerDefinition(project, schedulerRecord, agent)
 	if err != nil {
 		t.Fatalf("NewSchedulerDefinition returned error: %v", err)
 	}
-	if len(loader.Volumes) != 2 || loader.Volumes[0].Source != "cache" {
-		t.Fatalf("loader volumes = %#v", loader.Volumes)
+	if len(schedulerDefinition.Volumes) != 2 || schedulerDefinition.Volumes[0].Source != "cache" {
+		t.Fatalf("scheduler volumes = %#v", schedulerDefinition.Volumes)
 	}
-	if loader.Summary.Name != "缓存巡检" || loader.Summary.Description != "检查缓存状态" {
-		t.Fatalf("loader presentation = %#v", loader.Summary)
+	if schedulerDefinition.Summary.Name != "缓存巡检" || schedulerDefinition.Summary.Description != "检查缓存状态" {
+		t.Fatalf("scheduler presentation = %#v", schedulerDefinition.Summary)
 	}
 }
 
-func TestSchedulerConcurrencyPolicyFlowsIntoManagedLoader(t *testing.T) {
+func TestSchedulerConcurrencyPolicyFlowsIntoManagedScheduler(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		raw  string
@@ -156,7 +156,7 @@ func TestSchedulerConcurrencyPolicyFlowsIntoManagedLoader(t *testing.T) {
 				t.Fatalf("scheduler builds = %d, want 1", len(builds))
 			}
 			if got := builds[0].Definition.Summary.ConcurrencyPolicy; got != test.want {
-				t.Fatalf("loader concurrency policy = %q, want %q", got, test.want)
+				t.Fatalf("scheduler concurrency policy = %q, want %q", got, test.want)
 			}
 		})
 	}
@@ -184,19 +184,19 @@ func TestDisabledAgentDisablesManagedAgentAndSchedulerRecords(t *testing.T) {
 	if record.SchedulerEnabled {
 		t.Fatalf("agent scheduler enabled = true, want false")
 	}
-	scheduler, ok, err := NewSchedulerRecordFromSpec(project.ID, 1, agent)
+	schedulerRecord, ok, err := NewSchedulerRecordFromSpec(project.ID, 1, agent)
 	if err != nil || !ok {
-		t.Fatalf("NewSchedulerRecordFromSpec = %#v/%v/%v", scheduler, ok, err)
+		t.Fatalf("NewSchedulerRecordFromSpec = %#v/%v/%v", schedulerRecord, ok, err)
 	}
-	if scheduler.Enabled {
+	if schedulerRecord.Enabled {
 		t.Fatalf("scheduler enabled = true, want false")
 	}
-	loader, err := NewSchedulerDefinition(project, scheduler, agent)
+	schedulerDefinition, err := NewSchedulerDefinition(project, schedulerRecord, agent)
 	if err != nil {
 		t.Fatalf("NewSchedulerDefinition returned error: %v", err)
 	}
-	if loader.Summary.Enabled {
-		t.Fatalf("loader enabled = true, want false")
+	if schedulerDefinition.Summary.Enabled {
+		t.Fatalf("scheduler enabled = true, want false")
 	}
 }
 

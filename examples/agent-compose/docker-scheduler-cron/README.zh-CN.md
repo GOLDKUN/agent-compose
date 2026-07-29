@@ -9,7 +9,7 @@ managed cron scheduler。
 
 - 从 `agent-compose.yml` 解析 cron trigger
 - 将 project 应用到 daemon
-- 创建 managed project scheduler 和 loader
+- 创建 managed project scheduler
 - 确认 scheduler 处于 enabled 状态
 - 使用 `agent-compose down` 禁用 scheduler
 
@@ -78,10 +78,10 @@ go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/a
 预期结果：
 
 - `config` 显示 trigger 为 `kind: cron`。
-- `up` 创建 `project_scheduler` 和 `loader` 资源。
+- `up` 为每个已配置 scheduler 创建一条 `scheduler` 资源。
 - `ps` 显示 scheduler 为 `enabled`。
 - `inspect project` 显示 `scheduler_count: 1` 和 `trigger_count: 1`。
-- `down` 禁用 managed scheduler 和 loader。
+- `down` 禁用 managed scheduler。
 
 ## 更容易观察触发的方法
 
@@ -140,8 +140,7 @@ created  project            docker-scheduler-cron                               
 created  project_revision   sha256:609b72e32d33488851496faefccbe2e3487cf2247e5218dd5cde9ae31d57e964  project-docker-scheduler-cron-034aaf526f91/1
 created  project_agent      reviewer                                                                 agent-reviewer-4bff2fb6372a
 created  agent_definition   reviewer                                                                 agent-reviewer-4bff2fb6372a
-created  project_scheduler  reviewer                                                                 scheduler-reviewer-default-ed0b5bed0daa
-created  loader             docker-scheduler-cron/reviewer scheduler                                 loader-reviewer-default-ed0b5bed0daa
+created  scheduler          reviewer                                                                 scheduler-reviewer-default-ed0b5bed0daa
 ```
 
 ### 3. Scheduler 状态
@@ -189,6 +188,5 @@ Status: down
 Failed session stops: 0
 
 ACTION   TYPE               NAME      ID                                       MESSAGE
-updated  project_scheduler  reviewer  scheduler-reviewer-default-ed0b5bed0daa  disabled by project down
-updated  loader             reviewer  loader-reviewer-default-ed0b5bed0daa     disabled by project down
+updated  scheduler          reviewer  scheduler-reviewer-default-ed0b5bed0daa  disabled by project down
 ```

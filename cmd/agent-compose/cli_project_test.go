@@ -250,7 +250,7 @@ agents:
 	if runCount != 0 {
 		t.Fatalf("daemon runner called %d times, want 0", runCount)
 	}
-	for _, want := range []string{"ID", "NAME", "TYPE", "ACTION", "created", "agent", "trigger", "hourly"} {
+	for _, want := range []string{"ID", "NAME", "TYPE", "ACTION", "created", "agent", "scheduler", "reviewer"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("up first stdout %q does not contain %q", stdout, want)
 		}
@@ -278,7 +278,7 @@ agents:
 	assertComposeUpChange(t, repeated.Changes, "unchanged", "project", "cli-up-demo")
 	assertComposeUpChange(t, repeated.Changes, "unchanged", "project_agent", "reviewer")
 	assertComposeUpChange(t, repeated.Changes, "unchanged", "agent_definition", "reviewer")
-	assertComposeUpChange(t, repeated.Changes, "unchanged", "project_scheduler", "reviewer")
+	assertComposeUpChange(t, repeated.Changes, "unchanged", "scheduler", "reviewer")
 
 	if err := os.WriteFile(composePath, []byte(`
 name: cli-up-demo
@@ -298,8 +298,8 @@ agents:
     scheduler:
       triggers:
         - name: hourly
-          cron: "0 * * * *"
-          prompt: review hourly
+          cron: "30 * * * *"
+          prompt: review half-hourly
 `), 0o600); err != nil {
 		t.Fatalf("update compose file: %v", err)
 	}
@@ -319,6 +319,16 @@ agents:
 	}
 	assertComposeUpChange(t, changed.Changes, "updated", "project_agent", "reviewer")
 	assertComposeUpChange(t, changed.Changes, "updated", "agent_definition", "reviewer")
+	assertComposeUpChange(t, changed.Changes, "updated", "scheduler", "reviewer")
+	schedulerChanges := 0
+	for _, change := range changed.Changes {
+		if change.ResourceType == "scheduler" {
+			schedulerChanges++
+		}
+	}
+	if schedulerChanges != 1 {
+		t.Fatalf("up changed scheduler changes = %#v, want exactly one scheduler/updated", changed.Changes)
+	}
 }
 
 func TestIntegrationCLIProjectCommandsMissingProjectAreFriendly(t *testing.T) {

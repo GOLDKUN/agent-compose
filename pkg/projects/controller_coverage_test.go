@@ -59,7 +59,7 @@ agents:
 	controller := NewController(ControllerDependencies{
 		Config:     &appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverDocker},
 		Store:      store,
-		Schedulers: controllerCoverageLoaderValidator{},
+		Schedulers: controllerCoverageSchedulerValidator{},
 	})
 	normalized := NormalizedProject{Spec: normalizedSpec, SpecHash: hash, SourcePath: "/repo/agent-compose.yaml"}
 	validation, err := controller.ValidateProject(ctx, normalized, nil)
@@ -209,10 +209,10 @@ func TestManagedSchedulerErrorHelpersCoverage(t *testing.T) {
 
 	var cleaned bool
 	cleanupFailedScheduler(context.Background(), ReconcileSchedulerOptions{
-		CleanupFailedScheduler: func(_ context.Context, scheduler domain.ProjectSchedulerRecord, loaderID string) {
-			cleaned = scheduler.SchedulerID == "scheduler-1" && loaderID == "loader-1"
+		CleanupFailedScheduler: func(_ context.Context, scheduler domain.ProjectSchedulerRecord, schedulerID string) {
+			cleaned = scheduler.SchedulerID == "scheduler-1" && schedulerID == "scheduler-1"
 		},
-	}, domain.ProjectSchedulerRecord{SchedulerID: "scheduler-1"}, "loader-1")
+	}, domain.ProjectSchedulerRecord{SchedulerID: "scheduler-1"}, "scheduler-1")
 	if !cleaned {
 		t.Fatal("cleanupFailedScheduler did not invoke callback")
 	}
@@ -223,8 +223,8 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	ctx := context.Background()
 	project := domain.ProjectRecord{ID: "project-1", Name: "Down Project"}
 	schedulerStore := &downCoverageStore{items: []domain.ProjectSchedulerRecord{
-		{ProjectID: project.ID, SchedulerID: "scheduler-disabled", AgentName: "idle", ID: "loader-idle", Enabled: false},
-		{ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Enabled: true},
+		{ProjectID: project.ID, SchedulerID: "scheduler-disabled", AgentName: "idle", ID: "scheduler-disabled", Enabled: false},
+		{ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "scheduler-1", Enabled: true},
 	}}
 	sessionStore := &downCoverageSessions{sessions: []*domain.Sandbox{
 		nil,
@@ -260,8 +260,7 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	if len(sessionStore.listOptions) != 1 || sessionStore.listOptions[0].ProjectID != "" || sessionStore.listOptions[0].VMStatus != domain.VMStatusRunning {
 		t.Fatalf("sandbox list options = %#v, want all running sandboxes without project prefilter", sessionStore.listOptions)
 	}
-	assertDownChange(t, changes, DownChangeUpdated, "project_scheduler", "scheduler-1")
-	assertDownChange(t, changes, DownChangeUpdated, "loader", "loader-1")
+	assertDownChange(t, changes, DownChangeUpdated, "scheduler", "scheduler-1")
 	assertDownChange(t, changes, DownChangeUnchanged, "sandbox", "session-fail")
 	assertDownChange(t, changes, DownChangeUpdated, "sandbox", "session-ok")
 	assertDownChange(t, changes, DownChangeUpdated, "sandbox", "session-legacy")
@@ -309,13 +308,13 @@ func TestE2EControllerValidateApplyDryRunAndResolveWorkflows(t *testing.T) {
 	TestDownProjectSandboxAndSchedulerWorkflows(t)
 }
 
-type controllerCoverageLoaderValidator struct{}
+type controllerCoverageSchedulerValidator struct{}
 
-func (controllerCoverageLoaderValidator) Validate(context.Context, string, string) (schedulers.SchedulerValidationResult, error) {
+func (controllerCoverageSchedulerValidator) Validate(context.Context, string, string) (schedulers.SchedulerValidationResult, error) {
 	return schedulers.SchedulerValidationResult{Triggers: []domain.SchedulerTrigger{{ID: "daily", Kind: domain.SchedulerTriggerKindCron, Enabled: true, SpecJSON: `{"expr":"0 0 * * *"}`}}}, nil
 }
 
-func (controllerCoverageLoaderValidator) Refresh(context.Context) error {
+func (controllerCoverageSchedulerValidator) Refresh(context.Context) error {
 	return nil
 }
 

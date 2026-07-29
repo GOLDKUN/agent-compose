@@ -131,7 +131,7 @@ func (d *Dispatcher) publishOne(ctx context.Context, item domain.TopicEventRecor
 		},
 	}); !ok {
 		d.clearInFlight(item.ID)
-		_ = d.configDB.ReleaseEventClaim(ctx, item.ID, claimID, domain.TopicEventDispatchRetrying, "loader bus is full", time.Now().UTC().Add(time.Second))
+		_ = d.configDB.ReleaseEventClaim(ctx, item.ID, claimID, domain.TopicEventDispatchRetrying, "scheduler bus is full", time.Now().UTC().Add(time.Second))
 		return false
 	}
 	return true

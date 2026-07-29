@@ -119,13 +119,13 @@ func (f *schedulerPruneE2EFixture) seedHistory(t *testing.T, dataRoot string) {
 		StartedAt: completedAt.Add(-time.Minute), CompletedAt: completedAt, DurationMs: 60_000,
 		ResultJSON: `{"ok":true}`, PayloadJSON: `{"source":"e2e"}`, ArtifactsDir: f.artifactDir,
 	}); err != nil {
-		t.Fatalf("create loader run: %v", err)
+		t.Fatalf("create scheduler run: %v", err)
 	}
 	if err := f.store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
-		ID: "loader-event-scheduler-prune-e2e", SchedulerID: f.scheduler.ID, RunID: f.runID, TriggerID: f.triggerID,
+		ID: "scheduler-event-scheduler-prune-e2e", SchedulerID: f.scheduler.ID, RunID: f.runID, TriggerID: f.triggerID,
 		Type: "scheduler.run.completed", Level: "info", Message: "scheduler prune e2e completed", CreatedAt: completedAt,
 	}); err != nil {
-		t.Fatalf("add loader event: %v", err)
+		t.Fatalf("add scheduler event: %v", err)
 	}
 	if _, err := f.store.CreateEvent(ctx, domain.TopicEventRecord{
 		ID: f.eventID, Topic: "scheduler.prune.e2e", Source: domain.TopicEventSourceSystem,
@@ -200,7 +200,7 @@ func (f schedulerPruneE2EFixture) assertPersisted(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := f.store.GetSchedulerRun(ctx, f.scheduler.ID, f.runID); err != nil {
-		t.Fatalf("loader run missing after dry-run: %v", err)
+		t.Fatalf("scheduler run missing after dry-run: %v", err)
 	}
 	if _, err := os.Stat(f.artifactDir); err != nil {
 		t.Fatalf("artifact missing after dry-run: %v", err)
@@ -212,7 +212,7 @@ func (f schedulerPruneE2EFixture) assertHistoryRemoved(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := f.store.GetSchedulerRun(ctx, f.scheduler.ID, f.runID); err == nil {
-		t.Fatal("loader run still exists after forced prune")
+		t.Fatal("scheduler run still exists after forced prune")
 	}
 	if _, err := os.Stat(f.artifactDir); !os.IsNotExist(err) {
 		t.Fatalf("artifact dir stat after forced prune=%v, want not exist", err)
@@ -242,7 +242,7 @@ func (f schedulerPruneE2EFixture) assertRelationCounts(t *testing.T, want int) {
 		SchedulerIDs: []string{f.scheduler.ID}, RunID: f.runID, Limit: 10,
 	})
 	if err != nil || len(events) != want {
-		t.Fatalf("loader events=%#v err=%v, want %d", events, err, want)
+		t.Fatalf("scheduler events=%#v err=%v, want %d", events, err, want)
 	}
 	deliveries, err := f.store.ListEventDeliveries(ctx, []string{f.eventID})
 	if err != nil || len(deliveries) != want {

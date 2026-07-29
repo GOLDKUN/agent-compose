@@ -7,10 +7,10 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-// The loader sandbox-spawning APIs (scheduler.agent, scheduler.shell,
+// The scheduler sandbox-spawning APIs (scheduler.agent, scheduler.shell,
 // scheduler.exec) accept a `jupyter: true` option that must reach the request
 // struct so SchedulerSandboxRunner.Ensure can enable Jupyter on the sandbox.
-func TestLoaderJupyterOptionThreadsThroughRequests(t *testing.T) {
+func TestSchedulerJupyterOptionThreadsThroughRequests(t *testing.T) {
 	run := func(t *testing.T, script string) *coverageEngineHost {
 		t.Helper()
 		host := &coverageEngineHost{state: map[string]string{}}

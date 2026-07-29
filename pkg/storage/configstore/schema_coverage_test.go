@@ -161,7 +161,7 @@ func testConfigStoreProjectCRUDCoverageWorkflows(t *testing.T) {
 		t.Fatalf("ListProjectAgents agents=%#v err=%v", agents, err)
 	}
 	scheduler, err := store.UpsertProjectScheduler(ctx, domain.ProjectSchedulerRecord{
-		ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "loader-1", Revision: thirdRevision.Revision, Enabled: true, TriggerCount: 2, SpecJSON: `{"id":"scheduler-1"}`,
+		ProjectID: project.ID, SchedulerID: "scheduler-1", AgentName: "worker", ID: "scheduler-1", Revision: thirdRevision.Revision, Enabled: true, TriggerCount: 2, SpecJSON: `{"id":"scheduler-1"}`,
 	})
 	if err != nil {
 		t.Fatalf("UpsertProjectScheduler returned error: %v", err)
@@ -410,7 +410,7 @@ func testConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 		t.Fatalf("ListDescendantEventIDs ids=%#v err=%v", ids, err)
 	}
 
-	if err := store.UpsertEventDelivery(ctx, domain.EventDelivery{EventID: event.ID, SchedulerID: "loader-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded}); err != nil {
+	if err := store.UpsertEventDelivery(ctx, domain.EventDelivery{EventID: event.ID, SchedulerID: "scheduler-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded}); err != nil {
 		t.Fatalf("UpsertEventDelivery returned error: %v", err)
 	}
 	if err := store.UpsertEventDelivery(ctx, domain.EventDelivery{}); err == nil {
@@ -419,7 +419,7 @@ func testConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 	if deliveries, err := store.ListEventDeliveries(ctx, []string{"", event.ID, event.ID}); err != nil || len(deliveries) != 1 {
 		t.Fatalf("ListEventDeliveries deliveries=%#v err=%v", deliveries, err)
 	}
-	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{EventID: event.ID, SandboxID: "sandbox-1", Relation: "created", SchedulerID: "loader-1", RunID: "run-1", TriggerID: "trigger-1", SchedulerEventID: "loader-event-1"}); err != nil {
+	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{EventID: event.ID, SandboxID: "sandbox-1", Relation: "created", SchedulerID: "scheduler-1", RunID: "run-1", TriggerID: "trigger-1", SchedulerEventID: "scheduler-event-1"}); err != nil {
 		t.Fatalf("AddEventSandboxLink returned error: %v", err)
 	}
 	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{}); err == nil {
@@ -509,64 +509,64 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 		t.Fatalf("ListWorkspaceConfigs items=%#v err=%v", items, err)
 	}
 
-	loader, err := upsertNativeTestScheduler(ctx, store, Scheduler{
-		Summary:  domain.SchedulerSummary{ID: "loader-1", Name: "Scheduler", Enabled: true, Runtime: domain.SchedulerRuntimeScheduler, DefaultAgent: "codex"},
+	scheduler, err := upsertNativeTestScheduler(ctx, store, Scheduler{
+		Summary:  domain.SchedulerSummary{ID: "scheduler-1", Name: "Scheduler", Enabled: true, Runtime: domain.SchedulerRuntimeScheduler, DefaultAgent: "codex"},
 		Script:   "function main(){}",
-		EnvItems: []domain.SandboxEnvVar{{Name: "LOADER", Value: "value"}},
+		EnvItems: []domain.SandboxEnvVar{{Name: "SCHEDULER", Value: "value"}},
 	})
 	if err != nil {
 		t.Fatalf("create native scheduler returned error: %v", err)
 	}
-	triggers, err := store.ReplaceSchedulerTriggers(ctx, loader.Summary.ID, []domain.SchedulerTrigger{
+	triggers, err := store.ReplaceSchedulerTriggers(ctx, scheduler.Summary.ID, []domain.SchedulerTrigger{
 		{ID: "interval", Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 1000, Enabled: true},
 		{ID: "event", Kind: domain.SchedulerTriggerKindEvent, Topic: "topic", Enabled: true},
 	})
 	if err != nil || len(triggers) != 2 {
 		t.Fatalf("ReplaceSchedulerTriggers triggers=%#v err=%v", triggers, err)
 	}
-	if err := store.SetSchedulerEnabled(ctx, loader.Summary.ID, false); err != nil {
+	if err := store.SetSchedulerEnabled(ctx, scheduler.Summary.ID, false); err != nil {
 		t.Fatalf("SetSchedulerEnabled false returned error: %v", err)
 	}
-	if err := store.SetSchedulerEnabled(ctx, loader.Summary.ID, true); err != nil {
+	if err := store.SetSchedulerEnabled(ctx, scheduler.Summary.ID, true); err != nil {
 		t.Fatalf("SetSchedulerEnabled true returned error: %v", err)
 	}
-	if err := store.SetSchedulerTriggerEnabled(ctx, loader.Summary.ID, "interval", false); err != nil {
+	if err := store.SetSchedulerTriggerEnabled(ctx, scheduler.Summary.ID, "interval", false); err != nil {
 		t.Fatalf("SetSchedulerTriggerEnabled returned error: %v", err)
 	}
-	if err := store.SetSchedulerTriggerEnabled(ctx, loader.Summary.ID, "interval", true); err != nil {
+	if err := store.SetSchedulerTriggerEnabled(ctx, scheduler.Summary.ID, "interval", true); err != nil {
 		t.Fatalf("SetSchedulerTriggerEnabled true returned error: %v", err)
 	}
-	if err := store.SetSchedulerTriggerEnabled(ctx, loader.Summary.ID, "missing", true); err == nil {
+	if err := store.SetSchedulerTriggerEnabled(ctx, scheduler.Summary.ID, "missing", true); err == nil {
 		t.Fatalf("SetSchedulerTriggerEnabled missing trigger returned nil error")
 	}
-	if err := store.MarkSchedulerTriggerFired(ctx, loader.Summary.ID, "interval", time.Now().UTC(), time.Now().UTC().Add(time.Hour)); err != nil {
+	if err := store.MarkSchedulerTriggerFired(ctx, scheduler.Summary.ID, "interval", time.Now().UTC(), time.Now().UTC().Add(time.Hour)); err != nil {
 		t.Fatalf("MarkSchedulerTriggerFired returned error: %v", err)
 	}
-	if err := store.SetSchedulerTriggerNextFireAt(ctx, loader.Summary.ID, "interval", time.Now().UTC().Add(2*time.Hour)); err != nil {
+	if err := store.SetSchedulerTriggerNextFireAt(ctx, scheduler.Summary.ID, "interval", time.Now().UTC().Add(2*time.Hour)); err != nil {
 		t.Fatalf("SetSchedulerTriggerNextFireAt returned error: %v", err)
 	}
-	if err := store.SetSchedulerTriggerNextFireAt(ctx, loader.Summary.ID, "missing", time.Now().UTC()); err == nil {
+	if err := store.SetSchedulerTriggerNextFireAt(ctx, scheduler.Summary.ID, "missing", time.Now().UTC()); err == nil {
 		t.Fatal("SetSchedulerTriggerNextFireAt missing trigger returned nil error")
 	}
 	if err := store.SetSchedulerTriggerNextFireAt(ctx, "", "interval", time.Now().UTC()); err == nil {
 		t.Fatal("SetSchedulerTriggerNextFireAt empty scheduler returned nil error")
 	}
-	if err := store.UpdateSchedulerLastError(ctx, loader.Summary.ID, "last error"); err != nil {
+	if err := store.UpdateSchedulerLastError(ctx, scheduler.Summary.ID, "last error"); err != nil {
 		t.Fatalf("UpdateSchedulerLastError returned error: %v", err)
 	}
 	if err := store.UpdateSchedulerLastError(ctx, "", "last error"); err == nil {
 		t.Fatalf("UpdateSchedulerLastError empty id returned nil error")
 	}
-	if loaded, err := store.GetScheduler(ctx, loader.Summary.ID); err != nil || loaded.Summary.ID != loader.Summary.ID {
+	if loaded, err := store.GetScheduler(ctx, scheduler.Summary.ID); err != nil || loaded.Summary.ID != scheduler.Summary.ID {
 		t.Fatalf("GetScheduler loaded=%#v err=%v", loaded, err)
 	}
 	if summaries, err := store.ListSchedulerSummaries(ctx); err != nil || len(summaries) < 1 {
 		t.Fatalf("ListSchedulerSummaries summaries=%#v err=%v", summaries, err)
 	}
-	if loaders, err := store.ListSchedulers(ctx); err != nil || len(loaders) < 1 {
-		t.Fatalf("ListSchedulers loaders=%#v err=%v", loaders, err)
+	if schedulers, err := store.ListSchedulers(ctx); err != nil || len(schedulers) < 1 {
+		t.Fatalf("ListSchedulers schedulers=%#v err=%v", schedulers, err)
 	}
-	run := domain.SchedulerRunSummary{ID: "run-1", SchedulerID: loader.Summary.ID, TriggerID: "event", TriggerKind: domain.SchedulerTriggerKindEvent, TriggerSource: "manual", Status: domain.SchedulerRunStatusRunning, StartedAt: time.Now().UTC(), PayloadJSON: `{}`}
+	run := domain.SchedulerRunSummary{ID: "run-1", SchedulerID: scheduler.Summary.ID, TriggerID: "event", TriggerKind: domain.SchedulerTriggerKindEvent, TriggerSource: "manual", Status: domain.SchedulerRunStatusRunning, StartedAt: time.Now().UTC(), PayloadJSON: `{}`}
 	if err := store.CreateSchedulerRun(ctx, run); err != nil {
 		t.Fatalf("CreateSchedulerRun returned error: %v", err)
 	}
@@ -580,16 +580,16 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if err := store.UpdateSchedulerRun(ctx, missingRun); err == nil {
 		t.Fatalf("UpdateSchedulerRun missing run returned nil error")
 	}
-	if _, err := store.GetSchedulerRun(ctx, loader.Summary.ID, run.ID); err != nil {
+	if _, err := store.GetSchedulerRun(ctx, scheduler.Summary.ID, run.ID); err != nil {
 		t.Fatalf("GetSchedulerRun returned error: %v", err)
 	}
-	if _, err := store.GetSchedulerRun(ctx, loader.Summary.ID, "missing"); err == nil {
+	if _, err := store.GetSchedulerRun(ctx, scheduler.Summary.ID, "missing"); err == nil {
 		t.Fatalf("GetSchedulerRun missing run returned nil error")
 	}
-	if runs, err := store.ListSchedulerRuns(ctx, loader.Summary.ID, 10); err != nil || len(runs) != 1 {
+	if runs, err := store.ListSchedulerRuns(ctx, scheduler.Summary.ID, 10); err != nil || len(runs) != 1 {
 		t.Fatalf("ListSchedulerRuns runs=%#v err=%v", runs, err)
 	}
-	if runs, err := store.ListSchedulerRuns(ctx, loader.Summary.ID, 0); err != nil || len(runs) != 1 {
+	if runs, err := store.ListSchedulerRuns(ctx, scheduler.Summary.ID, 0); err != nil || len(runs) != 1 {
 		t.Fatalf("ListSchedulerRuns default limit runs=%#v err=%v", runs, err)
 	}
 	if runs, err := store.ListRecentSchedulerRuns(ctx, 10); err != nil || len(runs) != 1 {
@@ -598,58 +598,58 @@ func testConfigStoreCRUDCoverageWorkflows(t *testing.T) {
 	if runs, err := store.ListRecentSchedulerRuns(ctx, 0); err != nil || len(runs) != 1 {
 		t.Fatalf("ListRecentSchedulerRuns default limit runs=%#v err=%v", runs, err)
 	}
-	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "event-1", SchedulerID: loader.Summary.ID, RunID: run.ID, Type: "scheduler.test", Level: "info", CreatedAt: time.Now().UTC()}); err != nil {
+	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "event-1", SchedulerID: scheduler.Summary.ID, RunID: run.ID, Type: "scheduler.test", Level: "info", CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("AddSchedulerEvent returned error: %v", err)
 	}
-	if events, err := store.ListSchedulerEvents(ctx, loader.Summary.ID, 10); err != nil || len(events) != 1 {
+	if events, err := store.ListSchedulerEvents(ctx, scheduler.Summary.ID, 10); err != nil || len(events) != 1 {
 		t.Fatalf("ListSchedulerEvents events=%#v err=%v", events, err)
 	}
-	if err := store.SetSchedulerState(ctx, loader.Summary.ID, "key", `{"ok":true}`); err != nil {
+	if err := store.SetSchedulerState(ctx, scheduler.Summary.ID, "key", `{"ok":true}`); err != nil {
 		t.Fatalf("SetSchedulerState returned error: %v", err)
 	}
-	if value, found, err := store.GetSchedulerState(ctx, loader.Summary.ID, "key"); err != nil || !found || value == "" {
+	if value, found, err := store.GetSchedulerState(ctx, scheduler.Summary.ID, "key"); err != nil || !found || value == "" {
 		t.Fatalf("GetSchedulerState value=%q found=%v err=%v", value, found, err)
 	}
-	if err := store.DeleteSchedulerState(ctx, loader.Summary.ID, "key"); err != nil {
+	if err := store.DeleteSchedulerState(ctx, scheduler.Summary.ID, "key"); err != nil {
 		t.Fatalf("DeleteSchedulerState returned error: %v", err)
 	}
-	if value, found, err := store.GetSchedulerState(ctx, loader.Summary.ID, "key"); err != nil || found || value != "" {
+	if value, found, err := store.GetSchedulerState(ctx, scheduler.Summary.ID, "key"); err != nil || found || value != "" {
 		t.Fatalf("GetSchedulerState deleted value=%q found=%v err=%v", value, found, err)
 	}
 	if err := store.SetSchedulerState(ctx, "", "key", `{}`); err == nil {
-		t.Fatalf("SetSchedulerState empty loader returned nil error")
+		t.Fatalf("SetSchedulerState empty scheduler returned nil error")
 	}
-	if err := store.UpsertSchedulerBinding(ctx, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, SandboxID: "sandbox-1"}); err != nil {
+	if err := store.UpsertSchedulerBinding(ctx, domain.SchedulerBinding{SchedulerID: scheduler.Summary.ID, SandboxID: "sandbox-1"}); err != nil {
 		t.Fatalf("UpsertSchedulerBinding returned error: %v", err)
 	}
-	if binding, found, err := store.GetSchedulerBinding(ctx, loader.Summary.ID, ""); err != nil || !found || binding.SandboxID != "sandbox-1" {
+	if binding, found, err := store.GetSchedulerBinding(ctx, scheduler.Summary.ID, ""); err != nil || !found || binding.SandboxID != "sandbox-1" {
 		t.Fatalf("GetSchedulerBinding binding=%#v found=%v err=%v", binding, found, err)
 	}
-	if err := store.UpsertSchedulerBinding(ctx, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-2", SandboxConfigHash: "sha256:config"}); err != nil {
+	if err := store.UpsertSchedulerBinding(ctx, domain.SchedulerBinding{SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-2", SandboxConfigHash: "sha256:config"}); err != nil {
 		t.Fatalf("UpsertSchedulerBinding trigger scope returned error: %v", err)
 	}
-	if binding, found, err := store.GetSchedulerBinding(ctx, loader.Summary.ID, "trigger-1"); err != nil || !found || binding.SandboxID != "sandbox-2" || binding.SandboxConfigHash != "sha256:config" {
+	if binding, found, err := store.GetSchedulerBinding(ctx, scheduler.Summary.ID, "trigger-1"); err != nil || !found || binding.SandboxID != "sandbox-2" || binding.SandboxConfigHash != "sha256:config" {
 		t.Fatalf("GetSchedulerBinding trigger binding=%#v found=%v err=%v", binding, found, err)
 	}
-	wrongExpected := domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "stale", SandboxConfigHash: "sha256:config"}
-	claimed, err := store.CompareAndSwapSchedulerBinding(ctx, &wrongExpected, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-3", SandboxConfigHash: "sha256:new"})
+	wrongExpected := domain.SchedulerBinding{SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-1", SandboxID: "stale", SandboxConfigHash: "sha256:config"}
+	claimed, err := store.CompareAndSwapSchedulerBinding(ctx, &wrongExpected, domain.SchedulerBinding{SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-3", SandboxConfigHash: "sha256:new"})
 	if err != nil || claimed {
 		t.Fatalf("CompareAndSwapSchedulerBinding stale expected claimed=%v err=%v, want false/nil", claimed, err)
 	}
-	current, found, err := store.GetSchedulerBinding(ctx, loader.Summary.ID, "trigger-1")
+	current, found, err := store.GetSchedulerBinding(ctx, scheduler.Summary.ID, "trigger-1")
 	if err != nil || !found {
 		t.Fatalf("GetSchedulerBinding before compare-and-swap current=%#v found=%v err=%v", current, found, err)
 	}
-	claimed, err = store.CompareAndSwapSchedulerBinding(ctx, &current, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-3", SandboxConfigHash: "sha256:new"})
+	claimed, err = store.CompareAndSwapSchedulerBinding(ctx, &current, domain.SchedulerBinding{SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-3", SandboxConfigHash: "sha256:new"})
 	if err != nil || !claimed {
 		t.Fatalf("CompareAndSwapSchedulerBinding current claimed=%v err=%v, want true/nil", claimed, err)
 	}
-	claimed, err = store.CompareAndSwapSchedulerBinding(ctx, nil, domain.SchedulerBinding{SchedulerID: loader.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-4", SandboxConfigHash: "sha256:other"})
+	claimed, err = store.CompareAndSwapSchedulerBinding(ctx, nil, domain.SchedulerBinding{SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-1", SandboxID: "sandbox-4", SandboxConfigHash: "sha256:other"})
 	if err != nil || claimed {
 		t.Fatalf("CompareAndSwapSchedulerBinding occupied insert claimed=%v err=%v, want false/nil", claimed, err)
 	}
-	if binding, found, err := store.GetSchedulerBinding(ctx, loader.Summary.ID, ""); err != nil || !found || binding.SandboxID != "sandbox-1" {
-		t.Fatalf("loader-level binding changed: binding=%#v found=%v err=%v", binding, found, err)
+	if binding, found, err := store.GetSchedulerBinding(ctx, scheduler.Summary.ID, ""); err != nil || !found || binding.SandboxID != "sandbox-1" {
+		t.Fatalf("scheduler-level binding changed: binding=%#v found=%v err=%v", binding, found, err)
 	}
 	if binding, found, err := store.GetSchedulerBinding(ctx, "missing", ""); err != nil || found || binding.SchedulerID != "" {
 		t.Fatalf("GetSchedulerBinding missing binding=%#v found=%v err=%v", binding, found, err)

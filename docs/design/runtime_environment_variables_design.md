@@ -134,7 +134,7 @@ Child processes inherit the runtime process's native `HOME`.
 
 Artifact dir is a command/request-scoped path:
 
-- Host-side cell and loader command artifacts live under
+- Host-side cell and scheduler command artifacts live under
   `<sandbox>/state/cells/...`.
 - The corresponding guest-side path is `/data/state/cells/...`.
 - Runtime JS can still receive artifact dir through request or CLI argument.

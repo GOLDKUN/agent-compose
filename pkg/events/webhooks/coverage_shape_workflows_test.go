@@ -306,7 +306,7 @@ func (s *webhookRouteStore) ListEventSandboxLinks(context.Context, []string) ([]
 }
 
 func (s *webhookRouteStore) ListEventDeliveries(context.Context, []string) ([]domain.EventDelivery, error) {
-	return []domain.EventDelivery{{EventID: "event-1", SchedulerID: "loader-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded}}, nil
+	return []domain.EventDelivery{{EventID: "event-1", SchedulerID: "scheduler-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded}}, nil
 }
 
 func (s *webhookRouteStore) ListWebhookSources(context.Context) ([]domain.WebhookSource, error) {

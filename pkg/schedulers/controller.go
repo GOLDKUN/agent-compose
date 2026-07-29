@@ -15,10 +15,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Compatibility contract: quoted loader terms in this package are external
-// identifiers, not internal domain terminology. Persisted event types,
-// notification reasons, errors, log keys, and payload keys must keep their
-// historical values for existing databases, clients, and integrations.
 type ControllerStore interface {
 	RunStore
 	SchedulerStore
@@ -204,7 +200,7 @@ func (c *Controller) Start() {
 	}
 	c.startOnce.Do(func() {
 		if err := c.Refresh(c.deps.RootCtx); err != nil {
-			slog.Warn("failed to refresh loaders on startup", "error", err)
+			slog.Warn("failed to refresh schedulers on startup", "error", err)
 		}
 		go c.scheduler.Loop()
 		go c.EventLoop()
@@ -248,9 +244,7 @@ func (c *Controller) SetSchedulerEnabled(ctx context.Context, schedulerID string
 	if err := c.Refresh(ctx); err != nil {
 		return domain.Scheduler{}, err
 	}
-	// Notification reasons are an existing pub/sub contract. Keep their
-	// historical loader spelling so current subscribers continue to match.
-	c.notify("loader_updated")
+	c.notify("scheduler_updated")
 	return c.deps.Store.GetScheduler(ctx, schedulerID)
 }
 
@@ -261,9 +255,7 @@ func (c *Controller) SetSchedulerTriggerEnabled(ctx context.Context, schedulerID
 	if err := c.Refresh(ctx); err != nil {
 		return domain.Scheduler{}, err
 	}
-	// See SetSchedulerEnabled: this reason is consumed outside the scheduler
-	// domain and remains stable for compatibility.
-	c.notify("loader_updated")
+	c.notify("scheduler_updated")
 	return c.deps.Store.GetScheduler(ctx, schedulerID)
 }
 
@@ -394,7 +386,7 @@ func (c *Controller) LoadSchedulerForRun(ctx context.Context, schedulerID, trigg
 		}
 	}
 	id := strings.TrimSpace(schedulerID) + "/" + triggerID
-	return domain.Scheduler{}, nil, domain.ResourceError(domain.ErrNotFound, "loader trigger", id, fmt.Sprintf("loader trigger %s not found", id), nil)
+	return domain.Scheduler{}, nil, domain.ResourceError(domain.ErrNotFound, "scheduler trigger", id, fmt.Sprintf("scheduler trigger %s not found", id), nil)
 }
 
 func (c *Controller) UpdateTriggerEventDelivery(ctx context.Context, run domain.SchedulerRunSummary) {
@@ -428,7 +420,7 @@ func (c *Controller) UpdateTriggerEventDelivery(ctx context.Context, run domain.
 		Status:      status,
 		Error:       errText,
 	}); err != nil {
-		slog.Warn("failed to update event delivery", "event_id", metadata.EventID, "loader_id", run.SchedulerID, "trigger_id", run.TriggerID, "run_id", run.ID, "error", err)
+		slog.Warn("failed to update event delivery", "event_id", metadata.EventID, "scheduler_id", run.SchedulerID, "trigger_id", run.TriggerID, "run_id", run.ID, "error", err)
 	}
 }
 

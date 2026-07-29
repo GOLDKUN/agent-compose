@@ -11,7 +11,7 @@ inside the guest, while `runtime/javascript` adapts provider-specific CLIs.
 Provider handling is split across four layers:
 
 - Go control plane: `NormalizeAgentKind` and `NormalizeAgentDefinition` in
-  `pkg/model/agent_model.go`, loader
+  `pkg/model/agent_model.go`, scheduler
   default-agent validation, and run/sandbox orchestration currently pass a
   provider string to the guest runtime.
 - JavaScript runtime: `runtime/javascript/src/provider.ts` normalizes provider
@@ -140,7 +140,7 @@ Agent execution should:
      `runProjectAgent`;
    - v1 agent definition sandbox compatibility paths set those fields when executing via
      `SendAgentMessage` / `SendAgentMessageStream`;
-   - loaders linked to an agent definition set those fields when using
+   - schedulers linked to an agent definition set those fields when using
      `scheduler.agent`;
    - the runtime CLI accepts `--model` and `--system-prompt-file`;
    - `PromptCommandOptions` and `RunnerOptions` include `model?: string` and
@@ -177,7 +177,7 @@ Agent execution should:
 
    - `normalizeAgentKind` maps aliases;
    - agent definition validation accepts `opencode`;
-   - loader/default-agent paths keep accepting normalized `opencode`;
+   - scheduler/default-agent paths keep accepting normalized `opencode`;
    - service API tests cover sending an `open-code` alias through to normalized
      `opencode`.
 

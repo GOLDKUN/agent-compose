@@ -269,7 +269,7 @@ func (s *eventStore) UpsertEventDelivery(ctx context.Context, delivery domain.Ev
 	delivery.Status = domain.NormalizeEventDeliveryStatus(delivery.Status)
 	delivery.Error = strings.TrimSpace(delivery.Error)
 	if delivery.EventID == "" || delivery.SchedulerID == "" || delivery.TriggerID == "" || delivery.Status == "" {
-		return fmt.Errorf("event delivery requires event, loader, trigger, and status")
+		return fmt.Errorf("event delivery requires event, scheduler, trigger, and status")
 	}
 	now := time.Now().UTC()
 	if delivery.CreatedAt.IsZero() {

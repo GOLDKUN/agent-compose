@@ -27,7 +27,6 @@ const (
 	ResourceAgent     ResourceKind = "agent"
 	ResourceScheduler ResourceKind = "scheduler"
 	ResourceTrigger   ResourceKind = "trigger"
-	ResourceLoader    ResourceKind = "loader"
 	ResourceRun       ResourceKind = "run"
 	ResourceSandbox   ResourceKind = "sandbox"
 	ResourceCache     ResourceKind = "cache"

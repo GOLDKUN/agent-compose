@@ -96,6 +96,8 @@ func composeDisplayResourceType(resourceType string) string {
 	switch resourceType {
 	case "agent_definition", "project_agent":
 		return "agent"
+	// These values are accepted only when rendering pre-cutover responses.
+	// Current project reconciliation emits one native scheduler change.
 	case "project_scheduler":
 		return "trigger"
 	case "loader":

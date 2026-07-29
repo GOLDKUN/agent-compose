@@ -32,7 +32,7 @@ func TestE2ECLISchedulerPublicContractWorkflow(t *testing.T) {
 	TestIntegrationCLISchedulerRunsLogsAndInspectResources(t)
 	TestIntegrationCLISchedulerTriggerUsesSchedulerRunAPI(t)
 	TestIntegrationCLISchedulerInspectDeclarativeTriggerYAML(t)
-	TestIntegrationCLISchedulerInspectLoaderRegisteredTrigger(t)
+	TestIntegrationCLISchedulerInspectSchedulerRegisteredTrigger(t)
 	TestSchedulerPruneCommandFlags(t)
 	TestSchedulerPruneRejectsArgumentsAndInvalidFilters(t)
 	TestIntegrationCLISchedulerPruneMapsFiltersAndJSONStats(t)
@@ -249,8 +249,7 @@ func testComposeProjectPureHelpers(t *testing.T) {
 	}
 	changes := []*agentcomposev2.ProjectChange{
 		{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED, ResourceType: "agent", ResourceId: "agent-1", Name: "worker"},
-		{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UPDATED, ResourceType: "project_scheduler", ResourceId: "scheduler-1", Name: "worker"},
-		{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UPDATED, ResourceType: "loader", ResourceId: "loader-1", Name: "worker scheduler"},
+		{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UPDATED, ResourceType: "scheduler", ResourceId: "scheduler-1", Name: "worker"},
 		{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_REMOVED, ResourceType: "sandbox", ResourceId: "session-1", Name: "old"},
 		{Action: agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UNCHANGED, ResourceType: "sandbox", ResourceId: "session-2", Message: "stop failed"},
 	}
@@ -277,7 +276,7 @@ func testComposeProjectPureHelpers(t *testing.T) {
 	if err := writeComposeUpText(&out, composeDisplayChangesFromProjectChanges(upResp.GetChanges(), displaySpec)); err != nil {
 		t.Fatalf("writeComposeUpText returned error: %v", err)
 	}
-	if !strings.Contains(out.String(), "ACTION") || !strings.Contains(out.String(), "timer") || strings.Contains(out.String(), "loader") {
+	if !strings.Contains(out.String(), "ACTION") || !strings.Contains(out.String(), "scheduler") || strings.Contains(out.String(), "loader") {
 		t.Fatalf("compose up text = %q", out.String())
 	}
 	out.Reset()
@@ -303,7 +302,7 @@ func testComposeProjectPureHelpers(t *testing.T) {
 	if err := writeComposeDownText(&out, composeDownDisplayChanges(downResp, displaySpec)); err != nil {
 		t.Fatalf("writeComposeDownText returned error: %v", err)
 	}
-	if !strings.Contains(out.String(), "MESSAGE") || !strings.Contains(out.String(), "timer") || !strings.Contains(out.String(), "stop failed") || strings.Contains(out.String(), "loader") {
+	if !strings.Contains(out.String(), "MESSAGE") || !strings.Contains(out.String(), "scheduler") || !strings.Contains(out.String(), "stop failed") || strings.Contains(out.String(), "loader") {
 		t.Fatalf("compose down text = %q", out.String())
 	}
 	sharedTriggerSpec := &compose.NormalizedProjectSpec{Agents: []compose.NormalizedAgentSpec{
