@@ -20,6 +20,8 @@ if grep -Eq '^[[:space:]]*(push|pull_request|schedule):' <<<"$workflow_source"; 
 fi
 grep -Eq '^[[:space:]]*contents:[[:space:]]+write[[:space:]]*$' <<<"$workflow_source" || fail 'contents write permission is missing'
 grep -Eq '^[[:space:]]*release_tag:' <<<"$workflow_source" || fail 'release tag input is missing'
+grep -Fq 'go install github.com/bufbuild/buf/cmd/buf@v1.68.1' <<<"$workflow_source" || fail 'pinned Buf installation is missing'
+grep -Fq 'run: buf generate' <<<"$workflow_source" || fail 'protobuf source generation is missing'
 grep -Fq 'go test ./cmd/agent-compose-migrate/...' <<<"$workflow_source" || fail 'focused migrator tests are missing'
 grep -Fq './scripts/build-v2-storage-migrator-binaries.sh ./upload-v2-storage-migrator' <<<"$workflow_source" || fail 'shared binary builder is not used'
 grep -Fq 'gh release upload' <<<"$workflow_source" || fail 'existing release upload is missing'

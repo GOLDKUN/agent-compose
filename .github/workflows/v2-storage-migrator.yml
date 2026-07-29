@@ -27,6 +27,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
+      - name: Generate Protobuf sources
+        run: buf generate
       - name: Test V2 storage migrator
         run: go test ./cmd/agent-compose-migrate/...
       - name: Build linux/amd64 and linux/arm64 assets
