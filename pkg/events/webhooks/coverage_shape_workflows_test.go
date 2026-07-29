@@ -148,6 +148,18 @@ func TestWebhookHTTPRoutesCoverageWorkflow(t *testing.T) {
 			t.Fatalf("GET %s status=%d body=%s", target, rec.Code, rec.Body.String())
 		}
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/events?topic=webhook.github.push&offset=3&limit=7", nil)
+	rec = httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || store.lastFilter.Offset != 3 || store.lastFilter.Limit != 7 || !strings.Contains(rec.Body.String(), `"total":1`) {
+		t.Fatalf("paginated events status=%d filter=%#v body=%s", rec.Code, store.lastFilter, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/events?topic=webhook.github.push&offset=1&after_sequence=1", nil)
+	rec = httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("mixed event pagination status=%d body=%s", rec.Code, rec.Body.String())
+	}
 	req = httptest.NewRequest(http.MethodPut, "/api/webhook-sources/github", strings.NewReader(`{"name":"GitHub","enabled":true,"provider":"github","topic_prefix":"webhook.github.","token":"new-token"}`))
 	rec = httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
@@ -255,6 +267,7 @@ type webhookRouteStore struct {
 	events     map[string]domain.TopicEventRecord
 	sources    map[string]domain.WebhookSource
 	existingID string
+	lastFilter domain.TopicEventFilter
 }
 
 func newWebhookRouteStore() *webhookRouteStore {
@@ -289,12 +302,13 @@ func (s *webhookRouteStore) GetEvent(_ context.Context, eventID string) (domain.
 	return event, nil
 }
 
-func (s *webhookRouteStore) ListEvents(context.Context, domain.TopicEventFilter) ([]domain.TopicEventRecord, error) {
+func (s *webhookRouteStore) ListEvents(_ context.Context, filter domain.TopicEventFilter) ([]domain.TopicEventRecord, int, error) {
+	s.lastFilter = filter
 	items := make([]domain.TopicEventRecord, 0, len(s.events))
 	for _, event := range s.events {
 		items = append(items, event)
 	}
-	return items, nil
+	return items, len(items), nil
 }
 
 func (s *webhookRouteStore) ListDescendantEventIDs(context.Context, string, int) ([]string, error) {

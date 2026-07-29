@@ -108,17 +108,20 @@ the URL.
 
 ```http
 GET /api/events/:event_id
-GET /api/events?correlation_id=some_system:object:123
+GET /api/events?correlation_id=some_system:object:123&offset=0&limit=100
 GET /api/events?topic=runtime.some_adapter.requested&after_sequence=123&limit=100
 ```
 
 Query constraints:
 
 - `event_id` query returns one event.
-- `correlation_id` query returns the event stream for the same business flow,
-  sorted by `sequence` ascending.
+- Normal list queries explicitly use `offset` and `limit`, return `total`, and sort by
+  `sequence` descending so the newest events are returned first.
 - `topic + after_sequence` can be used by external adapters to poll derived
-  events.
+  events in ascending sequence order. This compatibility mode returns
+  `next_after_sequence` and cannot be combined with `offset`. For compatibility,
+  omitting both parameters also uses ascending sequence order and returns
+  `next_after_sequence`.
 - `limit` defaults to 100 and is capped at 500.
 - List queries must contain at least `correlation_id` or `topic`.
 

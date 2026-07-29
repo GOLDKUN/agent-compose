@@ -61,9 +61,9 @@ func (s *eventStore) ListPendingEvents(ctx context.Context, limit int) ([]domain
 	return scanTopicEvents(rows)
 }
 
-func (s *eventStore) ListEvents(ctx context.Context, filter domain.TopicEventFilter) ([]domain.TopicEventRecord, error) {
+func (s *eventStore) ListEvents(ctx context.Context, filter domain.TopicEventFilter) ([]domain.TopicEventRecord, int, error) {
 	if strings.TrimSpace(filter.Topic) == "" && strings.TrimSpace(filter.CorrelationID) == "" {
-		return nil, fmt.Errorf("topic or correlation id is required")
+		return nil, 0, fmt.Errorf("topic or correlation id is required")
 	}
 	limit := filter.Limit
 	if limit <= 0 {
@@ -76,7 +76,7 @@ func (s *eventStore) ListEvents(ctx context.Context, filter domain.TopicEventFil
 	args := make([]any, 0, 5)
 	if topic := strings.TrimSpace(filter.Topic); topic != "" {
 		if err := domain.ValidateTopicEventName(topic); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		clauses = append(clauses, "topic = ?")
 		args = append(args, topic)
@@ -93,14 +93,30 @@ func (s *eventStore) ListEvents(ctx context.Context, filter domain.TopicEventFil
 		clauses = append(clauses, "dispatch_status = ?")
 		args = append(args, status)
 	}
-	args = append(args, limit)
-	query := selectTopicEventSQL() + ` WHERE ` + strings.Join(clauses, " AND ") + ` ORDER BY sequence ASC LIMIT ?`
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	where := ` WHERE ` + strings.Join(clauses, " AND ")
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event`+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count events: %w", err)
+	}
+	order := ` ORDER BY sequence DESC`
+	pageArgs := append([]any(nil), args...)
+	if filter.AfterSequence > 0 || filter.SequenceAsc {
+		order = ` ORDER BY sequence ASC`
+		pageArgs = append(pageArgs, limit)
+	} else {
+		pageArgs = append(pageArgs, limit, max(filter.Offset, 0))
+	}
+	query := selectTopicEventSQL() + where + order + ` LIMIT ?`
+	if filter.AfterSequence <= 0 && !filter.SequenceAsc {
+		query += ` OFFSET ?`
+	}
+	rows, err := s.db.QueryContext(ctx, query, pageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("query events: %w", err)
+		return nil, 0, fmt.Errorf("query events: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	return scanTopicEvents(rows)
+	items, err := scanTopicEvents(rows)
+	return items, total, err
 }
 
 func (s *eventStore) MarkEventPublished(ctx context.Context, eventID, claimID string, dispatchedAt time.Time) error {
