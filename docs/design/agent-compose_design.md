@@ -938,6 +938,13 @@ Main JavaScript APIs:
 - `scheduler.on(...)`
 - `scheduler.cron(...)`
 
+Cron registration accepts an explicit IANA timezone. When it is omitted, the
+scheduler uses the daemon process's local timezone (`TZ`, then
+`/etc/localtime`); persisted fire timestamps remain UTC. Declarative YAML cron
+triggers expose the same optional `timezone` override. The deployment image
+contains `tzdata`, and the base Docker Compose topology mounts the Linux host's
+`/etc/localtime` read-only.
+
 `scheduler.agent` and `scheduler.llm` support `outputSchema` / `schema`. Passing
 a `scheduler.z` schema generates JSON Schema and validates the returned value
 locally. Passing plain JSON Schema performs JSON parsing.

@@ -538,6 +538,7 @@ func TriggerSpecToProto(trigger compose.NormalizedTriggerSpec) *agentcomposev2.T
 		Kind:          triggerKindToProto(trigger.Kind),
 		Prompt:        trigger.Prompt,
 		SandboxPolicy: schedulerSandboxPolicyToProto(trigger.SandboxPolicy),
+		Timezone:      trigger.Timezone,
 	}
 	switch trigger.Kind {
 	case "cron":
@@ -976,6 +977,9 @@ func TriggerYAMLShape(trigger *agentcomposev2.TriggerSpec) map[string]any {
 	}
 	if trigger.GetPrompt() != "" {
 		raw["prompt"] = trigger.GetPrompt()
+	}
+	if strings.TrimSpace(trigger.GetTimezone()) != "" {
+		raw["timezone"] = trigger.GetTimezone()
 	}
 	if policy := schedulerSandboxPolicyText(trigger.GetSandboxPolicy()); policy != "" {
 		raw["sandbox_policy"] = policy

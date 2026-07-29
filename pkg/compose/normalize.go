@@ -161,6 +161,7 @@ type NormalizedTriggerSpec struct {
 	Name          string            `yaml:"name,omitempty" json:"name,omitempty"`
 	Kind          string            `yaml:"kind" json:"kind"`
 	Cron          string            `yaml:"cron,omitempty" json:"cron,omitempty"`
+	Timezone      string            `yaml:"timezone,omitempty" json:"timezone,omitempty"`
 	Interval      string            `yaml:"interval,omitempty" json:"interval,omitempty"`
 	Timeout       string            `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 	Event         *EventTriggerSpec `yaml:"event,omitempty" json:"event,omitempty"`
@@ -1268,17 +1269,35 @@ func normalizeTriggerSpec(path string, trigger TriggerSpec) (NormalizedTriggerSp
 		if _, err := composeCronParser.Parse(normalized.Cron); err != nil {
 			return NormalizedTriggerSpec{}, &ValidationError{Path: path + ".cron", Message: fmt.Sprintf("invalid cron expression: %v", err)}
 		}
+		normalized.Timezone = strings.TrimSpace(trigger.Timezone)
+		if strings.EqualFold(normalized.Timezone, "local") {
+			normalized.Timezone = "Local"
+		}
+		if normalized.Timezone != "" {
+			if _, err := time.LoadLocation(normalized.Timezone); err != nil {
+				return NormalizedTriggerSpec{}, &ValidationError{Path: path + ".timezone", Message: fmt.Sprintf("invalid timezone: %v", err)}
+			}
+		}
 	case "interval":
+		if strings.TrimSpace(trigger.Timezone) != "" {
+			return NormalizedTriggerSpec{}, &ValidationError{Path: path + ".timezone", Message: "timezone is only supported for cron triggers"}
+		}
 		normalized.Interval = strings.TrimSpace(trigger.Interval)
 		if err := validatePositiveDuration(path+".interval", normalized.Interval); err != nil {
 			return NormalizedTriggerSpec{}, err
 		}
 	case "timeout":
+		if strings.TrimSpace(trigger.Timezone) != "" {
+			return NormalizedTriggerSpec{}, &ValidationError{Path: path + ".timezone", Message: "timezone is only supported for cron triggers"}
+		}
 		normalized.Timeout = strings.TrimSpace(trigger.Timeout)
 		if err := validatePositiveDuration(path+".timeout", normalized.Timeout); err != nil {
 			return NormalizedTriggerSpec{}, err
 		}
 	case "event":
+		if strings.TrimSpace(trigger.Timezone) != "" {
+			return NormalizedTriggerSpec{}, &ValidationError{Path: path + ".timezone", Message: "timezone is only supported for cron triggers"}
+		}
 		if trigger.Event == nil {
 			return NormalizedTriggerSpec{}, &ValidationError{Path: path + ".event.topic", Message: "event trigger topic is required"}
 		}

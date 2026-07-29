@@ -14,6 +14,7 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 	triggers, script, err := ProjectSchedulerTriggersAndScript("project-1", "worker", "nightly", &compose.NormalizedSchedulerSpec{
 		Triggers: []compose.NormalizedTriggerSpec{
 			{Name: "cron-main", Kind: "cron", Cron: "*/5 * * * *", Prompt: "Run cron"},
+			{Name: "cron-shanghai", Kind: "cron", Cron: "0 9 * * *", Timezone: "Asia/Shanghai", Prompt: "Run local cron"},
 			{Name: "interval-main", Kind: "interval", Interval: "2s"},
 			{Name: "timeout-main", Kind: "timeout", Timeout: "3s"},
 			{Name: "event-main", Kind: "event", Event: &compose.EventTriggerSpec{Topic: "webhook.github.push"}, Prompt: `quote "prompt"`},
@@ -22,11 +23,14 @@ func TestManagedLoaderTriggerRegistrationCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectSchedulerTriggersAndScript returned error: %v", err)
 	}
-	if len(triggers) != 4 {
+	if len(triggers) != 5 {
 		t.Fatalf("triggers = %#v", triggers)
 	}
-	if triggers[0].Kind != domain.SchedulerTriggerKindCron || triggers[1].IntervalMs != 2000 || triggers[2].Kind != domain.SchedulerTriggerKindTimeout || triggers[3].Topic != "webhook.github.push" {
+	if triggers[0].Kind != domain.SchedulerTriggerKindCron || !strings.Contains(triggers[0].SpecJSON, `"timezone":"Local"`) || !strings.Contains(triggers[1].SpecJSON, `"timezone":"Asia/Shanghai"`) || triggers[2].IntervalMs != 2000 || triggers[3].Kind != domain.SchedulerTriggerKindTimeout || triggers[4].Topic != "webhook.github.push" {
 		t.Fatalf("trigger shapes = %#v", triggers)
+	}
+	if !strings.Contains(script, `{ timezone: "Asia/Shanghai" }`) {
+		t.Fatalf("script missing explicit cron timezone: %s", script)
 	}
 	for _, want := range []string{"scheduler.cron(", "scheduler.interval(", "scheduler.timeout(", "scheduler.on(", `quote \"prompt\"`} {
 		if !strings.Contains(script, want) {

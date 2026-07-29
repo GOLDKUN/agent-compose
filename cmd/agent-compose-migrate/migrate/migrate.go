@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	databaseName      = "data.db"
-	journalName       = ".agent-compose-migrate.json"
-	inPlaceBackupName = ".agent-compose-migrate-backup"
+	databaseName         = "data.db"
+	journalName          = ".agent-compose-migrate.json"
+	inPlaceBackupName    = ".agent-compose-migrate-backup"
+	currentSchemaVersion = 8
 )
 
 var knownMigrationChecksums = map[int64]string{
@@ -32,6 +33,7 @@ var knownMigrationChecksums = map[int64]string{
 	5: "e43cc1ffdfcd45e5e81a8fc098a6e77299e6e437f8c447eb0db49443a3bd29d2",
 	6: "92da2ea1c85e7d1321ca1e4260370a3d12057219005a83808529dbdd8d25299a",
 	7: "a8cb740e25992d3f3121bcfbff07c67cff699e8625d281edf60c0e76f91ce9ba",
+	8: "4569a4d7f82de70d3a2545dcdff07e0929e55daffaedf13fd6f2b8a8bcbf1d3e",
 }
 
 var ErrReported = errors.New("migration failure is included in the report")
@@ -110,7 +112,7 @@ func Run(ctx context.Context, options Options) (Report, error) {
 		return fail(err)
 	}
 	report.SourceVersion = version
-	if version < 0 || version > 7 {
+	if version < 0 || version > currentSchemaVersion {
 		return fail(fmt.Errorf("source database has an unknown migration version"))
 	}
 	if version == 0 {

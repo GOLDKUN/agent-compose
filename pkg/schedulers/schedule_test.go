@@ -3,10 +3,40 @@ package schedulers_test
 import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestCronDefaultsToProcessLocalTimezone(t *testing.T) {
+	if os.Getenv("AGENT_COMPOSE_CRON_LOCAL_TEST") == "1" {
+		now := time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC)
+		specJSON, err := schedulers.SchedulerCronSpecJSON("0 9 * * *", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, err := schedulers.SchedulerTriggerNextFireAt(now, domain.SchedulerTrigger{
+			Kind:     domain.SchedulerTriggerKindCron,
+			SpecJSON: specJSON,
+		}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := time.Date(2026, 6, 2, 1, 0, 0, 0, time.UTC)
+		if !next.Equal(want) {
+			t.Fatalf("next local cron fire = %s, want %s", next, want)
+		}
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestCronDefaultsToProcessLocalTimezone$")
+	cmd.Env = append(os.Environ(), "AGENT_COMPOSE_CRON_LOCAL_TEST=1", "TZ=Asia/Shanghai")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("local timezone subprocess failed: %v\n%s", err, output)
+	}
+}
 
 func TestLoaderScheduleModelWorkflows(t *testing.T) {
 	testLoaderScheduleModelWorkflows(t)
@@ -59,8 +89,12 @@ func testLoaderScheduleModelWorkflows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalizeSchedulerCronSpecJSON returned error: %v", err)
 	}
-	if !strings.Contains(normalized, `"timezone":"UTC"`) {
+	if !strings.Contains(normalized, `"timezone":"Local"`) {
 		t.Fatalf("normalized cron spec = %q", normalized)
+	}
+	explicitUTC, err := schedulers.SchedulerCronSpecJSON("0 9 * * *", "UTC")
+	if err != nil || !strings.Contains(explicitUTC, `"timezone":"UTC"`) {
+		t.Fatalf("explicit UTC cron spec = %q, err=%v", explicitUTC, err)
 	}
 	if _, err := schedulers.NormalizeSchedulerCronSpecJSON(`{"expr":""}`); err == nil {
 		t.Fatalf("empty cron expression returned nil error")

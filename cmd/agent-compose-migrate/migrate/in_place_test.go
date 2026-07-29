@@ -91,7 +91,7 @@ func TestIntegrationRunMigratesDataRootInPlaceWithoutCopyingSandboxData(t *testi
 	}
 
 	report, err := Run(context.Background(), Options{Source: root, Target: root})
-	if err != nil || report.Stage != "complete" || report.TargetVersion != 7 || !report.InPlace || report.CopiedBytes != 0 {
+	if err != nil || report.Stage != "complete" || report.TargetVersion != currentSchemaVersion || !report.InPlace || report.CopiedBytes != 0 {
 		t.Fatalf("in-place migration report=%+v err=%v", report, err)
 	}
 	if report.SourceFingerprint != "" {
@@ -164,7 +164,7 @@ func TestIntegrationRunMigratesDataRootInPlaceWithoutCopyingSandboxData(t *testi
 	summary["vm_status"] = "RUNNING"
 	writeMigrationJSON(t, filepath.Join(root, "sandboxes", sandboxID, "metadata.json"), metadata)
 	repeated, err := Run(context.Background(), Options{Source: root, Target: root})
-	if err != nil || repeated.Stage != "complete" || repeated.TargetVersion != 7 {
+	if err != nil || repeated.Stage != "complete" || repeated.TargetVersion != currentSchemaVersion {
 		t.Fatalf("repeated in-place migration report=%+v err=%v", repeated, err)
 	}
 }
@@ -250,7 +250,7 @@ func TestIntegrationRunMigratesUnversionedAndMixedStandaloneDataInPlace(t *testi
 			}
 
 			report, err := Run(context.Background(), Options{Source: root, Target: root})
-			if err != nil || report.Stage != "complete" || report.TargetVersion != 7 {
+			if err != nil || report.Stage != "complete" || report.TargetVersion != currentSchemaVersion {
 				t.Fatalf("mixed in-place migration report=%+v err=%v", report, err)
 			}
 			targetDB, err := openReadOnly(filepath.Join(root, databaseName))
@@ -415,7 +415,7 @@ func TestIntegrationRunResumesInPlaceAfterOriginalDatabaseMove(t *testing.T) {
 	}
 
 	report, err := Run(ctx, Options{Source: root, Target: root})
-	if err != nil || report.Stage != "complete" || report.TargetVersion != 7 {
+	if err != nil || report.Stage != "complete" || report.TargetVersion != currentSchemaVersion {
 		t.Fatalf("resumed switch report=%+v err=%v", report, err)
 	}
 	if _, err := os.Stat(filepath.Join(root, databaseName)); err != nil {

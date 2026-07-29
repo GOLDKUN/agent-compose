@@ -41,7 +41,7 @@ func TestRunResumesFileCopyFromPersistedSchedulerMappings(t *testing.T) {
 			}
 
 			report, err := Run(context.Background(), Options{Source: source, Target: target})
-			if err != nil || report.Stage != "complete" || report.TargetVersion != 7 {
+			if err != nil || report.Stage != "complete" || report.TargetVersion != currentSchemaVersion {
 				t.Fatalf("resumed migration report=%+v err=%v", report, err)
 			}
 			if len(report.Warnings) != 1 || report.Warnings[0] != "preserved warning" {
@@ -80,7 +80,7 @@ func TestRunResumesDatabaseStageAfterTargetUpgrade(t *testing.T) {
 	}
 
 	report, err := Run(context.Background(), Options{Source: source, Target: target})
-	if err != nil || report.Stage != "complete" || report.TargetVersion != 7 {
+	if err != nil || report.Stage != "complete" || report.TargetVersion != currentSchemaVersion {
 		t.Fatalf("database-stage resume report=%+v err=%v", report, err)
 	}
 	if data, err := os.ReadFile(copiedArtifact); err != nil || string(data) != "preserved" {

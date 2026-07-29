@@ -140,6 +140,10 @@ The base topology mounts the Docker socket without privilege or KVM. Use the
 persisted KVM overlay only on a prepared host when selecting BoxLite or
 Microsandbox.
 
+It also mounts the Linux host's `/etc/localtime` read-only so daemon-local cron
+schedules follow the host timezone. Set `TZ` in `.env` only when the daemon
+should intentionally use another timezone, then restart the daemon.
+
 ## Release model
 
 The fixed `installer-latest` prerelease contains:

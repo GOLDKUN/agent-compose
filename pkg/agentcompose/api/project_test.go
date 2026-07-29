@@ -331,6 +331,7 @@ agents:
       triggers:
         - name: hourly
           cron: "0 * * * *"
+          timezone: Asia/Shanghai
           prompt: Review hourly changes
         - name: frequent
           interval: 5m
@@ -361,6 +362,9 @@ agents:
 	if got := wireSpec.GetAgents()[0].GetScheduler().GetConcurrencyPolicy(); got != agentcomposev2.SchedulerConcurrencyPolicy_SCHEDULER_CONCURRENCY_POLICY_PARALLEL {
 		t.Fatalf("protobuf concurrency policy = %q, want parallel", got)
 	}
+	if got := wireSpec.GetAgents()[0].GetScheduler().GetTriggers()[0].GetTimezone(); got != "Asia/Shanghai" {
+		t.Fatalf("protobuf cron timezone = %q", got)
+	}
 	shape, issues := ProjectSpecYAMLShape(wireSpec)
 	if len(issues) != 0 {
 		t.Fatalf("convert protobuf project to YAML shape: %#v", issues)
@@ -369,8 +373,8 @@ agents:
 	if err != nil {
 		t.Fatalf("marshal reconstructed YAML: %v", err)
 	}
-	if !strings.Contains(string(data), "concurrency_policy: parallel") {
-		t.Fatalf("reconstructed YAML lost concurrency policy:\n%s", data)
+	if !strings.Contains(string(data), "concurrency_policy: parallel") || !strings.Contains(string(data), "timezone: Asia/Shanghai") {
+		t.Fatalf("reconstructed YAML lost scheduler fields:\n%s", data)
 	}
 
 	reparsed, err := compose.Parse(data)
@@ -392,6 +396,9 @@ agents:
 		if scheduler.Triggers[index].Kind != kind {
 			t.Fatalf("round-tripped trigger %d = %#v, want kind %q", index, scheduler.Triggers[index], kind)
 		}
+	}
+	if scheduler.Triggers[0].Timezone != "Asia/Shanghai" {
+		t.Fatalf("round-tripped cron timezone = %q", scheduler.Triggers[0].Timezone)
 	}
 }
 

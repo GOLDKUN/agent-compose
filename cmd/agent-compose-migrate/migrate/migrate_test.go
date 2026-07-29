@@ -40,7 +40,7 @@ func TestRunCopiesLatestDataRootAndResumes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v (%+v)", err, report)
 	}
-	if report.TargetVersion != 7 || report.CopiedFiles != 2 || report.Stage != "complete" || report.SourceFingerprint == "" {
+	if report.TargetVersion != currentSchemaVersion || report.CopiedFiles != 2 || report.Stage != "complete" || report.SourceFingerprint == "" {
 		t.Fatalf("report = %+v", report)
 	}
 	data, err := os.ReadFile(filepath.Join(target, "sandboxes", "sandbox-1", "artifact.txt"))
@@ -431,7 +431,7 @@ func TestRunConvertsStandaloneVersionedAndUnversionedSources(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run returned error: %v (%+v)", err, report)
 			}
-			if report.TargetVersion != 7 || len(report.Warnings) != 1 {
+			if report.TargetVersion != currentSchemaVersion || len(report.Warnings) != 1 {
 				t.Fatalf("report = %+v", report)
 			}
 			targetDatabase, err := sqlite.Open(filepath.Join(target, databaseName), 0)
@@ -687,7 +687,7 @@ func TestRunAppendsProjectionRevisionAndBackfillsProvableSchedulerRun(t *testing
 	if err != nil {
 		t.Fatalf("Run returned error: %v (%+v)", err, report)
 	}
-	if len(report.Warnings) != 1 || report.TargetVersion != 7 {
+	if len(report.Warnings) != 1 || report.TargetVersion != currentSchemaVersion {
 		t.Fatalf("report = %+v", report)
 	}
 	targetDB, err := sql.Open("sqlite", filepath.Join(target, databaseName))

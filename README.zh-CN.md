@@ -340,6 +340,8 @@ docker compose --profile with-ui up -d   # 同时启动 Web UI
 
 以上命令默认使用不含 KVM 权限的基础 Compose。需要在 Linux KVM 主机显式启用 BoxLite/Microsandbox 时，把 `COMPOSE_FILE=docker-compose.yml:docker-compose.kvm.yml` 写入部署目录的 `.env`；`docker-compose.kvm.yml` 只增加 `privileged` 和 `/dev/kvm` 能力，不是本地 build override。
 
+Daemon 还会以只读方式挂载 Linux 宿主机的 `/etc/localtime`，因此未显式设置 `timezone` 的 cron trigger 会跟随宿主机时区。仅在需要覆盖宿主机时区时才在 `.env` 中设置 `TZ`，修改后需要重启 daemon。
+
 **[`.env.example`](.env.example) 是权威的、带完整注释的配置参考。** 对外部署前至少检查这些：
 
 - `AUTH_PASSWORD`、`AUTH_SECRET` —— UI server 登录 secret（务必替换示例值）。

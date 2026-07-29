@@ -107,6 +107,8 @@ scheduler.schedule(triggerId, expression, callback, options);
 
 也可以用 `{ tz: "Asia/Shanghai" }`。全局 `setInterval`、`setTimeout`、`clearInterval`、`clearTimeout` 以及 `scheduler.setInterval`、`scheduler.setTimeout` 仍然可用，主要用于兼容 JavaScript timer 写法。
 
+省略 `timezone` 时，cron 使用 daemon 的本地时区（`TZ` 优先，否则使用 `/etc/localtime`）；显式使用 `UTC` 可固定为 UTC 调度。
+
 ## 运行入口和载荷
 
 手动运行时，agent-compose 会优先调用全局 `main(payload)`。如果没有 `main()` 且脚本只注册了一个触发器，则会调用这个触发器的 callback；如果有多个触发器，必须显式选择触发器或定义 `main()`。
