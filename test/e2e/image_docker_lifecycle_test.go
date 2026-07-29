@@ -25,6 +25,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
+	domain "agent-compose/pkg/model"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -136,6 +137,9 @@ func TestE2EImageDockerSandboxLifecycle(t *testing.T) {
 				Name:     "lifecycle",
 				Provider: "codex",
 				Image:    guestImage,
+				Sandbox: &agentcomposev2.SandboxSpec{
+					StoppedRuntimePolicy: domain.StoppedRuntimePolicyRetain,
+				},
 				Driver: &agentcomposev2.DriverSpec{
 					Name:   "docker",
 					Config: &agentcomposev2.DriverSpec_Docker{Docker: &agentcomposev2.DockerDriverSpec{}},
@@ -191,8 +195,12 @@ func TestE2EImageDockerSandboxLifecycle(t *testing.T) {
 	if err != nil {
 		failImageDockerFixture(t, fixture, "StopSandbox returned error: %v", err)
 	}
-	if got := stopResp.Msg.GetSandbox().GetStatus(); got != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED {
+	stopped := stopResp.Msg.GetSandbox()
+	if got := stopped.GetStatus(); got != agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED {
 		failImageDockerFixture(t, fixture, "StopSandbox status = %q, want %q", got, agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED)
+	}
+	if stopped.GetStoppedRuntimePolicy() != domain.StoppedRuntimePolicyRetain || stopped.GetStoppedRuntimeState() != domain.StoppedRuntimeStateRetained {
+		failImageDockerFixture(t, fixture, "StopSandbox policy/state = %q/%q, want retain/retained", stopped.GetStoppedRuntimePolicy(), stopped.GetStoppedRuntimeState())
 	}
 	stoppedContainer := inspectImageDockerSandboxContainer(t, ctx, fixture)
 	if stoppedContainer.ID != initialContainer.ID || stoppedContainer.State == nil || stoppedContainer.State.Running {
