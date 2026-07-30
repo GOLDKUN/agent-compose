@@ -63,6 +63,7 @@ func TestMigrationBaseline(t *testing.T) {
 	for _, index := range []string{
 		"idx_event_correlation", "idx_event_delivery_scheduler_run", "idx_event_delivery_status",
 		"idx_event_dispatch", "idx_event_dispatch_attempt", "idx_event_idempotency", "idx_event_parent",
+		"idx_event_source_correlation_sequence", "idx_event_source_sequence", "idx_event_source_topic_sequence",
 		"idx_event_sandbox_link_scheduler_run", "idx_event_sandbox_link_sandbox",
 		"idx_event_topic_sequence", "idx_llm_facade_token_sandbox", "idx_scheduler_event_created",
 		"idx_scheduler_event_run_created", "idx_scheduler_event_sandbox_run", "idx_scheduler_run_prune",
@@ -285,6 +286,9 @@ func TestBaselineIncludesPreviouslyOmittedSchema(t *testing.T) {
 		{name: "idx_scheduler_event_sandbox_run", columns: []string{"linked_sandbox_id", "scheduler_id", "scheduler_run_id"}, descending: []bool{false, false, false}},
 		{name: "idx_event_sandbox_link_scheduler_run", columns: []string{"scheduler_run_id"}, descending: []bool{false}},
 		{name: "idx_event_delivery_scheduler_run", columns: []string{"scheduler_run_id"}, descending: []bool{false}},
+		{name: "idx_event_source_sequence", columns: []string{"source", "sequence"}, descending: []bool{false, true}},
+		{name: "idx_event_source_topic_sequence", columns: []string{"source", "topic", "sequence", "created_at"}, descending: []bool{false, false, true, true}},
+		{name: "idx_event_source_correlation_sequence", columns: []string{"source", "correlation_id", "sequence"}, descending: []bool{false, false, true}},
 	}
 	for _, definition := range indexDefinitions {
 		assertSQLiteIndexColumns(t, db, definition.name, definition.columns, definition.descending)

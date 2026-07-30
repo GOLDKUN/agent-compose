@@ -250,11 +250,16 @@ func TestV2MigrationDesignAppliesEachNewVersionIndependently(t *testing.T) {
 	assertSQLiteTablesPresent(t, db, "scheduler_trigger", "scheduler_run", "event_session_link")
 	assertSQLiteTablesAbsent(t, db, "loader", "loader_run")
 
-	if err := applyMigrationSet(ctx, db, chain); err != nil {
+	if err := applyMigrationSet(ctx, db, chain[:7]); err != nil {
 		t.Fatalf("apply migration 7: %v", err)
 	}
 	assertSQLiteTablesPresent(t, db, "event_delivery", "event_sandbox_link")
 	assertSQLiteTablesAbsent(t, db, "event_session_link")
+	for migrationCount := 8; migrationCount <= len(chain); migrationCount++ {
+		if err := applyMigrationSet(ctx, db, chain[:migrationCount]); err != nil {
+			t.Fatalf("apply migration %d: %v", migrationCount, err)
+		}
+	}
 	assertNoForeignKeyViolations(t, db)
 }
 
@@ -274,7 +279,7 @@ func TestProjectRunCompletionMigrationPreservesV9Runs(t *testing.T) {
 			t.Fatalf("seed v9 run with %q: %v", statement, err)
 		}
 	}
-	if err := applyMigrationSet(ctx, db, chain); err != nil {
+	if err := applyMigrationSet(ctx, db, chain[:10]); err != nil {
 		t.Fatalf("apply v10 migration: %v", err)
 	}
 	var policy string
@@ -423,8 +428,8 @@ func loadV2MigrationDesignChain(t *testing.T) []migration {
 	if err != nil {
 		t.Fatalf("load migrations: %v", err)
 	}
-	if len(chain) != 10 {
-		t.Fatalf("migration count = %d, want 10", len(chain))
+	if len(chain) != 11 {
+		t.Fatalf("migration count = %d, want 11", len(chain))
 	}
 	return chain
 }

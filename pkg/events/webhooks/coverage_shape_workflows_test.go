@@ -118,6 +118,7 @@ func TestWebhookHTTPRoutesCoverageWorkflow(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/webhook.github.push", strings.NewReader(`{"intent":"push","correlationId":"corr-1"}`))
 	req.Header.Set("Authorization", "Bearer token")
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "idem-1")
 	rec := httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted || len(store.events) != 1 {
@@ -136,9 +137,12 @@ func TestWebhookHTTPRoutesCoverageWorkflow(t *testing.T) {
 	for _, target := range []string{
 		"/api/events/event-1",
 		"/api/events?topic=webhook.github.push&limit=10",
+		"/api/events?source=webhook&view=summary&offset=0&limit=10",
+		"/api/events/topics?source=webhook&limit=10",
 		"/api/events/event-1/sessions",
 		"/api/events/event-1/sandboxes",
 		"/api/events/event-1/runs",
+		"/api/events/event-1/trace",
 		"/api/webhook-sources",
 	} {
 		req = httptest.NewRequest(http.MethodGet, target, nil)
@@ -147,6 +151,27 @@ func TestWebhookHTTPRoutesCoverageWorkflow(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("GET %s status=%d body=%s", target, rec.Code, rec.Body.String())
 		}
+	}
+	if store.lastTopicSource != domain.TopicEventSourceWebhook {
+		t.Fatalf("event topic source = %q, want webhook", store.lastTopicSource)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/events?topic=webhook.github.push&offset=0", nil)
+	rec = httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"payload"`) || !strings.Contains(rec.Body.String(), `"idempotency_key":"idem-1"`) {
+		t.Fatalf("full events compatibility status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/events?source=webhook&view=summary&offset=0", nil)
+	rec = httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || store.lastFilter.Source != domain.TopicEventSourceWebhook || strings.Contains(rec.Body.String(), `"payload"`) || strings.Contains(rec.Body.String(), `"idempotency_key"`) {
+		t.Fatalf("summary events status=%d filter=%#v body=%s", rec.Code, store.lastFilter, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/events?source=webhook&view=summary", nil)
+	rec = httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"next_after_sequence":1`) {
+		t.Fatalf("summary event cursor status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/events?topic=webhook.github.push&offset=3&limit=7", nil)
 	rec = httptest.NewRecorder()
@@ -264,10 +289,11 @@ type ioNopCloser struct {
 func (c ioNopCloser) Close() error { return nil }
 
 type webhookRouteStore struct {
-	events     map[string]domain.TopicEventRecord
-	sources    map[string]domain.WebhookSource
-	existingID string
-	lastFilter domain.TopicEventFilter
+	events          map[string]domain.TopicEventRecord
+	sources         map[string]domain.WebhookSource
+	existingID      string
+	lastFilter      domain.TopicEventFilter
+	lastTopicSource string
 }
 
 func newWebhookRouteStore() *webhookRouteStore {
@@ -309,6 +335,46 @@ func (s *webhookRouteStore) ListEvents(_ context.Context, filter domain.TopicEve
 		items = append(items, event)
 	}
 	return items, len(items), nil
+}
+
+func (s *webhookRouteStore) ListEventSummaries(_ context.Context, filter domain.TopicEventFilter) ([]domain.EventSummary, int, error) {
+	s.lastFilter = filter
+	items := make([]domain.EventSummary, 0, len(s.events))
+	for _, event := range s.events {
+		items = append(items, domain.EventSummary{
+			ID: event.ID, Sequence: event.Sequence, Topic: event.Topic, Source: event.Source,
+			Provider: event.Provider, Intent: event.Intent, CorrelationID: event.CorrelationID,
+			DeliveryID: event.DeliveryID, DispatchStatus: event.DispatchStatus,
+			ParentEventID: event.ParentEventID, PublisherType: event.PublisherType,
+			PublisherID: event.PublisherID, PublisherRunID: event.PublisherRunID,
+			CreatedAt: event.CreatedAt, DispatchedAt: event.DispatchedAt,
+		})
+	}
+	return items, len(items), nil
+}
+
+func (s *webhookRouteStore) ListEventTopics(_ context.Context, source string, _, _ int) ([]domain.EventTopicSummary, int, error) {
+	s.lastTopicSource = source
+	return []domain.EventTopicSummary{{Topic: "webhook.github.push", EventCount: 1, LatestEventAt: time.Now().UTC()}}, 1, nil
+}
+
+func (s *webhookRouteStore) GetEventTrace(_ context.Context, eventID string, _ int) (domain.EventTrace, error) {
+	event, err := s.GetEvent(context.Background(), eventID)
+	if err != nil {
+		return domain.EventTrace{}, err
+	}
+	return domain.EventTrace{
+		Event: domain.EventSummary{
+			ID: event.ID, Sequence: event.Sequence, Topic: event.Topic, Source: event.Source,
+			Provider: event.Provider, Intent: event.Intent, CorrelationID: event.CorrelationID,
+			DeliveryID: event.DeliveryID, DispatchStatus: event.DispatchStatus,
+			CreatedAt: event.CreatedAt, DispatchedAt: event.DispatchedAt,
+		},
+		Runs: []domain.EventRunTrace{{
+			Delivery: domain.EventDelivery{EventID: eventID, SchedulerID: "scheduler-1", TriggerID: "trigger-1", RunID: "run-1", Status: domain.EventDeliveryStatusRunSucceeded},
+		}},
+		SandboxLinks: []domain.EventSandboxTraceItem{{EventID: eventID, SandboxID: "sandbox-1", Relation: "created"}},
+	}, nil
 }
 
 func (s *webhookRouteStore) ListDescendantEventIDs(context.Context, string, int) ([]string, error) {

@@ -110,11 +110,23 @@ the URL.
 GET /api/events/:event_id
 GET /api/events?correlation_id=some_system:object:123&offset=0&limit=100
 GET /api/events?topic=runtime.some_adapter.requested&after_sequence=123&limit=100
+GET /api/events?source=webhook&view=summary&offset=0&limit=100
+GET /api/events/topics?source=webhook&offset=0&limit=100
+GET /api/events/:event_id/trace
 ```
+
+These queries remain on the existing HTTP event compatibility surface; they do
+not add a protobuf or Connect service.
 
 Query constraints:
 
 - `event_id` query returns one event.
+- `source` is an exact event-source filter and is sufficient on its own. The
+  management UI uses `source=webhook` to browse webhook ingress without
+  exposing unrelated scheduler or system events in that workflow.
+- `view=summary` uses a lightweight SQLite projection and omits the raw
+  payload, idempotency key, and other fields that are not needed by collection
+  views. The default response remains the full compatibility representation.
 - Normal list queries explicitly use `offset` and `limit`, return `total`, and sort by
   `sequence` descending so the newest events are returned first.
 - `topic + after_sequence` can be used by external adapters to poll derived
@@ -123,7 +135,14 @@ Query constraints:
   omitting both parameters also uses ascending sequence order and returns
   `next_after_sequence`.
 - `limit` defaults to 100 and is capped at 500.
-- List queries must contain at least `correlation_id` or `topic`.
+- List queries must contain at least `source`, `correlation_id`, or `topic`.
+- `/api/events/topics` requires `source` and returns distinct observed topics,
+  event counts, and latest event timestamps for that source.
+- `/api/events/:event_id/trace` follows up to 1,000 causal graph nodes,
+  including the requested root event, and
+  returns their combined scheduler deliveries, runs, scheduler events, and
+  sandbox links. Descendant event records and payloads are not returned; a
+  truncated causal graph is reported with `descendants_truncated=true`.
 
 Topic polling is not message-queue semantics. Adapters must store their own last
 seen sequence and implement idempotency by `event_id` or business id.
@@ -430,7 +449,7 @@ business processing.
 
 ### Observability And Operations
 
-Suggested HTTP APIs or Connect APIs for UI and troubleshooting:
+HTTP APIs for UI and troubleshooting:
 
 ```http
 GET /api/events/:event_id/trace
@@ -440,9 +459,11 @@ GET /api/webhook-sources
 GET /api/webhook-sources/:source_id/stats
 ```
 
-`trace` returns event, parent/child events, delivery, scheduler run, scheduler event,
-and related sandbox. `sandboxes` returns only sandboxes created or operated by
-the flow triggered by the event, suitable for external systems to look up
+The implemented `trace` endpoint returns a lightweight root event summary and
+aggregates delivery, scheduler run, scheduler event, and related sandbox data
+from the root and its descendants. It does not return descendant event records
+or event payloads. `sandboxes` returns only sandboxes created or operated by the
+flow triggered by the event, suitable for external systems to look up
 sandboxes by `event_id`. The implemented
 `GET /api/events/:event_id/sessions` route is a compatibility alias for the
 same sandbox query.

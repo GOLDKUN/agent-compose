@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,6 +33,8 @@ type Store interface {
 
 type RouteOptions struct {
 	Store              Store
+	QueryStore         EventQueryStore
+	Sandboxes          SandboxSummaryReader
 	WebhookBodyLimit   int64
 	NewEventID         func() string
 	MarshalJSONCompact func(any) (string, error)
@@ -44,9 +47,11 @@ func RegisterRoutes(app *echo.Echo, opts RouteOptions) {
 	app.PUT("/api/webhook-sources/:source_id", h.handlePutWebhookSource)
 	app.DELETE("/api/webhook-sources/:source_id", h.handleDeleteWebhookSource)
 	app.GET("/api/events", h.handleListEvents)
+	app.GET("/api/events/topics", h.handleListEventTopics)
 	app.GET("/api/events/:event_id/sessions", h.handleGetEventSandboxes)
 	app.GET("/api/events/:event_id/sandboxes", h.handleGetEventSandboxes)
 	app.GET("/api/events/:event_id/runs", h.handleGetEventRuns)
+	app.GET("/api/events/:event_id/trace", h.handleGetEventTrace)
 	app.GET("/api/events/:event_id", h.handleGetEvent)
 }
 
@@ -56,6 +61,14 @@ type routeHandler struct {
 
 func (h routeHandler) store() Store {
 	return h.opts.Store
+}
+
+func (h routeHandler) queryStore() EventQueryStore {
+	store := h.opts.QueryStore
+	if store == nil {
+		store, _ = any(h.opts.Store).(EventQueryStore)
+	}
+	return store
 }
 
 func (h routeHandler) newEventID() string {
@@ -166,6 +179,13 @@ func (h routeHandler) handleGetEvent(c echo.Context) error {
 }
 
 func (h routeHandler) handleListEvents(c echo.Context) error {
+	source := strings.TrimSpace(c.QueryParam("source"))
+	if source != "" {
+		source = domain.NormalizeTopicEventSource(source)
+		if source == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "source is invalid"})
+		}
+	}
 	topic := strings.TrimSpace(c.QueryParam("topic"))
 	if topic != "" {
 		if err := domain.ValidateTopicEventName(topic); err != nil {
@@ -173,8 +193,12 @@ func (h routeHandler) handleListEvents(c echo.Context) error {
 		}
 	}
 	correlationID := strings.TrimSpace(c.QueryParam("correlation_id"))
-	if topic == "" && correlationID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "topic or correlation_id is required"})
+	if source == "" && topic == "" && correlationID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "source, topic, or correlation_id is required"})
+	}
+	view := strings.ToLower(strings.TrimSpace(c.QueryParam("view")))
+	if view != "" && view != "full" && view != "summary" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "view is invalid"})
 	}
 	afterSequence, err := parseOptionalInt64Query(c, "after_sequence")
 	if err != nil {
@@ -192,14 +216,34 @@ func (h routeHandler) handleListEvents(c echo.Context) error {
 	if afterSequence > 0 && offsetProvided {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "offset and after_sequence cannot be combined"})
 	}
-	items, total, err := h.store().ListEvents(c.Request().Context(), domain.TopicEventFilter{
+	filter := domain.TopicEventFilter{
+		Source:        source,
 		Topic:         topic,
 		CorrelationID: correlationID,
 		AfterSequence: afterSequence,
 		Offset:        offset,
 		Limit:         limit,
 		SequenceAsc:   !offsetProvided,
-	})
+	}
+	if view == "summary" {
+		store := h.queryStore()
+		if store == nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "event query store is required"})
+		}
+		items, total, err := store.ListEventSummaries(c.Request().Context(), filter)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list events"})
+		}
+		resp := EventSummaryListResponse{Items: make([]EventSummaryJSON, 0, len(items)), Total: total}
+		for _, item := range items {
+			resp.Items = append(resp.Items, eventSummaryToJSON(item))
+			if !offsetProvided && item.Sequence > resp.NextAfterSequence {
+				resp.NextAfterSequence = item.Sequence
+			}
+		}
+		return c.JSON(http.StatusOK, resp)
+	}
+	items, total, err := h.store().ListEvents(c.Request().Context(), filter)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list events"})
 	}
@@ -211,6 +255,57 @@ func (h routeHandler) handleListEvents(c echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+func (h routeHandler) handleListEventTopics(c echo.Context) error {
+	store := h.queryStore()
+	if store == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "event query store is required"})
+	}
+	source := domain.NormalizeTopicEventSource(c.QueryParam("source"))
+	if source == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "source is required"})
+	}
+	limit, err := parseLimitQuery(c, 100, 500)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "limit is invalid"})
+	}
+	offset, err := parseOptionalIntQuery(c, "offset")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "offset is invalid"})
+	}
+	items, total, err := store.ListEventTopics(c.Request().Context(), source, offset, limit)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list event topics"})
+	}
+	resp := EventTopicListResponse{Items: make([]EventTopicJSON, 0, len(items)), Total: total}
+	for _, item := range items {
+		resp.Items = append(resp.Items, EventTopicJSON{
+			Topic:         item.Topic,
+			EventCount:    item.EventCount,
+			LatestEventAt: formatEventTime(item.LatestEventAt),
+		})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h routeHandler) handleGetEventTrace(c echo.Context) error {
+	store := h.queryStore()
+	if store == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "event query store is required"})
+	}
+	eventID := strings.TrimSpace(c.Param("event_id"))
+	view, err := newTraceService(store, h.opts.Sandboxes).trace(c.Request().Context(), eventID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "event not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to trace event"})
+	}
+	if view.SandboxSummaryError != nil {
+		slog.WarnContext(c.Request().Context(), "event trace sandbox summary enrichment failed", "event_id", eventID, "error", view.SandboxSummaryError)
+	}
+	return c.JSON(http.StatusOK, eventTraceResponseFor(view))
 }
 
 func (h routeHandler) handleGetEventSandboxes(c echo.Context) error {
