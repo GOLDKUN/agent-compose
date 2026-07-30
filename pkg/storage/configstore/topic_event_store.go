@@ -62,55 +62,16 @@ func (s *eventStore) ListPendingEvents(ctx context.Context, limit int) ([]domain
 }
 
 func (s *eventStore) ListEvents(ctx context.Context, filter domain.TopicEventFilter) ([]domain.TopicEventRecord, int, error) {
-	if strings.TrimSpace(filter.Topic) == "" && strings.TrimSpace(filter.CorrelationID) == "" {
-		return nil, 0, fmt.Errorf("topic or correlation id is required")
+	query, err := buildEventListQuery(filter)
+	if err != nil {
+		return nil, 0, err
 	}
-	limit := filter.Limit
-	if limit <= 0 {
-		limit = 100
+	total, err := s.countEventList(ctx, query)
+	if err != nil {
+		return nil, 0, err
 	}
-	if limit > 500 {
-		limit = 500
-	}
-	clauses := make([]string, 0, 4)
-	args := make([]any, 0, 5)
-	if topic := strings.TrimSpace(filter.Topic); topic != "" {
-		if err := domain.ValidateTopicEventName(topic); err != nil {
-			return nil, 0, err
-		}
-		clauses = append(clauses, "topic = ?")
-		args = append(args, topic)
-	}
-	if correlationID := strings.TrimSpace(filter.CorrelationID); correlationID != "" {
-		clauses = append(clauses, "correlation_id = ?")
-		args = append(args, correlationID)
-	}
-	if filter.AfterSequence > 0 {
-		clauses = append(clauses, "sequence > ?")
-		args = append(args, filter.AfterSequence)
-	}
-	if status := domain.NormalizeTopicEventDispatchStatus(filter.DispatchStatus); status != "" && strings.TrimSpace(filter.DispatchStatus) != "" {
-		clauses = append(clauses, "dispatch_status = ?")
-		args = append(args, status)
-	}
-	where := ` WHERE ` + strings.Join(clauses, " AND ")
-	var total int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event`+where, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count events: %w", err)
-	}
-	order := ` ORDER BY sequence DESC`
-	pageArgs := append([]any(nil), args...)
-	if filter.AfterSequence > 0 || filter.SequenceAsc {
-		order = ` ORDER BY sequence ASC`
-		pageArgs = append(pageArgs, limit)
-	} else {
-		pageArgs = append(pageArgs, limit, max(filter.Offset, 0))
-	}
-	query := selectTopicEventSQL() + where + order + ` LIMIT ?`
-	if filter.AfterSequence <= 0 && !filter.SequenceAsc {
-		query += ` OFFSET ?`
-	}
-	rows, err := s.db.QueryContext(ctx, query, pageArgs...)
+	args := append(append([]any(nil), query.filterArgs...), query.pageArgs...)
+	rows, err := s.db.QueryContext(ctx, selectTopicEventSQL()+query.where+query.page, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query events: %w", err)
 	}

@@ -80,6 +80,7 @@ func (e *TopicEventIdempotencyConflictError) Unwrap() error {
 
 type TopicEventFilter struct {
 	EventID        string
+	Source         string
 	Topic          string
 	CorrelationID  string
 	AfterSequence  int64
@@ -87,6 +88,69 @@ type TopicEventFilter struct {
 	Limit          int
 	SequenceAsc    bool
 	DispatchStatus string
+}
+
+type EventSummary struct {
+	ID             string
+	Sequence       int64
+	Topic          string
+	Source         string
+	Provider       string
+	Intent         string
+	CorrelationID  string
+	DeliveryID     string
+	DispatchStatus string
+	ParentEventID  string
+	PublisherType  string
+	PublisherID    string
+	PublisherRunID string
+	CreatedAt      time.Time
+	DispatchedAt   time.Time
+}
+
+type EventTopicSummary struct {
+	Topic         string
+	EventCount    int
+	LatestEventAt time.Time
+}
+
+type EventSchedulerSummary struct {
+	ID        string
+	ProjectID string
+	AgentName string
+	Name      string
+}
+
+type EventSchedulerRunSummary struct {
+	ID          string
+	Status      string
+	StartedAt   time.Time
+	CompletedAt time.Time
+	DurationMs  int64
+	Error       string
+}
+
+type EventSchedulerEventSummary struct {
+	ID              string
+	Type            string
+	Level           string
+	Message         string
+	LinkedSandboxID string
+	CreatedAt       time.Time
+}
+
+type EventRunTrace struct {
+	Delivery  EventDelivery
+	Scheduler *EventSchedulerSummary
+	Run       *EventSchedulerRunSummary
+	Events    []EventSchedulerEventSummary
+}
+
+type EventTrace struct {
+	Event                EventSummary
+	Runs                 []EventRunTrace
+	SandboxLinks         []EventSandboxTraceItem
+	DescendantsTruncated bool
 }
 
 type WebhookSource struct {
@@ -172,6 +236,22 @@ func NormalizeTopicEventSource(source string) string {
 		return TopicEventSourceSystem
 	default:
 		return ""
+	}
+}
+
+// TopicEventSourceFilterValues returns every persisted source value that is
+// equivalent to source. Loader was renamed to scheduler, but upgraded databases
+// intentionally retain loader-era event rows, so scheduler filters must match
+// both stored values.
+func TopicEventSourceFilterValues(source string) []string {
+	normalized := NormalizeTopicEventSource(source)
+	switch normalized {
+	case "":
+		return nil
+	case TopicEventSourceScheduler:
+		return []string{TopicEventSourceScheduler, legacyTopicEventSourceLoader}
+	default:
+		return []string{normalized}
 	}
 }
 
