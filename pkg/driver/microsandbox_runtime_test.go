@@ -71,6 +71,7 @@ func TestMicrosandboxExecStreamPreservesSplitUTF8(t *testing.T) {
 		context.Background(),
 		recv,
 		func() error { return nil },
+		nil,
 		collector,
 		25*time.Millisecond,
 		nil,

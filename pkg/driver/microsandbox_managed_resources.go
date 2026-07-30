@@ -18,7 +18,7 @@ func ListMicrosandboxManagedResources(ctx context.Context, config *appconfig.Con
 		return nil, nil, nil
 	}
 	bySandbox := map[string]*ManagedRuntimeResource{}
-	handles, err := microsandbox.ListSandboxesWith(ctx, microsandbox.NewSandboxFilter().WithLabels(map[string]string{microsandboxManagedLabel: "true"}))
+	handles, err := listMicrosandboxManagedSandboxes(ctx, microsandbox.ListSandboxesWith)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -51,6 +51,36 @@ func ListMicrosandboxManagedResources(ctx context.Context, config *appconfig.Con
 		result = append(result, *resource)
 	}
 	return result, warnings, nil
+}
+
+type microsandboxSandboxPageLister func(context.Context, ...microsandbox.SandboxListOption) (*microsandbox.SandboxPage, error)
+
+func listMicrosandboxManagedSandboxes(ctx context.Context, listPage microsandboxSandboxPageLister) ([]*microsandbox.SandboxHandle, error) {
+	labels := microsandbox.WithListLabels(map[string]string{microsandboxManagedLabel: "true"})
+	var handles []*microsandbox.SandboxHandle
+	var cursor string
+	for {
+		options := []microsandbox.SandboxListOption{labels}
+		if cursor != "" {
+			options = append(options, microsandbox.WithListCursor(cursor))
+		}
+		page, err := listPage(ctx, options...)
+		if err != nil {
+			return nil, fmt.Errorf("list managed microsandbox sandboxes: %w", err)
+		}
+		if page == nil {
+			return nil, fmt.Errorf("list managed microsandbox sandboxes: empty page response")
+		}
+		handles = append(handles, page.Sandboxes...)
+		if page.NextCursor == nil || strings.TrimSpace(*page.NextCursor) == "" {
+			return handles, nil
+		}
+		nextCursor := strings.TrimSpace(*page.NextCursor)
+		if nextCursor == cursor {
+			return nil, fmt.Errorf("list managed microsandbox sandboxes: pagination cursor did not advance")
+		}
+		cursor = nextCursor
+	}
 }
 
 func appendMicrosandboxDiskResources(config *appconfig.Config, bySandbox map[string]*ManagedRuntimeResource, warnings []string) []string {
