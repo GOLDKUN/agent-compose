@@ -2,7 +2,9 @@
 
 This document describes the external event ingress and topic event dispatch
 model currently implemented in code, and records the target design still to be
-completed. Relevant implementation lives mainly in:
+completed. Sections explicitly labeled as current describe implemented behavior;
+target delivery and provider verification sections remain proposals. Relevant
+implementation lives mainly in:
 
 - HTTP handler: `pkg/events/webhooks/http.go`
 - Topic event model: `pkg/model/`

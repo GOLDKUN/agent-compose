@@ -1,11 +1,15 @@
 # Runtime Bidirectional Interaction Stream Design
 
+The Docker command and agent attach paths are implemented. Microsandbox
+supports native command attach but not agent attach; BoxLite interaction
+remains unsupported by the current runtime API.
+
 ## Background
 
 The current execution boundary from the agent-compose daemon to the runtime is centered on `ExecStream`:
 
 ```go
-ExecStream(context.Context, *Session, VMState, ExecSpec, ExecStreamWriter) (ExecResult, error)
+ExecStream(context.Context, *Sandbox, VMState, ExecSpec, ExecStreamWriter) (ExecResult, error)
 ```
 
 This interface can express "one-shot start parameters plus a runtime-to-daemon output stream", but it cannot express ongoing interaction such as stdin, TTY, terminal resize, signal/cancel, multi-turn agent input, or structured runtime events. As a result, `exec`, `run --command`, scheduler commands, cells, and agent prompts currently rely on file protocols such as `command-request.json`, prompt files, script files, stdout markers, and result files to carry control semantics.

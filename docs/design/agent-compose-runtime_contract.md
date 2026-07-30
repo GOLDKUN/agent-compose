@@ -3,18 +3,19 @@
 This document describes the call boundary between the Go host side
 `agent-compose` process and the JavaScript runtime
 `agent-compose-runtime` inside the sandbox. The current runtime is primarily
-used by `AgentService`: the host executes a unified entry command inside the
-sandbox, the JavaScript runtime adapts Codex, Claude, Gemini, OpenCode, and Pi, and structured
-results are returned to the host.
+used by the daemon's agent execution services: the host executes a unified
+entry command inside the sandbox, the JavaScript runtime adapts Codex, Claude,
+Gemini, OpenCode, and Pi, and structured results are returned to the host.
 
 Related code:
 
 - Stream model: `pkg/model/model.go`, `pkg/driver/types.go`
 - Marker parsing and stream filtering: `pkg/execution/parse.go`
 - Host agent calls: `pkg/agentcompose/adapters/agent_runner.go`
-- Host execution and persistence: `pkg/agentcompose/adapters/cell_executor.go`, `pkg/agentcompose/adapters/agent_executor.go`, and `pkg/storage/sessionstore`
+- Host execution and persistence: `pkg/agentcompose/adapters/cell_executor.go`,
+  `pkg/agentcompose/adapters/agent_executor.go`, and `pkg/storage/sandboxstore/`
 - v2 stream API: `proto/agentcompose/v2/agentcompose.proto`
-- CLI stream writer: `cmd/agent-compose/main.go`
+- CLI stream writer: `cmd/agent-compose/cli_run_stream.go`
 - Runtime CLI source: `runtime/javascript/src/cli.ts`
 - Runtime provider adapters: `runtime/javascript/src/runners/`
 - Guest SDK: `runtime/agent-compose-runtime-sdk/`
@@ -193,7 +194,6 @@ Command arguments:
 | `--workspace` | no | Agent working directory; default `WORKSPACE` or `/workspace` |
 | `--home` | no | Agent HOME; default `HOME` or `/root` |
 | `--model` | no | Agent model; consumed by providers that support explicit model selection |
-| `--system-prompt-file` | no | System prompt file path; currently consumed by providers that need prompt-level system instructions |
 | `--skill <name>` | no | Repeatable enabled skill name. Host projects the active set into `/root/.agents/skills` before invoking runtime |
 
 Agent identity uses the fixed convention path documented in §3.2.
@@ -344,9 +344,8 @@ enum StdioStream {
 
 `StreamAgentRunResponse`, `StreamExecResponse`, and `TranscriptEvent` carry a
 `stream` field. `STDIO_STREAM_UNSPECIFIED` is treated as stdout by CLI and host
-consumers. The v1 API keeps its historical `is_stderr` fields for compatibility;
-the conversion to that boolean happens only at v1/session compatibility
-boundaries.
+consumers. No legacy v1 control-plane conversion is performed by the current
+runtime contract.
 
 The protocol deliberately does not add `chunk_type`, `payload_kind`, typed
 payload events, new CLI flags, JSON schema changes, or stdin forwarding for this
@@ -680,8 +679,10 @@ opencode run <prompt> --format json --dir /workspace --dangerously-skip-permissi
 When a model is provided by the host, the runner appends `--model <model>`.
 When a stored provider thread exists, the runner appends
 `--session <stored thread id>`. The `--session` flag is OpenCode's provider-native
-resume flag. The runner sets
-`OPENCODE_DISABLE_AUTOUPDATE=true` unless the environment already defines it.
+resume flag. When `systemContext` is non-empty, the runner prepends it to the
+user prompt separated by a blank line. The runner sets
+`OPENCODE_DISABLE_AUTOUPDATE=true` and `OPENCODE_DISABLE_MODELS_FETCH=1` unless
+the environment already defines them.
 
 OpenCode raw JSON events are converted into a human-readable transcript. The
 runner writes `/data/state/agents/providers/opencode.json` after a successful

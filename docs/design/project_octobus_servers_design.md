@@ -2,9 +2,9 @@
 
 ## 1. 背景与目标
 
-agent-compose 当前只支持在 daemon Settings 中配置一个全局 OctoBus
-连接。所有 project、agent 和 sandbox 共享同一个 OctoBus 地址与 token；agent
-只通过 `capset_ids` 声明允许使用的 capability sets。
+agent-compose 同时支持 daemon Settings 中的全局 OctoBus 连接和 project
+声明的具名 `octobus_servers`。未限定的 `capset_ids` 使用全局连接，带
+server 限定的 declaration 在 daemon 运行时解析对应 project server。
 
 单一全局连接限制了以下使用方式：
 
@@ -540,7 +540,7 @@ capset declaration 解析 target 的小接口，而不是让 capproxy 直接依�
 
 ## 12. 文档和发布
 
-实现时需要同步：
+该功能已实现；以下文档是维护和回归检查时需要同步的边界：
 
 - compose YAML 英文和中文手册；
 - project/capability API 文档；

@@ -1,8 +1,8 @@
 # Resource Identity and CLI Display Design
 
-Status: design proposal. This document describes the intended CLI-facing
-resource identity model and output shape. It does not require code changes by
-itself.
+This document is a proposal, not an implementation contract. It describes the
+intended CLI-facing resource identity model and output shape. It does not
+require code changes by itself.
 
 The examples use sanitized project-relative paths:
 

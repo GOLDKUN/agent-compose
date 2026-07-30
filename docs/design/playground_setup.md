@@ -1,9 +1,11 @@
 # Playground Deployment And Verification
 
-This document describes the external shared playground deployment. It is not a
-repository-local development environment.
+This document is an obsolete external-environment snapshot. The repository
+cannot verify the state or paths of the shared playground described here. Use
+the repository Compose files and current v2 CLI/API documentation for supported
+deployments; this is not a repository-local development environment.
 
-Current real environment:
+Historical environment snapshot (not verified by this repository):
 
 - Code directory: `/data/code`
 - Deployment directory: `/data/playground`
@@ -45,7 +47,7 @@ service:
 
 - Listen port: `8000`
 - Uses the independent `agent-compose-ui` image
-- Reverse proxies daemon v1/v2 Connect APIs, `/api/`, and Jupyter proxy routes
+- Reverse proxies daemon v2 Connect APIs, `/api/`, and Jupyter proxy routes
 - Data mount: `./data:/data`, used for frontend service runtime data
 
 The corresponding host data directory is:
@@ -59,9 +61,9 @@ directory backing `SANDBOX_ROOT`.
 
 Web/UI should no longer be validated as embedded static assets inside the daemon
 container. The frontend may be served by nginx, a static file server, or an
-independent container, and should reverse proxy to daemon v1/v2 Connect APIs and
-Jupyter proxy routes. The existing frontend continues to use v1 API; CLI and new
-clients should prefer v2 API.
+independent container, and should reverse proxy to daemon v2 Connect APIs and
+Jupyter proxy routes. The removed v1 control-plane API must not be used as a
+deployment or verification requirement.
 
 ## Build Images
 
@@ -116,17 +118,7 @@ curl -i http://127.0.0.1:8000/ | head
 curl -i http://127.0.0.1:8000/ui/ | head
 ```
 
-### 3. Verify v1 SessionService Compatibility API Access
-
-```bash
-curl -sS -X POST \
-  http://127.0.0.1:7410/agentcompose.v1.SessionService/ListSessions \
-  -H 'Content-Type: application/json' \
-  -H 'Connect-Protocol-Version: 1' \
-  -d '{}'
-```
-
-### 4. Verify v2 ProjectService Main Path Access
+### 3. Verify v2 ProjectService Main Path Access
 
 An empty request should return validation issues, not 404:
 
@@ -138,7 +130,7 @@ curl -sS -X POST \
   -d '{}'
 ```
 
-### 5. Complete Project Smoke With CLI
+### 4. Complete Project Smoke With CLI
 
 Prepare a temporary compose file:
 
@@ -162,55 +154,12 @@ agent-compose --host http://127.0.0.1:7410 -f /tmp/agent-compose-smoke.yml ps
 agent-compose --host http://127.0.0.1:7410 -f /tmp/agent-compose-smoke.yml down
 ```
 
-### 6. Create A v1 Verification Sandbox
+### 5. Verify Sandbox And Jupyter Through v2
 
-A minimal v1 compatibility request is enough; no extra `baseWorkspace` is
-required:
-
-```bash
-curl -sS -X POST \
-  http://127.0.0.1:7410/agentcompose.v1.SessionService/CreateSession \
-  -H 'Content-Type: application/json' \
-  -H 'Connect-Protocol-Version: 1' \
-  -d '{"title":"playground-verify"}'
-```
-
-Notes:
-
-- `base_workspace` is not required for the current playground smoke
-  verification.
-- If you need a real workspace, prefer managing `workspace_id` through
-  `ConfigService`. The currently supported workspace types are `file` and
-  `git`.
-
-### 7. Query Sandbox State Through v1 Compatibility API
-
-```bash
-curl -sS -X POST \
-  http://127.0.0.1:7410/agentcompose.v1.SessionService/ListSessions \
-  -H 'Content-Type: application/json' \
-  -H 'Connect-Protocol-Version: 1' \
-  -d '{}'
-```
-
-### 8. Get Notebook Proxy Entry
-
-Take the v1 `sessionId` field from the previous response, then run:
-
-```bash
-curl -sS -X POST \
-  http://127.0.0.1:7410/agentcompose.v1.SessionService/GetSessionProxy \
-  -H 'Content-Type: application/json' \
-  -H 'Connect-Protocol-Version: 1' \
-  -d '{"sessionId":"<sandbox_id>"}'
-```
-
-Expected fields:
-
-- `proxyPath`, for example `/jupyter/<sandbox_id>/lab`
-- `notebookUrl`, for example `/jupyter/<sandbox_id>/lab?token=...`
-- `driver`
-- `vmStatus`
+Use the CLI `ps` output or the v2 `SandboxService.ListSandboxes` and
+`SandboxService.GetSandbox` RPCs to obtain a sandbox ID and proxy entry. The
+proxy path is normally `/jupyter/<sandbox_id>/lab`; the v2 response carries the
+driver, runtime status, and notebook URL when the proxy is ready.
 
 ## Cold Start Characteristics
 
@@ -220,7 +169,7 @@ If any of these happened:
 - `/data/playground/data/agent-compose` was cleared
 - `image-cache` or `boxlite` cache directories were deleted
 
-then the first v1-compatible `CreateSession` may be noticeably slower. This is usually normal
+then the first sandbox creation may be noticeably slower. This is usually normal
 warmup and does not mean the RPC layer is stuck.
 
 Important cache directories:
@@ -249,7 +198,7 @@ After clearing the data directory, prewarm after deployment:
 
 1. Update and start the `agent-compose` container.
 2. Create a temporary sandbox, for example `playground-prewarm`.
-3. Poll `ListSessions` until it becomes `RUNNING`.
+3. Poll `SandboxService.ListSandboxes` until the sandbox becomes `RUNNING`.
 4. Start formal feature verification.
 
 ## Troubleshooting
@@ -270,7 +219,7 @@ reverse proxy config, and connectivity from it to daemon
 daemon container embeds `/agent-compose.html` as the signal for frontend
 deployment success.
 
-### 2. `CreateSession` Fails Or Stays `PENDING`
+### 2. Sandbox Creation Fails Or Stays `PENDING`
 
 Check:
 
@@ -288,11 +237,11 @@ Confirm first:
   be pulled
 - whether this is only the first cold start rebuilding caches
 
-### 3. `GetSessionProxy` Returns 502 Or Notebook Is Not Reachable
+### 3. Sandbox Proxy Returns 502 Or Notebook Is Not Reachable
 
 Check:
 
-- `vmStatus` in `ListSessions`
+- sandbox runtime status in `SandboxService.GetSandbox`
 - `docker logs --tail 200 agent-compose`
 - proxy / VM state files under the corresponding sandbox directory
 

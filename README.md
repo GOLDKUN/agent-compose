@@ -96,7 +96,36 @@ use it at the URL the installer prints when the UI is enabled. See
 [deploy/README.md](deploy/README.md) for install, upgrade, uninstall, data
 preservation, and mirror/private-registry options.
 
-### Option B — Build from source (for the CLI workflow)
+### Option B — Pull published images (without the installer)
+
+Published daemon and guest images are available from [Docker
+Hub](https://hub.docker.com/u/chaitin). Pull the stable multi-architecture
+images directly:
+
+```bash
+docker pull chaitin/agent-compose:latest
+docker pull chaitin/agent-compose-guest:latest
+```
+
+For a pinned application release, replace `latest` with its release tag (for
+example `v1.2.3`) on both images. The optional frontend is published
+independently and can be pulled with its supported UI tag:
+
+```bash
+docker pull chaitin/agent-compose-ui:latest
+```
+
+The daemon and standard guest images publish `linux/amd64` and `linux/arm64`
+manifests. The UI tag is selected independently from the daemon release. To
+deploy with Compose, use `docker-compose.yml` and `.env.example` from the
+matching repository tag, copy `.env.example` to `.env`, and fill in the
+required settings. For a pinned deployment, add `AGENT_COMPOSE_IMAGE` and
+`DEFAULT_IMAGE` with the daemon and guest references shown above; add
+`AGENT_COMPOSE_FRONTEND_IMAGE` when pinning the optional UI. Then run
+`docker compose pull` and `docker compose up -d`, adding `--profile with-ui`
+when the frontend is needed.
+
+### Option C — Build from source (for the CLI workflow)
 
 ```bash
 task build                       # builds ./build/agent-compose
@@ -121,7 +150,7 @@ agent-compose --host http://127.0.0.1:7410 status
 
 ### Run your first agent
 
-With a local daemon running (Option B), create an `agent-compose.yml`:
+With a local daemon running (Option C), create an `agent-compose.yml`:
 
 ```yaml
 name: demo
