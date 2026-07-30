@@ -95,11 +95,13 @@ The interactive form and non-interactive CLI can independently override the
 backend (`--backend-image`), frontend (`--frontend-image`), and sandbox guest
 (`--guest-image`) image with a complete tag or digest reference. An explicit
 image always replaces that one value and becomes installer-managed, including
-during upgrade. Images omitted from the command retain the normal upgrade
-protection above. If the deprecated `--image-prefix` is combined with complete
-image options, the complete option wins for its image and the prefix supplies
-the omitted images. Without either form of override, the Docker Hub references
-from the selected Release bundle are used.
+during upgrade. The TUI displays the exact defaults from the selected Release
+manifest and refreshes them when the version field loses focus; an empty image
+field continues to follow that Release. Images omitted from the command retain
+the normal upgrade protection above. If the deprecated `--image-prefix` is
+combined with complete image options, the complete option wins for its image
+and the prefix supplies the omitted images. Without either form of override,
+the Docker Hub references from the selected Release bundle are used.
 
 New installations persist `AGENT_COMPOSE_DATA_DIR=./data`. If an older database
 exists only under `./data/agent-compose`, that path is retained. When databases

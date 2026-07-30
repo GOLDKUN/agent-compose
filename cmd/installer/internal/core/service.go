@@ -63,7 +63,23 @@ func (s Service) Apply(ctx context.Context, operation Operation, options Options
 	if operation == OperationUninstall {
 		return s.uninstall(ctx, options)
 	}
-	return s.installOrUpgrade(ctx, operation, options)
+	return s.installOrUpgrade(ctx, operation, options, nil)
+}
+
+// ApplyRelease applies an install or upgrade using a release that was already
+// resolved for an interactive preview. Reusing it keeps a moving "latest"
+// release consistent between confirmation and execution.
+func (s Service) ApplyRelease(ctx context.Context, operation Operation, options Options, release *Release) (Result, error) {
+	if operation == OperationUninstall {
+		return s.uninstall(ctx, options)
+	}
+	if release == nil || release.bundle == nil {
+		return Result{}, fmt.Errorf("resolved release is required")
+	}
+	if release.version != options.Version {
+		return Result{}, fmt.Errorf("resolved release version %q does not match requested version %q", release.version, options.Version)
+	}
+	return s.installOrUpgrade(ctx, operation, options, release.bundle)
 }
 
 func (s Service) report(kind EventKind, message string) {
@@ -108,7 +124,7 @@ func randomPassword() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(data), nil
 }
 
-func (s Service) installOrUpgrade(ctx context.Context, operation Operation, options Options) (result Result, resultErr error) {
+func (s Service) installOrUpgrade(ctx context.Context, operation Operation, options Options, resolved *bundle) (result Result, resultErr error) {
 	if err := options.Validate(operation); err != nil {
 		return result, err
 	}
@@ -120,12 +136,15 @@ func (s Service) installOrUpgrade(ctx context.Context, operation Operation, opti
 	if err := s.checkCompose(ctx); err != nil {
 		return result, err
 	}
-	s.report(EventStep, "Loading deployment bundle")
-	loadedBundle, err := (bundleLoader{client: s.HTTPClient}).Load(ctx, options)
-	if err != nil {
-		return result, err
+	loadedBundle := resolved
+	if loadedBundle == nil {
+		s.report(EventStep, "Loading deployment bundle")
+		loadedBundle, err = (bundleLoader{client: s.HTTPClient}).Load(ctx, options)
+		if err != nil {
+			return result, err
+		}
+		defer loadedBundle.Close()
 	}
-	defer loadedBundle.Close()
 
 	plan, err := prepareInstallPlan(operation, options, loadedBundle)
 	if err != nil {
@@ -410,64 +429,6 @@ func ensureSecrets(env *envFile) (string, error) {
 		return "", err
 	}
 	return password, nil
-}
-
-func applyImageReferences(env, state, manifest *envFile, options Options, mode string) error {
-	desired := map[string]string{}
-	explicit := map[string]bool{
-		"AGENT_COMPOSE_IMAGE":          options.BackendImageSet,
-		"AGENT_COMPOSE_FRONTEND_IMAGE": options.FrontendImageSet,
-		"DEFAULT_IMAGE":                options.GuestImageSet,
-	}
-	if options.ImagePrefix != "" {
-		version := options.Version
-		if image, ok := manifest.Get("AGENT_COMPOSE_IMAGE"); ok {
-			if colon := strings.LastIndex(image, ":"); colon > strings.LastIndex(image, "/") {
-				version = image[colon+1:]
-			}
-		}
-		frontendVersion := options.FrontendVersion
-		if frontendVersion == "" {
-			frontendVersion = DefaultVersion
-		}
-		desired["AGENT_COMPOSE_IMAGE"] = options.ImagePrefix + "/agent-compose:" + version
-		desired["AGENT_COMPOSE_FRONTEND_VERSION"] = frontendVersion
-		desired["AGENT_COMPOSE_FRONTEND_IMAGE"] = options.ImagePrefix + "/agent-compose-ui:" + frontendVersion
-		desired["DEFAULT_IMAGE"] = options.ImagePrefix + "/agent-compose-guest:" + version
-	} else {
-		for _, key := range []string{"AGENT_COMPOSE_IMAGE", "AGENT_COMPOSE_FRONTEND_VERSION", "AGENT_COMPOSE_FRONTEND_IMAGE", "DEFAULT_IMAGE"} {
-			if value, ok := manifest.Get(key); ok {
-				desired[key] = value
-			}
-		}
-	}
-	if options.BackendImageSet {
-		desired["AGENT_COMPOSE_IMAGE"] = strings.TrimSpace(options.BackendImage)
-	}
-	if options.FrontendImageSet {
-		desired["AGENT_COMPOSE_FRONTEND_IMAGE"] = strings.TrimSpace(options.FrontendImage)
-	}
-	if options.GuestImageSet {
-		desired["DEFAULT_IMAGE"] = strings.TrimSpace(options.GuestImage)
-	}
-	for key, value := range desired {
-		current, currentExists := env.Get(key)
-		managed, managedExists := state.Get(key)
-		shouldSet := explicit[key] || mode == "install" || !currentExists || current == ""
-		if mode == "upgrade" && managedExists && current == managed {
-			shouldSet = true
-		}
-		if !shouldSet {
-			continue
-		}
-		if err := env.Set(key, value); err != nil {
-			return err
-		}
-		if err := state.Set(key, value); err != nil {
-			return err
-		}
-	}
-	return state.Set("INSTALLER_PAYLOAD_VERSION", "1")
 }
 
 func selectDataDir(installDir string, env *envFile, existingEnv bool) (string, string, error) {
