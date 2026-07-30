@@ -23,7 +23,7 @@ require (
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.9
-	github.com/superradcompany/microsandbox/sdk/go v0.6.4
+	github.com/superradcompany/microsandbox/sdk/go v0.6.8
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
