@@ -146,7 +146,17 @@ func (r *AgentRunner) PrepareSandboxAgentEnvironment(ctx context.Context, sessio
 			return err
 		}
 	}
+	startupEnv, err := runtimefacade.EnsureSessionStartupFacadeConfig(ctx, r.config, facadeStoreFor(r.configDB), session, runtimefacade.TokenSourceAgent, "")
+	if err != nil {
+		if r.configDB != nil {
+			_ = r.configDB.RevokeLLMFacadeTokensForSandbox(context.WithoutCancel(ctx), session.Summary.ID)
+		}
+		return err
+	}
 	if _, err := r.prepareAgentFiles(ctx, session, agent, definition); err != nil {
+		if r.configDB != nil {
+			_ = r.configDB.RevokeLLMFacadeTokensForSandbox(context.WithoutCancel(ctx), session.Summary.ID)
+		}
 		return err
 	}
 	managedEnv, err := runtimefacade.EnsureSessionLLMFacadeConfig(ctx, r.config, facadeStoreFor(r.configDB), session, agent.Provider, agent.Model, "session", "")
@@ -162,8 +172,11 @@ func (r *AgentRunner) PrepareSandboxAgentEnvironment(ctx context.Context, sessio
 		}
 		return err
 	}
+	if len(startupEnv) > 0 {
+		session.RuntimeEnvItems = domain.MergeEnvItems(session.RuntimeEnvItems, llms.EnvItemsFromMap(startupEnv, true))
+	}
 	if len(managedEnv) > 0 {
-		session.RuntimeEnvItems = domain.MergeEnvItems(session.RuntimeEnvItems, llms.EnvItemsFromMap(managedEnv, false))
+		session.RuntimeEnvItems = domain.MergeEnvItems(session.RuntimeEnvItems, llms.EnvItemsFromMap(managedEnv, true))
 	}
 	return nil
 }

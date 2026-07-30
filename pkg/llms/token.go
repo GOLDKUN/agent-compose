@@ -16,13 +16,17 @@ func NewFacadeToken(sandboxID, model, providerID, wireAPI, source, runID string)
 	tokenValue := "ac_llm_" + hex.EncodeToString(raw)
 	hash, fingerprint := HashFacadeToken(tokenValue)
 	now := time.Now().UTC()
+	normalizedWireAPI := strings.TrimSpace(wireAPI)
+	if normalizedWireAPI != "" {
+		normalizedWireAPI = NormalizeWireAPI(normalizedWireAPI)
+	}
 	return tokenValue, FacadeToken{
 		SandboxID:        strings.TrimSpace(sandboxID),
 		TokenHash:        hash,
 		TokenFingerprint: fingerprint,
 		Model:            strings.TrimSpace(model),
 		ProviderID:       strings.TrimSpace(providerID),
-		WireAPI:          NormalizeWireAPI(wireAPI),
+		WireAPI:          normalizedWireAPI,
 		Source:           strings.TrimSpace(source),
 		RunID:            strings.TrimSpace(runID),
 		IssuedAt:         now,

@@ -14,6 +14,7 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/internal/testutil"
+	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/storage/sandboxstore"
 )
@@ -61,6 +62,16 @@ func TestAgentRunnerPrepareSandboxAgentEnvironmentUsesOnlyCurrentAgent(t *testin
 	if err != nil {
 		t.Fatalf("OpenStores returned error: %v", err)
 	}
+	if err := configDB.UpsertDefaultLLMConfig(ctx, llms.Provider{
+		ID:           "anthropic-primary",
+		Name:         "Anthropic",
+		ProviderType: llms.ProviderFamilyAnthropic,
+		BaseURL:      "https://anthropic.upstream.test",
+		APIKey:       "anthropic-upstream-secret",
+		Scope:        llms.ProviderScopeSystem,
+	}, llms.Model{ID: "claude-agent", Name: "claude-agent", Enabled: true, Scope: llms.ProviderScopeSystem}); err != nil {
+		t.Fatalf("save Anthropic provider: %v", err)
+	}
 	session, err := store.CreateSandbox(ctx, "agent environment", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeManual, nil, nil, []domain.SandboxTag{
 		{Name: domain.AgentSandboxTagSource, Value: domain.AgentSandboxTagSourceVal},
 		{Name: domain.AgentSandboxTagID, Value: "agent-1"},
@@ -93,8 +104,8 @@ func TestAgentRunnerPrepareSandboxAgentEnvironmentUsesOnlyCurrentAgent(t *testin
 	if env["OPENAI_API_KEY"] == "" || env["OPENAI_BASE_URL"] == "" {
 		t.Fatalf("missing current Codex environment: %#v", env)
 	}
-	if env["ANTHROPIC_API_KEY"] != "" || env["ANTHROPIC_BASE_URL"] != "" {
-		t.Fatalf("unexpected Claude environment: %#v", env)
+	if env["ANTHROPIC_API_KEY"] == "" || env["ANTHROPIC_BASE_URL"] == "" || env["ANTHROPIC_API_KEY"] == "anthropic-upstream-secret" {
+		t.Fatalf("missing or leaked Claude environment: %#v", env)
 	}
 	if data, err := os.ReadFile(execution.HostAgentSystemPromptPath(session)); err != nil || string(data) != definition.SystemPrompt {
 		t.Fatalf("system prompt = %q err=%v", string(data), err)
@@ -111,6 +122,16 @@ func TestAgentRunnerPrepareSandboxAgentEnvironmentUsesOnlyCurrentAgent(t *testin
 	}
 	if token.Model != "gpt-agent" || token.Source != "session" || token.RunID != "" {
 		t.Fatalf("sandbox token = %#v", token)
+	}
+	if err := store.UpdateSandbox(ctx, session); err != nil {
+		t.Fatalf("UpdateSandbox returned error: %v", err)
+	}
+	reloaded, err := store.GetSandbox(ctx, session.Summary.ID)
+	if err != nil {
+		t.Fatalf("GetSandbox returned error: %v", err)
+	}
+	if len(reloaded.RuntimeEnvItems) != 0 || domain.SandboxEnvMap(reloaded.EnvItems)["ANTHROPIC_API_KEY"] != "" || domain.SandboxEnvMap(reloaded.EnvItems)["OPENAI_API_KEY"] != "" {
+		t.Fatalf("transient facade environment persisted: %#v", reloaded)
 	}
 }
 
