@@ -68,6 +68,36 @@ func TestRuntimeLLMFacadeRoutesCoverageWorkflow(t *testing.T) {
 	}
 }
 
+func TestRuntimeLLMFacadeOpenAIStartupTokenAllowsBothIngressProtocols(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{name: "responses", path: "/api/runtime/sandboxes/sandbox-1/llm/openai/v1/responses", body: `{"model":"gpt","input":"hi"}`},
+		{name: "chat completions", path: "/api/runtime/sandboxes/sandbox-1/llm/openai/v1/chat/completions", body: `{"model":"gpt","messages":[{"role":"user","content":"hi"}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			e := echo.New()
+			client := &fakeRuntimeLLMHTTPClient{status: http.StatusOK, body: `{"id":"resp-1","model":"gpt","output":[]}`}
+			RegisterRuntimeLLMFacadeRoutes(e, RuntimeLLMOptions{
+				Tokens:        fakeRuntimeLLMTokens{token: llms.FacadeToken{SandboxID: "sandbox-1", ProviderID: "provider-1", WireAPI: "", ExpiresAt: time.Now().Add(time.Hour)}},
+				Sandboxes:     fakeRuntimeLLMSessions{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1", VMStatus: domain.VMStatusRunning}}},
+				ResolveTarget: fakeRuntimeLLMTargetResolver("http://upstream.test/v1"),
+				Client:        client,
+			})
+			req := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
+			req.Header.Set("Authorization", "Bearer raw-token")
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK || client.calls != 1 {
+				t.Fatalf("startup token status=%d body=%s calls=%d", rec.Code, rec.Body.String(), client.calls)
+			}
+		})
+	}
+}
+
 func TestRuntimeLLMFacadeProtocolAndStreamCoverage(t *testing.T) {
 	t.Run("anthropic transparent proxy", func(t *testing.T) {
 		e := echo.New()

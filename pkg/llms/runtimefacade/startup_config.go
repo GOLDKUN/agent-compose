@@ -1,0 +1,166 @@
+package runtimefacade
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	appconfig "agent-compose/pkg/config"
+	"agent-compose/pkg/llms"
+	domain "agent-compose/pkg/model"
+)
+
+// EnsureSessionStartupFacadeConfig creates the short-lived environment needed
+// by commands that may run before the selected agent's exact facade config is
+// applied. Each provider family gets its own provider-bound token. The common
+// facade variables are intentionally left to EnsureSessionAgentRuntimeConfig,
+// because one process environment cannot represent two different common
+// facade tokens at once.
+func EnsureSessionStartupFacadeConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, source, runID string) (map[string]string, error) {
+	if config == nil || store == nil || session == nil {
+		return nil, nil
+	}
+	baseURL := llms.GuestRuntimeBaseURL(config, session)
+	if strings.TrimSpace(baseURL) == "" {
+		return nil, nil
+	}
+
+	env := make(map[string]string)
+	for _, family := range []string{llms.ProviderFamilyAnthropic, llms.ProviderFamilyOpenAI} {
+		familyEnv, err := ensureStartupFamilyConfig(ctx, config, store, session, family, source, runID, baseURL)
+		if err != nil {
+			return nil, err
+		}
+		for name, value := range familyEnv {
+			env[name] = value
+		}
+	}
+	if len(env) == 0 {
+		return nil, nil
+	}
+	return env, nil
+}
+
+func ensureStartupFamilyConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, family, source, runID, baseURL string) (map[string]string, error) {
+	provider, available, err := llms.SelectRuntimeFacadeProvider(ctx, store, session.Summary.ID, family)
+	if err != nil {
+		return nil, fmt.Errorf("select %s startup facade provider: %w", family, err)
+	}
+	providerEnv, err := llms.SandboxProviderEnvItems(ctx, store, session, family)
+	if err != nil {
+		return nil, fmt.Errorf("load %s startup facade environment: %w", family, err)
+	}
+	if !available && !startupFamilyHasInput(ctx, config, store, family, providerEnv) {
+		return nil, nil
+	}
+	if !available {
+		target, resolveErr := llms.ResolveRuntimeLLMTargetWithEnv(
+			ctx,
+			config,
+			store,
+			session.Summary.ID,
+			family,
+			startupFamilyModel(ctx, config, store, family, providerEnv),
+			"",
+			providerEnv,
+		)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("resolve %s startup facade provider: %w", family, resolveErr)
+		}
+		provider = target.Provider
+	}
+
+	wireAPI := ""
+	if family == llms.ProviderFamilyAnthropic {
+		wireAPI = llms.APIProtocolMessages
+	}
+	rawToken, token, err := llms.NewFacadeToken(session.Summary.ID, "", provider.ID, wireAPI, source, runID)
+	if err != nil {
+		return nil, fmt.Errorf("issue %s startup facade token: %w", family, err)
+	}
+	if err := store.SaveLLMFacadeToken(ctx, token); err != nil {
+		return nil, fmt.Errorf("save %s startup facade token: %w", family, err)
+	}
+
+	familyBaseURL := strings.TrimRight(baseURL, "/") + "/api/runtime/sandboxes/" + session.Summary.ID
+	if family == llms.ProviderFamilyAnthropic {
+		familyBaseURL += "/llm/anthropic"
+		return map[string]string{
+			"ANTHROPIC_API_KEY":    rawToken,
+			"ANTHROPIC_AUTH_TOKEN": rawToken,
+			"ANTHROPIC_BASE_URL":   familyBaseURL,
+		}, nil
+	}
+	return map[string]string{
+		"OPENAI_API_KEY":  rawToken,
+		"OPENAI_BASE_URL": familyBaseURL + "/llm/openai/v1",
+	}, nil
+}
+
+func startupFamilyHasInput(ctx context.Context, config *appconfig.Config, store FacadeStore, family string, providerEnv []domain.SandboxEnvVar) bool {
+	if family == llms.ProviderFamilyAnthropic && llms.HasAnthropicEnvProviderInput(providerEnv) {
+		return true
+	}
+	if family == llms.ProviderFamilyOpenAI && llms.HasOpenAIEnvProviderInput(providerEnv) {
+		return true
+	}
+	protocol := startupEnvValue(ctx, config, store, "LLM_API_PROTOCOL")
+	switch family {
+	case llms.ProviderFamilyAnthropic:
+		return firstNonEmpty(
+			startupEnvValue(ctx, config, store, "ANTHROPIC_API_KEY"),
+			startupEnvValue(ctx, config, store, "ANTHROPIC_AUTH_TOKEN"),
+			startupEnvValue(ctx, config, store, "ANTHROPIC_BASE_URL"),
+		) != "" || (llms.NormalizeWireAPI(protocol) == llms.APIProtocolMessages && startupGenericInput(ctx, config, store))
+	case llms.ProviderFamilyOpenAI:
+		return firstNonEmpty(
+			startupEnvValue(ctx, config, store, "OPENAI_API_KEY"),
+			startupEnvValue(ctx, config, store, "OPENAI_BASE_URL"),
+		) != "" || (llms.NormalizeWireAPI(protocol) != llms.APIProtocolMessages && startupGenericInput(ctx, config, store))
+	default:
+		return false
+	}
+}
+
+func startupGenericInput(ctx context.Context, config *appconfig.Config, store FacadeStore) bool {
+	return firstNonEmpty(
+		startupEnvValue(ctx, config, store, "LLM_API_ENDPOINT"),
+		startupEnvValue(ctx, config, store, "LLM_API_KEY"),
+	) != ""
+}
+
+func startupFamilyModel(ctx context.Context, config *appconfig.Config, store FacadeStore, family string, providerEnv []domain.SandboxEnvVar) string {
+	if family == llms.ProviderFamilyAnthropic {
+		return firstNonEmpty(
+			llms.SessionAnthropicEnvModel(providerEnv),
+			startupEnvValue(ctx, config, store, "ANTHROPIC_MODEL"),
+			startupEnvValue(ctx, config, store, "CLAUDE_MODEL"),
+			startupEnvValue(ctx, config, store, "LLM_MODEL"),
+		)
+	}
+	return firstNonEmpty(
+		llms.EnvItemValue(providerEnv, "LLM_MODEL"),
+		startupEnvValue(ctx, config, store, "LLM_MODEL"),
+	)
+}
+
+func startupEnvValue(ctx context.Context, config *appconfig.Config, store FacadeStore, key string) string {
+	if value := llms.LookupEnvValue(ctx, store, key); value != "" {
+		return value
+	}
+	if config == nil {
+		return ""
+	}
+	switch strings.ToUpper(strings.TrimSpace(key)) {
+	case "LLM_API_ENDPOINT":
+		return config.LLMAPIEndpoint
+	case "LLM_API_PROTOCOL":
+		return config.LLMAPIProtocol
+	case "LLM_API_KEY":
+		return config.LLMAPIKey
+	case "LLM_MODEL":
+		return config.LLMModel
+	default:
+		return ""
+	}
+}
