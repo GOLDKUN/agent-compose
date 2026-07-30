@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
+
+	domain "agent-compose/pkg/model"
 )
 
 const deletionRecoveryWorkers = 2
@@ -84,40 +87,55 @@ func (r *DeletionRecovery) run(ctx context.Context, done chan struct{}) {
 	defer close(done)
 
 	records, warnings := ListOwnershipRecords(r.coordinator.SandboxRoot)
-	deleting := make([]OwnershipRecord, 0, len(records))
+	pending := make(map[string]struct{}, len(records))
 	for _, record := range records {
 		if record.LifecycleState == "deleting" {
-			deleting = append(deleting, record)
+			pending[record.SandboxID] = struct{}{}
+		}
+	}
+	listed, listErr := r.coordinator.Store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: 1 << 30})
+	if listErr != nil {
+		warnings = append(warnings, fmt.Sprintf("list archived sandboxes for deletion recovery: %v", listErr))
+	} else {
+		for _, sandbox := range listed.Sandboxes {
+			if sandbox.Archive != nil && sandbox.Archive.State == domain.SandboxArchiveStateArchived {
+				pending[sandbox.Summary.ID] = struct{}{}
+			}
 		}
 	}
 	for _, warning := range warnings {
-		r.logger.Warn("failed to read sandbox deletion journal", "warning", warning)
+		r.logger.Warn("sandbox deletion recovery warning", "warning", warning)
 	}
-	if len(deleting) == 0 || ctx.Err() != nil {
+	if len(pending) == 0 || ctx.Err() != nil {
 		return
 	}
+	ids := make([]string, 0, len(pending))
+	for sandboxID := range pending {
+		ids = append(ids, sandboxID)
+	}
+	sort.Strings(ids)
 
-	jobs := make(chan OwnershipRecord)
+	jobs := make(chan string)
 	var workers sync.WaitGroup
-	workerCount := min(deletionRecoveryWorkers, len(deleting))
+	workerCount := min(deletionRecoveryWorkers, len(ids))
 	workers.Add(workerCount)
 	for range workerCount {
 		go func() {
 			defer workers.Done()
-			for record := range jobs {
-				result, err := r.coordinator.Remove(ctx, record.SandboxID, true)
+			for sandboxID := range jobs {
+				result, err := r.coordinator.Remove(ctx, sandboxID, true)
 				if err == nil && !result.Removed {
 					err = fmt.Errorf("sandbox deletion did not complete")
 				}
-				r.logFailure(ctx, record.SandboxID, err)
+				r.logFailure(ctx, sandboxID, err)
 			}
 		}()
 	}
 
 sendRecords:
-	for _, record := range deleting {
+	for _, sandboxID := range ids {
 		select {
-		case jobs <- record:
+		case jobs <- sandboxID:
 		case <-ctx.Done():
 			break sendRecords
 		}

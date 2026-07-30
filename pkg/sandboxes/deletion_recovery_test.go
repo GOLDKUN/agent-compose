@@ -80,6 +80,35 @@ func TestDeletionRecoveryReportsFailureAndRetriesOnNextInstance(t *testing.T) {
 	waitForDeletionRecoveryDone(t, second)
 }
 
+func TestDeletionRecoveryRemovesArchivedSandboxWithoutCleanupPolicy(t *testing.T) {
+	root := t.TempDir()
+	sandboxID := "archived-before-removal"
+	sandboxDir := filepath.Join(root, sandboxID)
+	if err := os.MkdirAll(filepath.Join(sandboxDir, "state"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store := &archivedRecoveryStore{sandbox: &domain.Sandbox{
+		Summary: domain.SandboxSummary{
+			ID: sandboxID, VMStatus: domain.VMStatusStopped,
+			WorkspacePath: filepath.Join(sandboxDir, "workspace"),
+		},
+		Archive: &domain.SandboxArchive{State: domain.SandboxArchiveStateArchived, ID: "archive"},
+	}}
+	recovery := NewDeletionRecovery(&RemovalCoordinator{
+		SandboxRoot: root, Store: store, Runtime: &recoveryRuntime{},
+	}, discardRecoveryLogger())
+	if err := recovery.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitForDeletionRecoveryDone(t, recovery)
+	if !store.removed {
+		t.Fatal("archived sandbox was not removed by startup recovery")
+	}
+	if _, err := ReadOwnershipRecord(root, sandboxID); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ownership record remains after archived recovery: %v", err)
+	}
+}
+
 func TestDeletionRecoveryReportsUnreadableJournal(t *testing.T) {
 	root := t.TempDir()
 	lifecycleRoot := LifecycleRoot(root)
@@ -225,6 +254,35 @@ func (recoveryStore) ListSandboxes(context.Context, domain.SandboxListOptions) (
 
 func (recoveryStore) UpdateSandbox(context.Context, *domain.Sandbox) error { return nil }
 func (recoveryStore) RemoveSandbox(context.Context, string) error          { return nil }
+
+type archivedRecoveryStore struct {
+	sandbox *domain.Sandbox
+	removed bool
+}
+
+func (s *archivedRecoveryStore) GetSandbox(_ context.Context, id string) (*domain.Sandbox, error) {
+	if s.sandbox == nil || s.sandbox.Summary.ID != id || s.removed {
+		return nil, os.ErrNotExist
+	}
+	return s.sandbox, nil
+}
+
+func (s *archivedRecoveryStore) ListSandboxes(context.Context, domain.SandboxListOptions) (domain.SandboxListResult, error) {
+	if s.sandbox == nil || s.removed {
+		return domain.SandboxListResult{}, nil
+	}
+	return domain.SandboxListResult{Sandboxes: []*domain.Sandbox{s.sandbox}}, nil
+}
+
+func (s *archivedRecoveryStore) UpdateSandbox(_ context.Context, sandbox *domain.Sandbox) error {
+	s.sandbox = sandbox
+	return nil
+}
+
+func (s *archivedRecoveryStore) RemoveSandbox(context.Context, string) error {
+	s.removed = true
+	return nil
+}
 
 type recoveryRuntime struct {
 	blockedID          string

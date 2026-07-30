@@ -117,9 +117,22 @@ task test:e2e:docker-retention
 Set `AGENT_COMPOSE_E2E_RETENTION_IMAGE` to use another compatible local guest
 image. The test starts the built host daemon with short cleanup intervals,
 removes an expired materialization from an isolated `IMAGE_CACHE_ROOT`, creates
-and stops a real Docker sandbox, waits for automatic workspace reclamation,
-then verifies that sandbox metadata remains available and resume is rejected.
-All daemon data and Docker resources are fixture-scoped and cleaned afterward.
+and stops a real Docker sandbox, waits for automatic workspace deletion and
+full archival of the remaining sandbox, then verifies that the original
+sandbox record, directory, and Docker resources are removed. All daemon data
+and Docker resources are fixture-scoped and cleaned afterward.
+
+A focused archive-content variant is also available:
+
+```bash
+task image:agent-compose-guest
+task test:e2e:docker-retention-archive
+```
+
+Set `AGENT_COMPOSE_E2E_DOCKER_RETENTION_IMAGE` to use another compatible local
+guest image. It verifies that state, home, logs, context, runtime, metadata,
+VM/proxy state, and the lifecycle ownership record enter the archive, while
+workspace does not and no original sandbox data or Docker container remains.
 
 The real Docker scheduler script E2E is also opt-in because it starts a Docker
 sandbox and waits for a scheduler trigger. Run it with:

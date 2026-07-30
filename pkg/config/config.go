@@ -90,6 +90,7 @@ type Config struct {
 	CacheTTL                   time.Duration
 	CleanupInterval            time.Duration
 	WorkspaceCleanupTTL        time.Duration
+	SandboxArchiveRoot         string
 	ImageCacheCleanupTTL       time.Duration
 	ImagePullTimeout           time.Duration
 	GuestWorkspacePath         string
@@ -327,6 +328,10 @@ func NewConfig(di do.Injector) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	sandboxArchiveRoot := strings.TrimSpace(os.Getenv("SANDBOX_ARCHIVE_ROOT"))
+	if sandboxArchiveRoot == "" {
+		sandboxArchiveRoot = filepath.Join(dataRoot, "archives", "sandboxes")
+	}
 	imageCacheCleanupTTL, err := cleanupDurationEnv("IMAGE_CACHE_CLEANUP_TTL", 0)
 	if err != nil {
 		return nil, err
@@ -431,6 +436,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 
 	dataRoot = mustAbs(dataRoot)
 	sandboxRoot = mustAbs(sandboxRoot)
+	sandboxArchiveRoot = mustAbs(sandboxArchiveRoot)
 	boxliteHome = mustAbs(boxliteHome)
 	boxliteRuntimeDir = mustAbs(boxliteRuntimeDir)
 	dockerHome = mustAbs(dockerHome)
@@ -510,6 +516,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		CacheTTL:                   cacheTTL,
 		CleanupInterval:            cleanupInterval,
 		WorkspaceCleanupTTL:        workspaceCleanupTTL,
+		SandboxArchiveRoot:         sandboxArchiveRoot,
 		ImageCacheCleanupTTL:       imageCacheCleanupTTL,
 		ImagePullTimeout:           imagePullTimeout,
 		GuestWorkspacePath:         guestPaths.GuestWorkspacePath,

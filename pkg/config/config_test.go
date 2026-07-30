@@ -111,6 +111,22 @@ func TestNewConfigRejectsInvalidCleanupDurations(t *testing.T) {
 	}
 }
 
+func TestNewConfigDefaultsSandboxArchiveRootWithoutChangingWorkspaceCleanupTTL(t *testing.T) {
+	t.Setenv("DATA_ROOT", filepath.Join(t.TempDir(), "data"))
+	di := do.New()
+	do.ProvideValue(di, slog.Default())
+	config, err := NewConfig(di)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.WorkspaceCleanupTTL != 0 {
+		t.Fatalf("WorkspaceCleanupTTL = %s, want existing disabled default", config.WorkspaceCleanupTTL)
+	}
+	if config.SandboxArchiveRoot != filepath.Join(config.DataRoot, "archives", "sandboxes") {
+		t.Fatalf("SandboxArchiveRoot = %q", config.SandboxArchiveRoot)
+	}
+}
+
 func testNewConfigParsesEnvironment(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))

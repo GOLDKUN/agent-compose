@@ -25,6 +25,9 @@ const (
 
 	SandboxWorkspaceReclamationStateReclaiming = "reclaiming"
 	SandboxWorkspaceReclamationStateReclaimed  = "reclaimed"
+
+	SandboxArchiveStateArchiving = "archiving"
+	SandboxArchiveStateArchived  = "archived"
 )
 
 type SandboxTag struct {
@@ -176,6 +179,19 @@ type SandboxWorkspaceReclamation struct {
 	LastError   string    `json:"last_error,omitempty"`
 }
 
+// SandboxArchive records the durable audit archive created when a stopped
+// sandbox reaches the workspace cleanup cutoff. The archive itself lives
+// outside the sandbox ownership tree and therefore survives sandbox removal.
+type SandboxArchive struct {
+	State       string    `json:"state"`
+	ID          string    `json:"id"`
+	StartedAt   time.Time `json:"started_at"`
+	CompletedAt time.Time `json:"completed_at,omitempty"`
+	SizeBytes   int64     `json:"size_bytes,omitempty"`
+	SHA256      string    `json:"sha256,omitempty"`
+	LastError   string    `json:"last_error,omitempty"`
+}
+
 type Sandbox struct {
 	Summary               SandboxSummary                `json:"summary"`
 	BaseWorkspace         string                        `json:"base_workspace,omitempty"`
@@ -183,6 +199,7 @@ type Sandbox struct {
 	Workspace             *SandboxWorkspace             `json:"workspace,omitempty"`
 	WorkspaceProvisioning *SandboxWorkspaceProvisioning `json:"workspace_provisioning,omitempty"`
 	WorkspaceReclamation  *SandboxWorkspaceReclamation  `json:"workspace_reclamation,omitempty"`
+	Archive               *SandboxArchive               `json:"archive,omitempty"`
 	StoppedRuntimePolicy  string                        `json:"stopped_runtime_policy,omitempty"`
 	StoppedRuntime        *StoppedRuntime               `json:"stopped_runtime,omitempty"`
 	EnvItems              []SandboxEnvVar               `json:"env_items,omitempty"`

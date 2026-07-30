@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,7 @@ func TestE2EDockerDaemonRetentionCleanup(t *testing.T) {
 		cleanupE2EWorkspaceSandbox(t, dockerClient, sandboxClient, sandboxID, removed)
 	})
 	workspacePath := sandbox.GetWorkspacePath()
+	sandboxDir := filepath.Dir(workspacePath)
 	assertE2EDockerSandboxContainerCount(t, ctx, dockerClient, sandboxID, 1)
 
 	stopResp, err := sandboxClient.StopSandbox(ctx, connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID}))
@@ -83,20 +85,15 @@ func TestE2EDockerDaemonRetentionCleanup(t *testing.T) {
 		t.Fatalf("default stop policy/state = %q/%q, want remove/released", stopped.GetStoppedRuntimePolicy(), stopped.GetStoppedRuntimeState())
 	}
 	assertE2EDockerSandboxContainerCount(t, ctx, dockerClient, sandboxID, 0)
+	archivePattern := filepath.Join(testRoot, "archives", "sandboxes", sandboxID, "*.tar.zst")
 	waitForE2ECondition(t, 15*time.Second, func() bool {
-		response, getErr := sandboxClient.GetSandbox(ctx, connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
-		return getErr == nil && response.Msg.GetSandbox().GetWorkspaceReclamationState() == agentcomposev2.WorkspaceReclamationState_WORKSPACE_RECLAMATION_STATE_RECLAIMED
-	}, "stopped sandbox workspace was not reclaimed")
+		archives, _ := filepath.Glob(archivePattern)
+		_, sandboxErr := os.Stat(sandboxDir)
+		_, getErr := sandboxClient.GetSandbox(ctx, connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
+		return len(archives) == 1 && errors.Is(sandboxErr, os.ErrNotExist) && connect.CodeOf(getErr) == connect.CodeNotFound
+	}, "stopped sandbox was not archived and fully removed")
 	if _, err := os.Stat(workspacePath); !os.IsNotExist(err) {
 		t.Fatalf("reclaimed workspace still exists: %v", err)
-	}
-	if _, err := sandboxClient.ResumeSandbox(ctx, connect.NewRequest(&agentcomposev2.ResumeSandboxRequest{SandboxId: sandboxID})); err == nil {
-		t.Fatal("ResumeSandbox succeeded after workspace reclamation")
-	}
-
-	removeResp, err := sandboxClient.RemoveSandbox(ctx, connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: sandboxID, Force: true}))
-	if err != nil || removeResp.Msg.GetSandboxId() != sandboxID || !removeResp.Msg.GetRemoved() {
-		t.Fatalf("RemoveSandbox reclaimed sandbox = %#v, error %v", removeResp, err)
 	}
 	removed = true
 	removeE2EDockerSandboxFallback(t, ctx, dockerClient, sandboxID)
