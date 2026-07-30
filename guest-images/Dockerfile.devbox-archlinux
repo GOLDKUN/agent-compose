@@ -2,7 +2,8 @@ ARG REGISTRY_MIRROR=docker.io
 
 FROM ${REGISTRY_MIRROR}/library/archlinux:latest
 
-ARG GOPROXY=https://goproxy.cn
+ARG GOPROXY=https://proxy.golang.org
+ARG ARCHLINUX_MIRROR
 ARG CODEX_VERSION=0.146.0
 ARG CLAUDE_CODE_VERSION=2.1.220
 ARG GEMINI_CLI_VERSION=0.53.0
@@ -13,7 +14,11 @@ ARG QWEN_CODE_VERSION=0.19.8
 
 RUN ln -sfv /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
-RUN printf 'Server = http://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch\n' > /etc/pacman.d/mirrorlist
+RUN if [ -n "${ARCHLINUX_MIRROR}" ]; then \
+      printf 'Server = %s/$repo/os/$arch\n' "${ARCHLINUX_MIRROR%/}" > /tmp/pacman-mirrorlist && \
+      cat /etc/pacman.d/mirrorlist >> /tmp/pacman-mirrorlist && \
+      mv /tmp/pacman-mirrorlist /etc/pacman.d/mirrorlist; \
+    fi
 RUN pacman -Syu --disable-download-timeout --noconfirm git git-lfs git-delta tig lazygit npm go rsync python python-pip less pre-commit the_silver_searcher ripgrep vim bash-completion tmux which openbsd-netcat socat podman podman-compose jq yq ed zip protobuf buf uv proxychains-ng
 
 RUN go env -w GOPROXY=${GOPROXY},direct &&\

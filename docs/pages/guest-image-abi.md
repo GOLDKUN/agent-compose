@@ -304,9 +304,10 @@ task image:agent-compose-guest-archlinux
 
 The resulting tag is `agent-compose-guest:archlinux`. The task explicitly
 targets `linux/amd64`, so it also works through emulation on an Arm development
-host. Override the tag with `IMAGE_TAG`, and use `ARCHLINUX_TAG` or
-`ARCHLINUX_MIRROR` when a deployment needs a pinned base tag or another package
-mirror:
+host. By default, builds use the upstream Arch mirrorlist and the official Go,
+PyPI, and npm registries. Override the tag with `IMAGE_TAG`, and use
+`ARCHLINUX_TAG` or `ARCHLINUX_MIRROR` when a deployment needs a pinned base tag
+or another package mirror:
 
 ```bash
 IMAGE_TAG=registry.example.com/team/agent-compose-guest:vX.Y.Z-archlinux \

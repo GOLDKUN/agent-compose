@@ -1,11 +1,11 @@
 ARG REGISTRY_MIRROR=docker.io
-ARG GOPROXY=https://goproxy.cn,direct
+ARG GOPROXY=https://proxy.golang.org,direct
 ARG GO_VERSION=1.26.4
 ARG GRPCURL_VERSION=v1.9.3
 ARG ARCHLINUX_TAG=latest
-ARG ARCHLINUX_MIRROR=https://mirrors.aliyun.com/archlinux
-ARG PYPI_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
-ARG PYPI_TRUSTED_HOST=mirrors.tuna.tsinghua.edu.cn
+ARG ARCHLINUX_MIRROR
+ARG PYPI_INDEX_URL=https://pypi.org/simple
+ARG PYPI_TRUSTED_HOST
 ARG CODEX_VERSION=0.146.0
 ARG CLAUDE_CODE_VERSION=2.1.220
 ARG GEMINI_CLI_VERSION=0.53.0
@@ -59,7 +59,7 @@ RUN if [ -n "${BUILDPLATFORM}" ] && [ "${BUILDPLATFORM}" != "${TARGETPLATFORM}" 
       protobuf \
       python \
       python-pip && \
-    npm config set registry https://registry.npmmirror.com --global && \
+    npm config set registry https://registry.npmjs.org --global && \
     npm config set fund false --global && \
     npm config set update-notifier false --global && \
     pacman -Scc --noconfirm && \
@@ -71,8 +71,6 @@ ENV PIP_TRUSTED_HOST=${PYPI_TRUSTED_HOST}
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN PIP_REQUIRE_HASHES=0 python -m pip install --break-system-packages --no-cache-dir --no-input \
-    --index-url ${PYPI_INDEX_URL} \
-    --trusted-host ${PYPI_TRUSTED_HOST} \
     jupyterlab bash_kernel && \
     python -m bash_kernel.install --sys-prefix
 

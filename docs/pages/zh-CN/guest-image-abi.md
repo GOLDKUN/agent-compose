@@ -208,7 +208,7 @@ daemon 会自行使用配置的 port、root directory、base URL 和 token 启�
 task image:agent-compose-guest-archlinux
 ```
 
-生成的 tag 为 `agent-compose-guest:archlinux`。该 task 会显式构建 `linux/amd64`，因此也可以在 Arm 开发主机上通过模拟执行。可通过 `IMAGE_TAG` 覆盖 tag；如果部署需要固定 base tag 或使用其他软件包镜像，可设置 `ARCHLINUX_TAG` 或 `ARCHLINUX_MIRROR`：
+生成的 tag 为 `agent-compose-guest:archlinux`。该 task 会显式构建 `linux/amd64`，因此也可以在 Arm 开发主机上通过模拟执行。构建默认使用上游 Arch mirrorlist 以及 Go、PyPI 和 npm 官方 registry。可通过 `IMAGE_TAG` 覆盖 tag；如果部署需要固定 base tag 或使用其他软件包镜像，可设置 `ARCHLINUX_TAG` 或 `ARCHLINUX_MIRROR`：
 
 ```bash
 IMAGE_TAG=registry.example.com/team/agent-compose-guest:vX.Y.Z-archlinux \
