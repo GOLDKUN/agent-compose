@@ -92,13 +92,16 @@ func (m *model) syncReleaseImageFields() {
 	if m.release == nil {
 		return
 	}
+	preview, previewErr := m.service.PreviewImages(m.operation, m.options, m.release)
+	guestImage := m.release.Images.Guest
+	if previewErr == nil && preview.Guest.Value != "" {
+		guestImage = preview.Guest.Value
+	}
 	for _, item := range []struct {
 		id    fieldID
 		value string
 	}{
-		{id: fieldBackendImage, value: m.release.Images.Backend},
-		{id: fieldFrontendImage, value: m.release.Images.Frontend},
-		{id: fieldGuestImage, value: m.release.Images.Guest},
+		{id: fieldGuestImage, value: guestImage},
 	} {
 		field := m.field(item.id)
 		if field == nil || (!field.followsRelease && strings.TrimSpace(field.input.Value()) != "") {
@@ -107,6 +110,26 @@ func (m *model) syncReleaseImageFields() {
 		field.input.SetValue(item.value)
 		field.followsRelease = true
 	}
+	if registry := m.field(fieldRegistry); registry != nil && previewErr == nil && strings.TrimSpace(registry.input.Value()) == "" {
+		registry.input.SetValue(preview.Registry)
+	}
+	frontend := m.field(fieldFrontendVersion)
+	if frontend == nil {
+		return
+	}
+	selected := m.release.DefaultFrontendVersion
+	if previewErr == nil && preview.FrontendVersion != "" {
+		selected = preview.FrontendVersion
+	}
+	frontend.choices = append(frontend.choices[:0], m.release.FrontendVersions...)
+	frontend.choice = 0
+	for index, version := range frontend.choices {
+		if version == selected {
+			frontend.choice = index
+			break
+		}
+	}
+	frontend.followsRelease = true
 }
 
 func (m *model) showConfirmation() {

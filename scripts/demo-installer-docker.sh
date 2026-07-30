@@ -86,6 +86,7 @@ build_bundle() {
     printf 'INSTALLER_PAYLOAD_VERSION=1\n'
     printf 'AGENT_COMPOSE_IMAGE=%s\n' "$image"
     printf 'AGENT_COMPOSE_FRONTEND_VERSION=%s\n' "$version"
+    printf 'AGENT_COMPOSE_FRONTEND_VERSIONS=%s\n' "$version"
     printf 'AGENT_COMPOSE_FRONTEND_IMAGE=%s\n' "$image"
     printf 'DEFAULT_IMAGE=%s\n' "$image"
   } >"$payload/images/manifest.env"

@@ -8,7 +8,8 @@ usage() {
 usage: build-installer-assets.sh [OUTPUT_DIR]
 
 Build the three GitHub Release installer assets. VERSION and IMAGE_PREFIX must
-be set; AGENT_COMPOSE_FRONTEND_VERSION defaults to latest.
+be set. AGENT_COMPOSE_FRONTEND_VERSION defaults to latest, and
+AGENT_COMPOSE_FRONTEND_VERSIONS defaults to that single version.
 EOF
 }
 
@@ -26,15 +27,29 @@ fi
 VERSION=${VERSION:-}
 IMAGE_PREFIX=${IMAGE_PREFIX:-}
 FRONTEND_VERSION=${AGENT_COMPOSE_FRONTEND_VERSION:-latest}
+FRONTEND_VERSIONS=${AGENT_COMPOSE_FRONTEND_VERSIONS:-$FRONTEND_VERSION}
 OUTPUT_DIR=${1:-"$ROOT_DIR/upload"}
 
 [[ -n $VERSION ]] || die 'VERSION is required'
 [[ -n $IMAGE_PREFIX ]] || die 'IMAGE_PREFIX is required'
-for value_name in VERSION IMAGE_PREFIX FRONTEND_VERSION; do
+for value_name in VERSION IMAGE_PREFIX FRONTEND_VERSION FRONTEND_VERSIONS; do
   value=${!value_name}
   [[ $value != *$'\n'* && $value != *$'\r'* ]] \
     || die "$value_name must not contain a newline"
 done
+
+frontend_default_found=false
+IFS=',' read -r -a frontend_versions <<<"$FRONTEND_VERSIONS"
+declare -A seen_frontend_versions=()
+for frontend_version in "${frontend_versions[@]}"; do
+  [[ $frontend_version =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]] \
+    || die "invalid frontend version: $frontend_version"
+  [[ -z ${seen_frontend_versions[$frontend_version]:-} ]] \
+    || die "duplicate frontend version: $frontend_version"
+  seen_frontend_versions[$frontend_version]=1
+  [[ $frontend_version != "$FRONTEND_VERSION" ]] || frontend_default_found=true
+done
+$frontend_default_found || die 'AGENT_COMPOSE_FRONTEND_VERSION must be listed in AGENT_COMPOSE_FRONTEND_VERSIONS'
 
 for command_name in gzip sha256sum tar; do
   command -v "$command_name" >/dev/null 2>&1 \
@@ -71,6 +86,7 @@ install -m 0644 "$ROOT_DIR/.env.example" "$payload/.env.example"
   printf 'INSTALLER_PAYLOAD_VERSION=1\n'
   printf 'AGENT_COMPOSE_IMAGE=%s/agent-compose:%s\n' "$IMAGE_PREFIX" "$VERSION"
   printf 'AGENT_COMPOSE_FRONTEND_VERSION=%s\n' "$FRONTEND_VERSION"
+  printf 'AGENT_COMPOSE_FRONTEND_VERSIONS=%s\n' "$FRONTEND_VERSIONS"
   printf 'AGENT_COMPOSE_FRONTEND_IMAGE=%s/agent-compose-ui:%s\n' "$IMAGE_PREFIX" "$FRONTEND_VERSION"
   printf 'DEFAULT_IMAGE=%s/agent-compose-guest:%s\n' "$IMAGE_PREFIX" "$VERSION"
 } >"$payload/images/manifest.env"

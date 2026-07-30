@@ -204,7 +204,11 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if key.String() == "left" || key.String() == "right" || key.String() == " " {
-			if m.toggleFocusedField() {
+			delta := 1
+			if key.String() == "left" {
+				delta = -1
+			}
+			if m.toggleFocusedField(delta) {
 				return m, nil
 			}
 		}
@@ -228,7 +232,7 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.resolveRelease(m.options.Version, true)
 		}
-		if m.fields[m.focus].toggle {
+		if m.fields[m.focus].toggle || m.fields[m.focus].choiceField {
 			return m, nil
 		}
 		var cmd tea.Cmd
@@ -260,7 +264,7 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func isImageField(id fieldID) bool {
-	return id == fieldBackendImage || id == fieldFrontendImage || id == fieldGuestImage
+	return id == fieldGuestImage
 }
 
 func (m *model) updateMenu(key tea.KeyMsg, count int, selectFn func(int)) (tea.Model, tea.Cmd) {
@@ -360,11 +364,11 @@ func (m *model) renderMenu(body *strings.Builder, title string, choices []string
 func (m *model) formHeading() (string, string) {
 	switch m.operation {
 	case core.OperationUpgrade:
-		return m.text("配置升级", "Configure upgrade"), m.text("确认安装位置、目标版本和可选镜像覆盖", "Review the location, target version, and optional image overrides")
+		return m.text("配置升级", "Configure upgrade"), m.text("确认安装位置、目标版本、Registry 和可选镜像覆盖", "Review the location, target version, registry, and optional image overrides")
 	case core.OperationUninstall:
 		return m.text("选择安装位置", "Select installation"), m.text("指定要卸载的 agent-compose 目录", "Choose the agent-compose directory to uninstall")
 	default:
-		return m.text("配置安装", "Configure installation"), m.text("确认安装位置、发布版本、镜像和 Web UI", "Review the location, release, images, and web UI")
+		return m.text("配置安装", "Configure installation"), m.text("确认安装位置、发布版本、Registry 和 Web UI", "Review the location, release, registry, and web UI")
 	}
 }
 
@@ -375,11 +379,17 @@ func (m *model) renderConfirm(body *strings.Builder) {
 		fmt.Fprintf(body, "  %s: %t\n", m.text("删除数据", "Purge data"), m.options.Purge)
 	} else {
 		fmt.Fprintf(body, "  %s: %s\n", m.text("版本", "Version"), m.options.Version)
+		registry := m.preview.Registry
+		if registry == "" {
+			registry = m.text("docker.io（默认）", "docker.io (default)")
+		}
+		fmt.Fprintf(body, "  %s: %s\n", m.text("镜像 Registry", "Image registry"), registry)
 		fmt.Fprintf(body, "  %s: %s\n", m.text("后端镜像", "Backend image"), m.imageSelection(m.preview.Backend))
-		fmt.Fprintf(body, "  %s: %s\n", m.text("前端镜像", "Frontend image"), m.imageSelection(m.preview.Frontend))
 		fmt.Fprintf(body, "  %s: %s\n", m.text("Guest 镜像", "Guest image"), m.imageSelection(m.preview.Guest))
 		fmt.Fprintf(body, "  %s: %s\n", m.text("安装 Web UI", "Install web UI"), m.yesNo(m.options.WithUI))
 		if m.options.WithUI {
+			fmt.Fprintf(body, "  %s: %s\n", m.text("Web UI 版本", "Web UI version"), m.preview.FrontendVersion)
+			fmt.Fprintf(body, "  %s: %s\n", m.text("前端镜像", "Frontend image"), m.imageSelection(m.preview.Frontend))
 			fmt.Fprintf(body, "  %s: %d\n", m.text("Web UI 端口", "Web UI port"), m.options.Port)
 		}
 		fmt.Fprintf(body, "  %s: %s\n", m.text("预拉取 guest 镜像", "Pre-pull guest image"), m.yesNo(!m.options.SkipGuestPull))

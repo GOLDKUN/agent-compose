@@ -4,8 +4,168 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestReplaceImageRegistryPreservesRepositoryAndIdentifier(t *testing.T) {
+	for _, testCase := range []struct {
+		name      string
+		reference string
+		registry  string
+		want      string
+	}{
+		{name: "implicit Docker Hub", reference: "chaitin/agent-compose:v1", registry: "registry.example.com", want: "registry.example.com/chaitin/agent-compose:v1"},
+		{name: "explicit Docker Hub", reference: "docker.io/chaitin/agent-compose:v1", registry: "registry.example.com:5000", want: "registry.example.com:5000/chaitin/agent-compose:v1"},
+		{name: "other registry digest", reference: "old.example/team/guest@sha256:abc", registry: "new.example", want: "new.example/team/guest@sha256:abc"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := replaceImageRegistry(testCase.reference, testCase.registry); got != testCase.want {
+				t.Fatalf("replaceImageRegistry() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestSupportedFrontendVersions(t *testing.T) {
+	manifest := parseEnvFile([]byte("AGENT_COMPOSE_FRONTEND_VERSION=v2\nAGENT_COMPOSE_FRONTEND_VERSIONS=v2,v1\n"))
+	versions, defaultVersion, err := supportedFrontendVersions(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultVersion != "v2" || !reflect.DeepEqual(versions, []string{"v2", "v1"}) {
+		t.Fatalf("versions = %#v, default = %q", versions, defaultVersion)
+	}
+
+	for name, content := range map[string]string{
+		"default missing":          "AGENT_COMPOSE_FRONTEND_VERSIONS=v1,v2\n",
+		"default absent from list": "AGENT_COMPOSE_FRONTEND_VERSION=v3\nAGENT_COMPOSE_FRONTEND_VERSIONS=v1,v2\n",
+		"duplicate":                "AGENT_COMPOSE_FRONTEND_VERSION=v1\nAGENT_COMPOSE_FRONTEND_VERSIONS=v1,v1\n",
+		"invalid tag":              "AGENT_COMPOSE_FRONTEND_VERSION=v1\nAGENT_COMPOSE_FRONTEND_VERSIONS=v1,bad/tag\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := supportedFrontendVersions(parseEnvFile([]byte(content))); err == nil {
+				t.Fatal("expected invalid frontend version manifest")
+			}
+		})
+	}
+}
+
+func TestPreviewAppliesRegistryAndSelectedFrontendVersion(t *testing.T) {
+	options := DefaultOptions()
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v2", "v2", "v2,v1")
+	options.InstallDir = filepath.Join(t.TempDir(), "install")
+	options.Registry = "mirror.example.com"
+	options.RegistrySet = true
+	options.FrontendVersion = "v1"
+	options.FrontendVersionSet = true
+	service := Service{}
+	release, err := service.ResolveRelease(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release.Close()
+
+	preview, err := service.PreviewImages(OperationInstall, options, release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Registry != "mirror.example.com" || preview.FrontendVersion != "v1" {
+		t.Fatalf("preview settings = %#v", preview)
+	}
+	for _, selection := range []ImageSelection{preview.Backend, preview.Frontend, preview.Guest} {
+		if !strings.HasPrefix(selection.Value, "mirror.example.com/") {
+			t.Fatalf("image did not use registry: %#v", selection)
+		}
+	}
+	if !strings.HasSuffix(preview.Frontend.Value, ":v1") {
+		t.Fatalf("frontend image = %q", preview.Frontend.Value)
+	}
+
+	options.FrontendVersion = "unsupported"
+	if _, err := service.PreviewImages(OperationInstall, options, release); err == nil || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("unsupported frontend version error = %v", err)
+	}
+}
+
+func TestInstallPersistsRegistryAndFrontendVersion(t *testing.T) {
+	root := t.TempDir()
+	options := DefaultOptions()
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v2", "v2", "v2,v1")
+	options.InstallDir = filepath.Join(root, "install")
+	options.KVMPath = filepath.Join(root, "missing-kvm")
+	options.NoStart = true
+	options.Registry = "mirror.example.com:5000"
+	options.RegistrySet = true
+	options.FrontendVersion = "v1"
+	options.FrontendVersionSet = true
+
+	if _, err := (Service{Runner: &fakeRunner{}}).Apply(context.Background(), OperationInstall, options); err != nil {
+		t.Fatal(err)
+	}
+	state := readTestEnv(t, filepath.Join(options.InstallDir, ".installer-state.env"))
+	assertTestEnv(t, state, installerRegistryKey, "mirror.example.com:5000")
+	assertTestEnv(t, state, installerImagePrefixKey, "")
+	assertTestEnv(t, state, installerFrontendVersionKey, "v1")
+	env := readTestEnv(t, filepath.Join(options.InstallDir, ".env"))
+	assertTestEnv(t, env, backendImageKey, "mirror.example.com:5000/agent-compose:v2")
+	assertTestEnv(t, env, frontendImageKey, "mirror.example.com:5000/agent-compose-ui:v1")
+	assertTestEnv(t, env, guestImageKey, "mirror.example.com:5000/agent-compose-guest:v2")
+}
+
+func TestEffectiveOptionsMigratesLegacyImagePrefix(t *testing.T) {
+	state := parseEnvFile([]byte(
+		"AGENT_COMPOSE_IMAGE=legacy.example/team/agent-compose:v1\n" +
+			"AGENT_COMPOSE_FRONTEND_IMAGE=legacy.example/team/agent-compose-ui:v1\n" +
+			"DEFAULT_IMAGE=legacy.example/team/agent-compose-guest:v1\n",
+	))
+	manifest := parseEnvFile([]byte(
+		"AGENT_COMPOSE_FRONTEND_VERSION=v2\n" +
+			"AGENT_COMPOSE_FRONTEND_VERSIONS=v2,v1\n",
+	))
+	env := parseEnvFile([]byte("AGENT_COMPOSE_FRONTEND_VERSION=v1\n"))
+	effective, err := effectiveImageOptions(env, state, manifest, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effective.ImagePrefix != "legacy.example/team" || effective.FrontendVersion != "v1" {
+		t.Fatalf("legacy settings = %#v", effective)
+	}
+}
+
+func TestUpgradePreservesSupportedFrontendVersionAndRejectsRemovedVersion(t *testing.T) {
+	root := t.TempDir()
+	installDir := filepath.Join(root, "install")
+	options := DefaultOptions()
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v1", "v2", "v2,v1")
+	options.InstallDir = installDir
+	options.KVMPath = filepath.Join(root, "missing-kvm")
+	options.NoStart = true
+	options.Registry = "mirror.example.com"
+	options.RegistrySet = true
+	options.FrontendVersion = "v1"
+	options.FrontendVersionSet = true
+	service := Service{Runner: &fakeRunner{}}
+	if _, err := service.Apply(context.Background(), OperationInstall, options); err != nil {
+		t.Fatal(err)
+	}
+
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v2", "v3", "v3,v1")
+	options.Registry, options.RegistrySet = "", false
+	options.FrontendVersion, options.FrontendVersionSet = "", false
+	if _, err := service.Apply(context.Background(), OperationUpgrade, options); err != nil {
+		t.Fatal(err)
+	}
+	env := readTestEnv(t, filepath.Join(installDir, ".env"))
+	assertTestEnv(t, env, frontendVersionKey, "v1")
+	assertTestEnv(t, env, frontendImageKey, "mirror.example.com/agent-compose-ui:v1")
+
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v3", "v3", "v3,v2")
+	if _, err := service.Apply(context.Background(), OperationUpgrade, options); err == nil || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("removed frontend version error = %v", err)
+	}
+}
 
 func TestResolveReleaseReportsManifestImages(t *testing.T) {
 	options := DefaultOptions()
@@ -92,4 +252,28 @@ func TestApplyReleaseReusesResolvedBundle(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(options.InstallDir, ".env")); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func makeTestBundleWithFrontendVersions(t *testing.T, releaseVersion, defaultVersion, versions string) string {
+	t.Helper()
+	dir := makeTestBundle(t, releaseVersion)
+	path := filepath.Join(dir, "images", "manifest.env")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := parseEnvFile(data)
+	for key, value := range map[string]string{
+		frontendVersionKey:  defaultVersion,
+		frontendVersionsKey: versions,
+		frontendImageKey:    "registry.example/agent-compose-ui:" + defaultVersion,
+	} {
+		if err := manifest.Set(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(path, manifest.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }

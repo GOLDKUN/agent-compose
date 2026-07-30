@@ -24,9 +24,14 @@ func TestRootHelpDocumentsOperationsAndDefaultDirectory(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"install", "upgrade", "uninstall", "/opt/agent-compose", "--backend-image", "--frontend-image", "--guest-image"} {
+	for _, expected := range []string{"install", "upgrade", "uninstall", "/opt/agent-compose", "--registry", "--frontend-version", "--guest-image"} {
 		if !strings.Contains(output.String(), expected) {
 			t.Fatalf("help missing %q:\n%s", expected, output.String())
+		}
+	}
+	for _, hidden := range []string{"--backend-image", "--frontend-image", "--image-prefix"} {
+		if strings.Contains(output.String(), hidden) {
+			t.Fatalf("help exposed compatibility flag %q:\n%s", hidden, output.String())
 		}
 	}
 }

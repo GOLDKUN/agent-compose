@@ -25,7 +25,10 @@ func newRootCommand(out, errOut io.Writer) *cobra.Command {
 	defaults.InstallDir = envOrDefault("AGENT_COMPOSE_INSTALL_DIR", defaults.InstallDir)
 	defaults.Repository = envOrDefault("AGENT_COMPOSE_REPO", defaults.Repository)
 	defaults.ReleaseBaseURL = strings.TrimSpace(os.Getenv("AGENT_COMPOSE_RELEASE_BASE_URL"))
-	defaults.FrontendVersion = envOrDefault("AGENT_COMPOSE_FRONTEND_VERSION", defaults.FrontendVersion)
+	if frontendVersion := strings.TrimSpace(os.Getenv("AGENT_COMPOSE_FRONTEND_VERSION")); frontendVersion != "" {
+		defaults.FrontendVersion = frontendVersion
+		defaults.FrontendVersionSet = true
+	}
 	defaults.KVMPath = envOrDefault("AGENT_COMPOSE_KVM_DETECT_PATH", defaults.KVMPath)
 	options := &commandOptions{Options: defaults, yes: truthy(os.Getenv("AGENT_COMPOSE_YES"))}
 	root := &cobra.Command{
@@ -62,6 +65,8 @@ func newRootCommand(out, errOut io.Writer) *cobra.Command {
 	flags.BoolVar(&options.WithUI, "with-ui", options.WithUI, "also publish the web UI")
 	flags.BoolVar(&options.SkipGuestPull, "skip-guest-pull", false, "do not pre-pull the sandbox guest image")
 	flags.StringVar(&options.Version, "version", options.Version, "application release version")
+	flags.StringVar(&options.Registry, "registry", "", "registry host for release images")
+	flags.StringVar(&options.FrontendVersion, "frontend-version", options.FrontendVersion, "supported web UI version")
 	flags.StringVar(&options.ImagePrefix, "image-prefix", "", "image registry prefix")
 	flags.StringVar(&options.BackendImage, "backend-image", "", "complete backend image reference")
 	flags.StringVar(&options.FrontendImage, "frontend-image", "", "complete frontend image reference")
@@ -70,7 +75,9 @@ func newRootCommand(out, errOut io.Writer) *cobra.Command {
 	flags.BoolVarP(&options.yes, "yes", "y", options.yes, "skip confirmation prompts")
 	flags.BoolVar(&options.legacyUpgrade, "upgrade", false, "upgrade an existing installation (legacy form)")
 	_ = flags.MarkHidden("upgrade")
-	_ = flags.MarkDeprecated("image-prefix", "use --backend-image, --frontend-image, and --guest-image instead")
+	_ = flags.MarkHidden("image-prefix")
+	_ = flags.MarkHidden("backend-image")
+	_ = flags.MarkHidden("frontend-image")
 
 	root.AddCommand(newOperationCommand(core.OperationInstall, options, out, errOut))
 	root.AddCommand(newOperationCommand(core.OperationUpgrade, options, out, errOut))
@@ -104,6 +111,8 @@ func newOperationCommand(operation core.Operation, options *commandOptions, out,
 func markExplicitOptions(cmd *cobra.Command, options *commandOptions) {
 	options.PortSet = cmd.Flags().Changed("port")
 	options.WithUISet = cmd.Flags().Changed("with-ui")
+	options.RegistrySet = cmd.Flags().Changed("registry")
+	options.FrontendVersionSet = options.FrontendVersionSet || cmd.Flags().Changed("frontend-version")
 	options.BackendImageSet = cmd.Flags().Changed("backend-image")
 	options.FrontendImageSet = cmd.Flags().Changed("frontend-image")
 	options.GuestImageSet = cmd.Flags().Changed("guest-image")
@@ -212,7 +221,7 @@ func writeResult(out io.Writer, operation core.Operation, result core.Result, pu
 }
 
 func hasInstallerFlags(cmd *cobra.Command) bool {
-	for _, name := range []string{"dir", "port", "version", "image-prefix", "backend-image", "frontend-image", "guest-image", "no-start", "yes", "with-ui", "skip-guest-pull"} {
+	for _, name := range []string{"dir", "port", "version", "registry", "frontend-version", "image-prefix", "backend-image", "frontend-image", "guest-image", "no-start", "yes", "with-ui", "skip-guest-pull"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}

@@ -374,6 +374,8 @@ jobs:
       - name: Build installer assets
         env:
           VERSION: ${{ github.ref_name }}
+          AGENT_COMPOSE_FRONTEND_VERSION: ${{ vars.AGENT_COMPOSE_FRONTEND_VERSION || 'latest' }}
+          AGENT_COMPOSE_FRONTEND_VERSIONS: ${{ vars.AGENT_COMPOSE_FRONTEND_VERSIONS || vars.AGENT_COMPOSE_FRONTEND_VERSION || 'latest' }}
         run: ./scripts/build-installer-assets.sh ./upload
       - name: Publish release
         env:
