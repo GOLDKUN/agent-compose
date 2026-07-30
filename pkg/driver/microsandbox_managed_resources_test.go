@@ -64,3 +64,20 @@ func TestListMicrosandboxManagedSandboxesRejectsInvalidPagination(t *testing.T) 
 		})
 	}
 }
+
+func TestListMicrosandboxManagedSandboxesRejectsCursorCycle(t *testing.T) {
+	cursors := []string{"cursor-a", "cursor-b", "cursor-a"}
+	calls := 0
+
+	_, err := listMicrosandboxManagedSandboxes(context.Background(), func(context.Context, ...microsandbox.SandboxListOption) (*microsandbox.SandboxPage, error) {
+		page := &microsandbox.SandboxPage{NextCursor: &cursors[calls]}
+		calls++
+		return page, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "pagination cursor repeated") {
+		t.Fatalf("listMicrosandboxManagedSandboxes() error = %v, want repeated cursor error", err)
+	}
+	if calls != len(cursors) {
+		t.Fatalf("listMicrosandboxManagedSandboxes() calls = %d, want %d", calls, len(cursors))
+	}
+}

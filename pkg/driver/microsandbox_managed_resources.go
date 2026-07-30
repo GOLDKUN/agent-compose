@@ -59,6 +59,7 @@ func listMicrosandboxManagedSandboxes(ctx context.Context, listPage microsandbox
 	labels := microsandbox.WithListLabels(map[string]string{microsandboxManagedLabel: "true"})
 	var handles []*microsandbox.SandboxHandle
 	var cursor string
+	seenCursors := make(map[string]struct{})
 	for {
 		options := []microsandbox.SandboxListOption{labels}
 		if cursor != "" {
@@ -76,9 +77,10 @@ func listMicrosandboxManagedSandboxes(ctx context.Context, listPage microsandbox
 			return handles, nil
 		}
 		nextCursor := strings.TrimSpace(*page.NextCursor)
-		if nextCursor == cursor {
-			return nil, fmt.Errorf("list managed microsandbox sandboxes: pagination cursor did not advance")
+		if _, seen := seenCursors[nextCursor]; seen {
+			return nil, fmt.Errorf("list managed microsandbox sandboxes: pagination cursor repeated")
 		}
+		seenCursors[nextCursor] = struct{}{}
 		cursor = nextCursor
 	}
 }
