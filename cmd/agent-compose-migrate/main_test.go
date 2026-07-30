@@ -46,7 +46,7 @@ func TestE2ELegacyMigratorCLIJSONDryRun(t *testing.T) {
 	if err := reader.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if exitCode != 0 || report.Stage != "eligible" || report.TargetVersion != 9 || !report.DryRun {
+	if exitCode != 0 || report.Stage != "eligible" || report.TargetVersion != 10 || !report.DryRun {
 		t.Fatalf("exit=%d report=%+v", exitCode, report)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -91,7 +91,7 @@ func TestE2ELegacyMigratorCLITextDryRun(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exit code = %d, want 0", exitCode)
 	}
-	if got, want := strings.TrimSpace(string(output)), "legacy migration dry run: source schema version 9 is eligible"; got != want {
+	if got, want := strings.TrimSpace(string(output)), "legacy migration dry run: source schema version 10 is eligible"; got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -153,7 +153,7 @@ func TestE2ELegacyMigratorCLIInPlaceWorkflow(t *testing.T) {
 	}
 
 	report := runMigratorCLIJSON(t, "--source", root, "--target", root, "--json")
-	if report.Stage != "complete" || !report.InPlace || report.TargetVersion != 9 || report.Backup == "" {
+	if report.Stage != "complete" || !report.InPlace || report.TargetVersion != 10 || report.Backup == "" {
 		t.Fatalf("in-place report=%+v", report)
 	}
 	nativeInfo, err := os.Stat(filepath.Join(root, "sandboxes", sandboxID, "state.bin"))
@@ -164,7 +164,7 @@ func TestE2ELegacyMigratorCLIInPlaceWorkflow(t *testing.T) {
 		t.Fatalf("database backup is unavailable: %v", err)
 	}
 	repeated := runMigratorCLIJSON(t, "--source", root, "--target", root, "--json")
-	if repeated.Stage != "complete" || repeated.TargetVersion != 9 {
+	if repeated.Stage != "complete" || repeated.TargetVersion != 10 {
 		t.Fatalf("repeated in-place report=%+v", repeated)
 	}
 }

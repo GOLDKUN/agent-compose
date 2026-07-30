@@ -12,6 +12,14 @@ const (
 	ProjectRunSourceManual    = "manual"
 	ProjectRunSourceScheduler = "scheduler"
 	ProjectRunSourceAPI       = "api"
+
+	ProjectRunCleanupStopOnCompletion   = "stop_on_completion"
+	ProjectRunCleanupKeepRunning        = "keep_running"
+	ProjectRunCleanupRemoveOnCompletion = "remove_on_completion"
+
+	ProjectRunCompletionActionNone   = "none"
+	ProjectRunCompletionActionStop   = "stop"
+	ProjectRunCompletionActionRemove = "remove"
 )
 
 type ProjectRecord struct {
@@ -90,6 +98,8 @@ type ProjectRunRecord struct {
 	LogsPath        string    `json:"logs_path,omitempty"`
 	ArtifactsDir    string    `json:"artifacts_dir,omitempty"`
 	CleanupError    string    `json:"cleanup_error,omitempty"`
+	CleanupPolicy   string    `json:"cleanup_policy"`
+	SandboxCreated  bool      `json:"sandbox_created"`
 	Driver          string    `json:"driver,omitempty"`
 	ImageRef        string    `json:"image_ref,omitempty"`
 	StartedAt       time.Time `json:"started_at,omitempty"`
@@ -98,6 +108,21 @@ type ProjectRunRecord struct {
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 	Warnings        []string  `json:"warnings,omitempty"`
+}
+
+// ProjectRunCompletionRecord is the durable intent to finish a run after its
+// sandbox lifecycle action succeeds. TransitionJSON preserves the exact
+// result selected by the first completion writer across daemon restarts.
+type ProjectRunCompletionRecord struct {
+	RunID          string    `json:"run_id"`
+	TargetStatus   string    `json:"target_status"`
+	TransitionJSON string    `json:"transition_json"`
+	CleanupAction  string    `json:"cleanup_action"`
+	Attempt        int       `json:"attempt"`
+	LastError      string    `json:"last_error,omitempty"`
+	NextAttemptAt  time.Time `json:"next_attempt_at,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type ProjectRunEventKind string

@@ -669,9 +669,10 @@ func TestRunsControllerExistingSandboxDoesNotRepeatAgentEnvironmentPreparation(t
 	if err := fixture.store.UpdateSandbox(fixture.ctx, sandbox); err != nil {
 		t.Fatalf("UpdateSandbox returned error: %v", err)
 	}
-	result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, domain.ProjectRunRecord{
+	run := persistControllerFixtureRun(t, fixture, domain.ProjectRunRecord{
 		RunID: "run-existing", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", Driver: driverpkg.RuntimeDriverDocker, ImageRef: "guest:latest",
-	}, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID})
+	})
+	result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, run, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID})
 	if err != nil {
 		t.Fatalf("ensureProjectRunSandbox returned error: %v", err)
 	}
@@ -696,9 +697,10 @@ func TestRunsControllerFailedFreshSandboxRetryPreparesAgentEnvironment(t *testin
 		t.Fatalf("UpdateSandbox returned error: %v", err)
 	}
 
-	result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, domain.ProjectRunRecord{
+	run := persistControllerFixtureRun(t, fixture, domain.ProjectRunRecord{
 		RunID: "run-retry", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", Driver: driverpkg.RuntimeDriverDocker, ImageRef: "guest:latest",
-	}, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID})
+	})
+	result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, run, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID})
 	if err != nil {
 		t.Fatalf("ensureProjectRunSandbox returned error: %v", err)
 	}
@@ -730,9 +732,10 @@ func TestRunsControllerReleasedRuntimeResumePreparesAgentEnvironment(t *testing.
 		t.Fatalf("SaveVMState returned error: %v", err)
 	}
 
-	result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, domain.ProjectRunRecord{
+	run := persistControllerFixtureRun(t, fixture, domain.ProjectRunRecord{
 		RunID: "run-released", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", Driver: driverpkg.RuntimeDriverDocker, ImageRef: "guest:latest",
-	}, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID})
+	})
+	result, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, run, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID})
 	if err != nil {
 		t.Fatalf("ensureProjectRunSandbox returned error: %v", err)
 	}
@@ -1528,6 +1531,24 @@ func newControllerRunFixture(t *testing.T) *controllerRunFixture {
 	}
 }
 
+func persistControllerFixtureRun(t *testing.T, fixture *controllerRunFixture, run domain.ProjectRunRecord) domain.ProjectRunRecord {
+	t.Helper()
+	created, err := fixture.configDB.CreateProjectRun(fixture.ctx, run)
+	if err != nil {
+		t.Fatalf("CreateProjectRun returned error: %v", err)
+	}
+	return created
+}
+
+func assertNoTerminalStatusEvent(t *testing.T, events []domain.ProjectRunEventRecord) {
+	t.Helper()
+	for _, event := range events {
+		if event.Kind == domain.ProjectRunEventKindStatus {
+			t.Fatalf("unexpected terminal status event: %#v", event)
+		}
+	}
+}
+
 func runAgentWithRemoveOnCompletion(t *testing.T, fixture *controllerRunFixture, extra func(*RunAgentRequest)) (domain.ProjectRunRecord, error, error) {
 	t.Helper()
 	req := RunAgentRequest{
@@ -1639,9 +1660,10 @@ func TestRunsControllerRunProjectAgentCleanupErrorRecording(t *testing.T) {
 		if err != nil || execErr != nil {
 			t.Fatalf("RunProjectAgent err=%v execErr=%v run=%#v", err, execErr, run)
 		}
-		if run.Status != domain.ProjectRunStatusSucceeded || !strings.Contains(run.CleanupError, "stop failed") {
+		if run.Status != domain.ProjectRunStatusRunning || !strings.Contains(run.CleanupError, "stop failed") {
 			t.Fatalf("run = %#v", run)
 		}
+		assertNoTerminalStatusEvent(t, fixture.configDB.events)
 		if _, statErr := os.Stat(fixture.store.SandboxDir(run.SandboxID)); statErr != nil {
 			t.Fatalf("sandbox dir should remain when cleanup fails: %v", statErr)
 		}
@@ -1657,6 +1679,10 @@ func TestRunsControllerRunProjectAgentCleanupErrorRecording(t *testing.T) {
 		if !strings.Contains(run.CleanupError, "runtime remove failed") {
 			t.Fatalf("cleanup error = %q", run.CleanupError)
 		}
+		if run.Status != domain.ProjectRunStatusRunning {
+			t.Fatalf("run status = %q, want running", run.Status)
+		}
+		assertNoTerminalStatusEvent(t, fixture.configDB.events)
 		if _, statErr := os.Stat(fixture.store.SandboxDir(run.SandboxID)); statErr != nil {
 			t.Fatalf("sandbox dir should remain when runtime removal fails: %v", statErr)
 		}
@@ -1671,9 +1697,10 @@ func TestRunsControllerRunProjectAgentCleanupErrorRecording(t *testing.T) {
 		if err != nil || execErr == nil || !strings.Contains(execErr.Error(), "agent failed") {
 			t.Fatalf("RunProjectAgent err=%v execErr=%v run=%#v", err, execErr, run)
 		}
-		if run.Status != domain.ProjectRunStatusFailed || !strings.Contains(run.Error, "agent failed") || !strings.Contains(run.CleanupError, "stop failed") {
+		if run.Status != domain.ProjectRunStatusRunning || !strings.Contains(run.Error, "agent failed") || !strings.Contains(run.CleanupError, "stop failed") {
 			t.Fatalf("run = %#v", run)
 		}
+		assertNoTerminalStatusEvent(t, fixture.configDB.events)
 	})
 
 	t.Run("session start failure cleans created sandbox", func(t *testing.T) {

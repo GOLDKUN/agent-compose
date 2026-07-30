@@ -421,13 +421,18 @@ scheduler trigger, or future API clients.
 5. Create a new sandbox or reuse an existing sandbox with `--sandbox`.
 6. Write project, agent, run_id, scheduler_id, source, and related tags to the
    sandbox.
-7. Mark run as running and call the existing agent executor.
+7. Persist the run/sandbox binding before starting or resuming runtime, mark
+   the run as running, and call the existing agent executor.
 8. Stream start/output/completed events for streaming requests.
-9. Persist terminal run state for success, failure, cancellation, workspace
-  preparation failure, sandbox startup failure, agent execution failure, and
-   stream send failure.
-10. Stop the runtime by default while preserving sandbox/run history. The
-    `KEEP_RUNNING` cleanup policy keeps the sandbox running.
+9. Atomically stage the exact completion result and stable final agent/result
+   events in a durable completion journal. The run remains running and has no
+   terminal status event while cleanup is pending.
+10. Stop the runtime by default, fully remove a newly created sandbox for
+    `REMOVE_ON_COMPLETION`, or skip cleanup for `KEEP_RUNNING`. Cleanup failures
+    are retried with bounded backoff and recovered after daemon restart.
+11. After cleanup succeeds, atomically commit the terminal run fields and its
+    unique status event and remove the completion journal. `StopRun` is a
+    cancellation request and can therefore return before this terminal commit.
 
 State queries primarily use project/run relationships in SQLite. Sandbox tags
 are used for compatibility queries, `down` stopping project sandboxes, and

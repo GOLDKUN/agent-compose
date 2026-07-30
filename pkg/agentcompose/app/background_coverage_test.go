@@ -13,6 +13,7 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/runs"
 	"agent-compose/pkg/storage/sandboxstore"
 )
 
@@ -106,10 +107,14 @@ func TestReconcilePersistedProjectRunsMarksInterruptedRunsFailed(t *testing.T) {
 			t.Fatalf("CreateProjectRun(%s) returned error: %v", run.RunID, err)
 		}
 	}
-	if err := reconcilePersistedProjectRuns(ctx, store, time.Now().Add(2*time.Second)); err != nil {
+	completions := runs.NewCompletionManager(store, nil, nil, nil, nil)
+	if err := reconcilePersistedProjectRuns(ctx, store, completions, time.Now().Add(2*time.Second)); err != nil {
 		t.Fatalf("reconcilePersistedProjectRuns returned error: %v", err)
 	}
 	for _, runID := range []string{"run-pending", "run-running"} {
+		if _, err := completions.Complete(ctx, runs.TransitionRequest{RunID: runID, Status: domain.ProjectRunStatusFailed}); err != nil {
+			t.Fatalf("complete reconciled run %s: %v", runID, err)
+		}
 		run, err := store.GetProjectRun(ctx, runID)
 		if err != nil {
 			t.Fatalf("GetProjectRun(%s) returned error: %v", runID, err)
@@ -135,7 +140,7 @@ func TestReconcilePersistedProjectRunsMarksInterruptedRunsFailed(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateProjectRun(run-fresh) returned error: %v", err)
 	}
-	if err := reconcilePersistedProjectRuns(ctx, store, time.Now().Add(-2*time.Second)); err != nil {
+	if err := reconcilePersistedProjectRuns(ctx, store, completions, time.Now().Add(-2*time.Second)); err != nil {
 		t.Fatalf("fresh reconcilePersistedProjectRuns returned error: %v", err)
 	}
 	fresh, err := store.GetProjectRun(ctx, "run-fresh")

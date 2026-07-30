@@ -22,19 +22,20 @@ const (
 	databaseName         = "data.db"
 	journalName          = ".agent-compose-migrate.json"
 	inPlaceBackupName    = ".agent-compose-migrate-backup"
-	currentSchemaVersion = 9
+	currentSchemaVersion = 10
 )
 
 var knownMigrationChecksums = map[int64]string{
-	1: "6d2a07e2df01c38a57989accc3eb265cc3238ae3322f5dd540383235e59e27a9",
-	2: "fa328b0bd1be3620d4a92b94bd39d6cb4a3a6d454ce1de643e82598f9c028a49",
-	3: "5bdbd3258245ce7fc025121625408b35b444a425ffcb89aed0b8b7a846969183",
-	4: "3d5c2ab028a6f7e1c461f0af3fc6d898807b60159f1625b8939987d6ce7b91cb",
-	5: "e43cc1ffdfcd45e5e81a8fc098a6e77299e6e437f8c447eb0db49443a3bd29d2",
-	6: "92da2ea1c85e7d1321ca1e4260370a3d12057219005a83808529dbdd8d25299a",
-	7: "a8cb740e25992d3f3121bcfbff07c67cff699e8625d281edf60c0e76f91ce9ba",
-	8: "4569a4d7f82de70d3a2545dcdff07e0929e55daffaedf13fd6f2b8a8bcbf1d3e",
-	9: "916b84e78f6956ae5af9e38720fa4c6c0c7dfe9d72ddba068790ce44a80e7fb3",
+	1:  "6d2a07e2df01c38a57989accc3eb265cc3238ae3322f5dd540383235e59e27a9",
+	2:  "fa328b0bd1be3620d4a92b94bd39d6cb4a3a6d454ce1de643e82598f9c028a49",
+	3:  "5bdbd3258245ce7fc025121625408b35b444a425ffcb89aed0b8b7a846969183",
+	4:  "3d5c2ab028a6f7e1c461f0af3fc6d898807b60159f1625b8939987d6ce7b91cb",
+	5:  "e43cc1ffdfcd45e5e81a8fc098a6e77299e6e437f8c447eb0db49443a3bd29d2",
+	6:  "92da2ea1c85e7d1321ca1e4260370a3d12057219005a83808529dbdd8d25299a",
+	7:  "a8cb740e25992d3f3121bcfbff07c67cff699e8625d281edf60c0e76f91ce9ba",
+	8:  "4569a4d7f82de70d3a2545dcdff07e0929e55daffaedf13fd6f2b8a8bcbf1d3e",
+	9:  "916b84e78f6956ae5af9e38720fa4c6c0c7dfe9d72ddba068790ce44a80e7fb3",
+	10: "63a1d45d94cbd1ade08ee556c7615f2dcbdd4411740f03ed12d93d67a1509d78",
 }
 
 var ErrReported = errors.New("migration failure is included in the report")

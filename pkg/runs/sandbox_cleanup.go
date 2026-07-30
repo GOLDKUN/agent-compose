@@ -9,27 +9,6 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
-func (c *Controller) cleanupProjectRunSandbox(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandboxResult SandboxResult, policy agentcomposev2.RunSandboxCleanupPolicy) domain.ProjectRunRecord {
-	sandbox := sandboxResult.Sandbox
-	if !CleanupPolicyStopsSandbox(policy) || sandbox == nil {
-		return run
-	}
-	cleanupErr := c.cleanupProjectRunSandboxByPolicy(ctx, sandboxResult, policy)
-	if cleanupErr == nil {
-		return run
-	}
-	updated, err := coordinator.TransitionRun(ctx, TransitionRequest{
-		RunID:        run.RunID,
-		Status:       run.Status,
-		SandboxID:    run.SandboxID,
-		CleanupError: cleanupErr.Error(),
-	})
-	if err != nil {
-		return run
-	}
-	return updated
-}
-
 func (c *Controller) cleanupProjectRunSandboxByPolicy(ctx context.Context, sandboxResult SandboxResult, policy agentcomposev2.RunSandboxCleanupPolicy) error {
 	sandbox := sandboxResult.Sandbox
 	if CleanupPolicyRemovesSandbox(policy) && sandboxResult.Created {

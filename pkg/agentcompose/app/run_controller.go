@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"connectrpc.com/connect"
@@ -53,7 +54,33 @@ func NewRunController(di do.Injector) (*runs.Controller, error) {
 		RunLogs:         do.MustInvoke[*runs.RunLogHub](di),
 		LifecycleLocks:  do.MustInvoke[*sandboxes.LifecycleLocks](di),
 		Removal:         do.MustInvoke[*sandboxes.RemovalCoordinator](di),
+		Completion:      do.MustInvoke[*runs.CompletionManager](di),
 	}), nil
+}
+
+type runCompletionStopper struct {
+	config    *appconfig.Config
+	store     *sandboxstore.Store
+	driver    *adapters.SandboxDriver
+	streams   *sandboxes.StreamBroker
+	locks     *sandboxes.LifecycleLocks
+	capTokens *adapters.CapabilitySandboxResolver
+}
+
+func (s runCompletionStopper) Stop(ctx context.Context, sandbox *domain.Sandbox) error {
+	return stopProjectSandbox(ctx, s.config.SandboxRoot, s.locks, s.store, s.driver, s.streams, sandbox, s.capTokens)
+}
+
+func NewRunCompletionManager(di do.Injector) (*runs.CompletionManager, error) {
+	stopper := runCompletionStopper{
+		config: do.MustInvoke[*appconfig.Config](di), store: do.MustInvoke[*sandboxstore.Store](di),
+		driver: do.MustInvoke[*adapters.SandboxDriver](di), streams: do.MustInvoke[*sandboxes.StreamBroker](di),
+		locks: do.MustInvoke[*sandboxes.LifecycleLocks](di), capTokens: do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
+	}
+	return runs.NewCompletionManager(
+		do.MustInvoke[*configstore.ConfigStore](di), do.MustInvoke[*sandboxstore.Store](di), stopper,
+		do.MustInvoke[*sandboxes.RemovalCoordinator](di), do.MustInvoke[*slog.Logger](di),
+	), nil
 }
 
 type runControllerDelegate struct {
@@ -62,11 +89,17 @@ type runControllerDelegate struct {
 }
 
 func (d runControllerDelegate) RunProjectCommandAttach(ctx context.Context, receive runs.RunAttachReceiver, send runs.RunAttachSender) error {
-	return runConnectError(d.controller.RunProjectCommandAttach(ctx, receive, send))
+	if d.supervisor == nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("run supervisor is required"))
+	}
+	return runConnectError(d.supervisor.Attach(ctx, receive, send))
 }
 
 func (d runControllerDelegate) RunAgent(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest]) (*connect.Response[agentcomposev2.RunAgentResponse], error) {
-	run, _, err := d.controller.RunProjectAgent(ctx, runAgentRequestFromProto(req.Msg), nil)
+	if d.supervisor == nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("run supervisor is required"))
+	}
+	run, _, err := d.supervisor.Run(ctx, runAgentRequestFromProto(req.Msg), nil)
 	if err != nil {
 		return nil, runConnectError(err)
 	}
@@ -101,7 +134,10 @@ func (d runControllerDelegate) StreamAgentRun(ctx context.Context, req *connect.
 			return sendRunAgentStreamChunk(stream, runID, chunk, createdAt)
 		},
 	}
-	run, execErr, err := d.controller.RunProjectAgent(ctx, runAgentRequestFromProto(req.Msg), &sink)
+	if d.supervisor == nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("run supervisor is required"))
+	}
+	run, execErr, err := d.supervisor.Run(ctx, runAgentRequestFromProto(req.Msg), &sink)
 	if err != nil {
 		return runConnectError(err)
 	}

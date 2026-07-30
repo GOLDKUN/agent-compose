@@ -258,6 +258,36 @@ func TestV2MigrationDesignAppliesEachNewVersionIndependently(t *testing.T) {
 	assertNoForeignKeyViolations(t, db)
 }
 
+func TestProjectRunCompletionMigrationPreservesV9Runs(t *testing.T) {
+	ctx := context.Background()
+	db := newMemoryDB(t)
+	chain := loadV2MigrationDesignChain(t)
+	if err := applyMigrationSet(ctx, db, chain[:9]); err != nil {
+		t.Fatalf("apply v9 prefix: %v", err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO project(id,name) VALUES('project-1','project')`,
+		`INSERT INTO project_agent(id,project_id,agent_name,created_at,updated_at) VALUES('agent-1','project-1','worker',1,1)`,
+		`INSERT INTO project_run(run_id,project_id,agent_id,status,sandbox_id,result_json,created_at,updated_at) VALUES('run-1','project-1','agent-1','running','sandbox-1','{}',1,1)`,
+	} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("seed v9 run with %q: %v", statement, err)
+		}
+	}
+	if err := applyMigrationSet(ctx, db, chain); err != nil {
+		t.Fatalf("apply v10 migration: %v", err)
+	}
+	var policy string
+	var created int
+	if err := db.QueryRowContext(ctx, `SELECT cleanup_policy, sandbox_created FROM project_run WHERE run_id='run-1'`).Scan(&policy, &created); err != nil {
+		t.Fatal(err)
+	}
+	if policy != "stop_on_completion" || created != 0 {
+		t.Fatalf("migrated run policy/created = %q/%d", policy, created)
+	}
+	assertSQLiteTablesPresent(t, db, "project_run_completion")
+}
+
 func TestV2MigrationDesignDeduplicatesEquivalentLegacyEventLinks(t *testing.T) {
 	ctx := context.Background()
 	db := newMemoryDB(t)
@@ -393,8 +423,8 @@ func loadV2MigrationDesignChain(t *testing.T) []migration {
 	if err != nil {
 		t.Fatalf("load migrations: %v", err)
 	}
-	if len(chain) != 9 {
-		t.Fatalf("migration count = %d, want 9", len(chain))
+	if len(chain) != 10 {
+		t.Fatalf("migration count = %d, want 10", len(chain))
 	}
 	return chain
 }

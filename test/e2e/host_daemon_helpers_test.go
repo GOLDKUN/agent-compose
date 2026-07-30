@@ -105,6 +105,23 @@ func (p *e2eDaemonProcess) stop(t *testing.T) {
 	})
 }
 
+func (p *e2eDaemonProcess) hardKill(t *testing.T) {
+	t.Helper()
+	if p == nil || p.cmd == nil || p.cmd.Process == nil {
+		t.Fatal("agent-compose daemon process is unavailable")
+	}
+	p.stopOnce.Do(func() {
+		if err := p.cmd.Process.Kill(); err != nil {
+			t.Fatalf("hard-kill agent-compose daemon: %v", err)
+		}
+		select {
+		case <-p.done:
+		case <-time.After(15 * time.Second):
+			t.Fatal("hard-killed agent-compose daemon did not exit")
+		}
+	})
+}
+
 func waitForE2EDaemon(t *testing.T, ctx context.Context, daemon *e2eDaemonProcess, baseURL string) {
 	t.Helper()
 	client := newE2EHTTPClient()

@@ -94,6 +94,19 @@ it before creating and validating a date-partitioned sandbox of its own.
 This focused task is intentionally absent from `task test` and GitHub Actions
 because GitHub-hosted CI does not provide its prebuilt guest-image prerequisite.
 
+Interrupted run cleanup has an opt-in hard-restart Docker E2E:
+
+```bash
+task image:agent-compose-guest
+task test:e2e:docker-run-completion-recovery
+```
+
+Set `AGENT_COMPOSE_E2E_RUN_COMPLETION_IMAGE` to use another compatible local
+guest image. The test starts a long-running command through the public API,
+hard-kills the host daemon, restarts it against the same data root, and verifies
+that the interrupted run becomes `FAILED` only after its Docker sandbox no
+longer consumes active compute resources.
+
 The daemon retention cleanup has a separate opt-in real Docker E2E:
 
 ```bash
