@@ -26,10 +26,11 @@ const (
 // expressed as a textinput.Model, and the port field has to render as disabled
 // rather than disappear, so the form tracks fields instead of raw inputs.
 type formField struct {
-	id     fieldID
-	toggle bool
-	on     bool
-	input  textinput.Model
+	id             fieldID
+	toggle         bool
+	on             bool
+	followsRelease bool
+	input          textinput.Model
 }
 
 func newTextField(id fieldID, value string) formField {
@@ -44,14 +45,20 @@ func newToggleField(id fieldID, on bool) formField {
 	return formField{id: id, toggle: true, on: on}
 }
 
+func newImageField(id fieldID, value string, explicitlySet bool) formField {
+	field := newTextField(id, value)
+	field.followsRelease = !explicitlySet
+	return field
+}
+
 func (m *model) buildFields() {
 	m.fields = []formField{newTextField(fieldInstallDir, m.options.InstallDir)}
 	if m.operation != core.OperationUninstall {
 		m.fields = append(m.fields,
 			newTextField(fieldVersion, m.options.Version),
-			newTextField(fieldBackendImage, m.options.BackendImage),
-			newTextField(fieldFrontendImage, m.options.FrontendImage),
-			newTextField(fieldGuestImage, m.options.GuestImage),
+			newImageField(fieldBackendImage, m.options.BackendImage, m.options.BackendImageSet),
+			newImageField(fieldFrontendImage, m.options.FrontendImage, m.options.FrontendImageSet),
+			newImageField(fieldGuestImage, m.options.GuestImage, m.options.GuestImageSet),
 			newToggleField(fieldWithUI, m.options.WithUI),
 			newTextField(fieldPort, strconv.Itoa(m.options.Port)),
 			newToggleField(fieldGuestPull, !m.options.SkipGuestPull),
@@ -120,14 +127,11 @@ func (m *model) readFields() error {
 		case fieldVersion:
 			m.options.Version = strings.TrimSpace(field.input.Value())
 		case fieldBackendImage:
-			m.options.BackendImage = strings.TrimSpace(field.input.Value())
-			m.options.BackendImageSet = m.options.BackendImage != ""
+			m.readImageField(i, &m.options.BackendImage, &m.options.BackendImageSet)
 		case fieldFrontendImage:
-			m.options.FrontendImage = strings.TrimSpace(field.input.Value())
-			m.options.FrontendImageSet = m.options.FrontendImage != ""
+			m.readImageField(i, &m.options.FrontendImage, &m.options.FrontendImageSet)
 		case fieldGuestImage:
-			m.options.GuestImage = strings.TrimSpace(field.input.Value())
-			m.options.GuestImageSet = m.options.GuestImage != ""
+			m.readImageField(i, &m.options.GuestImage, &m.options.GuestImageSet)
 		case fieldWithUI:
 			m.options.WithUI = field.on
 			m.options.WithUISet = true
@@ -153,6 +157,21 @@ func (m *model) readFields() error {
 		m.options.InstallerPath = m.installerPath
 	}
 	return m.options.Validate(m.operation)
+}
+
+func (m *model) readImageField(index int, value *string, explicitlySet *bool) {
+	field := &m.fields[index]
+	trimmed := strings.TrimSpace(field.input.Value())
+	if trimmed == "" {
+		field.followsRelease = true
+	}
+	if field.followsRelease {
+		*value = ""
+		*explicitlySet = false
+		return
+	}
+	*value = trimmed
+	*explicitlySet = true
 }
 
 func (m *model) fieldLabel(id fieldID) string {
@@ -183,6 +202,9 @@ func (m *model) renderForm(body *strings.Builder) {
 	body.WriteString(mutedStyle.Render(description) + "\n\n")
 	for i := range m.fields {
 		m.renderFormField(body, i)
+	}
+	if m.resolving {
+		body.WriteString(mutedStyle.Render(m.spinner.View()+" "+m.text("正在解析版本 ", "Resolving release ")+m.resolvingVersion) + "\n")
 	}
 	if m.err != nil {
 		body.WriteString(warnStyle.Render("! "+m.err.Error()) + "\n")

@@ -38,25 +38,33 @@ type operationResult struct {
 type eventMessage core.Event
 
 type model struct {
-	service       core.Service
-	ctx           context.Context
-	cancel        context.CancelFunc
-	options       core.Options
-	installerPath string
-	program       *tea.Program
-	screen        screen
-	language      language
-	cursor        int
-	operation     core.Operation
-	fields        []formField
-	focus         int
-	spinner       spinner.Model
-	cancelling    bool
-	events        []logEntry
-	result        core.Result
-	err           error
-	width         int
-	height        int
+	service              core.Service
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	options              core.Options
+	installerPath        string
+	program              *tea.Program
+	screen               screen
+	language             language
+	cursor               int
+	operation            core.Operation
+	fields               []formField
+	focus                int
+	spinner              spinner.Model
+	cancelling           bool
+	events               []logEntry
+	result               core.Result
+	err                  error
+	release              *core.Release
+	releaseVersion       string
+	preview              core.ImagePreview
+	resolving            bool
+	resolvingVersion     string
+	resolveID            uint64
+	resolveCancel        context.CancelFunc
+	continueAfterResolve bool
+	width                int
+	height               int
 }
 
 var (
@@ -82,7 +90,10 @@ const productTagline = ":: DECLARATIVE AGENT RUNTIME :: INSTALLER ::"
 
 func Run(service core.Service, defaults core.Options, installerPath string) error {
 	m := newModel(service, defaults, installerPath)
-	defer m.cancel()
+	defer func() {
+		m.cancel()
+		m.closeRelease()
+	}()
 	switch m.service.Runner.(type) {
 	case nil, core.ExecRunner:
 		m.service.Runner = core.ExecRunner{Output: newCommandOutputWriter(func(line string) {
@@ -128,6 +139,8 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case operationResult:
 		m.result, m.err, m.screen = msg.result, msg.err, screenDone
 		return m, nil
+	case releaseResolvedMessage:
+		return m.handleResolvedRelease(msg)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -162,7 +175,8 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor, m.screen = 0, screenAction
 		})
 	case screenAction:
-		return m.updateMenu(key, 4, func(choice int) {
+		previousScreen := m.screen
+		updated, cmd := m.updateMenu(key, 4, func(choice int) {
 			if choice == 3 {
 				m.err = nil
 				m.screen = screenDone
@@ -172,13 +186,21 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.buildFields()
 			m.cursor, m.screen = 0, screenForm
 		})
+		if previousScreen != screenForm && m.screen == screenForm && m.operation != core.OperationUninstall {
+			return updated, tea.Batch(cmd, m.resolveRelease(m.options.Version, false))
+		}
+		return updated, cmd
 	case screenForm:
 		if key.String() == "tab" || key.String() == "down" || key.String() == "shift+tab" || key.String() == "up" {
+			leavingVersion := m.fields[m.focus].id == fieldVersion
 			delta := 1
 			if key.String() == "shift+tab" || key.String() == "up" {
 				delta = -1
 			}
 			m.moveFocus(delta)
+			if leavingVersion && m.fields[m.focus].id != fieldVersion {
+				return m, m.resolveRelease(strings.TrimSpace(m.field(fieldVersion).input.Value()), false)
+			}
 			return m, nil
 		}
 		if key.String() == "left" || key.String() == "right" || key.String() == " " {
@@ -194,16 +216,27 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			if m.operation == core.OperationUninstall {
 				m.screen = screenPurge
-			} else {
-				m.screen = screenConfirm
+				return m, nil
 			}
-			return m, nil
+			if m.release != nil && m.releaseVersion == m.options.Version && !m.resolving {
+				m.showConfirmation()
+				return m, nil
+			}
+			if m.resolving && m.resolvingVersion == m.options.Version {
+				m.continueAfterResolve = true
+				return m, nil
+			}
+			return m, m.resolveRelease(m.options.Version, true)
 		}
 		if m.fields[m.focus].toggle {
 			return m, nil
 		}
 		var cmd tea.Cmd
+		before := m.fields[m.focus].input.Value()
 		m.fields[m.focus].input, cmd = m.fields[m.focus].input.Update(key)
+		if isImageField(m.fields[m.focus].id) && m.fields[m.focus].input.Value() != before {
+			m.fields[m.focus].followsRelease = false
+		}
 		return m, cmd
 	case screenPurge:
 		return m.updateMenu(key, 2, func(choice int) { m.options.Purge = choice == 1; m.cursor, m.screen = 0, screenConfirm })
@@ -224,6 +257,10 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func isImageField(id fieldID) bool {
+	return id == fieldBackendImage || id == fieldFrontendImage || id == fieldGuestImage
 }
 
 func (m *model) updateMenu(key tea.KeyMsg, count int, selectFn func(int)) (tea.Model, tea.Cmd) {
@@ -249,7 +286,7 @@ func (m *model) runOperation() tea.Cmd {
 				m.program.Send(eventMessage(event))
 			}
 		})
-		result, err := service.Apply(m.ctx, m.operation, m.options)
+		result, err := service.ApplyRelease(m.ctx, m.operation, m.options, m.release)
 		return operationResult{result: result, err: err}
 	}
 }
@@ -338,9 +375,9 @@ func (m *model) renderConfirm(body *strings.Builder) {
 		fmt.Fprintf(body, "  %s: %t\n", m.text("删除数据", "Purge data"), m.options.Purge)
 	} else {
 		fmt.Fprintf(body, "  %s: %s\n", m.text("版本", "Version"), m.options.Version)
-		fmt.Fprintf(body, "  %s: %s\n", m.text("后端镜像", "Backend image"), m.imageSelection(m.options.BackendImageSet, m.options.BackendImage))
-		fmt.Fprintf(body, "  %s: %s\n", m.text("前端镜像", "Frontend image"), m.imageSelection(m.options.FrontendImageSet, m.options.FrontendImage))
-		fmt.Fprintf(body, "  %s: %s\n", m.text("Guest 镜像", "Guest image"), m.imageSelection(m.options.GuestImageSet, m.options.GuestImage))
+		fmt.Fprintf(body, "  %s: %s\n", m.text("后端镜像", "Backend image"), m.imageSelection(m.preview.Backend))
+		fmt.Fprintf(body, "  %s: %s\n", m.text("前端镜像", "Frontend image"), m.imageSelection(m.preview.Frontend))
+		fmt.Fprintf(body, "  %s: %s\n", m.text("Guest 镜像", "Guest image"), m.imageSelection(m.preview.Guest))
 		fmt.Fprintf(body, "  %s: %s\n", m.text("安装 Web UI", "Install web UI"), m.yesNo(m.options.WithUI))
 		if m.options.WithUI {
 			fmt.Fprintf(body, "  %s: %d\n", m.text("Web UI 端口", "Web UI port"), m.options.Port)
@@ -351,14 +388,15 @@ func (m *model) renderConfirm(body *strings.Builder) {
 	m.renderMenu(body, m.text("确认继续？", "Continue?"), []string{m.text("继续", "Continue"), m.text("返回", "Back")})
 }
 
-func (m *model) imageSelection(set bool, image string) string {
-	if set {
-		return image
+func (m *model) imageSelection(selection core.ImageSelection) string {
+	label := m.text("发布默认值", "release default")
+	switch selection.Source {
+	case core.ImageSourceOverride:
+		label = m.text("显式覆盖", "explicit override")
+	case core.ImageSourcePreserved:
+		label = m.text("保留现有值", "preserved existing value")
 	}
-	if m.operation == core.OperationUpgrade {
-		return m.text("保留自定义值，否则使用发布默认值", "Preserve custom value, otherwise use release default")
-	}
-	return m.text("使用发布默认值", "Use release default")
+	return selection.Value + "  " + mutedStyle.Render("("+label+")")
 }
 
 func (m *model) renderDone(body *strings.Builder) {

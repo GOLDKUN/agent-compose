@@ -49,6 +49,8 @@ bootstrap 会自动选择 Linux amd64/arm64 installer 并打开中英文 TUI。�
 `/opt/agent-compose`；当前用户无写权限时请使用 `sudo`。自动化场景使用
 `install --yes` 并显式传入所需参数。
 
+TUI 会解析所选 Release，并展示其后端、前端和 guest 镜像的精确缺省值。修改应用版本会刷新这些缺省值；输入完整镜像引用只会覆盖对应的单个镜像。
+
 首次运行会生成 `admin` 密码并打印一次，同时打印安装目录；启用 Web UI 时还会打印浏览器 URL（地址取本机主网卡 IP，不是 `localhost`）。安装时选择启用会把 `COMPOSE_PROFILES` 持久化进 `.env`，之后普通的 `docker compose up -d` 也会带上前端。事后再启用：
 
 ```bash

@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,6 +25,7 @@ func TestModelSelectsLanguageAndInstallFlow(t *testing.T) {
 	if m.operation != core.OperationInstall || m.screen != screenForm || len(m.fields) != 8 {
 		t.Fatalf("install form = %q, %d, %d fields", m.operation, m.screen, len(m.fields))
 	}
+	attachTestRelease(t, m, "v1", "ui-v3")
 	form := m.View()
 	for _, expected := range []string{"Configure installation", "Install directory", "Application version", "Backend image (optional)", "Frontend image (optional)", "Guest image (optional)", "Install web UI", "Web UI port", "Pre-pull guest image", "╭", "Tab / ↑↓ move"} {
 		if !strings.Contains(form, expected) {
@@ -37,13 +40,14 @@ func TestModelSelectsLanguageAndInstallFlow(t *testing.T) {
 	if m.err == nil || !strings.Contains(m.View(), "absolute") {
 		t.Fatalf("expected path validation in view: %v\n%s", m.err, m.View())
 	}
-	m.fields[0].input.SetValue("/opt/agent-compose")
+	installDir := t.TempDir()
+	m.fields[0].input.SetValue(installDir)
 	press(t, m, "enter")
 	if m.screen != screenConfirm {
 		t.Fatalf("screen = %d, want confirmation", m.screen)
 	}
 	confirmation := m.View()
-	for _, expected := range []string{"/opt/agent-compose", "latest", "Backend image: Use release default", "Frontend image: Use release default", "Guest image: Use release default", "Install web UI: No", "Pre-pull guest image: Yes"} {
+	for _, expected := range []string{installDir, "latest", "Backend image: registry.example/agent-compose:v1", "Frontend image: registry.example/agent-compose-ui:ui-v3", "Guest image: registry.example/agent-compose-guest:v1", "release default", "Install web UI: No", "Pre-pull guest image: Yes"} {
 		if !strings.Contains(confirmation, expected) {
 			t.Fatalf("confirmation missing %q:\n%s", expected, confirmation)
 		}
@@ -55,9 +59,9 @@ func TestModelSelectsLanguageAndInstallFlow(t *testing.T) {
 
 func TestModelReadsExplicitImageOverrides(t *testing.T) {
 	m := installForm(t)
-	m.field(fieldBackendImage).input.SetValue(" registry.example/backend:v1 ")
-	m.field(fieldFrontendImage).input.SetValue("registry.example/frontend@sha256:abc")
-	m.field(fieldGuestImage).input.SetValue("registry.example/guest:v2")
+	setExplicitImage(t, m, fieldBackendImage, " registry.example/backend:v1 ")
+	setExplicitImage(t, m, fieldFrontendImage, "registry.example/frontend@sha256:abc")
+	setExplicitImage(t, m, fieldGuestImage, "registry.example/guest:v2")
 
 	press(t, m, "enter")
 	if !m.options.BackendImageSet || m.options.BackendImage != "registry.example/backend:v1" {
@@ -74,6 +78,88 @@ func TestModelReadsExplicitImageOverrides(t *testing.T) {
 		if !strings.Contains(confirmation, image) {
 			t.Fatalf("confirmation missing %q:\n%s", image, confirmation)
 		}
+	}
+}
+
+func TestModelResolvesImagesWhenVersionLosesFocus(t *testing.T) {
+	m := installForm(t)
+	if got := m.field(fieldGuestImage).input.Value(); got != "registry.example/agent-compose-guest:v1" {
+		t.Fatalf("guest image field = %q", got)
+	}
+	if view := m.View(); !strings.Contains(view, "registry.example/agent-compose-guest:v1") {
+		t.Fatalf("initial release image is missing from the form:\n%s", view)
+	}
+
+	m.options.BundleDir = makeTUITestBundle(t, "v2", "ui-v4")
+	m.focus = indexOfField(t, m, fieldVersion)
+	m.focusFields()
+	m.field(fieldVersion).input.SetValue("v2")
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if updated != m || cmd == nil || !m.resolving || m.resolvingVersion != "v2" {
+		t.Fatalf("version change did not start resolution: resolving=%t version=%q cmd=%v", m.resolving, m.resolvingVersion, cmd)
+	}
+	if view := m.View(); !strings.Contains(view, "Resolving release v2") {
+		t.Fatalf("resolution status is missing:\n%s", view)
+	}
+	message := cmd()
+	m.Update(message)
+	view := m.View()
+	for _, image := range []string{
+		"registry.example/agent-compose:v2",
+		"registry.example/agent-compose-ui:ui-v4",
+		"registry.example/agent-compose-guest:v2",
+	} {
+		if !strings.Contains(view, image) {
+			t.Fatalf("resolved form is missing %q:\n%s", image, view)
+		}
+	}
+}
+
+func TestModelVersionChangePreservesExplicitImage(t *testing.T) {
+	m := installForm(t)
+	setExplicitImage(t, m, fieldGuestImage, "operator.example/guest:keep")
+	m.options.BundleDir = makeTUITestBundle(t, "v2", "ui-v4")
+	m.focus = indexOfField(t, m, fieldVersion)
+	m.focusFields()
+	m.field(fieldVersion).input.SetValue("v2")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if cmd == nil {
+		t.Fatal("version change did not start resolution")
+	}
+	m.Update(cmd())
+
+	if got := m.field(fieldBackendImage).input.Value(); got != "registry.example/agent-compose:v2" {
+		t.Fatalf("backend image = %q", got)
+	}
+	guest := m.field(fieldGuestImage)
+	if got := guest.input.Value(); got != "operator.example/guest:keep" || guest.followsRelease {
+		t.Fatalf("guest image = %q, follows release = %t", got, guest.followsRelease)
+	}
+}
+
+func setExplicitImage(t *testing.T, m *model, id fieldID, value string) {
+	t.Helper()
+	field := m.field(id)
+	if field == nil {
+		t.Fatalf("image field %d is missing", id)
+	}
+	field.input.SetValue(value)
+	field.followsRelease = false
+}
+
+func TestModelStaysInFormWhenReleaseResolutionFails(t *testing.T) {
+	m := installForm(t)
+	m.options.BundleDir = filepath.Join(t.TempDir(), "missing")
+	m.focus = indexOfField(t, m, fieldVersion)
+	m.focusFields()
+	m.field(fieldVersion).input.SetValue("missing")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if cmd == nil {
+		t.Fatal("version change did not start resolution")
+	}
+	m.Update(cmd())
+	if m.screen != screenForm || m.err == nil || !strings.Contains(m.View(), "resolve release missing") {
+		t.Fatalf("resolution failure did not remain in the form: screen=%d err=%v\n%s", m.screen, m.err, m.View())
 	}
 }
 
@@ -173,7 +259,49 @@ func installForm(t *testing.T) *model {
 	if m.screen != screenForm {
 		t.Fatalf("screen = %d, want the install form", m.screen)
 	}
+	attachTestRelease(t, m, "v1", "ui-v1")
 	return m
+}
+
+func attachTestRelease(t *testing.T, m *model, version, frontendVersion string) {
+	t.Helper()
+	dir := makeTUITestBundle(t, version, frontendVersion)
+	options := m.options
+	options.BundleDir = dir
+	release, err := m.service.ResolveRelease(m.ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.closeRelease()
+	m.release = release
+	m.releaseVersion = options.Version
+	m.syncReleaseImageFields()
+	m.options.BundleDir = dir
+	t.Cleanup(m.closeRelease)
+}
+
+func makeTUITestBundle(t *testing.T, version, frontendVersion string) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeTUITestFile(t, filepath.Join(dir, "docker-compose.yml"), "services: {}\n")
+	writeTUITestFile(t, filepath.Join(dir, ".env.example"), "AUTH_PASSWORD=\nAUTH_SECRET=\n")
+	manifest := "INSTALLER_PAYLOAD_VERSION=1\n" +
+		"AGENT_COMPOSE_IMAGE=registry.example/agent-compose:" + version + "\n" +
+		"AGENT_COMPOSE_FRONTEND_VERSION=" + frontendVersion + "\n" +
+		"AGENT_COMPOSE_FRONTEND_IMAGE=registry.example/agent-compose-ui:" + frontendVersion + "\n" +
+		"DEFAULT_IMAGE=registry.example/agent-compose-guest:" + version + "\n"
+	writeTUITestFile(t, filepath.Join(dir, "images", "manifest.env"), manifest)
+	return dir
+}
+
+func writeTUITestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func indexOfField(t *testing.T, m *model, id fieldID) int {

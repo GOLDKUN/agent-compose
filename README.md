@@ -72,6 +72,10 @@ TUI. The default installation directory is `/opt/agent-compose`; use `sudo`
 when the current user cannot write there. For automation, run
 `install --yes` and pass options explicitly.
 
+The TUI resolves the selected Release and shows its exact backend, frontend,
+and guest image defaults. Changing the application version refreshes those
+defaults; entering a complete image reference overrides only that image.
+
 The base stack starts the daemon. The frontend is defined under the `with-ui`
 profile, which the installer leaves off unless you answer yes to **Install web
 UI** (or pass `--with-ui`). Enabling it there persists `COMPOSE_PROFILES` in
