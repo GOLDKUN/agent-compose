@@ -336,16 +336,22 @@ func testConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 	if pending, err := store.ListPendingEvents(ctx, 10); err != nil || len(pending) != 2 {
 		t.Fatalf("ListPendingEvents pending=%#v err=%v", pending, err)
 	}
-	if events, err := store.ListEvents(ctx, domain.TopicEventFilter{Topic: event.Topic, CorrelationID: "corr-1", Limit: 10}); err != nil || len(events) != 2 {
-		t.Fatalf("ListEvents events=%#v err=%v", events, err)
+	if events, total, err := store.ListEvents(ctx, domain.TopicEventFilter{Topic: event.Topic, CorrelationID: "corr-1", Limit: 10}); err != nil || len(events) != 2 || total != 2 || events[0].ID != child.ID || events[1].ID != event.ID {
+		t.Fatalf("ListEvents events=%#v total=%d err=%v", events, total, err)
 	}
-	if events, err := store.ListEvents(ctx, domain.TopicEventFilter{Topic: event.Topic, AfterSequence: event.Sequence, DispatchStatus: domain.TopicEventDispatchPending, Limit: 1000}); err != nil || len(events) != 1 {
-		t.Fatalf("ListEvents filtered events=%#v err=%v", events, err)
+	if events, total, err := store.ListEvents(ctx, domain.TopicEventFilter{Topic: event.Topic, CorrelationID: "corr-1", Offset: 1, Limit: 1}); err != nil || len(events) != 1 || total != 2 || events[0].ID != event.ID {
+		t.Fatalf("ListEvents second page events=%#v total=%d err=%v", events, total, err)
 	}
-	if _, err := store.ListEvents(ctx, domain.TopicEventFilter{}); err == nil {
+	if events, total, err := store.ListEvents(ctx, domain.TopicEventFilter{Topic: event.Topic, CorrelationID: "corr-1", SequenceAsc: true, Limit: 10}); err != nil || len(events) != 2 || total != 2 || events[0].ID != event.ID || events[1].ID != child.ID {
+		t.Fatalf("ListEvents legacy events=%#v total=%d err=%v", events, total, err)
+	}
+	if events, total, err := store.ListEvents(ctx, domain.TopicEventFilter{Topic: event.Topic, AfterSequence: event.Sequence, DispatchStatus: domain.TopicEventDispatchPending, Limit: 1000}); err != nil || len(events) != 1 || total != 1 || events[0].ID != child.ID {
+		t.Fatalf("ListEvents filtered events=%#v total=%d err=%v", events, total, err)
+	}
+	if _, _, err := store.ListEvents(ctx, domain.TopicEventFilter{}); err == nil {
 		t.Fatalf("ListEvents empty filter returned nil error")
 	}
-	if _, err := store.ListEvents(ctx, domain.TopicEventFilter{Topic: "bad topic"}); err == nil {
+	if _, _, err := store.ListEvents(ctx, domain.TopicEventFilter{Topic: "bad topic"}); err == nil {
 		t.Fatalf("ListEvents invalid topic returned nil error")
 	}
 	if err := store.UpdateEventPayload(ctx, event.ID, `{"branch":"dev"}`); err != nil {

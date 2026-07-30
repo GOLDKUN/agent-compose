@@ -22,7 +22,8 @@ type TopicEventResponse struct {
 
 type TopicEventListResponse struct {
 	Items             []TopicEventJSON `json:"items"`
-	NextAfterSequence int64            `json:"next_after_sequence"`
+	Total             int              `json:"total"`
+	NextAfterSequence int64            `json:"next_after_sequence,omitempty"`
 }
 
 type EventSandboxesResponse struct {

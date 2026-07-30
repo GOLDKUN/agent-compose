@@ -83,7 +83,9 @@ type TopicEventFilter struct {
 	Topic          string
 	CorrelationID  string
 	AfterSequence  int64
+	Offset         int
 	Limit          int
+	SequenceAsc    bool
 	DispatchStatus string
 }
 

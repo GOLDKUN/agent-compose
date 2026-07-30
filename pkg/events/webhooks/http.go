@@ -19,7 +19,7 @@ type Store interface {
 	FindEventByIdempotencyKey(context.Context, string, string) (domain.TopicEventRecord, bool, error)
 	CreateEvent(context.Context, domain.TopicEventRecord) (domain.TopicEventRecord, error)
 	GetEvent(context.Context, string) (domain.TopicEventRecord, error)
-	ListEvents(context.Context, domain.TopicEventFilter) ([]domain.TopicEventRecord, error)
+	ListEvents(context.Context, domain.TopicEventFilter) ([]domain.TopicEventRecord, int, error)
 	ListDescendantEventIDs(context.Context, string, int) ([]string, error)
 	ListEventSandboxLinks(context.Context, []string) ([]domain.EventSandboxTraceItem, error)
 	ListEventDeliveries(context.Context, []string) ([]domain.EventDelivery, error)
@@ -184,19 +184,29 @@ func (h routeHandler) handleListEvents(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "limit is invalid"})
 	}
-	items, err := h.store().ListEvents(c.Request().Context(), domain.TopicEventFilter{
+	offset, err := parseOptionalIntQuery(c, "offset")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "offset is invalid"})
+	}
+	offsetProvided := strings.TrimSpace(c.QueryParam("offset")) != ""
+	if afterSequence > 0 && offsetProvided {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "offset and after_sequence cannot be combined"})
+	}
+	items, total, err := h.store().ListEvents(c.Request().Context(), domain.TopicEventFilter{
 		Topic:         topic,
 		CorrelationID: correlationID,
 		AfterSequence: afterSequence,
+		Offset:        offset,
 		Limit:         limit,
+		SequenceAsc:   !offsetProvided,
 	})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list events"})
 	}
-	resp := TopicEventListResponse{Items: make([]TopicEventJSON, 0, len(items))}
+	resp := TopicEventListResponse{Items: make([]TopicEventJSON, 0, len(items)), Total: total}
 	for _, item := range items {
 		resp.Items = append(resp.Items, TopicEventToJSON(item))
-		if item.Sequence > resp.NextAfterSequence {
+		if !offsetProvided && item.Sequence > resp.NextAfterSequence {
 			resp.NextAfterSequence = item.Sequence
 		}
 	}
@@ -365,6 +375,14 @@ func parseOptionalInt64Query(c echo.Context, name string) (int64, error) {
 		return 0, fmt.Errorf("%s is invalid", name)
 	}
 	return value, nil
+}
+
+func parseOptionalIntQuery(c echo.Context, name string) (int, error) {
+	value, err := parseOptionalInt64Query(c, name)
+	if err != nil || value > int64(^uint(0)>>1) {
+		return 0, fmt.Errorf("%s is invalid", name)
+	}
+	return int(value), nil
 }
 
 func parseLimitQuery(c echo.Context, defaultValue, maxValue int) (int, error) {
