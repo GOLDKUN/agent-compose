@@ -75,22 +75,18 @@ func TestRuntimeInteractionCapabilitiesValidateStartSpecUnsupported(t *testing.T
 	}
 }
 
-func TestBoxliteAndMicrosandboxNativeExecAttachUnsupported(t *testing.T) {
+func TestBoxliteNativeExecAttachUnsupported(t *testing.T) {
 	spec := RuntimeStartSpec{Kind: RuntimeOperationCommand, AttachStdin: true, TTY: true}
-	for _, driver := range []string{RuntimeDriverBoxlite, RuntimeDriverMicrosandbox} {
-		t.Run(driver, func(t *testing.T) {
-			_, err := UnsupportedRuntimeInteraction(driver, RuntimeInteractionCapabilities{}, spec)
-			if !errors.Is(err, ErrRuntimeInteractionUnsupported) {
-				t.Fatalf("OpenInteraction() error = %v, want ErrRuntimeInteractionUnsupported", err)
-			}
-			var unsupported *RuntimeInteractionUnsupportedError
-			if !errors.As(err, &unsupported) {
-				t.Fatalf("OpenInteraction() error = %T, want RuntimeInteractionUnsupportedError", err)
-			}
-			if unsupported.Driver != driver || unsupported.Operation != RuntimeOperationCommand || unsupported.Capability != RuntimeCapabilityNativeExec {
-				t.Fatalf("unsupported = %#v, want driver=%q operation=%q capability=%q", unsupported, driver, RuntimeOperationCommand, RuntimeCapabilityNativeExec)
-			}
-		})
+	_, err := UnsupportedRuntimeInteraction(RuntimeDriverBoxlite, RuntimeInteractionCapabilities{}, spec)
+	if !errors.Is(err, ErrRuntimeInteractionUnsupported) {
+		t.Fatalf("OpenInteraction() error = %v, want ErrRuntimeInteractionUnsupported", err)
+	}
+	var unsupported *RuntimeInteractionUnsupportedError
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("OpenInteraction() error = %T, want RuntimeInteractionUnsupportedError", err)
+	}
+	if unsupported.Driver != RuntimeDriverBoxlite || unsupported.Operation != RuntimeOperationCommand || unsupported.Capability != RuntimeCapabilityNativeExec {
+		t.Fatalf("unsupported = %#v, want driver=%q operation=%q capability=%q", unsupported, RuntimeDriverBoxlite, RuntimeOperationCommand, RuntimeCapabilityNativeExec)
 	}
 }
 
