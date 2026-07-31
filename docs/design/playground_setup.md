@@ -9,7 +9,7 @@ Current real environment:
 - Deployment directory: `/data/playground`
 - Compose file: `/data/playground/docker-compose.yml`
 - Current shared compose deploys the `agent-compose` daemon and the independent
-  `agent-compose-frontend` frontend service
+  `agent-compose-ui` frontend service
 
 For local integration testing, use the repository-root `docker-compose.yml`.
 Do not mix this shared playground document with the local compose setup inside
@@ -40,7 +40,7 @@ service:
 - Data mount: `./data/agent-compose:/data`
 - Extra runtime mount: `/var/run/docker.sock:/var/run/docker.sock`
 
-Current key configuration for the shared playground `agent-compose-frontend`
+Current key configuration for the shared playground `agent-compose-ui`
 service:
 
 - Listen port: `8000`
@@ -78,13 +78,13 @@ task image:agent-compose
 Start or update daemon and independent frontend service:
 
 ```bash
-docker compose -f /data/playground/docker-compose.yml up -d agent-compose agent-compose-frontend
+docker compose -f /data/playground/docker-compose.yml up -d agent-compose agent-compose-ui
 ```
 
 Force recreate containers after image updates:
 
 ```bash
-docker compose -f /data/playground/docker-compose.yml up -d --force-recreate agent-compose agent-compose-frontend
+docker compose -f /data/playground/docker-compose.yml up -d --force-recreate agent-compose agent-compose-ui
 ```
 
 Check status:
@@ -92,7 +92,7 @@ Check status:
 ```bash
 docker compose -f /data/playground/docker-compose.yml ps
 docker logs --tail 200 agent-compose
-docker logs --tail 200 agent-compose-frontend
+docker logs --tail 200 agent-compose-ui
 ```
 
 ## Basic Verification
@@ -261,7 +261,7 @@ Check:
 ```bash
 docker compose -f /data/playground/docker-compose.yml ps
 docker logs --tail 200 agent-compose
-docker logs --tail 200 agent-compose-frontend
+docker logs --tail 200 agent-compose-ui
 ```
 
 If the independent frontend cannot be opened, first verify the frontend service,
@@ -313,5 +313,5 @@ Rebuild images and force recreate containers:
 cd /data/code
 task image:agent-compose-guest
 task image:agent-compose
-docker compose -f /data/playground/docker-compose.yml up -d --force-recreate agent-compose agent-compose-frontend
+docker compose -f /data/playground/docker-compose.yml up -d --force-recreate agent-compose agent-compose-ui
 ```

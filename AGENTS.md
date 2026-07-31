@@ -145,7 +145,7 @@ Current Docker build behavior:
 
 Current compose behavior:
 
-- `docker-compose.yml` deploys the `agent-compose` service; the optional `agent-compose-frontend` service uses the published `agent-compose-ui` image under the `with-ui` profile
+- `docker-compose.yml` deploys the `agent-compose` service; the optional `agent-compose-ui` service uses the published `agent-compose-ui` image under the `with-ui` profile
 - the daemon listens on container port `7410`, published only on host loopback as `127.0.0.1:7410`; the UI profile publishes `${AGENT_COMPOSE_HTTP_PORT:-80}`
 - data is mounted from `${AGENT_COMPOSE_DATA_DIR:-./data}` to `/data`
 - the user-created `.env` is mounted read-only at `/data/work/.env` for daemon configuration
