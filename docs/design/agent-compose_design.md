@@ -1007,8 +1007,8 @@ The current Docker deployment provides an independent frontend service:
 
 - The `agent-compose-ui` repository builds and publishes the frontend image.
 - Compose has two services: `agent-compose` daemon and
-  `agent-compose-frontend`.
-- The daemon starts by default; the `agent-compose-frontend` service starts
+  `agent-compose-ui`.
+- The daemon starts by default; the `agent-compose-ui` service starts
   when the `with-ui` profile is enabled.
 - The frontend image runs the agent-compose-ui server behind nginx. Nginx owns
   static assets, access logs, body size limits, timeouts, and WebSocket upgrade
