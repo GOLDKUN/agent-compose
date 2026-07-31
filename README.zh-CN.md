@@ -62,27 +62,34 @@ installer 还会预先拉取 sandbox guest 镜像，避免首次运行 agent 时
 
 ### 方式 B —— 直接获取发布镜像（无需 install.sh）
 
-daemon 和 guest 镜像发布在 [Docker Hub](https://hub.docker.com/u/chaitin)，可以直接拉取稳定的多架构镜像：
+daemon 和 guest 镜像发布在 [Docker Hub](https://hub.docker.com/u/chaitin)。拉取镜像时必须使用明确的 release tag：先从
+[agent-compose Releases](https://github.com/chaitin/agent-compose/releases)
+页面选择 `AGENT_COMPOSE_VERSION`，再从独立的
+[agent-compose-ui Releases](https://github.com/chaitin/agent-compose-ui/releases)
+页面选择 `AGENT_COMPOSE_UI_VERSION`：
 
 ```bash
-docker pull chaitin/agent-compose:latest
-docker pull chaitin/agent-compose-guest:latest
-```
+export AGENT_COMPOSE_VERSION=<agent-compose-release-tag>
+export AGENT_COMPOSE_UI_VERSION=<agent-compose-ui-release-tag>
 
-需要固定应用版本时，将 `latest` 替换为对应 release tag（例如
-`v1.2.3`），daemon 和 guest 使用相同的应用版本 tag。可选的 Web UI 独立发布，版本号与 daemon 独立：
-
-```bash
-docker pull chaitin/agent-compose-ui:latest
+docker pull chaitin/agent-compose:${AGENT_COMPOSE_VERSION}
+docker pull chaitin/agent-compose-guest:${AGENT_COMPOSE_VERSION}
+docker pull chaitin/agent-compose-ui:${AGENT_COMPOSE_UI_VERSION}
 ```
 
 daemon 和标准 guest 镜像提供 `linux/amd64`、`linux/arm64` manifest。要用
 Compose 手工部署，请使用对应 repository tag 中的 `docker-compose.yml` 和
-`.env.example`，将 `.env.example` 复制为 `.env` 并填写必需配置。固定版本时，
-还要在 `.env` 中增加 `AGENT_COMPOSE_IMAGE` 和 `DEFAULT_IMAGE`，分别使用上面的
-daemon 和 guest 镜像引用；需要固定可选 UI 时再增加
-`AGENT_COMPOSE_FRONTEND_IMAGE`。然后执行 `docker compose pull`、
-`docker compose up -d`；需要 Web UI 时增加 `--profile with-ui`。
+`.env.example`，将 `.env.example` 复制为 `.env` 并填写必需配置。在 `.env` 中
+使用上面选定的 tag 设置镜像引用：
+
+```dotenv
+AGENT_COMPOSE_IMAGE=chaitin/agent-compose:<agent-compose-release-tag>
+DEFAULT_IMAGE=chaitin/agent-compose-guest:<agent-compose-release-tag>
+AGENT_COMPOSE_FRONTEND_IMAGE=chaitin/agent-compose-ui:<agent-compose-ui-release-tag>
+```
+
+然后执行 `docker compose pull`、`docker compose up -d`；需要 Web UI 时增加
+`--profile with-ui`。
 
 ### 方式 C —— 从源码构建（用于 CLI 工作流）
 
