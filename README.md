@@ -99,31 +99,37 @@ preservation, and mirror/private-registry options.
 ### Option B — Pull published images (without the installer)
 
 Published daemon and guest images are available from [Docker
-Hub](https://hub.docker.com/u/chaitin). Pull the stable multi-architecture
-images directly:
+Hub](https://hub.docker.com/u/chaitin). Always use an explicit release tag when
+pulling images. Select `AGENT_COMPOSE_VERSION` from the
+[agent-compose Releases](https://github.com/chaitin/agent-compose/releases)
+page, and select `AGENT_COMPOSE_UI_VERSION` independently from the
+[agent-compose-ui Releases](https://github.com/chaitin/agent-compose-ui/releases)
+page:
 
 ```bash
-docker pull chaitin/agent-compose:latest
-docker pull chaitin/agent-compose-guest:latest
-```
+export AGENT_COMPOSE_VERSION=<agent-compose-release-tag>
+export AGENT_COMPOSE_UI_VERSION=<agent-compose-ui-release-tag>
 
-For a pinned application release, replace `latest` with its release tag (for
-example `v1.2.3`) on both images. The optional frontend is published
-independently and can be pulled with its supported UI tag:
-
-```bash
-docker pull chaitin/agent-compose-ui:latest
+docker pull chaitin/agent-compose:${AGENT_COMPOSE_VERSION}
+docker pull chaitin/agent-compose-guest:${AGENT_COMPOSE_VERSION}
+docker pull chaitin/agent-compose-ui:${AGENT_COMPOSE_UI_VERSION}
 ```
 
 The daemon and standard guest images publish `linux/amd64` and `linux/arm64`
 manifests. The UI tag is selected independently from the daemon release. To
 deploy with Compose, use `docker-compose.yml` and `.env.example` from the
-matching repository tag, copy `.env.example` to `.env`, and fill in the
-required settings. For a pinned deployment, add `AGENT_COMPOSE_IMAGE` and
-`DEFAULT_IMAGE` with the daemon and guest references shown above; add
-`AGENT_COMPOSE_FRONTEND_IMAGE` when pinning the optional UI. Then run
-`docker compose pull` and `docker compose up -d`, adding `--profile with-ui`
-when the frontend is needed.
+matching agent-compose repository tag, copy `.env.example` to `.env`, and fill
+in the required settings. Set the image references in `.env` to the tags you
+selected above:
+
+```dotenv
+AGENT_COMPOSE_IMAGE=chaitin/agent-compose:<agent-compose-release-tag>
+DEFAULT_IMAGE=chaitin/agent-compose-guest:<agent-compose-release-tag>
+AGENT_COMPOSE_FRONTEND_IMAGE=chaitin/agent-compose-ui:<agent-compose-ui-release-tag>
+```
+
+Then run `docker compose pull` and `docker compose up -d`, adding
+`--profile with-ui` when the frontend is needed.
 
 ### Option C — Build from source (for the CLI workflow)
 
