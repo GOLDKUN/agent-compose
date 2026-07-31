@@ -66,7 +66,9 @@ func TestModelSelectsLanguageAndInstallFlow(t *testing.T) {
 
 func TestModelReadsRegistryGuestAndFrontendVersion(t *testing.T) {
 	m := installForm(t)
-	m.field(fieldRegistry).input.SetValue(" registry.example.com ")
+	registry := m.field(fieldRegistry)
+	registry.input.SetValue(" registry.example.com ")
+	registry.followsRelease = false
 	setExplicitImage(t, m, fieldGuestImage, "registry.example/guest:v2")
 	m.field(fieldWithUI).on = true
 	frontend := m.field(fieldFrontendVersion)
@@ -89,6 +91,37 @@ func TestModelReadsRegistryGuestAndFrontendVersion(t *testing.T) {
 		if !strings.Contains(confirmation, value) {
 			t.Fatalf("confirmation missing %q:\n%s", value, confirmation)
 		}
+	}
+}
+
+func TestModelCanClearPersistedRegistry(t *testing.T) {
+	m := installForm(t)
+	m.operation = core.OperationUpgrade
+	installDir := m.options.InstallDir
+	writeTUITestFile(t, filepath.Join(installDir, ".env"), "AGENT_COMPOSE_IMAGE=mirror.example/agent-compose:v1\nAGENT_COMPOSE_FRONTEND_VERSION=ui-v1\nAGENT_COMPOSE_FRONTEND_IMAGE=mirror.example/agent-compose-ui:ui-v1\nDEFAULT_IMAGE=mirror.example/agent-compose-guest:v1\n")
+	writeTUITestFile(t, filepath.Join(installDir, ".installer-state.env"), "INSTALLER_REGISTRY=mirror.example\nINSTALLER_FRONTEND_VERSION=ui-v1\nAGENT_COMPOSE_IMAGE=mirror.example/agent-compose:v1\nAGENT_COMPOSE_FRONTEND_VERSION=ui-v1\nAGENT_COMPOSE_FRONTEND_IMAGE=mirror.example/agent-compose-ui:ui-v1\nDEFAULT_IMAGE=mirror.example/agent-compose-guest:v1\n")
+	m.syncReleaseImageFields()
+	registry := m.field(fieldRegistry)
+	if got := registry.input.Value(); got != "mirror.example" || !registry.followsRelease {
+		t.Fatalf("persisted registry = %q, follows release = %t", got, registry.followsRelease)
+	}
+
+	m.focus = indexOfField(t, m, fieldRegistry)
+	m.focusFields()
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	if registry.input.Value() != "" || registry.followsRelease {
+		t.Fatalf("cleared registry = %q, follows release = %t", registry.input.Value(), registry.followsRelease)
+	}
+	press(t, m, "enter")
+
+	if !m.options.RegistrySet || m.options.Registry != "" {
+		t.Fatalf("registry reset = %q, set = %t", m.options.Registry, m.options.RegistrySet)
+	}
+	if m.err != nil || m.screen != screenConfirm {
+		t.Fatalf("registry reset did not reach confirmation: screen=%d err=%v", m.screen, m.err)
+	}
+	if m.preview.Registry != "" || m.preview.Backend.Value != "registry.example/agent-compose:v1" {
+		t.Fatalf("registry reset preview = %#v", m.preview)
 	}
 }
 

@@ -215,7 +215,7 @@ func desiredImageReferences(manifest *envFile, options Options) map[string]strin
 				desired[key] = value
 			}
 		}
-		if options.RegistrySet {
+		if options.RegistrySet && strings.TrimSpace(options.Registry) != "" {
 			for _, key := range []string{backendImageKey, frontendImageKey, guestImageKey} {
 				if value, ok := desired[key]; ok {
 					desired[key] = replaceImageRegistry(value, options.Registry)
@@ -301,7 +301,7 @@ func effectiveImageOptions(env, state, manifest *envFile, options Options) (Opti
 			}
 		}
 	}
-	if options.RegistrySet {
+	if options.RegistrySet && strings.TrimSpace(options.Registry) != "" {
 		if err := validateRegistry(options.Registry); err != nil {
 			return options, err
 		}

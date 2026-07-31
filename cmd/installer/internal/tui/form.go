@@ -69,6 +69,7 @@ func (m *model) buildFields() {
 	m.fields = []formField{newTextField(fieldInstallDir, m.options.InstallDir)}
 	if m.operation != core.OperationUninstall {
 		registry := newTextField(fieldRegistry, m.options.Registry)
+		registry.followsRelease = !m.options.RegistrySet
 		registry.input.Placeholder = m.text("docker.io（默认）", "docker.io (default)")
 		m.fields = append(m.fields,
 			newTextField(fieldVersion, m.options.Version),
@@ -150,7 +151,7 @@ func (m *model) readFields() error {
 			m.options.Version = strings.TrimSpace(field.input.Value())
 		case fieldRegistry:
 			m.options.Registry = strings.TrimSpace(field.input.Value())
-			m.options.RegistrySet = m.options.Registry != ""
+			m.options.RegistrySet = !field.followsRelease
 		case fieldGuestImage:
 			m.readImageField(i, &m.options.GuestImage, &m.options.GuestImageSet)
 		case fieldGuestPull:

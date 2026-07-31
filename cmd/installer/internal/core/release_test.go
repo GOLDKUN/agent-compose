@@ -121,7 +121,7 @@ func TestPreviewPreservesDigestPinnedDefaultFrontendImage(t *testing.T) {
 	}
 }
 
-func TestInstallPersistsRegistryAndFrontendVersion(t *testing.T) {
+func TestInstallPersistsAndUpgradeClearsRegistry(t *testing.T) {
 	root := t.TempDir()
 	options := DefaultOptions()
 	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v2", "v2", "v2,v1")
@@ -144,6 +144,18 @@ func TestInstallPersistsRegistryAndFrontendVersion(t *testing.T) {
 	assertTestEnv(t, env, backendImageKey, "mirror.example.com:5000/agent-compose:v2")
 	assertTestEnv(t, env, frontendImageKey, "mirror.example.com:5000/agent-compose-ui:v1")
 	assertTestEnv(t, env, guestImageKey, "mirror.example.com:5000/agent-compose-guest:v2")
+
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v3", "v2", "v2,v1")
+	options.Registry = ""
+	if _, err := (Service{Runner: &fakeRunner{}}).Apply(context.Background(), OperationUpgrade, options); err != nil {
+		t.Fatal(err)
+	}
+	state = readTestEnv(t, filepath.Join(options.InstallDir, ".installer-state.env"))
+	assertTestEnv(t, state, installerRegistryKey, "")
+	env = readTestEnv(t, filepath.Join(options.InstallDir, ".env"))
+	assertTestEnv(t, env, backendImageKey, "registry.example/agent-compose:v3")
+	assertTestEnv(t, env, frontendImageKey, "registry.example/agent-compose-ui:v1")
+	assertTestEnv(t, env, guestImageKey, "registry.example/agent-compose-guest:v3")
 }
 
 func TestEffectiveOptionsMigratesLegacyImagePrefix(t *testing.T) {

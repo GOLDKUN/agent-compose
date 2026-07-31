@@ -116,4 +116,15 @@ if VERSION=v9.8.7 IMAGE_PREFIX=registry.example \
 fi
 [[ ! -e $invalid_versions ]] || fail 'invalid frontend versions left an output directory'
 
+for invalid_list in ',v1' 'v1,' 'v1,,v2'; do
+  invalid_output="$TEST_ROOT/invalid-list-${invalid_list//,/_}"
+  if VERSION=v9.8.7 IMAGE_PREFIX=registry.example \
+    AGENT_COMPOSE_FRONTEND_VERSION=v1 \
+    AGENT_COMPOSE_FRONTEND_VERSIONS="$invalid_list" \
+    "$BUILDER" "$invalid_output" >/dev/null 2>&1; then
+    fail "builder accepted an empty frontend version in $invalid_list"
+  fi
+  [[ ! -e $invalid_output ]] || fail "invalid frontend list $invalid_list left an output directory"
+done
+
 printf 'test-installer-assets: all checks passed\n'

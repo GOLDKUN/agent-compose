@@ -200,6 +200,10 @@ func TestOptionsRejectExplicitInvalidImages(t *testing.T) {
 			options.Registry = "https://registry.example"
 			options.RegistrySet = true
 		}, wantErr: "without a scheme or path"},
+		{name: "signed registry port", set: func(options *Options) {
+			options.Registry = "registry.example:+5000"
+			options.RegistrySet = true
+		}, wantErr: "invalid port"},
 		{name: "registry and prefix", set: func(options *Options) {
 			options.Registry = "registry.example"
 			options.RegistrySet = true

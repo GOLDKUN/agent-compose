@@ -238,7 +238,7 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		before := m.fields[m.focus].input.Value()
 		m.fields[m.focus].input, cmd = m.fields[m.focus].input.Update(key)
-		if isImageField(m.fields[m.focus].id) && m.fields[m.focus].input.Value() != before {
+		if tracksExplicitInput(m.fields[m.focus].id) && m.fields[m.focus].input.Value() != before {
 			m.fields[m.focus].followsRelease = false
 		}
 		return m, cmd
@@ -263,8 +263,8 @@ func (m *model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func isImageField(id fieldID) bool {
-	return id == fieldGuestImage
+func tracksExplicitInput(id fieldID) bool {
+	return id == fieldRegistry || id == fieldGuestImage
 }
 
 func (m *model) updateMenu(key tea.KeyMsg, count int, selectFn func(int)) (tea.Model, tea.Cmd) {

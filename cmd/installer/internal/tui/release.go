@@ -110,7 +110,7 @@ func (m *model) syncReleaseImageFields() {
 		field.input.SetValue(item.value)
 		field.followsRelease = true
 	}
-	if registry := m.field(fieldRegistry); registry != nil && previewErr == nil && strings.TrimSpace(registry.input.Value()) == "" {
+	if registry := m.field(fieldRegistry); registry != nil && registry.followsRelease && previewErr == nil && strings.TrimSpace(registry.input.Value()) == "" {
 		registry.input.SetValue(preview.Registry)
 	}
 	frontend := m.field(fieldFrontendVersion)

@@ -79,7 +79,7 @@ func (o Options) Validate(operation Operation) error {
 		if o.Port < 1 || o.Port > 65535 {
 			return fmt.Errorf("port must be between 1 and 65535")
 		}
-		if o.RegistrySet {
+		if o.RegistrySet && strings.TrimSpace(o.Registry) != "" {
 			if err := validateRegistry(o.Registry); err != nil {
 				return err
 			}
@@ -152,6 +152,14 @@ func validateRegistry(value string) error {
 }
 
 func validRegistryPort(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
 	port, err := strconv.Atoi(value)
 	return err == nil && port >= 1 && port <= 65535
 }

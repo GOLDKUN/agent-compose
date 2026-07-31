@@ -39,6 +39,8 @@ for value_name in VERSION IMAGE_PREFIX FRONTEND_VERSION FRONTEND_VERSIONS; do
 done
 
 frontend_default_found=false
+[[ $FRONTEND_VERSIONS != ,* && $FRONTEND_VERSIONS != *, && $FRONTEND_VERSIONS != *,,* ]] \
+  || die 'AGENT_COMPOSE_FRONTEND_VERSIONS must not contain empty entries'
 IFS=',' read -r -a frontend_versions <<<"$FRONTEND_VERSIONS"
 declare -A seen_frontend_versions=()
 for frontend_version in "${frontend_versions[@]}"; do
