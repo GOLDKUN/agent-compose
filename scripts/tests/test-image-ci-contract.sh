@@ -12,6 +12,9 @@ GUEST_BUILDER="$ROOT_DIR/scripts/build-agent-compose-guest.sh"
 GUEST_DOCKERFILE="$ROOT_DIR/guest-images/Dockerfile.agent-compose-guest"
 ARCHLINUX_GUEST_DOCKERFILE="$ROOT_DIR/guest-images/Dockerfile.agent-compose-guest-archlinux"
 DEVBOX_DOCKERFILE="$ROOT_DIR/guest-images/Dockerfile.devbox-archlinux"
+DAEMON_DOCKERFILE="$ROOT_DIR/Dockerfile"
+LOCAL_DAEMON_DOCKERFILE="$ROOT_DIR/Dockerfile.agent-compose-local"
+COMPOSE_OVERRIDE="$ROOT_DIR/docker-compose.override.yml.example"
 
 failures=0
 TEST_ROOT=$(mktemp -d)
@@ -33,6 +36,49 @@ forbid_regex() { # $1=text $2=extended-regex $3=description
     fail "forbidden $3"
   fi
 }
+
+public_build_sources=''
+for source_file in \
+  "$DAEMON_DOCKERFILE" \
+  "$LOCAL_DAEMON_DOCKERFILE" \
+  "$GUEST_DOCKERFILE" \
+  "$ARCHLINUX_GUEST_DOCKERFILE" \
+  "$DEVBOX_DOCKERFILE" \
+  "$WORKFLOW" \
+  "$COMPOSE_OVERRIDE"; do
+  public_build_sources+=$(<"$source_file")
+  public_build_sources+=$'\n'
+done
+
+for regional_mirror in \
+  'mirrors\.tuna\.tsinghua\.edu\.cn' \
+  'goproxy\.cn' \
+  'mirrors\.aliyun\.com' \
+  'registry\.npmmirror\.com'; do
+  forbid_regex "$public_build_sources" "$regional_mirror" \
+    "regional mirror default $regional_mirror in public build configuration"
+done
+
+for daemon_dockerfile in "$DAEMON_DOCKERFILE" "$LOCAL_DAEMON_DOCKERFILE"; do
+  require_regex "$(<"$daemon_dockerfile")" \
+    '^ARG[[:space:]]+GOPROXY=https://proxy\.golang\.org,direct$' \
+    "official Go proxy default in $(basename "$daemon_dockerfile")"
+done
+
+require_regex "$(<"$GUEST_DOCKERFILE")" \
+  '^ARG[[:space:]]+PYPI_INDEX_URL=https://pypi\.org/simple$' \
+  'official PyPI default in Debian guest Dockerfile'
+require_regex "$(<"$ARCHLINUX_GUEST_DOCKERFILE")" \
+  '^ARG[[:space:]]+ARCHLINUX_MIRROR[[:space:]]*$' \
+  'upstream mirrorlist default in Arch Linux guest Dockerfile'
+for guest_dockerfile in "$GUEST_DOCKERFILE" "$ARCHLINUX_GUEST_DOCKERFILE"; do
+  require_regex "$(<"$guest_dockerfile")" \
+    'npm[[:space:]]+config[[:space:]]+set[[:space:]]+registry[[:space:]]+https://registry\.npmjs\.org' \
+    "official npm registry in $(basename "$guest_dockerfile")"
+  require_regex "$(<"$guest_dockerfile")" \
+    '^ARG[[:space:]]+PYPI_TRUSTED_HOST[[:space:]]*$' \
+    "empty trusted PyPI host default in $(basename "$guest_dockerfile")"
+done
 
 job_block() { # $1=job-id
   awk -v job="$1" '

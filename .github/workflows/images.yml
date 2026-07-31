@@ -38,7 +38,7 @@ env:
   REGISTRY: docker.io
   IMAGE_PREFIX: chaitin
   REGISTRY_MIRROR: docker.io
-  GOPROXY: https://goproxy.cn,direct
+  GOPROXY: https://proxy.golang.org,direct
 
 jobs:
   # Emit the build matrix as JSON: amd64 only on pull requests (fast Dockerfile

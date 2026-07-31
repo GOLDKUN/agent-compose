@@ -7,7 +7,7 @@ services:
       args:
         VERSION: ${VERSION:-dev}
         REGISTRY_MIRROR: ${REGISTRY_MIRROR:-docker.io}
-        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         ALL_PROXY: ${ALL_PROXY:-}
