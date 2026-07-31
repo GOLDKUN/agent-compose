@@ -24,6 +24,8 @@ services:
       - agent-compose
     env_file:
       - ./.env
+    volumes:
+      - ${AGENT_COMPOSE_UI_DATA_DIR:-./data/agent-compose-ui}:/data
     environment:
       JUPYTER_PROXY_BASE: ${JUPYTER_PROXY_BASE:-/jupyter}
       NGINX_JUPYTER_PROXY_BASE: ${JUPYTER_PROXY_BASE:-/jupyter}

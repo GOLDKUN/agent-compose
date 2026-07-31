@@ -58,6 +58,13 @@ func TestE2EDockerComposeSandboxEnvContract(t *testing.T) {
 	if service.WorkingDir != "/data/work" {
 		t.Fatalf("agent-compose working_dir = %q, want /data/work", service.WorkingDir)
 	}
+	frontend, ok := composeFile.Services["agent-compose-frontend"]
+	if !ok {
+		t.Fatalf("docker-compose.yml missing agent-compose-frontend service")
+	}
+	if !stringSliceContains(frontend.Volumes, "${AGENT_COMPOSE_UI_DATA_DIR:-./data/agent-compose-ui}:/data") {
+		t.Fatalf("agent-compose-frontend volumes = %#v, want persistent UI data mount", frontend.Volumes)
+	}
 
 	for _, want := range []string{
 		"AGENT_COMPOSE_DATA_DIR=./data",
