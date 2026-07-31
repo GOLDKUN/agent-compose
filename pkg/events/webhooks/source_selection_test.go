@@ -48,7 +48,7 @@ func TestUnsignedWebhookRejectsAmbiguousSources(t *testing.T) {
 	store := &candidateWebhookStore{
 		webhookRouteStore: newWebhookRouteStore(),
 		candidates: []domain.WebhookSource{
-			{ID: "unsigned", Enabled: true, Provider: "github", TopicPrefix: "webhook.github.", SignatureType: domain.WebhookSignatureNone},
+			{ID: "unsigned", Enabled: true, Provider: "github", TopicPrefix: "webhook.github.", SignatureType: domain.WebhookSignatureGitHubSHA256},
 			{ID: "signed", Enabled: true, Provider: "github", TopicPrefix: "webhook.github.", SignatureType: domain.WebhookSignatureGitHubSHA256, SignatureSecret: "secret"},
 		},
 	}

@@ -5,10 +5,7 @@ import (
 	"strings"
 )
 
-const (
-	WebhookSignatureNone         = "none"
-	WebhookSignatureGitHubSHA256 = "github_sha256"
-)
+const WebhookSignatureGitHubSHA256 = "github_sha256"
 
 // GitHubWebhookMode describes whether a webhook source uses legacy generic
 // handling, unsigned GitHub event routing, or signed GitHub event routing.
@@ -28,31 +25,23 @@ func GitHubWebhookModeForSource(source WebhookSource) (GitHubWebhookMode, error)
 	signatureType := strings.ToLower(strings.TrimSpace(source.SignatureType))
 	secret := strings.TrimSpace(source.SignatureSecret)
 
-	if signatureType == WebhookSignatureGitHubSHA256 && provider != "github" {
-		return GitHubWebhookModeGeneric, fmt.Errorf("github sha256 webhook source provider must be github")
-	}
-	if provider != "github" {
-		return GitHubWebhookModeGeneric, nil
-	}
 	if signatureType == "" {
 		return GitHubWebhookModeGeneric, nil
+	}
+	if signatureType != WebhookSignatureGitHubSHA256 {
+		if provider == "github" {
+			return GitHubWebhookModeGeneric, fmt.Errorf("github webhook source signature type must be %q", WebhookSignatureGitHubSHA256)
+		}
+		return GitHubWebhookModeGeneric, nil
+	}
+	if provider != "github" {
+		return GitHubWebhookModeGeneric, fmt.Errorf("github sha256 webhook source provider must be github")
 	}
 	if source.TopicPrefix != "webhook.github." {
 		return GitHubWebhookModeGeneric, fmt.Errorf("github webhook source topic prefix must be %q", "webhook.github.")
 	}
-
-	switch signatureType {
-	case WebhookSignatureNone:
-		if secret != "" {
-			return GitHubWebhookModeGeneric, fmt.Errorf("unsigned github webhook source signature secret must be empty")
-		}
+	if secret == "" {
 		return GitHubWebhookModeUnsigned, nil
-	case WebhookSignatureGitHubSHA256:
-		if secret == "" {
-			return GitHubWebhookModeGeneric, fmt.Errorf("github sha256 webhook source signature secret is required")
-		}
-		return GitHubWebhookModeSHA256, nil
-	default:
-		return GitHubWebhookModeGeneric, fmt.Errorf("github webhook source signature type must be %q or %q", WebhookSignatureNone, WebhookSignatureGitHubSHA256)
 	}
+	return GitHubWebhookModeSHA256, nil
 }

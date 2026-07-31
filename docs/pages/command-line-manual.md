@@ -83,21 +83,27 @@ with `provider` set to `github`, `topic_prefix` set to `webhook.github.`,
 will be entered in GitHub. The secret is write-only in API responses.
 
 GitHub also permits the webhook Secret field to be empty. To receive those
-unsigned deliveries directly, explicitly set `signature_type` to `none` and
-leave both `signature_secret` and the source token empty. This mode does not
-authenticate the sender: any client that can reach the endpoint can forge a
-GitHub event. Use it only behind a trusted reverse proxy or network access
-control. If a source token is configured with `signature_type=none`, the token
-is still required, so a proxy can authenticate the request and inject it. A
-tokenless unsigned source cannot share its webhook URL with another enabled
-source because it would make source selection ambiguous.
+unsigned deliveries directly, keep `signature_type` set to `github_sha256` and
+leave both `signature_secret` and the source token empty. The daemon skips
+signature verification when no signature secret is configured. This mode does
+not authenticate the sender: any client that can reach the endpoint can forge
+a GitHub event. Use it only behind a trusted reverse proxy or network access
+control. If a source token is configured, the token is still required, so a
+proxy can authenticate the request and inject it. A tokenless unsigned source
+cannot share its webhook URL with another enabled source because it would make
+source selection ambiguous.
+
+Because signature secrets are write-only, omitting or sending an empty
+`signature_secret` while updating an existing source preserves its current
+secret. Set `clear_signature=true` to intentionally switch an existing signed
+source to unsigned delivery.
 
 In the GitHub repository or organization settings, add a webhook with:
 
 - Payload URL: `https://<agent-compose-host>/api/webhooks/webhook.github`
 - Content type: `application/json`
 - Secret: the configured source signature secret, or empty only when the
-  source uses `signature_type=none`
+  source is intentionally unsigned
 - Events: select the events consumed by your schedulers
 
 The daemon verifies `X-Hub-Signature-256` against the exact request body and
@@ -105,11 +111,12 @@ uses `X-GitHub-Event` to publish topics such as `webhook.github.push`,
 `webhook.github.pull_request`, and `webhook.github.ping`. GitHub's
 `X-GitHub-Delivery` value provides the delivery ID and idempotency key, so a
 redelivery of the same payload is accepted without creating another event.
-Missing or invalid signatures are rejected even if the source also has a
-legacy static token. An explicit `signature_type=none` GitHub source uses the
-same event routing without signature verification. Generic sources, including
-legacy sources with an empty signature type, continue to use their URL topic
-and Bearer, `X-WEBHOOK-TOKEN`, or configured custom-header token.
+When a signature secret is configured, missing or invalid signatures are
+rejected even if the source also has a legacy static token. Without a signature
+secret, the GitHub source uses the same event routing without signature
+verification. Generic sources, including legacy sources with an empty signature
+type, continue to use their URL topic and Bearer, `X-WEBHOOK-TOKEN`, or a
+configured custom-header token.
 
 The token protects the daemon control plane rather than identifying the CLI
 application. Any UI server or reverse proxy that calls the same control-plane

@@ -146,12 +146,12 @@ Current implementation:
 - `/api/events` and `/api/events/*` use normal API/auth path and no longer
   depend on webhook token.
 
-GitHub sources explicitly configured with `signature_type=github_sha256` verify
-`X-Hub-Signature-256` over the exact raw body. Sources explicitly configured
-with `signature_type=none` accept GitHub's optional unsigned delivery, while a
-configured source token remains required. Both modes route from
-`X-GitHub-Event`; generic token-authenticated sources, including legacy sources
-with an empty signature type, retain the URL-derived topic.
+GitHub sources configured with `signature_type=github_sha256` verify
+`X-Hub-Signature-256` over the exact raw body when a signature secret is
+configured, and accept GitHub's optional unsigned delivery when it is empty. A
+configured source token remains required in unsigned mode. Both modes route
+from `X-GitHub-Event`; generic token-authenticated sources, including legacy
+sources with an empty signature type, retain the URL-derived topic.
 
 Target behavior:
 

@@ -16,9 +16,9 @@ func TestGitHubWebhookModeForSource(t *testing.T) {
 			want: GitHubWebhookModeSHA256,
 		},
 		{
-			name: "unsigned",
+			name: "unsigned without secret",
 			source: WebhookSource{Provider: "github", TopicPrefix: "webhook.github.",
-				SignatureType: WebhookSignatureNone},
+				SignatureType: WebhookSignatureGitHubSHA256},
 			want: GitHubWebhookModeUnsigned,
 		},
 		{
@@ -30,7 +30,7 @@ func TestGitHubWebhookModeForSource(t *testing.T) {
 		{
 			name: "generic none",
 			source: WebhookSource{Provider: "generic", TopicPrefix: "webhook.generic.",
-				SignatureType: WebhookSignatureNone},
+				SignatureType: "none"},
 			want: GitHubWebhookModeGeneric,
 		},
 		{
@@ -43,24 +43,6 @@ func TestGitHubWebhookModeForSource(t *testing.T) {
 			name: "signed prefix",
 			source: WebhookSource{Provider: "github", TopicPrefix: "webhook.other.",
 				SignatureType: WebhookSignatureGitHubSHA256, SignatureSecret: "secret"},
-			wantErr: true,
-		},
-		{
-			name: "signed secret",
-			source: WebhookSource{Provider: "github", TopicPrefix: "webhook.github.",
-				SignatureType: WebhookSignatureGitHubSHA256},
-			wantErr: true,
-		},
-		{
-			name: "unsigned prefix",
-			source: WebhookSource{Provider: "github", TopicPrefix: "webhook.other.",
-				SignatureType: WebhookSignatureNone},
-			wantErr: true,
-		},
-		{
-			name: "unsigned secret",
-			source: WebhookSource{Provider: "github", TopicPrefix: "webhook.github.",
-				SignatureType: WebhookSignatureNone, SignatureSecret: "secret"},
 			wantErr: true,
 		},
 		{

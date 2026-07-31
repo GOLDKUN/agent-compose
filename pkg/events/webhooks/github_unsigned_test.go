@@ -11,18 +11,25 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func TestUnsignedGitHubWebhookEventRouting(t *testing.T) {
+func TestClearingGitHubSecretEnablesUnsignedEventRouting(t *testing.T) {
 	store := newWebhookRouteStore()
+	store.sources["github"] = domain.WebhookSource{
+		ID: "github", Name: "GitHub", Enabled: true, Provider: "github", TopicPrefix: "webhook.github.",
+		SignatureType: domain.WebhookSignatureGitHubSHA256, SignatureSecret: "github-secret",
+	}
 	app := echo.New()
 	RegisterRoutes(app, RouteOptions{Store: store, WebhookBodyLimit: 1 << 20, NewEventID: func() string { return "event-1" }})
 
 	put := httptest.NewRequest(http.MethodPut, "/api/webhook-sources/github", strings.NewReader(
-		`{"name":"GitHub","enabled":true,"provider":"github","topic_prefix":"webhook.github.","signature_type":"none","clear_token":true}`,
+		`{"name":"GitHub","enabled":true,"provider":"github","topic_prefix":"webhook.github.","signature_type":"github_sha256","clear_token":true,"clear_signature":true}`,
 	))
 	putRec := httptest.NewRecorder()
 	app.ServeHTTP(putRec, put)
 	if putRec.Code != http.StatusOK {
 		t.Fatalf("configure status = %d, body = %s", putRec.Code, putRec.Body.String())
+	}
+	if store.sources["github"].SignatureSecret != "" {
+		t.Fatal("signature secret was not cleared")
 	}
 
 	rec := deliverGitHubWebhook(app, `{}`, "push", "delivery-unsigned", "")
@@ -39,7 +46,7 @@ func TestUnsignedGitHubWebhookRequiresConfiguredToken(t *testing.T) {
 	store := newWebhookRouteStore()
 	store.sources["github"] = domain.WebhookSource{
 		ID: "github", Name: "GitHub", Enabled: true, Provider: "github", TopicPrefix: "webhook.github.",
-		TokenHash: TokenHash("proxy-token"), SignatureType: domain.WebhookSignatureNone,
+		TokenHash: TokenHash("proxy-token"), SignatureType: domain.WebhookSignatureGitHubSHA256,
 	}
 	app := echo.New()
 	RegisterRoutes(app, RouteOptions{Store: store, WebhookBodyLimit: 1 << 20, NewEventID: func() string { return "event-1" }})
