@@ -167,6 +167,20 @@ func TestDeletionRecoveryPagesSandboxMetadata(t *testing.T) {
 	}
 }
 
+func TestDeletionRecoveryStopsPagingWhenContextIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	store := &pagedRecoveryStore{afterList: cancel}
+	recovery := &DeletionRecovery{coordinator: &RemovalCoordinator{Store: store}}
+
+	warnings := recovery.appendArchivedSandboxes(ctx, make(map[string]struct{}))
+	if len(warnings) != 0 {
+		t.Fatalf("canceled recovery warnings = %v", warnings)
+	}
+	if len(store.options) != 1 {
+		t.Fatalf("ListSandboxes calls after cancellation = %d, want 1", len(store.options))
+	}
+}
+
 func TestDeletionRecoveryReportsUnreadableJournal(t *testing.T) {
 	root := t.TempDir()
 	lifecycleRoot := LifecycleRoot(root)
@@ -339,11 +353,15 @@ func (recoveryStore) RemoveSandbox(context.Context, string) error          { ret
 
 type pagedRecoveryStore struct {
 	recoveryStore
-	options []domain.SandboxListOptions
+	options   []domain.SandboxListOptions
+	afterList func()
 }
 
 func (s *pagedRecoveryStore) ListSandboxes(_ context.Context, options domain.SandboxListOptions) (domain.SandboxListResult, error) {
 	s.options = append(s.options, options)
+	if s.afterList != nil {
+		s.afterList()
+	}
 	if options.Offset == 0 {
 		return domain.SandboxListResult{HasMore: true, NextOffset: 7}, nil
 	}

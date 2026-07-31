@@ -220,8 +220,8 @@ func (c *SandboxRetentionCleaner) writeSandboxArchiveEntries(ctx context.Context
 		if !info.Mode().IsRegular() && !info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
 			return fmt.Errorf("archive entry %q has unsupported mode %s", path, info.Mode())
 		}
-		relative, err := filepath.Rel(sandboxDir, path)
-		if err != nil || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		relative, err := sandboxArchiveRelativePath(sandboxDir, path)
+		if err != nil {
 			return fmt.Errorf("archive entry %q escapes sandbox", path)
 		}
 		if relative == sandboxArchiveWorkspaceDirectory || relative == sandboxArchiveExternalVolumesDirectory {
@@ -270,6 +270,17 @@ func (c *SandboxRetentionCleaner) writeSandboxArchiveEntries(ctx context.Context
 		}
 	}
 	return nil
+}
+
+func sandboxArchiveRelativePath(sandboxDir, path string) (string, error) {
+	relative, err := filepath.Rel(sandboxDir, path)
+	if err != nil {
+		return "", err
+	}
+	if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes sandbox")
+	}
+	return relative, nil
 }
 
 func writeArchiveFile(ctx context.Context, writer *tar.Writer, path, name string) error {

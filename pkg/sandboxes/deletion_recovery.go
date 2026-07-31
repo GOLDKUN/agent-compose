@@ -148,6 +148,9 @@ sendRecords:
 func (r *DeletionRecovery) appendArchivedSandboxes(ctx context.Context, pending map[string]struct{}) []string {
 	var warnings []string
 	for offset := 0; ; {
+		if ctx.Err() != nil {
+			return warnings
+		}
 		listed, err := r.coordinator.Store.ListSandboxes(ctx, domain.SandboxListOptions{
 			Offset: offset,
 			Limit:  deletionRecoveryPageSize,
@@ -155,7 +158,13 @@ func (r *DeletionRecovery) appendArchivedSandboxes(ctx context.Context, pending 
 		if err != nil {
 			return append(warnings, fmt.Sprintf("list archived sandboxes for deletion recovery: %v", err))
 		}
+		if ctx.Err() != nil {
+			return warnings
+		}
 		for _, sandbox := range listed.Sandboxes {
+			if ctx.Err() != nil {
+				return warnings
+			}
 			if sandbox.Archive == nil || sandbox.Archive.State != domain.SandboxArchiveStateArchived {
 				continue
 			}
