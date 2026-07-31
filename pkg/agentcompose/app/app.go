@@ -203,8 +203,10 @@ func NewSandboxRemovalCoordinator(di do.Injector) (*sandboxes.RemovalCoordinator
 }
 
 func NewDeletionRecovery(di do.Injector) (*sandboxes.DeletionRecovery, error) {
-	return sandboxes.NewDeletionRecovery(
+	config := do.MustInvoke[*appconfig.Config](di)
+	return sandboxes.NewDeletionRecoveryWithArchiveRoot(
 		do.MustInvoke[*sandboxes.RemovalCoordinator](di),
+		config.SandboxArchiveRoot,
 		do.MustInvoke[*slog.Logger](di),
 	), nil
 }
@@ -223,7 +225,13 @@ func NewCleanupRunner(di do.Injector) (*cleanup.Runner, error) {
 	return &cleanup.Runner{
 		Interval: config.CleanupInterval,
 		Policies: []cleanup.Policy{
-			{TTL: config.WorkspaceCleanupTTL, Cleaner: &sandboxes.WorkspaceCleaner{Store: store, Locks: do.MustInvoke[*sandboxes.LifecycleLocks](di)}},
+			{TTL: config.WorkspaceCleanupTTL, Cleaner: &sandboxes.WorkspaceCleaner{
+				Store: store, Locks: do.MustInvoke[*sandboxes.LifecycleLocks](di),
+			}},
+			{TTL: config.SandboxRetentionTTL, Cleaner: &sandboxes.SandboxRetentionCleaner{
+				Store: store, Locks: do.MustInvoke[*sandboxes.LifecycleLocks](di), ArchiveRoot: config.SandboxArchiveRoot,
+				Removal: do.MustInvoke[*sandboxes.RemovalCoordinator](di), SandboxRoot: config.SandboxRoot,
+			}},
 			{TTL: config.ImageCacheCleanupTTL, Cleaner: &adapters.ImageCacheCleaner{Cache: imageCache, Sandboxes: store, SandboxRoot: config.SandboxRoot}},
 		},
 	}, nil

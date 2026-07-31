@@ -3,6 +3,8 @@ package sandboxes
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
@@ -78,6 +80,105 @@ func TestDeletionRecoveryReportsFailureAndRetriesOnNextInstance(t *testing.T) {
 	}
 	waitForRecoveryJournalRemoval(t, root, "retry")
 	waitForDeletionRecoveryDone(t, second)
+}
+
+func TestDeletionRecoveryRemovesArchivedSandboxWithoutCleanupPolicy(t *testing.T) {
+	root := t.TempDir()
+	archiveRoot := filepath.Join(t.TempDir(), "archives")
+	sandboxID := "archived-before-removal"
+	sandboxDir := filepath.Join(root, sandboxID)
+	if err := os.MkdirAll(filepath.Join(sandboxDir, "state"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store := &archivedRecoveryStore{sandbox: &domain.Sandbox{
+		Summary: domain.SandboxSummary{
+			ID: sandboxID, VMStatus: domain.VMStatusStopped,
+			WorkspacePath: filepath.Join(sandboxDir, "workspace"),
+		},
+		Archive: &domain.SandboxArchive{State: domain.SandboxArchiveStateArchived, ID: "archive"},
+	}}
+	writeRecoveryArchive(t, archiveRoot, sandboxID, "archive")
+	recovery := NewDeletionRecoveryWithArchiveRoot(&RemovalCoordinator{
+		SandboxRoot: root, Store: store, Runtime: &recoveryRuntime{},
+	}, archiveRoot, discardRecoveryLogger())
+	if err := recovery.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitForDeletionRecoveryDone(t, recovery)
+	if !store.removed {
+		t.Fatal("archived sandbox was not removed by startup recovery")
+	}
+	if _, err := ReadOwnershipRecord(root, sandboxID); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ownership record remains after archived recovery: %v", err)
+	}
+}
+
+func TestDeletionRecoveryDoesNotTrustUnverifiedArchivedMetadata(t *testing.T) {
+	root := t.TempDir()
+	archiveRoot := filepath.Join(t.TempDir(), "archives")
+	if err := os.MkdirAll(archiveRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sandboxID := "forged-archive-state"
+	sandboxDir := filepath.Join(root, sandboxID)
+	if err := os.MkdirAll(filepath.Join(sandboxDir, "state"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store := &archivedRecoveryStore{sandbox: &domain.Sandbox{
+		Summary: domain.SandboxSummary{
+			ID: sandboxID, VMStatus: domain.VMStatusStopped,
+			WorkspacePath: filepath.Join(sandboxDir, "workspace"),
+		},
+		Archive: &domain.SandboxArchive{State: domain.SandboxArchiveStateArchived, ID: "missing"},
+	}}
+	recovery := NewDeletionRecoveryWithArchiveRoot(&RemovalCoordinator{
+		SandboxRoot: root, Store: store, Runtime: &recoveryRuntime{},
+	}, archiveRoot, discardRecoveryLogger())
+	if err := recovery.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitForDeletionRecoveryDone(t, recovery)
+	if store.removed {
+		t.Fatal("unverified archived metadata triggered sandbox removal")
+	}
+	if _, err := os.Stat(sandboxDir); err != nil {
+		t.Fatalf("unverified archived metadata removed sandbox data: %v", err)
+	}
+}
+
+func TestDeletionRecoveryPagesSandboxMetadata(t *testing.T) {
+	store := &pagedRecoveryStore{}
+	recovery := NewDeletionRecovery(&RemovalCoordinator{
+		SandboxRoot: t.TempDir(), Store: store, Runtime: &recoveryRuntime{},
+	}, discardRecoveryLogger())
+	if err := recovery.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitForDeletionRecoveryDone(t, recovery)
+
+	if len(store.options) != 2 {
+		t.Fatalf("ListSandboxes calls = %d, want 2", len(store.options))
+	}
+	if first := store.options[0]; first.Offset != 0 || first.Limit != deletionRecoveryPageSize {
+		t.Fatalf("first page options = %#v", first)
+	}
+	if second := store.options[1]; second.Offset != 7 || second.Limit != deletionRecoveryPageSize {
+		t.Fatalf("second page options = %#v", second)
+	}
+}
+
+func TestDeletionRecoveryStopsPagingWhenContextIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	store := &pagedRecoveryStore{afterList: cancel}
+	recovery := &DeletionRecovery{coordinator: &RemovalCoordinator{Store: store}}
+
+	warnings := recovery.appendArchivedSandboxes(ctx, make(map[string]struct{}))
+	if len(warnings) != 0 {
+		t.Fatalf("canceled recovery warnings = %v", warnings)
+	}
+	if len(store.options) != 1 {
+		t.Fatalf("ListSandboxes calls after cancellation = %d, want 1", len(store.options))
+	}
 }
 
 func TestDeletionRecoveryReportsUnreadableJournal(t *testing.T) {
@@ -213,6 +314,30 @@ func discardRecoveryLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+func writeRecoveryArchive(t *testing.T, archiveRoot, sandboxID, archiveID string) {
+	t.Helper()
+	directoryPath := filepath.Join(archiveRoot, sandboxID)
+	if err := os.MkdirAll(directoryPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	archive := []byte("committed archive")
+	if err := os.WriteFile(filepath.Join(directoryPath, archiveID+".tar.zst"), archive, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(archive)
+	directory, err := os.OpenRoot(directoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = directory.Close() }()
+	if err := writeArchiveManifest(directory, archiveID+".json", sandboxArchiveManifest{
+		Version: sandboxArchiveManifestVersion, ArchiveID: archiveID, SandboxID: sandboxID,
+		SizeBytes: int64(len(archive)), SHA256: hex.EncodeToString(digest[:]),
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type recoveryStore struct{}
 
 func (recoveryStore) GetSandbox(_ context.Context, id string) (*domain.Sandbox, error) {
@@ -225,6 +350,52 @@ func (recoveryStore) ListSandboxes(context.Context, domain.SandboxListOptions) (
 
 func (recoveryStore) UpdateSandbox(context.Context, *domain.Sandbox) error { return nil }
 func (recoveryStore) RemoveSandbox(context.Context, string) error          { return nil }
+
+type pagedRecoveryStore struct {
+	recoveryStore
+	options   []domain.SandboxListOptions
+	afterList func()
+}
+
+func (s *pagedRecoveryStore) ListSandboxes(_ context.Context, options domain.SandboxListOptions) (domain.SandboxListResult, error) {
+	s.options = append(s.options, options)
+	if s.afterList != nil {
+		s.afterList()
+	}
+	if options.Offset == 0 {
+		return domain.SandboxListResult{HasMore: true, NextOffset: 7}, nil
+	}
+	return domain.SandboxListResult{}, nil
+}
+
+type archivedRecoveryStore struct {
+	sandbox *domain.Sandbox
+	removed bool
+}
+
+func (s *archivedRecoveryStore) GetSandbox(_ context.Context, id string) (*domain.Sandbox, error) {
+	if s.sandbox == nil || s.sandbox.Summary.ID != id || s.removed {
+		return nil, os.ErrNotExist
+	}
+	return s.sandbox, nil
+}
+
+func (s *archivedRecoveryStore) ListSandboxes(context.Context, domain.SandboxListOptions) (domain.SandboxListResult, error) {
+	if s.sandbox == nil || s.removed {
+		return domain.SandboxListResult{}, nil
+	}
+	return domain.SandboxListResult{Sandboxes: []*domain.Sandbox{s.sandbox}}, nil
+}
+
+func (s *archivedRecoveryStore) UpdateSandbox(_ context.Context, sandbox *domain.Sandbox) error {
+	s.sandbox = sandbox
+	return nil
+}
+
+func (s *archivedRecoveryStore) RemoveSandbox(context.Context, string) error {
+	s.removed = true
+	return nil
+}
 
 type recoveryRuntime struct {
 	blockedID          string

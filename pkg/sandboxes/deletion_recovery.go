@@ -5,14 +5,21 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
+
+	domain "agent-compose/pkg/model"
 )
 
-const deletionRecoveryWorkers = 2
+const (
+	deletionRecoveryWorkers  = 2
+	deletionRecoveryPageSize = 200
+)
 
 // DeletionRecovery owns asynchronous recovery of sandbox deletion journals.
 type DeletionRecovery struct {
 	coordinator *RemovalCoordinator
+	archiveRoot string
 	logger      *slog.Logger
 
 	mu      sync.Mutex
@@ -23,10 +30,16 @@ type DeletionRecovery struct {
 
 // NewDeletionRecovery creates a one-shot deletion recovery component.
 func NewDeletionRecovery(coordinator *RemovalCoordinator, logger *slog.Logger) *DeletionRecovery {
+	return NewDeletionRecoveryWithArchiveRoot(coordinator, "", logger)
+}
+
+// NewDeletionRecoveryWithArchiveRoot creates deletion recovery that can verify
+// host-owned committed archives before recovering archive-driven removals.
+func NewDeletionRecoveryWithArchiveRoot(coordinator *RemovalCoordinator, archiveRoot string, logger *slog.Logger) *DeletionRecovery {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &DeletionRecovery{coordinator: coordinator, logger: logger}
+	return &DeletionRecovery{coordinator: coordinator, archiveRoot: archiveRoot, logger: logger}
 }
 
 // Start begins recovery and returns without waiting for the lifecycle scan or
@@ -84,46 +97,96 @@ func (r *DeletionRecovery) run(ctx context.Context, done chan struct{}) {
 	defer close(done)
 
 	records, warnings := ListOwnershipRecords(r.coordinator.SandboxRoot)
-	deleting := make([]OwnershipRecord, 0, len(records))
+	pending := make(map[string]struct{}, len(records))
 	for _, record := range records {
 		if record.LifecycleState == "deleting" {
-			deleting = append(deleting, record)
+			pending[record.SandboxID] = struct{}{}
 		}
 	}
+	warnings = append(warnings, r.appendArchivedSandboxes(ctx, pending)...)
 	for _, warning := range warnings {
-		r.logger.Warn("failed to read sandbox deletion journal", "warning", warning)
+		r.logger.Warn("sandbox deletion recovery warning", "warning", warning)
 	}
-	if len(deleting) == 0 || ctx.Err() != nil {
+	if len(pending) == 0 || ctx.Err() != nil {
 		return
 	}
+	ids := make([]string, 0, len(pending))
+	for sandboxID := range pending {
+		ids = append(ids, sandboxID)
+	}
+	sort.Strings(ids)
 
-	jobs := make(chan OwnershipRecord)
+	jobs := make(chan string)
 	var workers sync.WaitGroup
-	workerCount := min(deletionRecoveryWorkers, len(deleting))
+	workerCount := min(deletionRecoveryWorkers, len(ids))
 	workers.Add(workerCount)
 	for range workerCount {
 		go func() {
 			defer workers.Done()
-			for record := range jobs {
-				result, err := r.coordinator.Remove(ctx, record.SandboxID, true)
+			for sandboxID := range jobs {
+				result, err := r.coordinator.Remove(ctx, sandboxID, true)
 				if err == nil && !result.Removed {
 					err = fmt.Errorf("sandbox deletion did not complete")
 				}
-				r.logFailure(ctx, record.SandboxID, err)
+				r.logFailure(ctx, sandboxID, err)
 			}
 		}()
 	}
 
 sendRecords:
-	for _, record := range deleting {
+	for _, sandboxID := range ids {
 		select {
-		case jobs <- record:
+		case jobs <- sandboxID:
 		case <-ctx.Done():
 			break sendRecords
 		}
 	}
 	close(jobs)
 	workers.Wait()
+}
+
+func (r *DeletionRecovery) appendArchivedSandboxes(ctx context.Context, pending map[string]struct{}) []string {
+	var warnings []string
+	for offset := 0; ; {
+		if ctx.Err() != nil {
+			return warnings
+		}
+		listed, err := r.coordinator.Store.ListSandboxes(ctx, domain.SandboxListOptions{
+			Offset: offset,
+			Limit:  deletionRecoveryPageSize,
+		})
+		if err != nil {
+			return append(warnings, fmt.Sprintf("list archived sandboxes for deletion recovery: %v", err))
+		}
+		if ctx.Err() != nil {
+			return warnings
+		}
+		for _, sandbox := range listed.Sandboxes {
+			if ctx.Err() != nil {
+				return warnings
+			}
+			if sandbox.Archive == nil || sandbox.Archive.State != domain.SandboxArchiveStateArchived {
+				continue
+			}
+			if _, err := validateCommittedSandboxArchive(
+				ctx, r.archiveRoot, r.coordinator.SandboxRoot, sandbox.Summary.ID, sandbox.Archive.ID,
+			); err != nil {
+				warnings = append(warnings, fmt.Sprintf("verify committed archive for sandbox %s: %v", sandbox.Summary.ID, err))
+				continue
+			}
+			pending[sandbox.Summary.ID] = struct{}{}
+		}
+		if !listed.HasMore {
+			return warnings
+		}
+		if listed.NextOffset <= offset {
+			return append(warnings, fmt.Sprintf(
+				"list archived sandboxes for deletion recovery returned non-advancing offset %d after %d",
+				listed.NextOffset, offset,
+			))
+		}
+		offset = listed.NextOffset
+	}
 }
 
 func (r *DeletionRecovery) logFailure(ctx context.Context, sandboxID string, err error) {

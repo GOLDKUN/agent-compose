@@ -93,6 +93,43 @@ func TestSetupRegistersServiceGraph(t *testing.T) {
 	}
 }
 
+func TestNewCleanupRunnerSeparatesWorkspaceAndSandboxRetentionPolicies(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DATA_ROOT", root)
+	t.Setenv("SANDBOX_ROOT", filepath.Join(root, "sandboxes"))
+	t.Setenv("IMAGE_CACHE_ROOT", filepath.Join(root, "images"))
+	t.Setenv("RUNTIME_DRIVER", driverpkg.RuntimeDriverDocker)
+	t.Setenv("DOCKER_IMAGE", "guest:latest")
+	t.Setenv("WORKSPACE_CLEANUP_TTL", "12h")
+	t.Setenv("SANDBOX_RETENTION_TTL", "24h")
+	t.Setenv("LLM_API_ENDPOINT", "")
+
+	di := do.New()
+	appconfig.Setup(di)
+	do.ProvideValue(di, context.Background())
+	do.ProvideValue(di, slog.Default())
+	RegisterDependencies(di)
+	runner, err := NewCleanupRunner(di)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.Policies) != 3 {
+		t.Fatalf("cleanup policies = %#v, want workspace, sandbox retention, and image cache", runner.Policies)
+	}
+	if runner.Policies[0].TTL != 12*time.Hour {
+		t.Fatalf("workspace cleanup TTL = %s", runner.Policies[0].TTL)
+	}
+	if _, ok := runner.Policies[0].Cleaner.(*sandboxes.WorkspaceCleaner); !ok {
+		t.Fatalf("workspace cleanup cleaner = %T", runner.Policies[0].Cleaner)
+	}
+	if runner.Policies[1].TTL != 24*time.Hour {
+		t.Fatalf("sandbox retention TTL = %s", runner.Policies[1].TTL)
+	}
+	if _, ok := runner.Policies[1].Cleaner.(*sandboxes.SandboxRetentionCleaner); !ok {
+		t.Fatalf("sandbox retention cleaner = %T", runner.Policies[1].Cleaner)
+	}
+}
+
 func TestStartBackgroundConstructsCleanupBeforeScheduler(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", root)

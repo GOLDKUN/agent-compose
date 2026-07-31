@@ -36,23 +36,26 @@ func (c *WorkspaceCleaner) Clean(ctx context.Context, cutoff time.Time) (cleanup
 	if c == nil || c.Store == nil {
 		return cleanup.Result{}, fmt.Errorf("workspace cleaner store is not configured")
 	}
-	listed, err := c.Store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: 1 << 30})
+	ids, err := listCleanupSandboxIDs(ctx, c.Store)
 	if err != nil {
 		return cleanup.Result{}, err
 	}
 	result := cleanup.Result{}
 	var joined error
-	for _, sandbox := range listed.Sandboxes {
+	for _, sandboxID := range ids {
 		if err := ctx.Err(); err != nil {
 			return result, errors.Join(joined, err)
 		}
-		matched, removed, err := c.cleanSandbox(ctx, sandbox.Summary.ID, cutoff)
+		matched, removed, err := c.cleanSandbox(ctx, sandboxID, cutoff)
 		if err != nil {
 			if matched {
 				result.Matched++
 			}
+			if removed {
+				result.Removed++
+			}
 			result.Failed++
-			joined = errors.Join(joined, fmt.Errorf("reclaim workspace for sandbox %s: %w", sandbox.Summary.ID, err))
+			joined = errors.Join(joined, fmt.Errorf("reclaim workspace for sandbox %s: %w", sandboxID, err))
 			continue
 		}
 		if !matched {
@@ -70,9 +73,11 @@ func (c *WorkspaceCleaner) Clean(ctx context.Context, cutoff time.Time) (cleanup
 func (c *WorkspaceCleaner) cleanSandbox(ctx context.Context, sandboxID string, cutoff time.Time) (bool, bool, error) {
 	unlock := c.Locks.Lock(sandboxID)
 	defer unlock()
-
 	sandbox, err := c.Store.GetSandbox(ctx, sandboxID)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, false, nil
+		}
 		return false, false, err
 	}
 	if sandbox.WorkspaceReclamation != nil && sandbox.WorkspaceReclamation.State == domain.SandboxWorkspaceReclamationStateReclaimed {
@@ -87,44 +92,47 @@ func (c *WorkspaceCleaner) cleanSandbox(ctx context.Context, sandboxID string, c
 		if err != nil || !ok || eligibleAt.After(cutoff) {
 			return false, false, err
 		}
+	}
+	removed, err := c.reclaimWorkspace(ctx, sandbox)
+	return true, removed, err
+}
+
+func (c *WorkspaceCleaner) reclaimWorkspace(ctx context.Context, sandbox *domain.Sandbox) (bool, error) {
+	retrying := sandbox.WorkspaceReclamation != nil && sandbox.WorkspaceReclamation.State == domain.SandboxWorkspaceReclamationStateReclaiming
+	if sandbox.WorkspaceReclamation != nil && !retrying {
+		return false, fmt.Errorf("unknown workspace reclamation state %q", sandbox.WorkspaceReclamation.State)
+	}
+	if !retrying {
 		if _, err := c.safeWorkspacePath(sandbox); err != nil {
-			return true, false, err
+			return false, err
 		}
-		now := c.now()
 		sandbox.WorkspaceReclamation = &domain.SandboxWorkspaceReclamation{
-			State: domain.SandboxWorkspaceReclamationStateReclaiming, StartedAt: now,
+			State: domain.SandboxWorkspaceReclamationStateReclaiming, StartedAt: c.now(),
 		}
 		if err := c.Store.UpdateSandbox(ctx, sandbox); err != nil {
-			return true, false, fmt.Errorf("persist reclamation intent: %w", err)
+			return false, fmt.Errorf("persist reclamation intent: %w", err)
 		}
 	}
-
-	// Validate again after persisting intent so an external path replacement
-	// cannot turn the destructive operation into an unsafe deletion.
 	workspacePath, err := c.safeWorkspacePath(sandbox)
 	if err == nil {
 		err = os.RemoveAll(workspacePath)
 	}
 	if err != nil {
 		sandbox.WorkspaceReclamation.LastError = err.Error()
-		// The persisted reclaiming intent remains the recovery boundary even if
-		// recording the latest retry error also fails.
 		_ = c.Store.UpdateSandbox(ctx, sandbox)
-		return true, false, err
+		return false, err
 	}
 	sandbox.WorkspaceReclamation.State = domain.SandboxWorkspaceReclamationStateReclaimed
 	sandbox.WorkspaceReclamation.CompletedAt = c.now()
 	sandbox.WorkspaceReclamation.LastError = ""
 	if err := c.Store.UpdateSandbox(ctx, sandbox); err != nil {
-		return true, false, fmt.Errorf("persist reclaimed workspace: %w", err)
+		return false, fmt.Errorf("persist reclaimed workspace: %w", err)
 	}
-	// Reclamation state is the durable audit record; an event append failure
-	// must not make a completed, irreversible deletion retry as available.
-	_ = c.Store.AddEvent(ctx, sandboxID, domain.SandboxEvent{
+	_ = c.Store.AddEvent(ctx, sandbox.Summary.ID, domain.SandboxEvent{
 		ID: uuid.NewString(), Type: "sandbox.workspace_reclaimed", Level: "info",
 		Message: "sandbox workspace was reclaimed by retention policy", CreatedAt: c.now(),
 	})
-	return true, true, nil
+	return true, nil
 }
 
 func (c *WorkspaceCleaner) workspaceEligibleAt(sandbox *domain.Sandbox) (time.Time, bool, error) {
