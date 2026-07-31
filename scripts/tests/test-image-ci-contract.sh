@@ -411,6 +411,10 @@ if [[ -n $release_job ]]; then
     'version-tag-only release guard'
   require_regex "$release_job" '\./scripts/build-installer-assets\.sh[[:space:]]+\./upload' \
     'shared installer asset builder in release job'
+  require_regex "$release_job" 'AGENT_COMPOSE_FRONTEND_VERSION:.*vars\.AGENT_COMPOSE_FRONTEND_VERSION' \
+    'release frontend default version input'
+  require_regex "$release_job" 'AGENT_COMPOSE_FRONTEND_VERSIONS:.*vars\.AGENT_COMPOSE_FRONTEND_VERSIONS' \
+    'release supported frontend versions input'
   require_regex "$release_job" 'gh release (upload|create).*upload/\*' \
     'release publication from installer output only'
   forbid_regex "$release_job" 'build/agent-compose|build-agent-compose-binary|agent-compose-(darwin|linux)-(amd64|arm64)' \

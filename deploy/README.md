@@ -34,14 +34,14 @@ The bootstrap forwards all arguments to the downloaded binary:
 curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | \
   sudo bash -s -- install --yes
 
-# Select a release, directory, UI port, or complete image references.
+# Select a release, directory, registry, supported UI version, or guest image.
 sudo /opt/agent-compose/installer install \
   --version v1.2.3 \
   --dir /srv/agent-compose \
+  --registry registry.example.com \
   --with-ui \
+  --frontend-version v2 \
   --port 8080 \
-  --backend-image registry.example.com/team/agent-compose:v1.2.3 \
-  --frontend-image registry.example.com/team/agent-compose-ui:v1.2.3 \
   --guest-image registry.example.com/team/agent-compose-guest:v1.2.3 \
   --yes
 
@@ -56,16 +56,19 @@ sudo /opt/agent-compose/installer install --no-start --yes
 ```
 
 The legacy top-level form, including `--upgrade`, `--dir`, `--version`,
-`--image-prefix`, `--no-start`, and `--yes`, remains accepted. `--image-prefix`
-is deprecated; use the three complete image options when selecting a mirror or
-custom image. New automation should use the explicit `install`, `upgrade`, and
-`uninstall` subcommands.
+`--image-prefix`, `--backend-image`, `--frontend-image`, `--no-start`, and
+`--yes`, remains accepted for existing automation. These compatibility image
+flags are hidden from help. New automation should use `--registry`,
+`--frontend-version`, `--guest-image`, and the explicit `install`, `upgrade`,
+and `uninstall` subcommands. `--registry` and `--image-prefix` are mutually
+exclusive.
 
 Environment overrides retained for automation are:
 
 - `AGENT_COMPOSE_REPO`: GitHub repository used for downloads;
 - `AGENT_COMPOSE_INSTALL_DIR`: default installation directory;
-- `AGENT_COMPOSE_FRONTEND_VERSION`: frontend tag used with an image prefix;
+- `AGENT_COMPOSE_FRONTEND_VERSION`: supported frontend tag selected by legacy
+  automation;
 - `AGENT_COMPOSE_YES=1`: skip confirmation;
 - `AGENT_COMPOSE_INSTALLER_RELEASE`: bootstrap release tag, primarily for
   mirrors and release verification.
@@ -91,17 +94,28 @@ password. The password is printed once and stored in `.env`. Existing settings
 are preserved. During upgrade, image references advance only when their current
 value still matches `.installer-state.env`; user overrides are never replaced.
 
-The interactive form and non-interactive CLI can independently override the
-backend (`--backend-image`), frontend (`--frontend-image`), and sandbox guest
-(`--guest-image`) image with a complete tag or digest reference. An explicit
-image always replaces that one value and becomes installer-managed, including
-during upgrade. The TUI displays the exact defaults from the selected Release
-manifest and refreshes them when the version field loses focus; an empty image
-field continues to follow that Release. Images omitted from the command retain
-the normal upgrade protection above. If the deprecated `--image-prefix` is
-combined with complete image options, the complete option wins for its image
-and the prefix supplies the omitted images. Without either form of override,
-the Docker Hub references from the selected Release bundle are used.
+The interactive form accepts one optional registry host. It replaces only the
+registry component of all Release-managed references and preserves the full
+repository path, tag, or digest. For example, `chaitin/agent-compose:v1`
+becomes `registry.example.com/chaitin/agent-compose:v1`. This is not a Docker
+registry mirror: transparent mirrors require separate dockerd configuration
+and do not change image references.
+When the field is empty, the TUI displays Docker Hub (`docker.io`) as a hint
+but leaves the Release image references unchanged.
+
+The Release manifest declares a default frontend version and an ordered list
+of supported versions. The TUI presents that list beside the Web UI toggle;
+`--frontend-version` provides the same validated selection for automation. An
+upgrade preserves the selected version while the new Release still supports
+it and stops for an explicit choice otherwise. Releases without a list expose
+their default as the only choice.
+
+The sandbox guest image remains independently configurable with
+`--guest-image`. Hidden compatibility options can still override complete
+backend and frontend references, and a complete reference wins over Registry
+or version-derived values. The legacy `--image-prefix` retains its old
+namespace-prefix behavior. Installer choices are recorded in
+`.installer-state.env` so later upgrades preserve them.
 
 New installations persist `AGENT_COMPOSE_DATA_DIR=./data`. If an older database
 exists only under `./data/agent-compose`, that path is retained. When databases
@@ -178,6 +192,9 @@ application Release.
 Normal application releases contain the architecture-independent deployment
 bundle, bootstrap copy, and bundle checksum. The installer binary need not be
 rebuilt for ordinary application releases unless the payload protocol changes.
+The release workflow reads the optional repository variables
+`AGENT_COMPOSE_FRONTEND_VERSION` and `AGENT_COMPOSE_FRONTEND_VERSIONS`; when
+unset, both default to the single `latest` frontend choice.
 
 ## Contributor verification
 

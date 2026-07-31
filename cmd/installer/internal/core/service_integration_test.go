@@ -192,6 +192,23 @@ func TestOptionsRejectExplicitInvalidImages(t *testing.T) {
 			options.GuestImage = "  "
 			options.GuestImageSet = true
 		}, wantErr: "guest image"},
+		{name: "registry path", set: func(options *Options) {
+			options.Registry = "registry.example/team"
+			options.RegistrySet = true
+		}, wantErr: "without a scheme or path"},
+		{name: "registry scheme", set: func(options *Options) {
+			options.Registry = "https://registry.example"
+			options.RegistrySet = true
+		}, wantErr: "without a scheme or path"},
+		{name: "signed registry port", set: func(options *Options) {
+			options.Registry = "registry.example:+5000"
+			options.RegistrySet = true
+		}, wantErr: "invalid port"},
+		{name: "registry and prefix", set: func(options *Options) {
+			options.Registry = "registry.example"
+			options.RegistrySet = true
+			options.ImagePrefix = "legacy.example/team"
+		}, wantErr: "cannot be used together"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			options := DefaultOptions()

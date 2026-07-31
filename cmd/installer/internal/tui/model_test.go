@@ -27,13 +27,15 @@ func TestModelSelectsLanguageAndInstallFlow(t *testing.T) {
 	}
 	attachTestRelease(t, m, "v1", "ui-v3")
 	form := m.View()
-	for _, expected := range []string{"Configure installation", "Install directory", "Application version", "Backend image (optional)", "Frontend image (optional)", "Guest image (optional)", "Install web UI", "Web UI port", "Pre-pull guest image", "╭", "Tab / ↑↓ move"} {
+	for _, expected := range []string{"Configure installation", "Install directory", "Application version", "Image registry (optional)", "Guest image (optional)", "Pre-pull guest image", "Install web UI", "Web UI version", "Web UI port", "╭", "Tab / ↑↓ move"} {
 		if !strings.Contains(form, expected) {
 			t.Fatalf("install form missing %q:\n%s", expected, form)
 		}
 	}
-	if strings.Contains(form, "Image prefix") {
-		t.Fatalf("advanced image prefix rendered in TUI:\n%s", form)
+	for _, hidden := range []string{"Image prefix", "Backend image (optional)", "Frontend image (optional)"} {
+		if strings.Contains(form, hidden) {
+			t.Fatalf("hidden image control %q rendered in TUI:\n%s", hidden, form)
+		}
 	}
 	m.fields[0].input.SetValue("relative")
 	press(t, m, "enter")
@@ -47,37 +49,79 @@ func TestModelSelectsLanguageAndInstallFlow(t *testing.T) {
 		t.Fatalf("screen = %d, want confirmation", m.screen)
 	}
 	confirmation := m.View()
-	for _, expected := range []string{installDir, "latest", "Backend image: registry.example/agent-compose:v1", "Frontend image: registry.example/agent-compose-ui:ui-v3", "Guest image: registry.example/agent-compose-guest:v1", "release default", "Install web UI: No", "Pre-pull guest image: Yes"} {
+	for _, expected := range []string{installDir, "latest", "Image registry: docker.io (default)", "Backend image: registry.example/agent-compose:v1", "Guest image: registry.example/agent-compose-guest:v1", "release default", "Install web UI: No", "Pre-pull guest image: Yes"} {
 		if !strings.Contains(confirmation, expected) {
 			t.Fatalf("confirmation missing %q:\n%s", expected, confirmation)
 		}
 	}
-	if strings.Contains(confirmation, "Web UI port") {
-		t.Fatalf("confirmation offered a port without the web UI:\n%s", confirmation)
+	if m.options.RegistrySet {
+		t.Fatal("default Registry hint was treated as an explicit image rewrite")
+	}
+	for _, absent := range []string{"Web UI port", "Frontend image", "Web UI version"} {
+		if strings.Contains(confirmation, absent) {
+			t.Fatalf("confirmation offered %q without the web UI:\n%s", absent, confirmation)
+		}
 	}
 }
 
-func TestModelReadsExplicitImageOverrides(t *testing.T) {
+func TestModelReadsRegistryGuestAndFrontendVersion(t *testing.T) {
 	m := installForm(t)
-	setExplicitImage(t, m, fieldBackendImage, " registry.example/backend:v1 ")
-	setExplicitImage(t, m, fieldFrontendImage, "registry.example/frontend@sha256:abc")
+	registry := m.field(fieldRegistry)
+	registry.input.SetValue(" registry.example.com ")
+	registry.followsRelease = false
 	setExplicitImage(t, m, fieldGuestImage, "registry.example/guest:v2")
+	m.field(fieldWithUI).on = true
+	frontend := m.field(fieldFrontendVersion)
+	frontend.choices = []string{"ui-v3", "ui-v3-legacy"}
+	frontend.choice = 1
+	frontend.followsRelease = false
 
 	press(t, m, "enter")
-	if !m.options.BackendImageSet || m.options.BackendImage != "registry.example/backend:v1" {
-		t.Fatalf("backend image = %q, set=%t", m.options.BackendImage, m.options.BackendImageSet)
-	}
-	if !m.options.FrontendImageSet || m.options.FrontendImage != "registry.example/frontend@sha256:abc" {
-		t.Fatalf("frontend image = %q, set=%t", m.options.FrontendImage, m.options.FrontendImageSet)
+	if !m.options.RegistrySet || m.options.Registry != "registry.example.com" {
+		t.Fatalf("registry = %q, set=%t", m.options.Registry, m.options.RegistrySet)
 	}
 	if !m.options.GuestImageSet || m.options.GuestImage != "registry.example/guest:v2" {
 		t.Fatalf("guest image = %q, set=%t", m.options.GuestImage, m.options.GuestImageSet)
 	}
+	if !m.options.FrontendVersionSet || m.options.FrontendVersion != "ui-v3-legacy" {
+		t.Fatalf("frontend version = %q, set=%t", m.options.FrontendVersion, m.options.FrontendVersionSet)
+	}
 	confirmation := m.View()
-	for _, image := range []string{m.options.BackendImage, m.options.FrontendImage, m.options.GuestImage} {
-		if !strings.Contains(confirmation, image) {
-			t.Fatalf("confirmation missing %q:\n%s", image, confirmation)
+	for _, value := range []string{"registry.example.com", m.options.GuestImage, "ui-v3-legacy"} {
+		if !strings.Contains(confirmation, value) {
+			t.Fatalf("confirmation missing %q:\n%s", value, confirmation)
 		}
+	}
+}
+
+func TestModelCanClearPersistedRegistry(t *testing.T) {
+	m := installForm(t)
+	m.operation = core.OperationUpgrade
+	installDir := m.options.InstallDir
+	writeTUITestFile(t, filepath.Join(installDir, ".env"), "AGENT_COMPOSE_IMAGE=mirror.example/agent-compose:v1\nAGENT_COMPOSE_FRONTEND_VERSION=ui-v1\nAGENT_COMPOSE_FRONTEND_IMAGE=mirror.example/agent-compose-ui:ui-v1\nDEFAULT_IMAGE=mirror.example/agent-compose-guest:v1\n")
+	writeTUITestFile(t, filepath.Join(installDir, ".installer-state.env"), "INSTALLER_REGISTRY=mirror.example\nINSTALLER_FRONTEND_VERSION=ui-v1\nAGENT_COMPOSE_IMAGE=mirror.example/agent-compose:v1\nAGENT_COMPOSE_FRONTEND_VERSION=ui-v1\nAGENT_COMPOSE_FRONTEND_IMAGE=mirror.example/agent-compose-ui:ui-v1\nDEFAULT_IMAGE=mirror.example/agent-compose-guest:v1\n")
+	m.syncReleaseImageFields()
+	registry := m.field(fieldRegistry)
+	if got := registry.input.Value(); got != "mirror.example" || !registry.followsRelease {
+		t.Fatalf("persisted registry = %q, follows release = %t", got, registry.followsRelease)
+	}
+
+	m.focus = indexOfField(t, m, fieldRegistry)
+	m.focusFields()
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	if registry.input.Value() != "" || registry.followsRelease {
+		t.Fatalf("cleared registry = %q, follows release = %t", registry.input.Value(), registry.followsRelease)
+	}
+	press(t, m, "enter")
+
+	if !m.options.RegistrySet || m.options.Registry != "" {
+		t.Fatalf("registry reset = %q, set = %t", m.options.Registry, m.options.RegistrySet)
+	}
+	if m.err != nil || m.screen != screenConfirm {
+		t.Fatalf("registry reset did not reach confirmation: screen=%d err=%v", m.screen, m.err)
+	}
+	if m.preview.Registry != "" || m.preview.Backend.Value != "registry.example/agent-compose:v1" {
+		t.Fatalf("registry reset preview = %#v", m.preview)
 	}
 }
 
@@ -104,13 +148,12 @@ func TestModelResolvesImagesWhenVersionLosesFocus(t *testing.T) {
 	message := cmd()
 	m.Update(message)
 	view := m.View()
-	for _, image := range []string{
-		"registry.example/agent-compose:v2",
-		"registry.example/agent-compose-ui:ui-v4",
+	for _, value := range []string{
+		"ui-v4",
 		"registry.example/agent-compose-guest:v2",
 	} {
-		if !strings.Contains(view, image) {
-			t.Fatalf("resolved form is missing %q:\n%s", image, view)
+		if !strings.Contains(view, value) {
+			t.Fatalf("resolved form is missing %q:\n%s", value, view)
 		}
 	}
 }
@@ -128,13 +171,72 @@ func TestModelVersionChangePreservesExplicitImage(t *testing.T) {
 	}
 	m.Update(cmd())
 
-	if got := m.field(fieldBackendImage).input.Value(); got != "registry.example/agent-compose:v2" {
-		t.Fatalf("backend image = %q", got)
-	}
 	guest := m.field(fieldGuestImage)
 	if got := guest.input.Value(); got != "operator.example/guest:keep" || guest.followsRelease {
 		t.Fatalf("guest image = %q, follows release = %t", got, guest.followsRelease)
 	}
+	frontend := m.field(fieldFrontendVersion)
+	if frontend.choices[frontend.choice] != "ui-v4" || !frontend.followsRelease {
+		t.Fatalf("frontend choice = %#v, index=%d, follows=%t", frontend.choices, frontend.choice, frontend.followsRelease)
+	}
+}
+
+func TestModelVersionChangePreservesSupportedExplicitFrontendVersion(t *testing.T) {
+	m := installForm(t)
+	frontend := m.field(fieldFrontendVersion)
+	frontend.choice = 1
+	frontend.followsRelease = false
+	m.options.BundleDir = makeTUITestBundleWithFrontendVersions(t, "v2", "ui-v2", "ui-v2", "ui-v1-legacy")
+
+	resolveVersionChange(t, m, "v2")
+
+	if got := selectedChoice(frontend); got != "ui-v1-legacy" || frontend.followsRelease {
+		t.Fatalf("frontend version = %q, follows release = %t", got, frontend.followsRelease)
+	}
+	if !m.options.FrontendVersionSet || m.options.FrontendVersion != "ui-v1-legacy" {
+		t.Fatalf("frontend option = %q, set = %t", m.options.FrontendVersion, m.options.FrontendVersionSet)
+	}
+}
+
+func TestModelVersionChangeReplacesUnsupportedExplicitFrontendVersion(t *testing.T) {
+	m := installForm(t)
+	m.field(fieldWithUI).on = true
+	frontend := m.field(fieldFrontendVersion)
+	frontend.choice = 1
+	frontend.followsRelease = false
+	if err := m.readFields(); err != nil {
+		t.Fatal(err)
+	}
+	m.options.BundleDir = makeTUITestBundle(t, "v2", "ui-v2")
+	m.field(fieldVersion).input.SetValue("v2")
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("version change did not start resolution")
+	}
+	m.Update(cmd())
+
+	if got := selectedChoice(frontend); got != "ui-v2" || frontend.followsRelease {
+		t.Fatalf("frontend version = %q, follows release = %t", got, frontend.followsRelease)
+	}
+	if !m.options.FrontendVersionSet || m.options.FrontendVersion != "ui-v2" {
+		t.Fatalf("frontend option = %q, set = %t", m.options.FrontendVersion, m.options.FrontendVersionSet)
+	}
+	if m.err != nil || m.screen != screenConfirm {
+		t.Fatalf("fallback frontend version did not reach confirmation: screen=%d err=%v", m.screen, m.err)
+	}
+}
+
+func resolveVersionChange(t *testing.T, m *model, version string) {
+	t.Helper()
+	m.focus = indexOfField(t, m, fieldVersion)
+	m.focusFields()
+	m.field(fieldVersion).input.SetValue(version)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if cmd == nil {
+		t.Fatal("version change did not start resolution")
+	}
+	m.Update(cmd())
 }
 
 func setExplicitImage(t *testing.T, m *model, id fieldID, value string) {
@@ -175,11 +277,11 @@ func TestModelPortFollowsWebUIToggle(t *testing.T) {
 		t.Fatalf("disabled port is not marked in the form:\n%s", form)
 	}
 
-	// Tab from the UI toggle must land past the disabled port.
+	// Tab from the UI toggle must land past both disabled frontend fields.
 	m.focus = indexOfField(t, m, fieldWithUI)
 	m.moveFocus(1)
-	if m.fields[m.focus].id != fieldGuestPull {
-		t.Fatalf("focus stopped on field %d, want the guest toggle", m.fields[m.focus].id)
+	if m.fields[m.focus].id != fieldInstallDir {
+		t.Fatalf("focus stopped on field %d, want the first enabled field", m.fields[m.focus].id)
 	}
 
 	m.focus = indexOfField(t, m, fieldWithUI)
@@ -188,8 +290,8 @@ func TestModelPortFollowsWebUIToggle(t *testing.T) {
 		t.Fatal("port stayed disabled after enabling the web UI")
 	}
 	m.moveFocus(1)
-	if m.fields[m.focus].id != fieldPort {
-		t.Fatalf("focus skipped the re-enabled port, landed on %d", m.fields[m.focus].id)
+	if m.fields[m.focus].id != fieldFrontendVersion {
+		t.Fatalf("focus skipped the re-enabled frontend version, landed on %d", m.fields[m.focus].id)
 	}
 
 	press(t, m, "enter")
@@ -198,6 +300,36 @@ func TestModelPortFollowsWebUIToggle(t *testing.T) {
 	}
 	if confirmation := m.View(); !strings.Contains(confirmation, "Web UI port") {
 		t.Fatalf("confirmation hid the port with the web UI enabled:\n%s", confirmation)
+	}
+}
+
+func TestModelFrontendVersionChoiceUsesReleaseOrder(t *testing.T) {
+	m := installForm(t)
+	m.field(fieldWithUI).on = true
+	frontend := m.field(fieldFrontendVersion)
+	if got := frontend.choices[frontend.choice]; got != "ui-v1" {
+		t.Fatalf("default frontend version = %q", got)
+	}
+	m.focus = indexOfField(t, m, fieldFrontendVersion)
+	press(t, m, "right")
+	if got := frontend.choices[frontend.choice]; got != "ui-v1-legacy" || frontend.followsRelease {
+		t.Fatalf("next frontend version = %q, follows=%t", got, frontend.followsRelease)
+	}
+	press(t, m, "left")
+	if got := frontend.choices[frontend.choice]; got != "ui-v1" {
+		t.Fatalf("previous frontend version = %q", got)
+	}
+}
+
+func TestModelKeepsFrontendVersionChosenBeforeDisablingUI(t *testing.T) {
+	m := installForm(t)
+	m.field(fieldWithUI).on = true
+	m.focus = indexOfField(t, m, fieldFrontendVersion)
+	press(t, m, "right")
+	m.field(fieldWithUI).on = false
+	press(t, m, "enter")
+	if m.options.WithUI || !m.options.FrontendVersionSet || m.options.FrontendVersion != "ui-v1-legacy" {
+		t.Fatalf("WithUI=%t frontend=%q set=%t", m.options.WithUI, m.options.FrontendVersion, m.options.FrontendVersionSet)
 	}
 }
 
@@ -253,12 +385,14 @@ func TestModelEnabledPortIsValidated(t *testing.T) {
 func installForm(t *testing.T) *model {
 	t.Helper()
 	m := newModel(core.Service{}, core.DefaultOptions(), "/tmp/installer")
+	m.options.InstallDir = t.TempDir()
 	press(t, m, "down")
 	press(t, m, "enter")
 	press(t, m, "enter")
 	if m.screen != screenForm {
 		t.Fatalf("screen = %d, want the install form", m.screen)
 	}
+	m.field(fieldInstallDir).input.SetValue(m.options.InstallDir)
 	attachTestRelease(t, m, "v1", "ui-v1")
 	return m
 }
@@ -282,12 +416,18 @@ func attachTestRelease(t *testing.T, m *model, version, frontendVersion string) 
 
 func makeTUITestBundle(t *testing.T, version, frontendVersion string) string {
 	t.Helper()
+	return makeTUITestBundleWithFrontendVersions(t, version, frontendVersion, frontendVersion, frontendVersion+"-legacy")
+}
+
+func makeTUITestBundleWithFrontendVersions(t *testing.T, version, frontendVersion string, frontendVersions ...string) string {
+	t.Helper()
 	dir := t.TempDir()
 	writeTUITestFile(t, filepath.Join(dir, "docker-compose.yml"), "services: {}\n")
 	writeTUITestFile(t, filepath.Join(dir, ".env.example"), "AUTH_PASSWORD=\nAUTH_SECRET=\n")
 	manifest := "INSTALLER_PAYLOAD_VERSION=1\n" +
 		"AGENT_COMPOSE_IMAGE=registry.example/agent-compose:" + version + "\n" +
 		"AGENT_COMPOSE_FRONTEND_VERSION=" + frontendVersion + "\n" +
+		"AGENT_COMPOSE_FRONTEND_VERSIONS=" + strings.Join(frontendVersions, ",") + "\n" +
 		"AGENT_COMPOSE_FRONTEND_IMAGE=registry.example/agent-compose-ui:" + frontendVersion + "\n" +
 		"DEFAULT_IMAGE=registry.example/agent-compose-guest:" + version + "\n"
 	writeTUITestFile(t, filepath.Join(dir, "images", "manifest.env"), manifest)
