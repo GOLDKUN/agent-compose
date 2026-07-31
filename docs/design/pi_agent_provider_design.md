@@ -6,22 +6,26 @@
 
 调研基线：
 
-- agent-compose：`origin/main`，提交 `5ba97ec3`（2026-07-22 拉取）。
+- 调研基线：本文保留原始实现评审基线；当前代码和 guest image 以本仓库
+  `main` 分支为准。
 - Pi：[`earendil-works/pi`](https://github.com/earendil-works/pi)，提交 [`bc41f612`](https://github.com/earendil-works/pi/commit/bc41f612da8c15c4acc5f7ab7a7178a4fe17c942)，发布版 `v0.81.1`。
 - Pi npm 包：`@earendil-works/pi-coding-agent@0.81.1`，要求 Node.js `>=22.19.0`；当前 guest image 使用 Node.js 22，满足要求。
 
 建议将规范 provider 名称定为 `pi`，兼容输入别名 `pi-agent` 和 `pi_agent`。首版使用 Pi 的 JSON event stream 模式，每个 agent-compose prompt turn 启动一个 `pi --mode json` 子进程，并用 Pi session ID 延续上下文。暂不以 RPC 模式作为首版执行通道。
 
-推荐分两个发布级别：
+原始设计曾建议分两个发布级别。当前实现已交付基础主链路和声明式 MCP adapter；下文的分阶段建议仅作历史决策记录：
 
 1. 基础可用：prompt、模型路由、system prompt、skills、session resume、流式日志、取消、镜像和文档全部可用。
-2. 完整可用：补齐 agent-compose 声明式 MCP server 到 Pi tool 的适配后，才宣称与 Codex/Claude/OpenCode provider 功能对等。
+2. 完整可用：补齐 agent-compose 声明式 MCP server 到 Pi tool 的适配。
 
-Pi 官方刻意不内置 MCP。不能在配置了 `mcp_servers` 时静默忽略；基础版本如果尚未交付 MCP adapter，必须在执行前返回清晰的 `failed precondition`。
+Pi 官方刻意不内置 MCP；当前 guest image 通过固定版本的
+`pi-mcp-adapter` extension 提供声明式 MCP 映射。runtime 将控制面已经验证并
+物化的 local/remote server 配置转换为 adapter 配置；extension 缺失或执行
+失败会使本次 run 明确失败。
 
 ## 2. 当前 agent provider 执行链
 
-当前实现实际支持四种 provider：`codex`、`claude`、`gemini`、`opencode`。一次 agent run 的主要链路如下：
+当前实现实际支持五种 provider：`codex`、`claude`、`gemini`、`opencode`、`pi`。一次 agent run 的主要链路如下：
 
 ```text
 AgentDefinition / compose agent
@@ -47,7 +51,7 @@ AgentDefinition / compose agent
 | agent 进程和事件翻译 | `runtime/javascript/src/runners/*` | 新增 `runners/pi.ts` |
 | LLM facade | `pkg/llms/runtimefacade`、`pkg/llms` | 解析 Pi 模型选择并写 `models.json` |
 | skills 投影 | `pkg/execution/agent_files.go`、runtime options | 复用 `~/.agents/skills`，通过显式 `--skill` 限定本次 agent skills |
-| MCP | `AgentRunner.prepareAgentMCPConfig`、guest runtime | 增加 Pi MCP extension；未实现前显式拒绝 |
+| MCP | `AgentRunner.prepareAgentMCPConfig`、guest runtime | 通过固定版本 `pi-mcp-adapter` extension 映射 |
 | guest image | `guest-images/Dockerfile.agent-compose-guest` 等 | 固定版本安装 npm CLI，增加镜像断言 |
 | CLI prompt attach | `cmd/agent-compose/cli_resource_reference.go` | 将 `pi` 加入非交互/交互支持矩阵（按实际完成能力） |
 
@@ -61,7 +65,8 @@ Pi 提供 interactive、print/JSON、RPC 和 SDK 四种模式。首版选择 `--
 
 - 与 `OpenCodeRunner`、`GeminiRunner` 的“一次 turn 一个进程”模型一致。
 - stdout 是 LF 分隔 JSON，第一条是带 `id` 的 session header，后续是稳定的 agent/message/tool 生命周期事件。
-- 支持 `--session-id <id>`：session 不存在时创建，存在时恢复，正好映射 `stateRoot` 下的 provider thread state。
+- `--session-id <id>` 用于恢复已有 session；首次执行省略该参数，让 Pi 走
+  原生 session 创建路径，再把返回的 ID 写入 `stateRoot` 下的 provider state。
 - 进程退出天然定义本次 turn 完成；context cancellation 可通过终止子进程实现。
 - 不需要在 Go/runtime 层新增长生命周期 stdin command multiplexer。
 
@@ -73,8 +78,8 @@ RPC 模式保留为后续交互能力升级选项。只有需要 run 中途 `ste
 
 ```text
 pi --mode json
-   --session-dir <stateRoot>/pi/sessions
-   --session-id <stored-or-generated-thread-id>
+   --session-dir <stateRoot>/agents/providers/pi/sessions
+   [--session-id <stored-thread-id>]
    --model agent-compose/<resolved-model>
    --append-system-prompt <temporary-system-context-file>
    --no-extensions --no-skills --no-prompt-templates --no-themes
@@ -115,8 +120,11 @@ pi --mode json
 复用 `runtime/javascript/src/session-state.ts`：
 
 - provider key 使用 `pi`。
-- 首次执行前生成 64 位小写 SHA-256 形式的随机 ID 作为 `--session-id`，与 agent-compose 新资源 ID 的表示形式一致。Pi 原生只要求 ID 使用安全字符，并不要求 UUID；Pi 的 session header 必须返回同一个 ID，否则以返回值为准并更新 store。
-- session 文件定向到 `<stateRoot>/pi/sessions`，而不是默认 `~/.pi/agent/sessions`，使状态生命周期跟随 sandbox state root。
+- 首次执行不传 `--session-id`，由 Pi 通过原生创建路径生成 session；后续只在
+  stored thread 存在时传入该 ID。
+- session 文件定向到 `<stateRoot>/agents/providers/pi/sessions`，而不是默认
+  `~/.pi/agent/sessions`，使状态生命周期跟随 sandbox state root；恢复 ID
+  继续保存在 `<stateRoot>/agents/providers/pi.json`。
 - 只有进程成功完成且拿到合法 session ID 后才原子写 stored thread；失败不能覆盖上一个可恢复 ID。
 - Pi session 绑定 cwd。agent-compose 恢复 sandbox 时 workspace guest path 应保持稳定；若未来允许 guest workspace path 改变，应新增兼容性测试。
 
@@ -327,14 +335,14 @@ task image:agent-compose-guest
 
 ## 8. 分阶段落地建议
 
-### PR 1：provider 主链路
+### 历史 PR 1：provider 主链路
 
 - provider normalize/validation、PiRunner、JSON event mapping、session、system context、skills。
 - Pi facade config（OpenAI Responses/chat + Anthropic Messages）。
 - guest image、文档、unit/integration/image smoke。
 - MCP 非空 fail-fast。
 
-### PR 2：声明式 MCP adapter
+### 历史 PR 2：声明式 MCP adapter
 
 - runtime-owned Pi extension、stdio/remote transports、schema/content mapping、cleanup。
 - MCP unit/integration/E2E，移除 fail-fast 限制。
@@ -359,4 +367,6 @@ task image:agent-compose-guest
 | npm 依赖增加镜像体积 | 拉取和启动成本 | 记录 size budget；必要时再评估上游 standalone release |
 | structured output | Pi CLI 无等价 schema flag | 首版像 OpenCode/Gemini 一样明确拒绝；后续用受控 extension 实现，不用 prompt 伪约束冒充 schema guarantee |
 
-最终推荐：先落地 JSON mode + facade + session + skills 的完整主链路，并把 MCP 非空 fail-fast 作为安全边界；随后用仓库内固定版本的 Pi extension 补齐 MCP。这个路径对当前架构改动最小，同时保留将来用 RPC 支持更强交互的空间。
+最终实现结论：JSON mode + facade + session + skills 主链路与固定版本的
+Pi MCP extension 均已落地。RPC 仍是未来可选的交互升级，不应与当前普通
+prompt run 混同。

@@ -27,7 +27,7 @@
 - **Runtime LLM Facade**，托管 LLM 凭据，使 provider key 不进入 guest 容器。
 - 每个 agent 可配 **MCP server、可复用 skill、具名 volume**。
 - **Jupyter 代理**，支持 notebook 风格的 guest runtime。
-- **v1/v2 Connect API** 与生成的 TypeScript client。
+- **v2 Connect API** 与生成的 TypeScript client；`health.v1` 仅用于健康检查。
 
 ## 工作原理
 
@@ -60,7 +60,31 @@ docker compose --profile with-ui up -d
 
 installer 还会预先拉取 sandbox guest 镜像，避免首次运行 agent 时卡在大文件下载上；不需要时传 `--skip-guest-pull` 或在 TUI 里选「否」。基础 `docker-compose.yml` 不启用 `privileged`，也不映射 `/dev/kvm`；installer 在新安装时检测 KVM，并在可用时把 `COMPOSE_FILE=docker-compose.yml:docker-compose.kvm.yml` 持久化到安装目录的 `.env`。没有 KVM 时仍可使用默认 Docker driver。安装、升级、卸载、数据保留以及镜像/私有 registry 选项见 [deploy/README.md](deploy/README.md)。
 
-### 方式 B —— 从源码构建（用于 CLI 工作流）
+### 方式 B —— 直接获取发布镜像（无需 install.sh）
+
+daemon 和 guest 镜像发布在 [Docker Hub](https://hub.docker.com/u/chaitin)，可以直接拉取稳定的多架构镜像：
+
+```bash
+docker pull chaitin/agent-compose:latest
+docker pull chaitin/agent-compose-guest:latest
+```
+
+需要固定应用版本时，将 `latest` 替换为对应 release tag（例如
+`v1.2.3`），daemon 和 guest 使用相同的应用版本 tag。可选的 Web UI 独立发布，版本号与 daemon 独立：
+
+```bash
+docker pull chaitin/agent-compose-ui:latest
+```
+
+daemon 和标准 guest 镜像提供 `linux/amd64`、`linux/arm64` manifest。要用
+Compose 手工部署，请使用对应 repository tag 中的 `docker-compose.yml` 和
+`.env.example`，将 `.env.example` 复制为 `.env` 并填写必需配置。固定版本时，
+还要在 `.env` 中增加 `AGENT_COMPOSE_IMAGE` 和 `DEFAULT_IMAGE`，分别使用上面的
+daemon 和 guest 镜像引用；需要固定可选 UI 时再增加
+`AGENT_COMPOSE_FRONTEND_IMAGE`。然后执行 `docker compose pull`、
+`docker compose up -d`；需要 Web UI 时增加 `--profile with-ui`。
+
+### 方式 C —— 从源码构建（用于 CLI 工作流）
 
 ```bash
 task build                       # 产物在 ./build/agent-compose
@@ -77,7 +101,7 @@ agent-compose --host http://127.0.0.1:7410 status
 
 ### 运行第一个 agent
 
-在本地 daemon 运行的前提下（方式 B），创建 `agent-compose.yml`：
+在本地 daemon 运行的前提下（方式 C），创建 `agent-compose.yml`：
 
 ```yaml
 name: demo
@@ -379,7 +403,7 @@ task test          # 或：task test:unit / task test:integration / task test:e2
 
 用 `task image:agent-compose-guest` 和 `task image:agent-compose` 构建 guest 和 daemon 镜像。`task build:agent-compose` 按当前宿主选择原生 profile：Darwin 构建仅支持 Docker 的二进制，Linux 构建同时支持 Docker、BoxLite 和 Microsandbox；Linux full 构建会通过 Docker 准备两种 native runtime artifact。也可通过 `task build:agent-compose:darwin` 或 `task build:agent-compose:linux` 显式选择。旧任务 `build:agent-compose:boxlite` 已废弃，仅作为 Linux full profile 的兼容 alias。JavaScript runtime 组件在 `runtime/` 下。
 
-macOS/Linux daemon 原生二进制只用于本地开发和 CI 验证。独立的 Go installer 以 Linux amd64/arm64 二进制发布在固定的 `installer-latest` prerelease，并读取普通应用 Release 中的部署 bundle；正式部署载体仍是 GHCR 中的 multi-arch daemon/guest 镜像加该 installer。
+macOS/Linux daemon 原生二进制只用于本地开发和 CI 验证。独立的 Go installer 以 Linux amd64/arm64 二进制发布在固定的 `installer-latest` prerelease，并读取普通应用 Release 中的部署 bundle；正式部署载体仍是 Docker Hub 中的 multi-arch daemon/guest 镜像加该 installer。
 
 ## 文档
 

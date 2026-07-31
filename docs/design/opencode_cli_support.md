@@ -19,17 +19,19 @@ Provider handling is split across four layers:
   `runtime/javascript/src/runners/` contains the provider adapters.
 - Guest image: `guest-images/Dockerfile.agent-compose-guest` installs provider
   CLIs and links stable executable paths such as `/usr/bin/codex`.
-- UI and docs: `frontend/src/pages/AgentsPage.svelte`, `README.md`, and design
-  docs list supported providers.
+- UI and docs: the independent `agent-compose-ui` repository, root README, and
+  design docs list supported providers.
 
 The compose schema does not currently restrict provider names in `pkg/compose`;
 daemon-side agent definition validation does. Proto fields are strings, so this
 change should not require protobuf changes.
 
-`model` and `system_prompt` already exist in the compose, v1, v2, and store
-models. The OpenCode integration forwards them through `ExecuteAgentRequest`
-and `agent-compose-runtime prompt`; existing Codex, Claude, and Gemini runners
-keep their previous behavior unless they explicitly consume those fields later.
+`model` and `system_prompt` already exist in the compose, v2, and store
+models. The agent execution request carries the model and agent-definition ID;
+the host resolves the definition and materializes its system prompt under the
+sandbox state root. `agent-compose-runtime prompt` reads that convention path
+and passes the composed context to each provider runner using its supported
+mechanism.
 
 ## OpenCode CLI Facts
 
@@ -130,21 +132,20 @@ Agent execution should:
 
 4. Agent model and system prompt plumbing.
 
-   OpenCode needs `model` to select the target provider/model. The host forwards
-   model and system prompt explicitly instead of relying on stored metadata:
+   OpenCode needs `model` to select the target provider/model. The host carries
+   the model explicitly and resolves the system prompt from the bound agent
+   definition:
 
-   - a small execution-config helper resolves provider, model, and
-     system prompt from an agent definition when a sandbox has agent tags;
-   - `ExecuteAgentRequest` includes `Model` and `SystemPrompt`;
-   - managed project agent definitions set those fields in
-     `runProjectAgent`;
-   - v1 agent definition sandbox compatibility paths set those fields when executing via
-     `SendAgentMessage` / `SendAgentMessageStream`;
-   - schedulers linked to an agent definition set those fields when using
-     `scheduler.agent`;
-   - the runtime CLI accepts `--model` and `--system-prompt-file`;
-   - `PromptCommandOptions` and `RunnerOptions` include `model?: string` and
-     `systemPrompt?: string`.
+   - `ExecuteAgentRequest` includes `Model` and `AgentDefinitionID`;
+   - managed project runs and schedulers pass the bound definition ID and model;
+   - sandbox-tag fallback resolves the same agent definition when no explicit
+     ID is supplied;
+   - the host writes the resolved prompt to
+     `state/agents/system-prompts/system-prompt.txt`;
+   - the runtime CLI accepts `--model` and discovers the prompt below
+     `--state-root`;
+   - `PromptCommandOptions` carries `model`, while `RunnerOptions` carries
+     `model` and the composed `systemContext`.
 
 5. Install the CLI in the guest image.
 
@@ -156,8 +157,7 @@ Agent execution should:
 
 6. Update UI and docs.
 
-   - `frontend/src/pages/AgentsPage.svelte` and `frontend/src/api/agents.ts`
-     accept `opencode`.
+   - the independent `agent-compose-ui` repository accepts `opencode`.
    - `README.md`, SDK docs, and runtime contract docs list the new provider.
    - OpenCode environment-variable guidance notes that the exact provider key depends
      on the selected OpenCode model provider, so document common cases rather

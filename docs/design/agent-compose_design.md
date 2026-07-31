@@ -12,16 +12,17 @@ The current code facts are anchored by these entry points:
 - Compose parsing and normalization: `pkg/compose/`
 - v2 API: `proto/agentcompose/v2/agentcompose.proto`
 - Project/run persistence: `pkg/storage/configstore/project_store.go`,
-  `pkg/storage/configstore/run_coordinator_store.go`; shared storage helpers in
-  `pkg/storage/`
+  `pkg/storage/configstore/project_run_completion.go`, and related focused
+  stores under `pkg/storage/configstore/`
 - Jupyter proxy: `pkg/agentcompose/proxy/proxy.go`
 - Scheduler runtime and scheduling: owner behavior in `pkg/schedulers/`; daemon
   orchestration in `pkg/agentcompose/app/scheduler_controller.go` and
   `pkg/agentcompose/adapters/scheduler_session_runner.go`
 - Domain model helpers: `pkg/model/`
 - Project/run owner helpers: `pkg/projects/` and `pkg/runs/`
-- Sandbox execution owner helpers: `pkg/sessions/` compatibility lifecycle
-  package and `pkg/execution/`
+- Sandbox execution helpers: `pkg/execution/`, with lifecycle orchestration in
+  `pkg/agentcompose/adapters/` and filesystem ownership in
+  `pkg/storage/sandboxstore/`
 - Standalone frontend image: `agent-compose-ui` repository
 
 ## Architecture Goals
@@ -40,9 +41,9 @@ Core boundaries:
   describe an already running sandbox.
 - Web/UI is no longer built into the daemon image or hosted by the daemon
   process. It is deployed as an independent frontend service.
-- The v1 session-centric API remains available for the existing Web/UI and
-  compatibility clients. The v2 API is the primary path for the CLI and newer
-  clients.
+- The public control plane is the v2 Connect API. The removed
+  `agentcompose.v1.SessionService` is not registered; `health.v1` is a separate
+  health-check API, not a legacy control-plane surface.
 
 ```text
 CLI / Web / Connect clients
@@ -51,7 +52,7 @@ CLI / Web / Connect clients
   v
 agent-compose daemon
   |
-  | v1/v2 Connect handlers, HTTP routes, scheduler, store
+  | v2 Connect handlers, HTTP routes, scheduler, store
   v
 project / run / scheduler / sandbox control plane
   |
@@ -77,7 +78,7 @@ Daemon construction has been split into testable app construction:
 
 - Load `.env` and environment configuration.
 - Initialize Echo, structured logging, and DI.
-- Register `/api/version`, v1/v2 Connect handlers, webhook/event routes,
+- Register `/api/version`, v2 and health Connect handlers, webhook/event routes,
   workspace HTTP routes, and Jupyter proxy routes.
 - Register the service graph through `agentcompose.Register(di)`.
 - Start the scheduler controller, event dispatcher, capability proxy, and startup
@@ -162,7 +163,7 @@ agents:
   reviewer:
     provider: codex
     model: gpt-5
-    image: ghcr.io/org/agent-runtime:latest
+    image: chaitin/agent-compose-guest:latest
     driver:
       boxlite:
         kernel: s3://bucket/kernel
@@ -188,7 +189,7 @@ The same scheduler can also declare a scheduler script directly with inline QJS:
 agents:
   reviewer:
     provider: codex
-    image: ghcr.io/org/agent-runtime:latest
+    image: chaitin/agent-compose-guest:latest
     scheduler:
       script: |
         scheduler.interval("hourly-review", function hourlyReview() {
@@ -337,15 +338,14 @@ Besides Connect APIs, the daemon registers these HTTP routes:
 - webhook / event ingress: `/api/webhooks/:topic`, `/api/events...`
 - file workspace helper routes:
   `/api/agent-compose/workspaces/:workspaceID/files`, `upload`, and `download`
-- Jupyter proxy: `<JupyterProxyBasePath>/:sessionID` and
-  `<JupyterProxyBasePath>/:sessionID/*`. The default base path is `/jupyter`.
+- Jupyter proxy: `<JupyterProxyBasePath>/:sandboxID` and
+  `<JupyterProxyBasePath>/:sandboxID/*`. The default base path is `/jupyter`.
 
 The Jupyter proxy implementation lives in `pkg/agentcompose/proxy/proxy.go`.
-`GetSessionProxy` returns only proxy entry information; actual HTTP/WebSocket
-forwarding is handled by the HTTP routes above. When a sandbox is created
-through the v1-compatible API,
-`Config.JupyterProxyBasePath` is written into `proxyPath`; the current code
-default is `/jupyter`.
+`SandboxService.GetSandbox` returns proxy entry information when available;
+actual HTTP/WebSocket forwarding is handled by the HTTP routes above.
+`Config.JupyterProxyBasePath` is written into sandbox proxy state, and the
+current application default is `/jupyter`.
 
 ## Project Apply And Scheduling
 
@@ -440,8 +440,8 @@ file-level debugging.
 
 ### Agent system prompt (Phase 1)
 
-`AgentDefinition.system_prompt` is persisted on agent definitions (manual and
-managed) and exposed through v1/v2 APIs and the Agents UI. At execution time the
+`AgentDefinition.system_prompt` is persisted on agent definitions and exposed
+through the v2 API and Agents UI. At execution time the
 host resolves this field and materializes agent identity for the guest runtime.
 
 Layered prompt model:
@@ -714,7 +714,10 @@ currently supported:
 - `microsandbox`
 
 The default driver is controlled by `RUNTIME_DRIVER`; when empty, it is
-`docker`. The default guest image is `debian:bookworm-slim`.
+`docker`. The native application default guest image is
+`debian:bookworm-slim`; `.env.example` and installer-managed deployments
+override it with `chaitin/agent-compose-guest:latest` or the selected release
+tag.
 
 ### Compiled Driver Capability
 
@@ -795,9 +798,9 @@ internal `workspace_provisioning` field in sandbox `metadata.json`; it is not
 exposed through `SandboxSummary`, the public API, or list filters.
 
 The process-level `Provisioner` is shared by every lifecycle path that can start
-or restart a workspace-backed sandbox: v1 session create/resume,
-`sessions.Lifecycle.ResumeLoaded` and Jupyter `EnsureProxyReady`, scheduler sandbox
-create/sticky resume, and project-run sandbox create/reuse. It reloads persisted
+or restart a workspace-backed sandbox: project/run sandbox creation and reuse,
+`SandboxService.ResumeSandbox`, Jupyter proxy readiness, and scheduler sandbox
+create/sticky resume. It reloads persisted
 metadata and makes the decision from provisioning state, rather than from a
 create/resume flag or workspace directory contents. For `pending` and `failed`,
 it materializes into a same-filesystem staging directory, promotes the result,
@@ -849,8 +852,7 @@ sandboxes. Removing a sandbox deletes its sandbox directory, including the
 writable workspace, provisioning metadata, and any provisioning staging
 attempts.
 
-Current sandbox startup flow, used by v1-compatible `CreateSession` and the
-other creation paths:
+Current sandbox startup flow, used by project/run and scheduler creation paths:
 
 1. Resolve env, tags, workspace id, driver, and guest image from the request.
 2. Merge global env and request env.
@@ -861,17 +863,17 @@ other creation paths:
 5. Prepare managed capability, runtime, state, and home resources.
 6. Start runtime through the driver.
 7. Mark sandbox as `RUNNING`.
-8. Record sandbox-created state. Scheduler lifecycle events use
-   `scheduler.sandbox.*`; the historical `agent-compose.session.*` topic prefix
-   is retained only where the v1 compatibility event bus still emits it.
+8. Record sandbox-created state. Scheduler run events use
+   `scheduler.sandbox.*`; some topic-event publishers still emit the historical
+   `agent-compose.session.*` prefix as an internal event compatibility measure.
 
-`ResumeSession` is the v1-compatible resume method. It loads the same sandbox,
-runs the shared Provisioner, and starts its runtime; a `ready` workspace is left
-untouched. `StopSession` stops runtime and marks the sandbox `STOPPED` without
+`SandboxService.ResumeSandbox` loads the same sandbox, runs the shared
+Provisioner, and starts its runtime; a `ready` workspace is left untouched.
+`SandboxService.StopSandbox` stops runtime and marks the sandbox `STOPPED` without
 changing its workspace or provisioning state.
 
-Startup reconciles persisted sandbox runtime state. `GetSession`,
-`ListSessions`, and `StopSession` also trigger reconciliation logic.
+Startup reconciles persisted sandbox runtime state. Sandbox get, list, and stop
+operations also trigger the relevant reconciliation logic.
 
 Default guest paths:
 
@@ -899,8 +901,8 @@ The current scheduler runtime uses QJS and supports:
 Project compose `scheduler.script` uses the same runtime. Scripts are evaluated
 during validate/apply to collect triggers. APIs with side effects or host
 dependencies, such as `scheduler.agent`, `scheduler.llm`, `scheduler.exec`,
-`scheduler.shell`, `scheduler.event.publish`, and the v1-compatible session RPC
-bridge, should be used in
+`scheduler.shell`, `scheduler.event.publish`, and the sandbox RPC bridge should
+be used in
 `main()` or trigger callbacks.
 
 `scheduler` is the only product-level global object in the scheduler QJS
@@ -969,9 +971,10 @@ create workspace-capable agent sandboxes or grant file, command, or MCP tool
 access. With `outputSchema`, it uses prompt guidance and `json_object` instead
 of Responses API strict JSON Schema.
 
-Guest agent providers (`codex`, `claude`, `gemini`, `opencode`, `pi`) remain separate CLI runners
-inside guest containers with their own API keys and provider-native session
-state.
+Guest agent providers (`codex`, `claude`, `gemini`, `opencode`, `pi`) remain
+separate CLI runners with provider-native session state. Codex, Claude,
+OpenCode, and Pi normally receive scoped Runtime LLM Facade credentials rather
+than daemon provider keys; Gemini uses its CLI-native login flow.
 
 The scheduler's primary sandbox lifecycle API is:
 
@@ -982,20 +985,10 @@ The scheduler's primary sandbox lifecycle API is:
 - `scheduler.sandbox.listSandboxes()`
 - `scheduler.sandbox.getSandboxProxy(request)`
 
-These methods expose sandbox-shaped request and response JSON while currently
-bridging to the compatibility lifecycle service internally. The scheduler also retains these
-deprecated v1 `SessionService` aliases:
-
-- `scheduler.session.createSession(request)`
-- `scheduler.session.resumeSession(request)`
-- `scheduler.session.stopSession(request)`
-- `scheduler.session.getSession(request)`
-- `scheduler.session.listSessions()`
-- `scheduler.session.getSessionProxy(request)`
-
-Method names use lower camel case and also retain PascalCase aliases. New
-scripts should use `scheduler.sandbox.*`; calls through `scheduler.session.*`
-emit deprecation warnings.
+These methods expose sandbox-shaped request and response JSON through the
+sandbox lifecycle bridge. Method names use lower camel case and retain
+PascalCase aliases. The former `scheduler.session.*` object is no longer
+registered.
 
 ## Frontend Service
 
@@ -1016,7 +1009,7 @@ The current Docker deployment provides an independent frontend service:
   and authenticated reverse proxying.
 - `/api/auth/*` and `/oauth/*` belong to the UI server and are no longer
   registered by the daemon.
-- The UI server proxies daemon v1/v2 Connect APIs, the health API,
+- The UI server proxies daemon v2 Connect APIs, the health API,
   workspace/event/webhook HTTP APIs, `/jupyter/*` or the configured
   `JUPYTER_PROXY_BASE`, and the compatible `/agent-compose/session/*` paths to
   the daemon.
@@ -1070,8 +1063,8 @@ For shared playground build, deployment, and verification flow, see
 - `run` is a one-shot execution. It stops runtime by default after completion.
 - `down` disables managed schedulers and stops running project sandboxes.
   It does not delete history by default.
-- The v1 API must remain compatible. The v2 API carries the primary
-  project/run/exec/image path.
+- The v2 API is the public project/run/exec/image/sandbox control plane; legacy
+  v1 storage compatibility does not imply a live v1 RPC surface.
 - Web/UI is deployed as an independent service and is not included in the daemon
   Docker image; browser auth/OAuth belongs to the agent-compose-ui server.
 - The daemon TCP API should not be used as the public browser entrypoint.

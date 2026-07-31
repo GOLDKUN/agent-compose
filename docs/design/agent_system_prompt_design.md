@@ -1,6 +1,6 @@
 # Agent System Prompt — Phase 1 Design
 
-**Status:** Phase 1 is **implemented** in the current codebase. Sections through
+Phase 1 is present in the current codebase. Sections through
 [Success Criteria (Phase 1, verified)](#success-criteria-phase-1-verified) document what shipped in
 this change. [Next Steps](#next-steps) lists work that was **not** part of Phase 1.
 
@@ -12,6 +12,10 @@ Before Phase 1, `AgentDefinition.system_prompt` was persisted, exposed through
 API/Proto, and editable in the Agents UI, but the execution path never read it.
 Only the MPI (Model Program Interface) capability catalog reached provider
 system/developer instruction channels.
+
+The Phase 1 provider matrix below is historical. The current runtime has since
+added OpenCode and Pi; all five runners receive the composed context, using
+native system channels where available and prompt/file fallbacks elsewhere.
 
 Phase 1 closed that gap by wiring agent identity into a layered prompt model
 without introducing a full platform runtime brief.
@@ -192,8 +196,9 @@ runtime provider normalization. Discovery mirrors MPI convention-based lookup un
 
 - **Scheduler runs** (`pkg/schedulers/run_host.go`): set from the resolved agent
   definition id or `scheduler.Summary.AgentID` fallback.
-- **Managed project runs** (`run_service.go`): set from `run.ManagedAgentID`.
-- **v1 session chat compatibility runs**: rely on sandbox tags when no explicit
+- **Managed project runs** (`pkg/runs/controller.go`): set from the run's bound
+  agent definition.
+- **Legacy sandbox chat compatibility runs**: rely on sandbox tags when no explicit
   id is passed.
 
 `buildAgentExecSpec` passes `--state-root` only; the guest discovers agent identity
@@ -304,8 +309,8 @@ systemPrompt: {
 
 ### Gemini
 
-Gemini has no native system-instruction channel in the current runner. Phase 1
-shipped an interim fallback:
+Gemini has no native system-instruction channel in the current runner. The
+implemented fallback prepends the composed context to the user prompt:
 
 ```typescript
 const userPrompt = systemContext
@@ -323,7 +328,7 @@ the system prompt wiring scope.
 
 | Run type | How agent identity is resolved |
 | --- | --- |
-| v1 agent session chat compatibility | Sandbox tags `source=agent` + `agent_id` |
+| Legacy agent sandbox compatibility | Sandbox tags `source=agent` + `agent_id` |
 | Scheduler script `agent()` call | `AgentDefinitionID` from scheduler-bound agent |
 | Managed project run (v2) | `run.ManagedAgentID` |
 | Bare provider string, no agent | No agent identity; MPI-only if catalog exists |

@@ -1,5 +1,8 @@
 # OctoBus Integration Implementation Spec
 
+Project-scoped extensions are documented separately in
+[Project-scoped OctoBus servers](project_octobus_servers_design.md).
+
 OctoBus repository: [chaitin/OctoBus](https://github.com/chaitin/OctoBus).
 
 agent-compose integrates published OctoBus capability sets, injects selected
@@ -259,7 +262,8 @@ is missing, capability injection is skipped and a warning is recorded; creation
 is not blocked.
 
 **Step 2: `writeCapabilityGuide(sandbox, capset_ids)` after the shared
-Workspace Provisioner has established `ready` and before `StartSessionVM`,
+Workspace Provisioner has established `ready` and before the selected runtime
+driver starts,
 best-effort.** For each
 capset, call OctoBus
 `GET /admin/v1/catalog/{capset_id}?format=md&grpc=true` to render capability
@@ -279,23 +283,20 @@ and uses only the `grpc` section. **If OctoBus is
 unreachable or rendering fails, record an event and continue; sandbox/scheduler
 starts normally.**
 
-Coverage: Codex and Claude receive `mpiContext` in system prompt. Gemini runner
-does not currently consume `mpiContext`; this is a known gap and is out of scope
-for this phase.
+Coverage: all five current guest runners receive the composed `systemContext`,
+which contains the MPI catalog. Codex and Claude use native system/developer
+context channels; Gemini and OpenCode prepend it to the user prompt, and Pi
+passes it through an appended system-prompt file.
 
 Timing constraint: env injection runs before `Store.CreateSandbox` and returns
 values that are merged into the create request, when sandbox directory does not
 exist yet. Markdown writing must wait until after `CreateSandbox` creates the
-directory and before `StartSessionVM` mounts it; otherwise the path may not
+directory and before the selected runtime driver mounts it; otherwise the path may not
 exist or the file may miss the mount.
 
-Proto field:
-
-```proto
-message CreateSessionRequest {
-  repeated string capset_ids = 10;
-}
-```
+The current v2 `AgentSpec.capset_ids` field carries these declarations through
+project revision, managed agent definition, scheduler execution, and sandbox
+creation. There is no live v1 `CreateSessionRequest` control-plane message.
 
 Agent definitions, sandbox creation, and schedulers all retain capability set
 selection. `AgentSpec.capset_ids` is persisted in project revision and
