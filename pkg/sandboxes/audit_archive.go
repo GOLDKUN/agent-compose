@@ -126,7 +126,11 @@ func (c *SandboxRetentionCleaner) writeSandboxArchive(ctx context.Context, sandb
 		return 0, "", err
 	}
 	manifestName := sandbox.Archive.ID + ".json"
-	if manifest, err := validateCommittedSandboxArchiveInDirectory(ctx, directory, sandbox.Summary.ID, sandbox.Archive.ID); err == nil {
+	if manifest, committed, err := recoverCommittedSandboxArchive(
+		ctx, directory, directoryHandle, sandbox.Summary.ID, sandbox.Archive.ID,
+	); err != nil {
+		return 0, "", err
+	} else if committed {
 		return manifest.SizeBytes, manifest.SHA256, nil
 	}
 	if err := ctx.Err(); err != nil {
@@ -178,6 +182,26 @@ func (c *SandboxRetentionCleaner) writeSandboxArchive(ctx context.Context, sandb
 		return 0, "", fmt.Errorf("persist committed sandbox archive: %w", err)
 	}
 	return counted.total, checksum, nil
+}
+
+func recoverCommittedSandboxArchive(
+	ctx context.Context,
+	directory *os.Root,
+	directoryHandle *os.File,
+	sandboxID string,
+	archiveID string,
+) (sandboxArchiveManifest, bool, error) {
+	manifest, err := validateCommittedSandboxArchiveInDirectory(ctx, directory, sandboxID, archiveID)
+	if err != nil {
+		return sandboxArchiveManifest{}, false, nil
+	}
+	// A prior attempt may have renamed both committed files but failed its
+	// final directory sync. Make durability explicit before metadata can move
+	// to archived and authorize removal of the originals.
+	if err := syncOpenDirectory(directoryHandle); err != nil {
+		return sandboxArchiveManifest{}, true, fmt.Errorf("persist recovered sandbox archive: %w", err)
+	}
+	return manifest, true, nil
 }
 
 func (c *SandboxRetentionCleaner) writeSandboxArchiveEntries(ctx context.Context, writer *tar.Writer, sandbox *domain.Sandbox) error {
