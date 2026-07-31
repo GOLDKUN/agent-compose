@@ -47,11 +47,11 @@ func TestCompletionManagerPersistsEventsBeforeCleanupAndRetriesFirstResult(t *te
 		Status: domain.ProjectRunStatusRunning, SandboxID: "sandbox-1", CleanupPolicy: domain.ProjectRunCleanupStopOnCompletion,
 	})
 	sandboxes := completionSandboxStoreFake{sandbox: &domain.Sandbox{Summary: domain.SandboxSummary{ID: run.SandboxID, VMStatus: domain.VMStatusRunning}}}
-	stopper := &completionStopperFake{err: errors.New("stop unavailable")}
+	timeoutCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stopper := &completionStopperFake{err: errors.New("stop unavailable"), onStop: cancel}
 	manager := runs.NewCompletionManager(store, sandboxes, stopper, nil, nil)
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	defer cancel()
 	staged, err := manager.Complete(timeoutCtx, runs.TransitionRequest{
 		RunID: run.RunID, Status: domain.ProjectRunStatusSucceeded, Output: "exact output", ResultJSON: `{"ok":true}`,
 		TerminalEvents: []domain.ProjectRunEventRecord{{ID: "final-agent-event", RunID: run.RunID, Kind: domain.ProjectRunEventKindAgentMessage, Text: "done"}},
@@ -115,12 +115,16 @@ func (s completionSandboxStoreFake) GetSandbox(context.Context, string) (*domain
 }
 
 type completionStopperFake struct {
-	err   error
-	calls int
+	err    error
+	calls  int
+	onStop func()
 }
 
 func (s *completionStopperFake) Stop(context.Context, *domain.Sandbox) error {
 	s.calls++
+	if s.onStop != nil {
+		s.onStop()
+	}
 	return s.err
 }
 

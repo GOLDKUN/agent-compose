@@ -10,7 +10,7 @@ ExecStream(context.Context, *Session, VMState, ExecSpec, ExecStreamWriter) (Exec
 
 This interface can express "one-shot start parameters plus a runtime-to-daemon output stream", but it cannot express ongoing interaction such as stdin, TTY, terminal resize, signal/cancel, multi-turn agent input, or structured runtime events. As a result, `exec`, `run --command`, scheduler commands, cells, and agent prompts currently rely on file protocols such as `command-request.json`, prompt files, script files, stdout markers, and result files to carry control semantics.
 
-This design upgrades the lower execution boundary to an interactive runtime stream without breaking existing command behavior or artifact layout. The first phase implements the full Docker driver path. Microsandbox and BoxLite are left for later integration through a clear capability contract.
+This design upgrades the lower execution boundary to an interactive runtime stream without breaking existing command behavior or artifact layout. Docker provides the original native attach implementation. Microsandbox command attach is supported through its streaming exec API; BoxLite remains behind the explicit capability contract until its runtime API exposes the required input controls.
 
 ## Goals
 
@@ -26,7 +26,7 @@ This design upgrades the lower execution boundary to an interactive runtime stre
 
 ## Non-Goals
 
-1. Do not implement Microsandbox or BoxLite stdin/TTY/resize in the first phase.
+1. Do not implement BoxLite stdin/TTY/resize until its runtime API exposes the required controls. Microsandbox command attach was added later through its native streaming exec API.
 2. Do not merge workspace files, artifact bodies, or the LLM facade HTTP/SSE protocol into the runtime stream.
 3. Do not implement `run --prompt -it` by making users call `agent-compose exec <sandbox> -it codex` or `run --command "codex" -it`.
 4. Do not remove compatibility artifacts such as `command-request.json`, `command-result.json`, `stdout.txt`, `stderr.txt`, `output.txt`, or `transcript.txt`.
@@ -79,12 +79,12 @@ To reduce risk in the first phase, only `-it` paths need to use the `AttachExec`
 
 ## Driver Capability Matrix
 
-The first phase only requires full interactive support for Docker. Other drivers must report an explicit unsupported capability. They must not silently fall back to the regular `StreamExec` RPC.
+The first phase required full interactive support for Docker. Drivers without the required controls must report an explicit unsupported capability and must not silently fall back to the regular `StreamExec` RPC. Microsandbox now satisfies the command-interaction contract through native streaming exec.
 
-| driver | stdin | stdout/stderr | TTY | resize | first-phase strategy |
+| driver | stdin | stdout/stderr | TTY | resize | current strategy |
 |---|---:|---:|---:|---:|---|
 | Docker | supported | existing basis | supported | supported | full implementation |
-| Microsandbox | TBD | existing output event basis | TBD | TBD | return unsupported |
+| Microsandbox | supported | streaming exec events | supported | supported | native streaming exec |
 | BoxLite | current Go/FFI layer does not expose stdin | existing stdout/stderr callback | FFI has a `tty` field but it is not wired | not exposed | return unsupported |
 
 Suggested driver extension interface:
@@ -551,4 +551,6 @@ Rules:
 4. Add command mode for `AttachAgentRun` and wire `run --command -it`.
 5. Implement prompt interactive turn loop for the Codex provider and wire `run --prompt -it`.
 6. Upgrade `logs --follow` from file polling to "file snapshot plus RunLogHub real-time fanout".
-7. Return explicit unsupported errors for Microsandbox/BoxLite and non-Codex providers.
+7. Return explicit unsupported errors for BoxLite and non-Codex providers.
+
+The follow-on Microsandbox implementation uses native streaming exec for command attach while preserving the same `RuntimeInteraction` and external RPC contracts.
