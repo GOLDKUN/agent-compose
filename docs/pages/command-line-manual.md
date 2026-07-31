@@ -75,6 +75,50 @@ Health RPCs, the runtime LLM facade, Jupyter proxy traffic, and webhook
 ingestion retain their existing independent authentication or trust boundaries
 and do not consume the daemon token.
 
+#### GitHub webhooks
+
+Create an enabled webhook source through `PUT /api/webhook-sources/<source-id>`
+with `provider` set to `github`, `topic_prefix` set to `webhook.github.`,
+`signature_type` set to `github_sha256`, and the same `signature_secret` that
+will be entered in GitHub. The secret is write-only in API responses.
+
+GitHub also permits the webhook Secret field to be empty. To receive those
+unsigned deliveries directly, keep `signature_type` set to `github_sha256` and
+leave both `signature_secret` and the source token empty. The daemon skips
+signature verification when no signature secret is configured. This mode does
+not authenticate the sender: any client that can reach the endpoint can forge
+a GitHub event. Use it only behind a trusted reverse proxy or network access
+control. If a source token is configured, the token is still required, so a
+proxy can authenticate the request and inject it. A tokenless unsigned source
+cannot share its webhook URL with another enabled source because it would make
+source selection ambiguous.
+
+Because signature secrets are write-only, omitting or sending an empty
+`signature_secret` while updating an existing source preserves its current
+secret. Set `clear_signature=true` to intentionally switch an existing signed
+source to unsigned delivery.
+
+In the GitHub repository or organization settings, add a webhook with:
+
+- Payload URL: `https://<agent-compose-host>/api/webhooks/webhook.github`
+- Content type: `application/json` or `application/x-www-form-urlencoded`
+- Secret: the configured source signature secret, or empty only when the
+  source is intentionally unsigned
+- Events: select the events consumed by your schedulers
+
+The daemon accepts GitHub's JSON body or its form-encoded `payload` field. It
+verifies `X-Hub-Signature-256` against the exact request body before decoding
+either format and uses `X-GitHub-Event` to publish topics such as `webhook.github.push`,
+`webhook.github.pull_request`, and `webhook.github.ping`. GitHub's
+`X-GitHub-Delivery` value provides the delivery ID and idempotency key, so a
+redelivery of the same payload is accepted without creating another event.
+When a signature secret is configured, missing or invalid signatures are
+rejected even if the source also has a legacy static token. Without a signature
+secret, the GitHub source uses the same event routing without signature
+verification. Generic sources, including legacy sources with an empty signature
+type, continue to use their URL topic and Bearer, `X-WEBHOOK-TOKEN`, or a
+configured custom-header token.
+
 The token protects the daemon control plane rather than identifying the CLI
 application. Any UI server or reverse proxy that calls the same control-plane
 APIs must also inject `Authorization: Bearer <token>` before daemon

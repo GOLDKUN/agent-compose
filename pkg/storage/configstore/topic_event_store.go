@@ -564,6 +564,9 @@ func (s *eventStore) UpsertWebhookSource(ctx context.Context, source domain.Webh
 	source.TokenHeader = tokenHeader
 	source.SignatureType = strings.TrimSpace(source.SignatureType)
 	source.SignatureSecret = strings.TrimSpace(source.SignatureSecret)
+	if _, err := domain.GitHubWebhookModeForSource(source); err != nil {
+		return domain.WebhookSource{}, err
+	}
 	if source.ID == "" || source.TopicPrefix == "" {
 		return domain.WebhookSource{}, fmt.Errorf("webhook source id and topic prefix are required")
 	}

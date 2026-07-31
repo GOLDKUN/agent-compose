@@ -72,6 +72,43 @@ Token 可能被监听并重放。CLI 与 daemon 位于不同机器时，应使�
 Health RPC、runtime LLM facade、Jupyter proxy 和 webhook ingestion 继续使用各自
 已有的认证或信任边界，不消费 daemon Token。
 
+#### GitHub Webhook
+
+通过 `PUT /api/webhook-sources/<source-id>` 创建启用的 webhook source：将
+`provider` 设为 `github`，将 `topic_prefix` 设为 `webhook.github.`，将
+`signature_type` 设为 `github_sha256`，并在 `signature_secret` 中填写准备配置到
+GitHub 的同一个 secret。API 响应不会返回 secret 明文。
+
+GitHub 也允许 webhook 的 Secret 留空。若要直接接收这类无签名投递，需要显式将
+`signature_type` 保持为 `github_sha256`，并同时将 `signature_secret` 和 source
+token 留空。未配置 signature secret 时，daemon 会跳过签名校验。该模式不会认证
+发送者：任何能够访问此 endpoint 的客户端都可以伪造 GitHub 事件，因此只能在受信任
+的反向代理或网络访问控制之后使用。若 source 配置了 token，daemon 仍会要求该
+token，便于代理完成认证后注入。无 token 的 unsigned source 不能与另一个启用的
+source 共用 webhook URL，否则无法唯一选择 source。
+
+由于 signature secret 是 write-only，更新已有 source 时省略
+`signature_secret` 或传入空值会保留当前 secret。若要将已有的 signed source 切换为
+unsigned delivery，必须显式设置 `clear_signature=true`。
+
+在 GitHub 仓库或组织设置中添加 webhook，并使用以下配置：
+
+- Payload URL：`https://<agent-compose-host>/api/webhooks/webhook.github`
+- Content type：`application/json` 或 `application/x-www-form-urlencoded`
+- Secret：webhook source 中配置的 signature secret；仅当 source 明确使用无签名
+  模式时留空
+- Events：选择 scheduler 需要消费的事件
+
+daemon 支持 GitHub 的 JSON 请求体，也支持 form 编码的 `payload` 字段。两种格式都
+会先针对未经解码的原始请求体校验 `X-Hub-Signature-256`，然后根据
+`X-GitHub-Event` 发布 `webhook.github.push`、`webhook.github.pull_request` 和
+`webhook.github.ping` 等 topic。GitHub 的 `X-GitHub-Delivery` 同时作为 delivery
+ID 和幂等键，因此相同 payload 的 redelivery 会返回成功，但不会创建重复事件。配置
+signature secret 后，即使 source 同时保留了旧的静态 token，缺失或无效的签名仍会
+被拒绝。未配置 signature secret 时，GitHub source 使用相同的事件路由，但不校验
+签名。通用 webhook source（包括 signature type 为空的旧 source）继续使用 URL
+topic，以及 Bearer、`X-WEBHOOK-TOKEN` 或自定义 header token。
+
 该 Token 保护的是 daemon 控制面，并非只识别 CLI 程序。任何调用相同控制面 API
 的 UI server 或反向代理，也必须先配置注入 `Authorization: Bearer <token>`，再
 开启 daemon 认证。

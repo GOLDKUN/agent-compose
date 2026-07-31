@@ -157,18 +157,23 @@ WEBHOOK_BODY_LIMIT_BYTES=1048576
 
 Current implementation:
 
-- `/api/webhooks/*` bypasses UI session auth. The handler validates token
-  according to webhook source.
-- Each webhook source binds `topic_prefix` and token hash; request topic must
-  match an enabled source.
-- External callers should send `Authorization: Bearer <source-token>` or
-  `X-WEBHOOK-TOKEN`.
+- `/api/webhooks/*` bypasses UI session auth. The handler applies the
+  authentication configured by the matching webhook source; an explicit
+  unsigned source does not authenticate the caller.
+- Each webhook source binds `topic_prefix` and authentication settings; the
+  request URL topic must match an enabled source.
+- Token-authenticated callers should send `Authorization: Bearer
+  <source-token>` or `X-WEBHOOK-TOKEN`.
 - Source token comparison uses hash + constant-time compare.
 - `/api/events` and `/api/events/*` use normal API/auth path and no longer
   depend on webhook token.
 
-Current model is per-source token. Provider signature verification is needed
-before exposing this to the public internet.
+GitHub sources configured with `signature_type=github_sha256` verify
+`X-Hub-Signature-256` over the exact raw body when a signature secret is
+configured, and accept GitHub's optional unsigned delivery when it is empty. A
+configured source token remains required in unsigned mode. Both modes route
+from `X-GitHub-Event`; generic token-authenticated sources, including legacy
+sources with an empty signature type, retain the URL-derived topic.
 
 Target behavior:
 
@@ -207,9 +212,12 @@ owning all topic write permissions.
 
 ## Event Envelope
 
-Webhook body accepts only JSON objects. `Content-Type` may be `application/json`
-or a JSON media type with parameters. Arrays, strings, numbers, booleans, and
-`null` return `400 Bad Request`.
+Generic webhook bodies accept only JSON objects. `Content-Type` may be
+`application/json` or a JSON media type with parameters. Native GitHub sources
+also accept `application/x-www-form-urlencoded`; the handler verifies any
+configured signature against the raw form body, then decodes the single
+non-empty `payload` field as the JSON object. Arrays, strings, numbers, booleans,
+and `null` return `400 Bad Request`.
 
 Webhook payload written to `event.payload_json` uses camelCase:
 

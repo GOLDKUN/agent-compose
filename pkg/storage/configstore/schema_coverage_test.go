@@ -442,7 +442,7 @@ func testConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 	}
 
 	webhook, err := store.UpsertWebhookSource(ctx, domain.WebhookSource{
-		ID: "github", Name: "GitHub", Enabled: true, Provider: "github", TopicPrefix: "webhook.github.",
+		ID: "github", Name: "GitHub", Enabled: true, Provider: "generic", TopicPrefix: "webhook.github.",
 		TokenHash: "hash", TokenHeader: "x-github-token", SignatureType: "hmac-sha256", SignatureSecret: "secret", BodyLimitBytes: 1024,
 	})
 	if err != nil {

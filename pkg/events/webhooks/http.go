@@ -93,12 +93,13 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	if err := ValidateExternalTopic(topic); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
-	source, bodyLimit, handled, err := h.authorizeWebhookRequest(c, topic)
+	sources, bodyLimit, handled, err := h.webhookSources(c, topic)
 	if handled {
 		return err
 	}
-	if !RequestContentTypeIsJSON(c.Request()) {
-		return c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "content-type must be application/json"})
+	bodyFormat := detectRequestBodyFormat(c.Request())
+	if bodyFormat == requestBodyFormatUnsupported {
+		return c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "content-type must be application/json or application/x-www-form-urlencoded"})
 	}
 	rawBody, err := ReadBody(c.Request(), bodyLimit)
 	if err != nil {
@@ -107,7 +108,35 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 		}
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "failed to read request body"})
 	}
-	body, compactBody, err := DecodeJSONObject(rawBody)
+	source, handled, err := h.authorizeWebhookRequest(c, sources, rawBody)
+	if handled {
+		return err
+	}
+	if limit := h.sourceBodyLimit(source); limit > 0 && int64(len(rawBody)) > limit {
+		return c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "request body is too large"})
+	}
+	githubMode, err := domain.GitHubWebhookModeForSource(source)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid webhook source configuration"})
+	}
+	if githubMode != domain.GitHubWebhookModeGeneric {
+		var ok bool
+		topic, ok = githubTopic(c.Request())
+		if !ok {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid or missing X-GitHub-Event header"})
+		}
+	}
+	if bodyFormat == requestBodyFormatForm && githubMode == domain.GitHubWebhookModeGeneric {
+		return c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "application/x-www-form-urlencoded is supported only for GitHub webhooks"})
+	}
+	decodedBody := rawBody
+	if bodyFormat == requestBodyFormatForm {
+		decodedBody, err = decodeGitHubFormPayload(rawBody)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
+	}
+	body, compactBody, err := DecodeJSONObject(decodedBody)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
@@ -433,31 +462,75 @@ func (h routeHandler) handleDeleteWebhookSource(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h routeHandler) authorizeWebhookRequest(c echo.Context, topic string) (domain.WebhookSource, int64, bool, error) {
+func (h routeHandler) webhookSources(c echo.Context, topic string) ([]domain.WebhookSource, int64, bool, error) {
 	sources, err := h.store().ListEnabledWebhookSourcesForTopic(c.Request().Context(), topic)
 	if err != nil {
-		return domain.WebhookSource{}, 0, true, c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook sources"})
+		return nil, 0, true, c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook sources"})
 	}
 	if len(sources) == 0 {
-		return domain.WebhookSource{}, 0, true, c.JSON(http.StatusNotFound, map[string]string{"error": "webhook source not found"})
+		return nil, 0, true, c.JSON(http.StatusNotFound, map[string]string{"error": "webhook source not found"})
 	}
+	validSources := make([]domain.WebhookSource, 0, len(sources))
+	var limit int64
+	for _, source := range sources {
+		if _, err := domain.GitHubWebhookModeForSource(source); err != nil {
+			continue
+		}
+		validSources = append(validSources, source)
+		if sourceLimit := h.sourceBodyLimit(source); sourceLimit > limit {
+			limit = sourceLimit
+		}
+	}
+	if len(validSources) == 0 {
+		return nil, 0, true, c.JSON(http.StatusInternalServerError, map[string]string{"error": "webhook source configuration is invalid"})
+	}
+	return validSources, limit, false, nil
+}
+
+func (h routeHandler) sourceBodyLimit(source domain.WebhookSource) int64 {
+	if source.BodyLimitBytes > 0 {
+		return source.BodyLimitBytes
+	}
+	if h.opts.WebhookBodyLimit > 0 {
+		return h.opts.WebhookBodyLimit
+	}
+	return defaultWebhookBodyLimit
+}
+
+func (h routeHandler) authorizeWebhookRequest(c echo.Context, sources []domain.WebhookSource, rawBody []byte) (domain.WebhookSource, bool, error) {
+	for _, source := range sources {
+		githubMode, err := domain.GitHubWebhookModeForSource(source)
+		if err == nil && githubMode == domain.GitHubWebhookModeUnsigned && source.TokenHash == "" && len(sources) > 1 {
+			return domain.WebhookSource{}, true, c.JSON(http.StatusConflict, map[string]string{"error": "unsigned webhook source is ambiguous"})
+		}
+	}
+
 	matches := make([]domain.WebhookSource, 0, 1)
 	for _, source := range sources {
-		if source.TokenHash != "" && ValidTokenHash(c.Request(), source.TokenHash, source.TokenHeader) {
+		githubMode, err := domain.GitHubWebhookModeForSource(source)
+		if err != nil {
+			continue
+		}
+		authenticated := source.TokenHash != "" && ValidTokenHash(c.Request(), source.TokenHash, source.TokenHeader)
+		switch githubMode {
+		case domain.GitHubWebhookModeUnsigned:
+			if source.TokenHash == "" {
+				authenticated = true
+			}
+		case domain.GitHubWebhookModeSHA256:
+			authenticated = validGitHubSignature(c.Request(), rawBody, source.SignatureSecret)
+		}
+		if authenticated {
 			matches = append(matches, source)
 		}
 	}
 	if len(matches) == 0 {
-		return domain.WebhookSource{}, 0, true, c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid webhook source token"})
+		return domain.WebhookSource{}, true, c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid webhook source authentication"})
 	}
 	if len(matches) > 1 {
-		return domain.WebhookSource{}, 0, true, c.JSON(http.StatusConflict, map[string]string{"error": "webhook source is ambiguous"})
+		return domain.WebhookSource{}, true, c.JSON(http.StatusConflict, map[string]string{"error": "webhook source is ambiguous"})
 	}
-	limit := matches[0].BodyLimitBytes
-	if limit <= 0 {
-		limit = h.opts.WebhookBodyLimit
-	}
-	return matches[0], limit, false, nil
+	return matches[0], false, nil
 }
 
 func parseOptionalInt64Query(c echo.Context, name string) (int64, error) {
