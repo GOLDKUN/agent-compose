@@ -437,6 +437,9 @@ func NewConfig(di do.Injector) (*Config, error) {
 	dataRoot = mustAbs(dataRoot)
 	sandboxRoot = mustAbs(sandboxRoot)
 	sandboxArchiveRoot = mustAbs(sandboxArchiveRoot)
+	if err := validateSandboxArchiveRoot(sandboxRoot, sandboxArchiveRoot); err != nil {
+		return nil, err
+	}
 	boxliteHome = mustAbs(boxliteHome)
 	boxliteRuntimeDir = mustAbs(boxliteRuntimeDir)
 	dockerHome = mustAbs(dockerHome)

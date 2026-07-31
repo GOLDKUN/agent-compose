@@ -20,6 +20,11 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
+const (
+	sandboxArchiveWorkspaceDirectory       = "workspace"
+	sandboxArchiveExternalVolumesDirectory = "volumes"
+)
+
 type sandboxArchiveManifest struct {
 	Version    int       `json:"version"`
 	ArchiveID  string    `json:"archive_id"`
@@ -112,10 +117,26 @@ func (c *WorkspaceCleaner) writeSandboxArchive(ctx context.Context, sandbox *dom
 		return 0, "", fmt.Errorf("persist sandbox archive directory: %w", err)
 	}
 
+	if err := validateArchiveID(sandbox.Archive.ID); err != nil {
+		return 0, "", err
+	}
 	archiveName := sandbox.Archive.ID + ".tar.zst"
 	temporaryName := archiveName + ".tmp"
 	if err := removeArchiveTemporary(directory, temporaryName); err != nil {
 		return 0, "", err
+	}
+	manifestName := sandbox.Archive.ID + ".json"
+	if manifest, err := validateCommittedSandboxArchiveInDirectory(ctx, directory, sandbox.Summary.ID, sandbox.Archive.ID); err == nil {
+		return manifest.SizeBytes, manifest.SHA256, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, "", err
+	}
+	if err := discardInvalidCommittedArchive(directory, archiveName, manifestName); err != nil {
+		return 0, "", err
+	}
+	if err := syncOpenDirectory(directoryHandle); err != nil {
+		return 0, "", fmt.Errorf("persist discarded sandbox archive: %w", err)
 	}
 	file, err := directory.OpenFile(temporaryName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -142,15 +163,15 @@ func (c *WorkspaceCleaner) writeSandboxArchive(ctx context.Context, sandbox *dom
 		return 0, "", fmt.Errorf("commit sandbox archive: %w", err)
 	}
 	manifest := sandboxArchiveManifest{
-		Version: 1, ArchiveID: sandbox.Archive.ID, SandboxID: sandbox.Summary.ID,
+		Version: sandboxArchiveManifestVersion, ArchiveID: sandbox.Archive.ID, SandboxID: sandbox.Summary.ID,
 		ArchivedAt: c.now(), SizeBytes: counted.total, SHA256: checksum,
 		Includes: []string{"sandbox/**", ".lifecycle/ownership.json"},
-		Excludes: []string{"workspace", "external volumes", "driver runtime"},
+		Excludes: []string{"sandbox/workspace/**", "sandbox/volumes/**", "driver-private runtime"},
 	}
 	if state, stateErr := c.Store.GetVMState(sandbox.Summary.ID); stateErr == nil {
 		manifest.StoppedAt = state.StoppedAt.UTC()
 	}
-	if err := writeArchiveManifest(directory, sandbox.Archive.ID+".json", manifest); err != nil {
+	if err := writeArchiveManifest(directory, manifestName, manifest); err != nil {
 		return 0, "", err
 	}
 	if err := syncOpenDirectory(directoryHandle); err != nil {
@@ -179,11 +200,20 @@ func (c *WorkspaceCleaner) writeSandboxArchiveEntries(ctx context.Context, write
 		if err != nil || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			return fmt.Errorf("archive entry %q escapes sandbox", path)
 		}
+		if relative == sandboxArchiveWorkspaceDirectory || relative == sandboxArchiveExternalVolumesDirectory {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		linkTarget := ""
 		if info.Mode()&os.ModeSymlink != 0 {
 			linkTarget, err = os.Readlink(path)
 			if err != nil {
 				return err
+			}
+			if err := validateArchiveSymlinkTarget(relative, linkTarget); err != nil {
+				return fmt.Errorf("archive symlink %q: %w", path, err)
 			}
 		}
 		header, err := tar.FileInfoHeader(info, linkTarget)
@@ -255,32 +285,7 @@ func (r contextReader) Read(data []byte) (int, error) {
 }
 
 func (c *WorkspaceCleaner) safeArchiveDir(sandboxID string) (string, error) {
-	if sandboxID == "" || filepath.Base(sandboxID) != sandboxID {
-		return "", fmt.Errorf("invalid sandbox archive ID %q", sandboxID)
-	}
-	root, err := filepath.Abs(strings.TrimSpace(c.ArchiveRoot))
-	if err != nil || root == "" {
-		return "", fmt.Errorf("invalid sandbox archive root")
-	}
-	if strings.TrimSpace(c.SandboxRoot) != "" {
-		sandboxRoot, resolveErr := resolvePathFromExistingAncestor(c.SandboxRoot)
-		if resolveErr != nil {
-			return "", fmt.Errorf("resolve sandbox root: %w", resolveErr)
-		}
-		resolvedArchiveRoot, resolveErr := resolvePathFromExistingAncestor(root)
-		if resolveErr != nil {
-			return "", fmt.Errorf("resolve sandbox archive root: %w", resolveErr)
-		}
-		relative, relativeErr := filepath.Rel(sandboxRoot, resolvedArchiveRoot)
-		if relativeErr != nil || relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))) {
-			return "", fmt.Errorf("sandbox archive root %q must be outside sandbox root %q", root, c.SandboxRoot)
-		}
-	}
-	directory, err := filepath.Abs(filepath.Join(root, sandboxID))
-	if err != nil || filepath.Dir(directory) != root {
-		return "", fmt.Errorf("sandbox archive path escapes archive root")
-	}
-	return directory, nil
+	return safeSandboxArchiveDir(c.ArchiveRoot, c.SandboxRoot, sandboxID)
 }
 
 func writeArchiveManifest(directory *os.Root, name string, manifest sandboxArchiveManifest) error {
@@ -312,6 +317,29 @@ func writeArchiveManifest(directory *os.Root, name string, manifest sandboxArchi
 func removeArchiveTemporary(directory *os.Root, name string) error {
 	if err := directory.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove stale sandbox archive temporary file: %w", err)
+	}
+	return nil
+}
+
+func discardInvalidCommittedArchive(directory *os.Root, names ...string) error {
+	for _, name := range names {
+		if err := directory.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("discard invalid committed sandbox archive file %q: %w", name, err)
+		}
+		if err := removeArchiveTemporary(directory, name+".tmp"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateArchiveSymlinkTarget(relative, target string) error {
+	if filepath.IsAbs(target) || filepath.VolumeName(target) != "" {
+		return fmt.Errorf("target %q is absolute", target)
+	}
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(relative), target))
+	if resolved == ".." || strings.HasPrefix(resolved, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("target %q escapes sandbox", target)
 	}
 	return nil
 }

@@ -203,8 +203,10 @@ func NewSandboxRemovalCoordinator(di do.Injector) (*sandboxes.RemovalCoordinator
 }
 
 func NewDeletionRecovery(di do.Injector) (*sandboxes.DeletionRecovery, error) {
-	return sandboxes.NewDeletionRecovery(
+	config := do.MustInvoke[*appconfig.Config](di)
+	return sandboxes.NewDeletionRecoveryWithArchiveRoot(
 		do.MustInvoke[*sandboxes.RemovalCoordinator](di),
+		config.SandboxArchiveRoot,
 		do.MustInvoke[*slog.Logger](di),
 	), nil
 }

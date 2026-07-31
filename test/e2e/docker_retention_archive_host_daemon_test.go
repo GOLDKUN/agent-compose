@@ -72,9 +72,9 @@ func TestStoppedSandboxArchiveRecoveryLifecycle(t *testing.T) {
 		t.Fatalf("interrupted removal did not retain sandbox for recovery: %v", err)
 	}
 
-	recovery := sandboxes.NewDeletionRecovery(&sandboxes.RemovalCoordinator{
+	recovery := sandboxes.NewDeletionRecoveryWithArchiveRoot(&sandboxes.RemovalCoordinator{
 		SandboxRoot: sandboxRoot, Store: store, Runtime: retentionArchiveRuntime{}, Locks: locks,
-	}, nil)
+	}, archiveRoot, nil)
 	if err := recovery.Start(ctx); err != nil {
 		t.Fatal(err)
 	}

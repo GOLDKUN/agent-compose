@@ -16,6 +16,7 @@ const deletionRecoveryWorkers = 2
 // DeletionRecovery owns asynchronous recovery of sandbox deletion journals.
 type DeletionRecovery struct {
 	coordinator *RemovalCoordinator
+	archiveRoot string
 	logger      *slog.Logger
 
 	mu      sync.Mutex
@@ -26,10 +27,16 @@ type DeletionRecovery struct {
 
 // NewDeletionRecovery creates a one-shot deletion recovery component.
 func NewDeletionRecovery(coordinator *RemovalCoordinator, logger *slog.Logger) *DeletionRecovery {
+	return NewDeletionRecoveryWithArchiveRoot(coordinator, "", logger)
+}
+
+// NewDeletionRecoveryWithArchiveRoot creates deletion recovery that can verify
+// host-owned committed archives before recovering archive-driven removals.
+func NewDeletionRecoveryWithArchiveRoot(coordinator *RemovalCoordinator, archiveRoot string, logger *slog.Logger) *DeletionRecovery {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &DeletionRecovery{coordinator: coordinator, logger: logger}
+	return &DeletionRecovery{coordinator: coordinator, archiveRoot: archiveRoot, logger: logger}
 }
 
 // Start begins recovery and returns without waiting for the lifecycle scan or
@@ -99,6 +106,12 @@ func (r *DeletionRecovery) run(ctx context.Context, done chan struct{}) {
 	} else {
 		for _, sandbox := range listed.Sandboxes {
 			if sandbox.Archive != nil && sandbox.Archive.State == domain.SandboxArchiveStateArchived {
+				if _, err := validateCommittedSandboxArchive(
+					ctx, r.archiveRoot, r.coordinator.SandboxRoot, sandbox.Summary.ID, sandbox.Archive.ID,
+				); err != nil {
+					warnings = append(warnings, fmt.Sprintf("verify committed archive for sandbox %s: %v", sandbox.Summary.ID, err))
+					continue
+				}
 				pending[sandbox.Summary.ID] = struct{}{}
 			}
 		}

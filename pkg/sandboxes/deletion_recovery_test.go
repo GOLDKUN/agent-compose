@@ -3,6 +3,8 @@ package sandboxes
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
@@ -82,6 +84,7 @@ func TestDeletionRecoveryReportsFailureAndRetriesOnNextInstance(t *testing.T) {
 
 func TestDeletionRecoveryRemovesArchivedSandboxWithoutCleanupPolicy(t *testing.T) {
 	root := t.TempDir()
+	archiveRoot := filepath.Join(t.TempDir(), "archives")
 	sandboxID := "archived-before-removal"
 	sandboxDir := filepath.Join(root, sandboxID)
 	if err := os.MkdirAll(filepath.Join(sandboxDir, "state"), 0o700); err != nil {
@@ -94,9 +97,10 @@ func TestDeletionRecoveryRemovesArchivedSandboxWithoutCleanupPolicy(t *testing.T
 		},
 		Archive: &domain.SandboxArchive{State: domain.SandboxArchiveStateArchived, ID: "archive"},
 	}}
-	recovery := NewDeletionRecovery(&RemovalCoordinator{
+	writeRecoveryArchive(t, archiveRoot, sandboxID, "archive")
+	recovery := NewDeletionRecoveryWithArchiveRoot(&RemovalCoordinator{
 		SandboxRoot: root, Store: store, Runtime: &recoveryRuntime{},
-	}, discardRecoveryLogger())
+	}, archiveRoot, discardRecoveryLogger())
 	if err := recovery.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -106,6 +110,39 @@ func TestDeletionRecoveryRemovesArchivedSandboxWithoutCleanupPolicy(t *testing.T
 	}
 	if _, err := ReadOwnershipRecord(root, sandboxID); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("ownership record remains after archived recovery: %v", err)
+	}
+}
+
+func TestDeletionRecoveryDoesNotTrustUnverifiedArchivedMetadata(t *testing.T) {
+	root := t.TempDir()
+	archiveRoot := filepath.Join(t.TempDir(), "archives")
+	if err := os.MkdirAll(archiveRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sandboxID := "forged-archive-state"
+	sandboxDir := filepath.Join(root, sandboxID)
+	if err := os.MkdirAll(filepath.Join(sandboxDir, "state"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store := &archivedRecoveryStore{sandbox: &domain.Sandbox{
+		Summary: domain.SandboxSummary{
+			ID: sandboxID, VMStatus: domain.VMStatusStopped,
+			WorkspacePath: filepath.Join(sandboxDir, "workspace"),
+		},
+		Archive: &domain.SandboxArchive{State: domain.SandboxArchiveStateArchived, ID: "missing"},
+	}}
+	recovery := NewDeletionRecoveryWithArchiveRoot(&RemovalCoordinator{
+		SandboxRoot: root, Store: store, Runtime: &recoveryRuntime{},
+	}, archiveRoot, discardRecoveryLogger())
+	if err := recovery.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitForDeletionRecoveryDone(t, recovery)
+	if store.removed {
+		t.Fatal("unverified archived metadata triggered sandbox removal")
+	}
+	if _, err := os.Stat(sandboxDir); err != nil {
+		t.Fatalf("unverified archived metadata removed sandbox data: %v", err)
 	}
 }
 
@@ -240,6 +277,30 @@ func waitForRecoveryJournalRemoval(t *testing.T, root, sandboxID string) {
 
 func discardRecoveryLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func writeRecoveryArchive(t *testing.T, archiveRoot, sandboxID, archiveID string) {
+	t.Helper()
+	directoryPath := filepath.Join(archiveRoot, sandboxID)
+	if err := os.MkdirAll(directoryPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	archive := []byte("committed archive")
+	if err := os.WriteFile(filepath.Join(directoryPath, archiveID+".tar.zst"), archive, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(archive)
+	directory, err := os.OpenRoot(directoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = directory.Close() }()
+	if err := writeArchiveManifest(directory, archiveID+".json", sandboxArchiveManifest{
+		Version: sandboxArchiveManifestVersion, ArchiveID: archiveID, SandboxID: sandboxID,
+		SizeBytes: int64(len(archive)), SHA256: hex.EncodeToString(digest[:]),
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 type recoveryStore struct{}

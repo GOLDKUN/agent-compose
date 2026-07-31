@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -70,11 +71,19 @@ func TestWorkspaceCleanerArchivesAuditDataAndArchiveSurvivesSandboxRemoval(t *te
 		"logs/archive-log.txt":    "logs",
 		"context/context.txt":     "context",
 		"runtime/runtime.txt":     "runtime",
+		"guest-owned.txt":         "guest-owned",
 	}
 	for name, contents := range markers {
 		if err := os.WriteFile(filepath.Join(sandboxDir, filepath.FromSlash(name)), []byte(contents), 0o600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	externalVolumePath := filepath.Join(sandboxDir, "volumes", "mount-external", "secret.txt")
+	if err := os.MkdirAll(filepath.Dir(externalVolumePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(externalVolumePath, []byte("external volume secret"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(sandbox.Summary.WorkspacePath, "excluded.txt"), []byte("workspace"), 0o600); err != nil {
 		t.Fatal(err)
@@ -108,6 +117,12 @@ func TestWorkspaceCleanerArchivesAuditDataAndArchiveSurvivesSandboxRemoval(t *te
 	}
 	if _, ok := entries["sandbox/workspace/excluded.txt"]; ok {
 		t.Fatal("workspace was included in audit archive")
+	}
+	if _, ok := entries["sandbox/volumes/mount-external/secret.txt"]; ok {
+		t.Fatal("external BoxLite volume data was included in audit archive")
+	}
+	if _, ok := entries["sandbox/volumes"]; ok {
+		t.Fatal("external BoxLite volume bridge directory was included in audit archive")
 	}
 	for _, name := range []string{"sandbox/metadata.json", "sandbox/vm/runtime.json", "sandbox/proxy/jupyter.json", ".lifecycle/ownership.json"} {
 		if _, ok := entries[name]; !ok {
@@ -172,14 +187,21 @@ func TestWorkspaceCleanerRejectsArchiveRootInsideSandboxTree(t *testing.T) {
 		ArchiveRoot: filepath.Join(sandboxRoot, ".archives"), Now: func() time.Time { return now },
 	}
 	result, err := cleaner.Clean(context.Background(), now.Add(-24*time.Hour))
-	if err == nil || result.Failed != 1 {
+	if err == nil || result.Matched != 0 || result.Removed != 0 || result.Failed != 0 {
 		t.Fatalf("cleanup result/error = %#v/%v", result, err)
 	}
-	if _, err := os.Stat(sandbox.Summary.WorkspacePath); !os.IsNotExist(err) {
-		t.Fatalf("workspace remains after archive validation failure: %v", err)
+	if _, err := os.Stat(sandbox.Summary.WorkspacePath); err != nil {
+		t.Fatalf("invalid archive configuration removed workspace: %v", err)
 	}
 	if _, err := os.Stat(store.SandboxDir(sandbox.Summary.ID)); err != nil {
 		t.Fatalf("archive validation failure removed remaining originals: %v", err)
+	}
+	loaded, loadErr := store.GetSandbox(context.Background(), sandbox.Summary.ID)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if loaded.WorkspaceReclamation != nil {
+		t.Fatalf("invalid archive configuration persisted reclamation intent: %#v", loaded.WorkspaceReclamation)
 	}
 }
 
@@ -496,8 +518,10 @@ func assertArchiveManifestMatches(t *testing.T, archivePath string) {
 		t.Fatal(err)
 	}
 	var manifest struct {
-		SizeBytes int64  `json:"size_bytes"`
-		SHA256    string `json:"sha256"`
+		SizeBytes int64    `json:"size_bytes"`
+		SHA256    string   `json:"sha256"`
+		Includes  []string `json:"includes"`
+		Excludes  []string `json:"excludes"`
 	}
 	if err := json.Unmarshal(encoded, &manifest); err != nil {
 		t.Fatal(err)
@@ -505,6 +529,16 @@ func assertArchiveManifestMatches(t *testing.T, archivePath string) {
 	digest := sha256.Sum256(archive)
 	if manifest.SizeBytes != int64(len(archive)) || manifest.SHA256 != hex.EncodeToString(digest[:]) {
 		t.Fatalf("archive manifest size/checksum = %d/%s", manifest.SizeBytes, manifest.SHA256)
+	}
+	for _, included := range []string{"sandbox/**", ".lifecycle/ownership.json"} {
+		if !slices.Contains(manifest.Includes, included) {
+			t.Fatalf("archive manifest includes = %v, want %q", manifest.Includes, included)
+		}
+	}
+	for _, excluded := range []string{"sandbox/workspace/**", "sandbox/volumes/**", "driver-private runtime"} {
+		if !slices.Contains(manifest.Excludes, excluded) {
+			t.Fatalf("archive manifest excludes = %v, want %q", manifest.Excludes, excluded)
+		}
 	}
 	for _, path := range []string{archivePath + ".tmp", manifestPath + ".tmp"} {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {

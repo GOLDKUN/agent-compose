@@ -670,9 +670,9 @@ Microsandbox 解析 guest 镜像时优先使用可达的 Docker daemon，daemon 
 
 首次升级到 disk-image rootfs 时需要一次性切换：先排空 Microsandbox workload，删除现有 Microsandbox runtime sandbox，再仅删除各镜像 cache 中旧的 `rootfs/` 目录和 `.rootfs.ready` 标志。不要删除整个镜像目录，因为 BoxLite 的 `oci/` cache 和新的 Microsandbox 母盘共用该目录；`/data` 下的 workspace 与 agent state 必须保留。daemon 镜像会提供 `qemu-img` 和支持 `-d` 的 `mkfs.ext4`；原生部署需要安装这两个工具。该方案不要求支持 reflink 的文件系统、loop device 或特权 mount。
 
-daemon 可以选择启用基于时间的保留清理。`WORKSPACE_CLEANUP_TTL` 保持原有行为和默认值：接受非负 Go duration，`0` 表示禁用清理。最新一次 sandbox stop 被确认并达到期限后，agent-compose 先删除 workspace，再把剩余的完整 sandbox 目录和 lifecycle ownership record 打成一个归档。归档提交并完成校验后，正式的 sandbox removal coordinator 会删除 runtime、附件、列表索引、ownership record 和整个原 sandbox 目录。metadata、VM/proxy 状态、logs、home、state、context、runtime 等均不在归档外保留原件。workspace 删除或归档失败时，尚存的原件会保留用于后续重试。
+daemon 可以选择启用基于时间的保留清理。`WORKSPACE_CLEANUP_TTL` 保持原有行为和默认值：接受非负 Go duration，`0` 表示禁用清理。最新一次 sandbox stop 被确认并达到期限后，agent-compose 先删除 workspace，再把剩余的 sandbox 自有数据和 lifecycle ownership record 打成一个归档。归档包含 metadata、VM/proxy 状态、logs、home、state、context 和 guest runtime 目录，并跳过 workspace 与顶层 `volumes` bridge 目录。archive 与 manifest 提交并重新校验身份、大小和 SHA-256 后，正式的 sandbox removal coordinator 才会删除 runtime、volume bridge、附件、列表索引、ownership record 和整个原 sandbox 目录。workspace 删除或归档失败时，尚存的原件会保留用于后续重试。
 
-归档以 `tar.zst` 和 SHA-256 JSON sidecar 写入 `SANDBOX_ARCHIVE_ROOT`，默认位置为 `<data-root>/archives/sandboxes`。它位于 sandbox ownership tree 之外并在自动删除后继续存在；当前版本不提供归档 list、download、restore、retention 或 delete API。归档可能包含 provider 状态、凭据、prompt 和日志，运维方必须保护并显式管理该目录。workspace source、声明的外部 volume 和 driver 私有 runtime 磁盘不会复制进归档；归档完成后由各 runtime 所有者的正式边界删除 driver 资源。
+归档以 `tar.zst` 和 SHA-256 JSON sidecar 写入 `SANDBOX_ARCHIVE_ROOT`，默认位置为 `<data-root>/archives/sandboxes`。daemon 会拒绝与 `SANDBOX_ROOT` 相同、位于其下或经 symlink 解析后进入其中的归档根目录。归档位于 sandbox ownership tree 之外并在自动删除后继续存在；当前版本不提供归档 list、download、restore、retention 或 delete API。归档可能包含 provider 状态、凭据、prompt 和日志，运维方必须保护并显式管理该目录。workspace source、声明的外部 volume（包括 BoxLite bind-mounted volume bridge）和 driver 私有 runtime 磁盘不会复制进归档；归档完成后由各 runtime 所有者的正式边界删除 driver 资源。
 
 `IMAGE_CACHE_CLEANUP_TTL` 独立清理 `IMAGE_CACHE_ROOT` 自有且未被引用的 OCI 与 materialized 数据，优先使用最后使用时间，没有时回退到拉取时间或文件修改时间；默认 `0`，即关闭该 cleaner。`CLEANUP_INTERVAL` 默认 `1h`，因此 duration 清理最多可能延迟一个 interval。自动清理不会处理 Docker daemon 镜像、BoxLite home 或 Microsandbox SDK cache，也不实现磁盘空间水位策略。
 

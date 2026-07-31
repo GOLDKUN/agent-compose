@@ -41,6 +41,11 @@ func (c *WorkspaceCleaner) Clean(ctx context.Context, cutoff time.Time) (cleanup
 	if c == nil || c.Store == nil {
 		return cleanup.Result{}, fmt.Errorf("workspace cleaner store is not configured")
 	}
+	if strings.TrimSpace(c.ArchiveRoot) != "" {
+		if _, err := validateSandboxArchiveRoot(c.ArchiveRoot, c.SandboxRoot); err != nil {
+			return cleanup.Result{}, fmt.Errorf("validate sandbox archive root: %w", err)
+		}
+	}
 	listed, err := c.Store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: 1 << 30})
 	if err != nil {
 		return cleanup.Result{}, err
@@ -88,6 +93,11 @@ func (c *WorkspaceCleaner) cleanSandbox(ctx context.Context, sandboxID string, c
 	}
 	if sandbox.Archive == nil || sandbox.Archive.State != domain.SandboxArchiveStateArchived {
 		return matched, removed, nil
+	}
+	if _, err := validateCommittedSandboxArchive(
+		ctx, c.ArchiveRoot, c.SandboxRoot, sandbox.Summary.ID, sandbox.Archive.ID,
+	); err != nil {
+		return matched, removed, fmt.Errorf("verify committed sandbox archive: %w", err)
 	}
 	result, removeErr := c.Removal.Remove(ctx, sandboxID, true)
 	return matched, result.Removed, removeErr
