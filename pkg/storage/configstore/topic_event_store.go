@@ -592,7 +592,7 @@ func (s *eventStore) UpsertWebhookSource(ctx context.Context, source domain.Webh
 			return domain.WebhookSource{}, fmt.Errorf("github sha256 webhook source provider must be github")
 		}
 		if source.TopicPrefix != "webhook.github." {
-			return domain.WebhookSource{}, fmt.Errorf("github sha256 webhook source topic prefix must be webhook.github.")
+			return domain.WebhookSource{}, fmt.Errorf("github sha256 webhook source topic prefix must be webhook.github")
 		}
 		if source.SignatureSecret == "" {
 			return domain.WebhookSource{}, fmt.Errorf("github sha256 webhook source signature secret is required")
