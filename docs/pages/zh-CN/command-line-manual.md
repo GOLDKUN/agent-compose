@@ -670,7 +670,9 @@ Microsandbox 解析 guest 镜像时优先使用可达的 Docker daemon，daemon 
 
 首次升级到 disk-image rootfs 时需要一次性切换：先排空 Microsandbox workload，删除现有 Microsandbox runtime sandbox，再仅删除各镜像 cache 中旧的 `rootfs/` 目录和 `.rootfs.ready` 标志。不要删除整个镜像目录，因为 BoxLite 的 `oci/` cache 和新的 Microsandbox 母盘共用该目录；`/data` 下的 workspace 与 agent state 必须保留。daemon 镜像会提供 `qemu-img` 和支持 `-d` 的 `mkfs.ext4`；原生部署需要安装这两个工具。该方案不要求支持 reflink 的文件系统、loop device 或特权 mount。
 
-daemon 可以选择启用基于时间的保留清理。`WORKSPACE_CLEANUP_TTL` 保持原有行为和默认值：接受非负 Go duration，`0` 表示禁用清理。最新一次 sandbox stop 被确认并达到期限后，agent-compose 先删除 workspace，再把剩余的 sandbox 自有数据和 lifecycle ownership record 打成一个归档。归档包含 metadata、VM/proxy 状态、logs、home、state、context 和 guest runtime 目录，并跳过 workspace 与顶层 `volumes` bridge 目录。archive 与 manifest 提交并重新校验身份、大小和 SHA-256 后，正式的 sandbox removal coordinator 才会删除 runtime、volume bridge、附件、列表索引、ownership record 和整个原 sandbox 目录。workspace 删除或归档失败时，尚存的原件会保留用于后续重试。
+daemon 可以选择启用两条相互独立的定时保留策略。`WORKSPACE_CLEANUP_TTL` 保持原有的 workspace-only 行为：最新一次 sandbox stop 被确认并达到期限后，agent-compose 删除 workspace，但保留 metadata、logs、state 和其他审计数据。`SANDBOX_RETENTION_TTL` 控制完整的 stopped-sandbox 保留流程：必要时先回收 workspace，再把剩余的 sandbox 自有数据和 lifecycle ownership record 打成归档。两者都接受非负 Go duration，默认值均为 `0`，表示禁用对应策略；同时启用时可以先回收 workspace，之后再由 sandbox retention 归档并删除其余数据。
+
+sandbox retention 归档包含 metadata、VM/proxy 状态、logs、home、state、context 和 guest runtime 目录，并跳过 workspace 与顶层 `volumes` bridge 目录。archive 与 manifest 提交并重新校验身份、大小和 SHA-256 后，正式的 sandbox removal coordinator 才会删除 runtime、volume bridge、附件、列表索引、ownership record 和整个原 sandbox 目录。workspace 删除或归档失败时，尚存的原件会保留用于后续重试。
 
 归档以 `tar.zst` 和 SHA-256 JSON sidecar 写入 `SANDBOX_ARCHIVE_ROOT`，默认位置为 `<data-root>/archives/sandboxes`。daemon 会拒绝与 `SANDBOX_ROOT` 相同、位于其下或经 symlink 解析后进入其中的归档根目录。归档位于 sandbox ownership tree 之外并在自动删除后继续存在；当前版本不提供归档 list、download、restore、retention 或 delete API。归档可能包含 provider 状态、凭据、prompt 和日志，运维方必须保护并显式管理该目录。workspace source、声明的外部 volume（包括 BoxLite bind-mounted volume bridge）和 driver 私有 runtime 磁盘不会复制进归档；归档完成后由各 runtime 所有者的正式边界删除 driver 资源。
 

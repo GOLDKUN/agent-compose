@@ -45,7 +45,7 @@ func TestE2EDockerDaemonRetentionCleanup(t *testing.T) {
 		"CLEANUP_INTERVAL":               "100ms",
 		"IMAGE_CACHE_CLEANUP_TTL":        "1h",
 		"IMAGE_CACHE_ROOT":               cacheRoot,
-		"WORKSPACE_CLEANUP_TTL":          "500ms",
+		"SANDBOX_RETENTION_TTL":          "500ms",
 	})
 	waitForE2EDaemon(t, ctx, daemon, baseURL)
 	t.Cleanup(func() {

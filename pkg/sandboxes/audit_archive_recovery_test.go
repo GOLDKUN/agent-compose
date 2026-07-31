@@ -13,12 +13,12 @@ import (
 	"agent-compose/pkg/storage/sandboxstore"
 )
 
-func TestWorkspaceCleanerReusesCommittedArchiveAfterMetadataFailure(t *testing.T) {
+func TestSandboxRetentionReusesCommittedArchiveAfterMetadataFailure(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
 	failingStore := &archiveCompletionFailingStore{Store: store, failures: 1}
 	archiveRoot := filepath.Join(t.TempDir(), "archives")
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: failingStore, Locks: sandboxes.NewLifecycleLocks(),
 		ArchiveRoot: archiveRoot, SandboxRoot: workspaceCleanupSandboxRoot(store.SandboxDir(sandbox.Summary.ID)),
 		Now: func() time.Time { return now },
@@ -57,12 +57,12 @@ func TestWorkspaceCleanerReusesCommittedArchiveAfterMetadataFailure(t *testing.T
 	}
 }
 
-func TestWorkspaceCleanerRevalidatesArchiveBeforeRemoval(t *testing.T) {
+func TestSandboxRetentionRevalidatesArchiveBeforeRemoval(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
 	removal := &workspaceCleanupTestRemoval{store: store, failures: 1}
 	archiveRoot := filepath.Join(t.TempDir(), "archives")
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: sandboxes.NewLifecycleLocks(), ArchiveRoot: archiveRoot,
 		SandboxRoot: workspaceCleanupSandboxRoot(store.SandboxDir(sandbox.Summary.ID)), Removal: removal,
 		Now: func() time.Time { return now },
@@ -92,7 +92,50 @@ func TestWorkspaceCleanerRevalidatesArchiveBeforeRemoval(t *testing.T) {
 	}
 }
 
-func TestWorkspaceCleanerRejectsEscapingArchiveSymlinks(t *testing.T) {
+func TestSandboxRetentionTreatsConcurrentRemovalAsSuccess(t *testing.T) {
+	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
+	sandbox.Archive = &domain.SandboxArchive{State: domain.SandboxArchiveStateArchived, ID: "archive"}
+	if err := store.UpdateSandbox(context.Background(), sandbox); err != nil {
+		t.Fatal(err)
+	}
+	disappearing := &disappearingRetentionStore{Store: store, disappearOnLoad: 2}
+	cleaner := &sandboxes.SandboxRetentionCleaner{
+		Store: disappearing, Locks: sandboxes.NewLifecycleLocks(),
+		ArchiveRoot: filepath.Join(t.TempDir(), "archives"),
+		SandboxRoot: workspaceCleanupSandboxRoot(store.SandboxDir(sandbox.Summary.ID)),
+		Removal:     &workspaceCleanupTestRemoval{store: store},
+	}
+
+	result, err := cleaner.Clean(context.Background(), now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Matched != 1 || result.Removed != 1 || result.Failed != 0 {
+		t.Fatalf("cleanup result = %#v", result)
+	}
+}
+
+func TestSandboxRetentionSkipsSandboxRemovedAfterListing(t *testing.T) {
+	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
+	cleaner := &sandboxes.SandboxRetentionCleaner{
+		Store:       &disappearingRetentionStore{Store: store, disappearOnLoad: 1},
+		Locks:       sandboxes.NewLifecycleLocks(),
+		ArchiveRoot: filepath.Join(t.TempDir(), "archives"),
+		SandboxRoot: workspaceCleanupSandboxRoot(store.SandboxDir(sandbox.Summary.ID)),
+	}
+
+	result, err := cleaner.Clean(context.Background(), now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Skipped != 1 || result.Failed != 0 {
+		t.Fatalf("cleanup result = %#v", result)
+	}
+}
+
+func TestSandboxRetentionRejectsEscapingArchiveSymlinks(t *testing.T) {
 	tests := []struct {
 		name   string
 		target string
@@ -110,7 +153,7 @@ func TestWorkspaceCleanerRejectsEscapingArchiveSymlinks(t *testing.T) {
 				t.Skipf("create test symlink: %v", err)
 			}
 			archiveRoot := filepath.Join(t.TempDir(), "archives")
-			cleaner := &sandboxes.WorkspaceCleaner{
+			cleaner := &sandboxes.SandboxRetentionCleaner{
 				Store: store, Locks: sandboxes.NewLifecycleLocks(), ArchiveRoot: archiveRoot,
 				SandboxRoot: workspaceCleanupSandboxRoot(sandboxDir), Now: func() time.Time { return now },
 			}
@@ -130,7 +173,7 @@ func TestWorkspaceCleanerRejectsEscapingArchiveSymlinks(t *testing.T) {
 	}
 }
 
-func TestWorkspaceCleanerAllowsInternalArchiveSymlink(t *testing.T) {
+func TestSandboxRetentionAllowsInternalArchiveSymlink(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
 	sandboxDir := store.SandboxDir(sandbox.Summary.ID)
@@ -139,7 +182,7 @@ func TestWorkspaceCleanerAllowsInternalArchiveSymlink(t *testing.T) {
 		t.Skipf("create test symlink: %v", err)
 	}
 	archiveRoot := filepath.Join(t.TempDir(), "archives")
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: sandboxes.NewLifecycleLocks(), ArchiveRoot: archiveRoot,
 		SandboxRoot: workspaceCleanupSandboxRoot(sandboxDir), Now: func() time.Time { return now },
 	}
@@ -160,6 +203,20 @@ func TestWorkspaceCleanerAllowsInternalArchiveSymlink(t *testing.T) {
 type archiveCompletionFailingStore struct {
 	*sandboxstore.Store
 	failures int
+}
+
+type disappearingRetentionStore struct {
+	*sandboxstore.Store
+	loads           int
+	disappearOnLoad int
+}
+
+func (s *disappearingRetentionStore) GetSandbox(ctx context.Context, sandboxID string) (*domain.Sandbox, error) {
+	s.loads++
+	if s.loads >= s.disappearOnLoad {
+		return nil, os.ErrNotExist
+	}
+	return s.Store.GetSandbox(ctx, sandboxID)
 }
 
 func (s *archiveCompletionFailingStore) UpdateSandbox(ctx context.Context, sandbox *domain.Sandbox) error {

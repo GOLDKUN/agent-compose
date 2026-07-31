@@ -57,7 +57,7 @@ func TestStoppedSandboxArchiveRecoveryLifecycle(t *testing.T) {
 	}
 
 	locks := sandboxes.NewLifecycleLocks()
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: locks, SandboxRoot: sandboxRoot, ArchiveRoot: archiveRoot,
 		Removal: retentionArchiveFailedRemoval{},
 	}
@@ -129,7 +129,7 @@ func TestE2EDockerStoppedSandboxRetentionArchivesAuditData(t *testing.T) {
 	listenAddress := unusedLoopbackAddress(t)
 	baseURL := "http://" + listenAddress
 	daemon := startE2EDaemonWithEnv(t, binary, repoRoot, testRoot, listenAddress, image, map[string]string{
-		"WORKSPACE_CLEANUP_TTL": "1ns",
+		"SANDBOX_RETENTION_TTL": "1ns",
 		"CLEANUP_INTERVAL":      "100ms",
 		"SANDBOX_ARCHIVE_ROOT":  archiveRoot,
 	})

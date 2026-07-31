@@ -25,14 +25,9 @@ type WorkspaceCleanupStore interface {
 }
 
 type WorkspaceCleaner struct {
-	Store       WorkspaceCleanupStore
-	Locks       *LifecycleLocks
-	ArchiveRoot string
-	SandboxRoot string
-	Removal     interface {
-		Remove(context.Context, string, bool) (RemovalResult, error)
-	}
-	Now func() time.Time
+	Store WorkspaceCleanupStore
+	Locks *LifecycleLocks
+	Now   func() time.Time
 }
 
 func (c *WorkspaceCleaner) Name() string { return "sandbox-workspace" }
@@ -41,22 +36,17 @@ func (c *WorkspaceCleaner) Clean(ctx context.Context, cutoff time.Time) (cleanup
 	if c == nil || c.Store == nil {
 		return cleanup.Result{}, fmt.Errorf("workspace cleaner store is not configured")
 	}
-	if strings.TrimSpace(c.ArchiveRoot) != "" {
-		if _, err := validateSandboxArchiveRoot(c.ArchiveRoot, c.SandboxRoot); err != nil {
-			return cleanup.Result{}, fmt.Errorf("validate sandbox archive root: %w", err)
-		}
-	}
-	listed, err := c.Store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: 1 << 30})
+	ids, err := listCleanupSandboxIDs(ctx, c.Store)
 	if err != nil {
 		return cleanup.Result{}, err
 	}
 	result := cleanup.Result{}
 	var joined error
-	for _, sandbox := range listed.Sandboxes {
+	for _, sandboxID := range ids {
 		if err := ctx.Err(); err != nil {
 			return result, errors.Join(joined, err)
 		}
-		matched, removed, err := c.cleanSandbox(ctx, sandbox.Summary.ID, cutoff)
+		matched, removed, err := c.cleanSandbox(ctx, sandboxID, cutoff)
 		if err != nil {
 			if matched {
 				result.Matched++
@@ -65,7 +55,7 @@ func (c *WorkspaceCleaner) Clean(ctx context.Context, cutoff time.Time) (cleanup
 				result.Removed++
 			}
 			result.Failed++
-			joined = errors.Join(joined, fmt.Errorf("reclaim workspace for sandbox %s: %w", sandbox.Summary.ID, err))
+			joined = errors.Join(joined, fmt.Errorf("reclaim workspace for sandbox %s: %w", sandboxID, err))
 			continue
 		}
 		if !matched {
@@ -82,58 +72,29 @@ func (c *WorkspaceCleaner) Clean(ctx context.Context, cutoff time.Time) (cleanup
 
 func (c *WorkspaceCleaner) cleanSandbox(ctx context.Context, sandboxID string, cutoff time.Time) (bool, bool, error) {
 	unlock := c.Locks.Lock(sandboxID)
-	matched, removed, err := c.cleanSandboxWhileLocked(ctx, sandboxID, cutoff)
-	unlock()
-	if err != nil || !matched || c.Removal == nil {
-		return matched, removed, err
-	}
-	sandbox, loadErr := c.Store.GetSandbox(ctx, sandboxID)
-	if loadErr != nil {
-		return matched, removed, loadErr
-	}
-	if sandbox.Archive == nil || sandbox.Archive.State != domain.SandboxArchiveStateArchived {
-		return matched, removed, nil
-	}
-	if _, err := validateCommittedSandboxArchive(
-		ctx, c.ArchiveRoot, c.SandboxRoot, sandbox.Summary.ID, sandbox.Archive.ID,
-	); err != nil {
-		return matched, removed, fmt.Errorf("verify committed sandbox archive: %w", err)
-	}
-	result, removeErr := c.Removal.Remove(ctx, sandboxID, true)
-	return matched, result.Removed, removeErr
-}
-
-func (c *WorkspaceCleaner) cleanSandboxWhileLocked(ctx context.Context, sandboxID string, cutoff time.Time) (bool, bool, error) {
+	defer unlock()
 	sandbox, err := c.Store.GetSandbox(ctx, sandboxID)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, false, nil
+		}
 		return false, false, err
 	}
-	// Archival is the point of no return. If formal removal previously failed,
-	// keep driving it even though its durable intent changed the VM status from
-	// stopped to deleting.
-	if sandbox.Archive != nil && sandbox.Archive.State == domain.SandboxArchiveStateArchived {
-		return true, false, nil
+	if sandbox.WorkspaceReclamation != nil && sandbox.WorkspaceReclamation.State == domain.SandboxWorkspaceReclamationStateReclaimed {
+		return false, false, nil
 	}
-	eligibleAt, ok, err := c.workspaceEligibleAt(sandbox)
-	if err != nil || !ok || eligibleAt.After(cutoff) {
-		return false, false, err
+	retrying := sandbox.WorkspaceReclamation != nil && sandbox.WorkspaceReclamation.State == domain.SandboxWorkspaceReclamationStateReclaiming
+	if sandbox.WorkspaceReclamation != nil && !retrying {
+		return false, false, fmt.Errorf("unknown workspace reclamation state %q", sandbox.WorkspaceReclamation.State)
 	}
-
-	matched := false
-	removed := false
-	var joined error
-	if sandbox.WorkspaceReclamation == nil || sandbox.WorkspaceReclamation.State != domain.SandboxWorkspaceReclamationStateReclaimed {
-		matched = true
-		workspaceRemoved, reclaimErr := c.reclaimWorkspace(ctx, sandbox)
-		removed = workspaceRemoved
-		joined = errors.Join(joined, reclaimErr)
+	if !retrying {
+		eligibleAt, ok, err := c.workspaceEligibleAt(sandbox)
+		if err != nil || !ok || eligibleAt.After(cutoff) {
+			return false, false, err
+		}
 	}
-	workspaceReclaimed := sandbox.WorkspaceReclamation != nil && sandbox.WorkspaceReclamation.State == domain.SandboxWorkspaceReclamationStateReclaimed
-	if joined == nil && workspaceReclaimed && strings.TrimSpace(c.ArchiveRoot) != "" && (sandbox.Archive == nil || sandbox.Archive.State != domain.SandboxArchiveStateArchived) {
-		matched = true
-		joined = errors.Join(joined, c.archiveSandbox(ctx, sandbox))
-	}
-	return matched, removed, joined
+	removed, err := c.reclaimWorkspace(ctx, sandbox)
+	return true, removed, err
 }
 
 func (c *WorkspaceCleaner) reclaimWorkspace(ctx context.Context, sandbox *domain.Sandbox) (bool, error) {

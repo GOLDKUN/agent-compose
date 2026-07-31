@@ -60,7 +60,7 @@ func TestWorkspaceCleanerReclaimsStoppedSandboxAndBlocksProvisioning(t *testing.
 	}
 }
 
-func TestWorkspaceCleanerArchivesAuditDataAndArchiveSurvivesSandboxRemoval(t *testing.T) {
+func TestSandboxRetentionArchivesAuditDataAndArchiveSurvivesSandboxRemoval(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
@@ -92,7 +92,7 @@ func TestWorkspaceCleanerArchivesAuditDataAndArchiveSurvivesSandboxRemoval(t *te
 	sandboxRoot := workspaceCleanupSandboxRoot(sandboxDir)
 	locks := sandboxes.NewLifecycleLocks()
 	removal := &sandboxes.RemovalCoordinator{SandboxRoot: sandboxRoot, Store: store, Runtime: workspaceCleanupTestRuntime{}, Locks: locks}
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: locks, ArchiveRoot: archiveRoot, SandboxRoot: sandboxRoot, Removal: removal,
 		Now: func() time.Time { return now },
 	}
@@ -148,14 +148,14 @@ func TestWorkspaceCleanerArchivesAuditDataAndArchiveSurvivesSandboxRemoval(t *te
 	assertArchiveManifestMatches(t, archivePath)
 }
 
-func TestWorkspaceCleanerArchiveFailureDoesNotBlockWorkspaceRemoval(t *testing.T) {
+func TestSandboxRetentionArchiveFailureDoesNotBlockWorkspaceRemoval(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
 	archiveRoot := filepath.Join(t.TempDir(), "archive-file")
 	if err := os.WriteFile(archiveRoot, []byte("not a directory"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: sandboxes.NewLifecycleLocks(), ArchiveRoot: archiveRoot,
 		Now: func() time.Time { return now },
 	}
@@ -178,11 +178,11 @@ func TestWorkspaceCleanerArchiveFailureDoesNotBlockWorkspaceRemoval(t *testing.T
 	}
 }
 
-func TestWorkspaceCleanerRejectsArchiveRootInsideSandboxTree(t *testing.T) {
+func TestSandboxRetentionRejectsArchiveRootInsideSandboxTree(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
 	sandboxRoot := workspaceCleanupSandboxRoot(store.SandboxDir(sandbox.Summary.ID))
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: sandboxes.NewLifecycleLocks(), SandboxRoot: sandboxRoot,
 		ArchiveRoot: filepath.Join(sandboxRoot, ".archives"), Now: func() time.Time { return now },
 	}
@@ -205,7 +205,7 @@ func TestWorkspaceCleanerRejectsArchiveRootInsideSandboxTree(t *testing.T) {
 	}
 }
 
-func TestWorkspaceCleanerRejectsSymlinkSandboxArchiveDirectory(t *testing.T) {
+func TestSandboxRetentionRejectsSymlinkSandboxArchiveDirectory(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
 	sandboxDir := store.SandboxDir(sandbox.Summary.ID)
@@ -217,7 +217,7 @@ func TestWorkspaceCleanerRejectsSymlinkSandboxArchiveDirectory(t *testing.T) {
 	if err := os.Symlink(sandboxDir, filepath.Join(archiveRoot, sandbox.Summary.ID)); err != nil {
 		t.Fatal(err)
 	}
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: sandboxes.NewLifecycleLocks(), SandboxRoot: sandboxRoot,
 		ArchiveRoot: archiveRoot, Now: func() time.Time { return now },
 	}
@@ -237,13 +237,13 @@ func TestWorkspaceCleanerRejectsSymlinkSandboxArchiveDirectory(t *testing.T) {
 	}
 }
 
-func TestWorkspaceCleanerRetriesFormalRemovalAfterArchive(t *testing.T) {
+func TestSandboxRetentionRetriesFormalRemovalAfterArchive(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
 	sandboxDir := store.SandboxDir(sandbox.Summary.ID)
 	removal := &workspaceCleanupTestRemoval{store: store, failures: 1}
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: sandboxes.NewLifecycleLocks(), ArchiveRoot: filepath.Join(t.TempDir(), "archives"), Removal: removal,
 		Now: func() time.Time { return now },
 	}

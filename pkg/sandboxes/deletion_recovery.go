@@ -11,7 +11,10 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-const deletionRecoveryWorkers = 2
+const (
+	deletionRecoveryWorkers  = 2
+	deletionRecoveryPageSize = 200
+)
 
 // DeletionRecovery owns asynchronous recovery of sandbox deletion journals.
 type DeletionRecovery struct {
@@ -100,22 +103,7 @@ func (r *DeletionRecovery) run(ctx context.Context, done chan struct{}) {
 			pending[record.SandboxID] = struct{}{}
 		}
 	}
-	listed, listErr := r.coordinator.Store.ListSandboxes(ctx, domain.SandboxListOptions{Limit: 1 << 30})
-	if listErr != nil {
-		warnings = append(warnings, fmt.Sprintf("list archived sandboxes for deletion recovery: %v", listErr))
-	} else {
-		for _, sandbox := range listed.Sandboxes {
-			if sandbox.Archive != nil && sandbox.Archive.State == domain.SandboxArchiveStateArchived {
-				if _, err := validateCommittedSandboxArchive(
-					ctx, r.archiveRoot, r.coordinator.SandboxRoot, sandbox.Summary.ID, sandbox.Archive.ID,
-				); err != nil {
-					warnings = append(warnings, fmt.Sprintf("verify committed archive for sandbox %s: %v", sandbox.Summary.ID, err))
-					continue
-				}
-				pending[sandbox.Summary.ID] = struct{}{}
-			}
-		}
-	}
+	warnings = append(warnings, r.appendArchivedSandboxes(ctx, pending)...)
 	for _, warning := range warnings {
 		r.logger.Warn("sandbox deletion recovery warning", "warning", warning)
 	}
@@ -155,6 +143,41 @@ sendRecords:
 	}
 	close(jobs)
 	workers.Wait()
+}
+
+func (r *DeletionRecovery) appendArchivedSandboxes(ctx context.Context, pending map[string]struct{}) []string {
+	var warnings []string
+	for offset := 0; ; {
+		listed, err := r.coordinator.Store.ListSandboxes(ctx, domain.SandboxListOptions{
+			Offset: offset,
+			Limit:  deletionRecoveryPageSize,
+		})
+		if err != nil {
+			return append(warnings, fmt.Sprintf("list archived sandboxes for deletion recovery: %v", err))
+		}
+		for _, sandbox := range listed.Sandboxes {
+			if sandbox.Archive == nil || sandbox.Archive.State != domain.SandboxArchiveStateArchived {
+				continue
+			}
+			if _, err := validateCommittedSandboxArchive(
+				ctx, r.archiveRoot, r.coordinator.SandboxRoot, sandbox.Summary.ID, sandbox.Archive.ID,
+			); err != nil {
+				warnings = append(warnings, fmt.Sprintf("verify committed archive for sandbox %s: %v", sandbox.Summary.ID, err))
+				continue
+			}
+			pending[sandbox.Summary.ID] = struct{}{}
+		}
+		if !listed.HasMore {
+			return warnings
+		}
+		if listed.NextOffset <= offset {
+			return append(warnings, fmt.Sprintf(
+				"list archived sandboxes for deletion recovery returned non-advancing offset %d after %d",
+				listed.NextOffset, offset,
+			))
+		}
+		offset = listed.NextOffset
+	}
 }
 
 func (r *DeletionRecovery) logFailure(ctx context.Context, sandboxID string, err error) {

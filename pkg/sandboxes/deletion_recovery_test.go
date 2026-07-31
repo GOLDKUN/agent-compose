@@ -146,6 +146,27 @@ func TestDeletionRecoveryDoesNotTrustUnverifiedArchivedMetadata(t *testing.T) {
 	}
 }
 
+func TestDeletionRecoveryPagesSandboxMetadata(t *testing.T) {
+	store := &pagedRecoveryStore{}
+	recovery := NewDeletionRecovery(&RemovalCoordinator{
+		SandboxRoot: t.TempDir(), Store: store, Runtime: &recoveryRuntime{},
+	}, discardRecoveryLogger())
+	if err := recovery.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitForDeletionRecoveryDone(t, recovery)
+
+	if len(store.options) != 2 {
+		t.Fatalf("ListSandboxes calls = %d, want 2", len(store.options))
+	}
+	if first := store.options[0]; first.Offset != 0 || first.Limit != deletionRecoveryPageSize {
+		t.Fatalf("first page options = %#v", first)
+	}
+	if second := store.options[1]; second.Offset != 7 || second.Limit != deletionRecoveryPageSize {
+		t.Fatalf("second page options = %#v", second)
+	}
+}
+
 func TestDeletionRecoveryReportsUnreadableJournal(t *testing.T) {
 	root := t.TempDir()
 	lifecycleRoot := LifecycleRoot(root)
@@ -315,6 +336,19 @@ func (recoveryStore) ListSandboxes(context.Context, domain.SandboxListOptions) (
 
 func (recoveryStore) UpdateSandbox(context.Context, *domain.Sandbox) error { return nil }
 func (recoveryStore) RemoveSandbox(context.Context, string) error          { return nil }
+
+type pagedRecoveryStore struct {
+	recoveryStore
+	options []domain.SandboxListOptions
+}
+
+func (s *pagedRecoveryStore) ListSandboxes(_ context.Context, options domain.SandboxListOptions) (domain.SandboxListResult, error) {
+	s.options = append(s.options, options)
+	if options.Offset == 0 {
+		return domain.SandboxListResult{HasMore: true, NextOffset: 7}, nil
+	}
+	return domain.SandboxListResult{}, nil
+}
 
 type archivedRecoveryStore struct {
 	sandbox *domain.Sandbox

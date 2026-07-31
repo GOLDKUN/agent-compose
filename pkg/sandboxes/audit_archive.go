@@ -37,7 +37,7 @@ type sandboxArchiveManifest struct {
 	Excludes   []string  `json:"excludes"`
 }
 
-func (c *WorkspaceCleaner) archiveSandbox(ctx context.Context, sandbox *domain.Sandbox) error {
+func (c *SandboxRetentionCleaner) archiveSandbox(ctx context.Context, sandbox *domain.Sandbox) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func (c *WorkspaceCleaner) archiveSandbox(ctx context.Context, sandbox *domain.S
 	return nil
 }
 
-func (c *WorkspaceCleaner) writeSandboxArchive(ctx context.Context, sandbox *domain.Sandbox) (int64, string, error) {
+func (c *SandboxRetentionCleaner) writeSandboxArchive(ctx context.Context, sandbox *domain.Sandbox) (int64, string, error) {
 	archiveDir, err := c.safeArchiveDir(sandbox.Summary.ID)
 	if err != nil {
 		return 0, "", err
@@ -180,7 +180,7 @@ func (c *WorkspaceCleaner) writeSandboxArchive(ctx context.Context, sandbox *dom
 	return counted.total, checksum, nil
 }
 
-func (c *WorkspaceCleaner) writeSandboxArchiveEntries(ctx context.Context, writer *tar.Writer, sandbox *domain.Sandbox) error {
+func (c *SandboxRetentionCleaner) writeSandboxArchiveEntries(ctx context.Context, writer *tar.Writer, sandbox *domain.Sandbox) error {
 	sandboxDir := c.Store.SandboxDir(sandbox.Summary.ID)
 	if err := filepath.WalkDir(sandboxDir, func(path string, item fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
@@ -284,7 +284,7 @@ func (r contextReader) Read(data []byte) (int, error) {
 	return r.reader.Read(data)
 }
 
-func (c *WorkspaceCleaner) safeArchiveDir(sandboxID string) (string, error) {
+func (c *SandboxRetentionCleaner) safeArchiveDir(sandboxID string) (string, error) {
 	return safeSandboxArchiveDir(c.ArchiveRoot, c.SandboxRoot, sandboxID)
 }
 

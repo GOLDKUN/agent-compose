@@ -14,7 +14,7 @@ import (
 	"agent-compose/pkg/sandboxes"
 )
 
-func TestIntegrationWorkspaceCleanerExcludesMountedExternalVolume(t *testing.T) {
+func TestIntegrationSandboxRetentionExcludesMountedExternalVolume(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	store, sandbox := newWorkspaceCleanupSandbox(t, now.Add(-48*time.Hour))
 	sandboxDir := store.SandboxDir(sandbox.Summary.ID)
@@ -39,7 +39,7 @@ func TestIntegrationWorkspaceCleanerExcludesMountedExternalVolume(t *testing.T) 
 	})
 
 	archiveRoot := filepath.Join(t.TempDir(), "archives")
-	cleaner := &sandboxes.WorkspaceCleaner{
+	cleaner := &sandboxes.SandboxRetentionCleaner{
 		Store: store, Locks: sandboxes.NewLifecycleLocks(), ArchiveRoot: archiveRoot,
 		SandboxRoot: workspaceCleanupSandboxRoot(sandboxDir), Now: func() time.Time { return now },
 	}

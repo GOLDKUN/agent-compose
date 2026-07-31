@@ -91,16 +91,20 @@ func TestNewConfigRejectsInvalidCleanupDurations(t *testing.T) {
 		name      string
 		interval  string
 		workspace string
+		retention string
 		image     string
 	}{
 		{name: "negative workspace TTL", workspace: "-1h"},
+		{name: "invalid sandbox retention TTL", retention: "tomorrow"},
 		{name: "invalid image TTL", image: "tomorrow"},
 		{name: "zero interval while enabled", interval: "0", workspace: "1h"},
+		{name: "zero interval while retention enabled", interval: "0", retention: "1h"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("DATA_ROOT", filepath.Join(t.TempDir(), "data"))
 			t.Setenv("CLEANUP_INTERVAL", test.interval)
 			t.Setenv("WORKSPACE_CLEANUP_TTL", test.workspace)
+			t.Setenv("SANDBOX_RETENTION_TTL", test.retention)
 			t.Setenv("IMAGE_CACHE_CLEANUP_TTL", test.image)
 			di := do.New()
 			do.ProvideValue(di, slog.Default())
@@ -121,6 +125,9 @@ func TestNewConfigDefaultsSandboxArchiveRootWithoutChangingWorkspaceCleanupTTL(t
 	}
 	if config.WorkspaceCleanupTTL != 0 {
 		t.Fatalf("WorkspaceCleanupTTL = %s, want existing disabled default", config.WorkspaceCleanupTTL)
+	}
+	if config.SandboxRetentionTTL != 0 {
+		t.Fatalf("SandboxRetentionTTL = %s, want disabled default", config.SandboxRetentionTTL)
 	}
 	if config.SandboxArchiveRoot != filepath.Join(config.DataRoot, "archives", "sandboxes") {
 		t.Fatalf("SandboxArchiveRoot = %q", config.SandboxArchiveRoot)
@@ -155,6 +162,7 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	t.Setenv("CACHE_TTL", "2h")
 	t.Setenv("CLEANUP_INTERVAL", "30m")
 	t.Setenv("WORKSPACE_CLEANUP_TTL", "24h")
+	t.Setenv("SANDBOX_RETENTION_TTL", "36h")
 	t.Setenv("IMAGE_CACHE_CLEANUP_TTL", "48h")
 	t.Setenv("GUEST_WORKSPACE", "/workspace")
 	t.Setenv("GUEST_HOME", "/home/test")
@@ -199,8 +207,8 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	if config.SandboxDiskSizeGB != 11 || config.CacheTTL != 2*time.Hour {
 		t.Fatalf("sandbox disk/cache = %d/%s", config.SandboxDiskSizeGB, config.CacheTTL)
 	}
-	if config.CleanupInterval != 30*time.Minute || config.WorkspaceCleanupTTL != 24*time.Hour || config.ImageCacheCleanupTTL != 48*time.Hour {
-		t.Fatalf("cleanup config = %s/%s/%s", config.CleanupInterval, config.WorkspaceCleanupTTL, config.ImageCacheCleanupTTL)
+	if config.CleanupInterval != 30*time.Minute || config.WorkspaceCleanupTTL != 24*time.Hour || config.SandboxRetentionTTL != 36*time.Hour || config.ImageCacheCleanupTTL != 48*time.Hour {
+		t.Fatalf("cleanup config = %s/%s/%s/%s", config.CleanupInterval, config.WorkspaceCleanupTTL, config.SandboxRetentionTTL, config.ImageCacheCleanupTTL)
 	}
 	if config.DefaultImage != "box:latest" || config.DockerDefaultImage != "docker:latest" || config.MicrosandboxDefaultImage != "box:latest" {
 		t.Fatalf("image config = %#v", config)
