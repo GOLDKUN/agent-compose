@@ -190,9 +190,12 @@ owning all topic write permissions.
 
 ## Event Envelope
 
-Webhook body accepts only JSON objects. `Content-Type` may be `application/json`
-or a JSON media type with parameters. Arrays, strings, numbers, booleans, and
-`null` return `400 Bad Request`.
+Generic webhook bodies accept only JSON objects. `Content-Type` may be
+`application/json` or a JSON media type with parameters. Native GitHub sources
+also accept `application/x-www-form-urlencoded`; the handler verifies any
+configured signature against the raw form body, then decodes the single
+non-empty `payload` field as the JSON object. Arrays, strings, numbers, booleans,
+and `null` return `400 Bad Request`.
 
 Webhook payload written to `event.payload_json` uses camelCase:
 

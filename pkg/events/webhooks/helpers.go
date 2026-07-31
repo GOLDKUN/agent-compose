@@ -1,14 +1,11 @@
 package webhooks
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"strings"
 
@@ -68,36 +65,6 @@ func ReadBody(r *http.Request, limit int64) ([]byte, error) {
 		return nil, domain.ErrBodyTooLarge
 	}
 	return data, nil
-}
-
-func RequestContentTypeIsJSON(r *http.Request) bool {
-	contentType := strings.TrimSpace(r.Header.Get("Content-Type"))
-	if contentType == "" {
-		return false
-	}
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	return err == nil && strings.EqualFold(mediaType, "application/json")
-}
-
-func DecodeJSONObject(raw []byte) (map[string]any, string, error) {
-	var body map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(&body); err != nil {
-		return nil, "", fmt.Errorf("body must be valid JSON")
-	}
-	if body == nil {
-		return nil, "", fmt.Errorf("body must be a JSON object")
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return nil, "", fmt.Errorf("body must contain one JSON document")
-	}
-	compact, err := domain.MarshalJSONCompact(body)
-	if err != nil {
-		return nil, "", err
-	}
-	return body, compact, nil
 }
 
 func ValidateExternalTopic(topic string) error {

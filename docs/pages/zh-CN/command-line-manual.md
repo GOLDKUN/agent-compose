@@ -94,12 +94,13 @@ unsigned delivery，必须显式设置 `clear_signature=true`。
 在 GitHub 仓库或组织设置中添加 webhook，并使用以下配置：
 
 - Payload URL：`https://<agent-compose-host>/api/webhooks/webhook.github`
-- Content type：`application/json`
+- Content type：`application/json` 或 `application/x-www-form-urlencoded`
 - Secret：webhook source 中配置的 signature secret；仅当 source 明确使用无签名
   模式时留空
 - Events：选择 scheduler 需要消费的事件
 
-daemon 会针对原始请求体校验 `X-Hub-Signature-256`，并根据
+daemon 支持 GitHub 的 JSON 请求体，也支持 form 编码的 `payload` 字段。两种格式都
+会先针对未经解码的原始请求体校验 `X-Hub-Signature-256`，然后根据
 `X-GitHub-Event` 发布 `webhook.github.push`、`webhook.github.pull_request` 和
 `webhook.github.ping` 等 topic。GitHub 的 `X-GitHub-Delivery` 同时作为 delivery
 ID 和幂等键，因此相同 payload 的 redelivery 会返回成功，但不会创建重复事件。配置

@@ -4,8 +4,10 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -31,6 +33,99 @@ func TestGitHubWebhookSignatureAndEventRouting(t *testing.T) {
 				t.Fatalf("delivery identifiers = %q/%q", eventRecord.DeliveryID, eventRecord.IdempotencyKey)
 			}
 		})
+	}
+}
+
+func TestGitHubWebhookFormPayloadUsesRawBodyForSignature(t *testing.T) {
+	payload := `{"action":"opened","issue":{"number":504}}`
+	formBody := encodeGitHubForm(payload)
+
+	store, app := newGitHubWebhookTestServer()
+	rec := deliverGitHubWebhookWithContentType(
+		app,
+		formBody,
+		"issues",
+		"delivery-form",
+		signGitHubBody(formBody, "github-secret"),
+		"application/x-www-form-urlencoded",
+	)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	eventRecord := store.events["event-1"]
+	if eventRecord.Topic != "webhook.github.issues" {
+		t.Fatalf("topic = %q", eventRecord.Topic)
+	}
+	var eventPayload map[string]any
+	if err := json.Unmarshal([]byte(eventRecord.PayloadJSON), &eventPayload); err != nil {
+		t.Fatalf("decode stored payload: %v", err)
+	}
+	body, ok := eventPayload["body"].(map[string]any)
+	if !ok || body["action"] != "opened" {
+		t.Fatalf("stored body = %#v", eventPayload["body"])
+	}
+
+	store, app = newGitHubWebhookTestServer()
+	rec = deliverGitHubWebhookWithContentType(
+		app,
+		formBody,
+		"issues",
+		"delivery-form-invalid-signature",
+		signGitHubBody(payload, "github-secret"),
+		"application/x-www-form-urlencoded",
+	)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("decoded-payload signature status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if len(store.events) != 0 {
+		t.Fatalf("stored events = %#v", store.events)
+	}
+}
+
+func TestGitHubWebhookRejectsInvalidFormPayload(t *testing.T) {
+	for _, formBody := range []string{
+		"other=value",
+		"payload=%7B%7D&payload=%7B%7D",
+		"payload=%zz",
+	} {
+		store, app := newGitHubWebhookTestServer()
+		rec := deliverGitHubWebhookWithContentType(
+			app,
+			formBody,
+			"push",
+			"delivery-invalid-form",
+			signGitHubBody(formBody, "github-secret"),
+			"application/x-www-form-urlencoded",
+		)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("body %q status = %d, response = %s", formBody, rec.Code, rec.Body.String())
+		}
+		if len(store.events) != 0 {
+			t.Fatalf("body %q stored events = %#v", formBody, store.events)
+		}
+	}
+}
+
+func TestLegacyGitHubWebhookRejectsFormPayload(t *testing.T) {
+	store := newWebhookRouteStore()
+	store.sources["github"] = domain.WebhookSource{
+		ID: "github", Name: "Legacy GitHub", Enabled: true, Provider: "github", TopicPrefix: "webhook.github.",
+		TokenHash: TokenHash("legacy-token"),
+	}
+	app := echo.New()
+	RegisterRoutes(app, RouteOptions{Store: store, WebhookBodyLimit: 1 << 20, NewEventID: func() string { return "event-1" }})
+
+	formBody := encodeGitHubForm(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/webhook.github", strings.NewReader(formBody))
+	req.Header.Set("Authorization", "Bearer legacy-token")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if len(store.events) != 0 {
+		t.Fatalf("stored events = %#v", store.events)
 	}
 }
 
@@ -90,8 +185,12 @@ func newGitHubWebhookTestServer() (*webhookRouteStore, *echo.Echo) {
 }
 
 func deliverGitHubWebhook(app *echo.Echo, body, event, delivery, signature string) *httptest.ResponseRecorder {
+	return deliverGitHubWebhookWithContentType(app, body, event, delivery, signature, "application/json")
+}
+
+func deliverGitHubWebhookWithContentType(app *echo.Echo, body, event, delivery, signature, contentType string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/webhook.github", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	if event != "" {
 		req.Header.Set("X-GitHub-Event", event)
 	}
@@ -104,6 +203,10 @@ func deliverGitHubWebhook(app *echo.Echo, body, event, delivery, signature strin
 	rec := httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
 	return rec
+}
+
+func encodeGitHubForm(payload string) string {
+	return url.Values{"payload": {payload}}.Encode()
 }
 
 func signGitHubBody(body, secret string) string {

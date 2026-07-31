@@ -101,13 +101,14 @@ source to unsigned delivery.
 In the GitHub repository or organization settings, add a webhook with:
 
 - Payload URL: `https://<agent-compose-host>/api/webhooks/webhook.github`
-- Content type: `application/json`
+- Content type: `application/json` or `application/x-www-form-urlencoded`
 - Secret: the configured source signature secret, or empty only when the
   source is intentionally unsigned
 - Events: select the events consumed by your schedulers
 
-The daemon verifies `X-Hub-Signature-256` against the exact request body and
-uses `X-GitHub-Event` to publish topics such as `webhook.github.push`,
+The daemon accepts GitHub's JSON body or its form-encoded `payload` field. It
+verifies `X-Hub-Signature-256` against the exact request body before decoding
+either format and uses `X-GitHub-Event` to publish topics such as `webhook.github.push`,
 `webhook.github.pull_request`, and `webhook.github.ping`. GitHub's
 `X-GitHub-Delivery` value provides the delivery ID and idempotency key, so a
 redelivery of the same payload is accepted without creating another event.

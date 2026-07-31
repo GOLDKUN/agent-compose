@@ -84,8 +84,9 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	if handled {
 		return err
 	}
-	if !RequestContentTypeIsJSON(c.Request()) {
-		return c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "content-type must be application/json"})
+	bodyFormat := detectRequestBodyFormat(c.Request())
+	if bodyFormat == requestBodyFormatUnsupported {
+		return c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "content-type must be application/json or application/x-www-form-urlencoded"})
 	}
 	rawBody, err := ReadBody(c.Request(), bodyLimit)
 	if err != nil {
@@ -112,7 +113,17 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid or missing X-GitHub-Event header"})
 		}
 	}
-	body, compactBody, err := DecodeJSONObject(rawBody)
+	if bodyFormat == requestBodyFormatForm && githubMode == domain.GitHubWebhookModeGeneric {
+		return c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "application/x-www-form-urlencoded is supported only for GitHub webhooks"})
+	}
+	decodedBody := rawBody
+	if bodyFormat == requestBodyFormatForm {
+		decodedBody, err = decodeGitHubFormPayload(rawBody)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
+	}
+	body, compactBody, err := DecodeJSONObject(decodedBody)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}

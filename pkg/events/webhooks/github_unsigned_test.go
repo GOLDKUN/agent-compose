@@ -32,7 +32,15 @@ func TestClearingGitHubSecretEnablesUnsignedEventRouting(t *testing.T) {
 		t.Fatal("signature secret was not cleared")
 	}
 
-	rec := deliverGitHubWebhook(app, `{}`, "push", "delivery-unsigned", "")
+	formBody := encodeGitHubForm(`{}`)
+	rec := deliverGitHubWebhookWithContentType(
+		app,
+		formBody,
+		"push",
+		"delivery-unsigned",
+		"",
+		"application/x-www-form-urlencoded; charset=utf-8",
+	)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
