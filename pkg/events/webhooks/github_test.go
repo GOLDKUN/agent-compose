@@ -82,7 +82,7 @@ func newGitHubWebhookTestServer() (*webhookRouteStore, *echo.Echo) {
 	store := newWebhookRouteStore()
 	store.sources["github"] = domain.WebhookSource{
 		ID: "github", Name: "GitHub", Enabled: true, Provider: "github", TopicPrefix: "webhook.github.",
-		SignatureType: githubSignatureType, SignatureSecret: "github-secret",
+		SignatureType: domain.WebhookSignatureGitHubSHA256, SignatureSecret: "github-secret",
 	}
 	app := echo.New()
 	RegisterRoutes(app, RouteOptions{Store: store, WebhookBodyLimit: 1 << 20, NewEventID: func() string { return "event-1" }})

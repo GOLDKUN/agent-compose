@@ -78,15 +78,26 @@ and do not consume the daemon token.
 #### GitHub webhooks
 
 Create an enabled webhook source through `PUT /api/webhook-sources/<source-id>`
-with `provider` set to `github`, a `topic_prefix` such as `webhook.github.`,
+with `provider` set to `github`, `topic_prefix` set to `webhook.github.`,
 `signature_type` set to `github_sha256`, and the same `signature_secret` that
 will be entered in GitHub. The secret is write-only in API responses.
+
+GitHub also permits the webhook Secret field to be empty. To receive those
+unsigned deliveries directly, explicitly set `signature_type` to `none` and
+leave both `signature_secret` and the source token empty. This mode does not
+authenticate the sender: any client that can reach the endpoint can forge a
+GitHub event. Use it only behind a trusted reverse proxy or network access
+control. If a source token is configured with `signature_type=none`, the token
+is still required, so a proxy can authenticate the request and inject it. A
+tokenless unsigned source cannot share its webhook URL with another enabled
+source because it would make source selection ambiguous.
 
 In the GitHub repository or organization settings, add a webhook with:
 
 - Payload URL: `https://<agent-compose-host>/api/webhooks/webhook.github`
 - Content type: `application/json`
-- Secret: the configured source signature secret
+- Secret: the configured source signature secret, or empty only when the
+  source uses `signature_type=none`
 - Events: select the events consumed by your schedulers
 
 The daemon verifies `X-Hub-Signature-256` against the exact request body and
@@ -95,8 +106,10 @@ uses `X-GitHub-Event` to publish topics such as `webhook.github.push`,
 `X-GitHub-Delivery` value provides the delivery ID and idempotency key, so a
 redelivery of the same payload is accepted without creating another event.
 Missing or invalid signatures are rejected even if the source also has a
-legacy static token. Generic sources continue to use their URL topic and
-Bearer, `X-WEBHOOK-TOKEN`, or configured custom-header token.
+legacy static token. An explicit `signature_type=none` GitHub source uses the
+same event routing without signature verification. Generic sources, including
+legacy sources with an empty signature type, continue to use their URL topic
+and Bearer, `X-WEBHOOK-TOKEN`, or configured custom-header token.
 
 The token protects the daemon control plane rather than identifying the CLI
 application. Any UI server or reverse proxy that calls the same control-plane

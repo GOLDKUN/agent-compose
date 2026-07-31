@@ -135,20 +135,23 @@ WEBHOOK_BODY_LIMIT_BYTES=1048576
 
 Current implementation:
 
-- `/api/webhooks/*` bypasses UI session auth. The handler validates token
-  according to webhook source.
+- `/api/webhooks/*` bypasses UI session auth. The handler applies the
+  authentication configured by the matching webhook source; an explicit
+  unsigned source does not authenticate the caller.
 - Each webhook source binds `topic_prefix` and authentication settings; the
   request URL topic must match an enabled source.
-- External callers should send `Authorization: Bearer <source-token>` or
-  `X-WEBHOOK-TOKEN`.
+- Token-authenticated callers should send `Authorization: Bearer
+  <source-token>` or `X-WEBHOOK-TOKEN`.
 - Source token comparison uses hash + constant-time compare.
 - `/api/events` and `/api/events/*` use normal API/auth path and no longer
   depend on webhook token.
 
-GitHub sources configured with `signature_type=github_sha256` verify
-`X-Hub-Signature-256` over the exact raw body. They route the authenticated
-delivery from `X-GitHub-Event`; generic token-authenticated sources retain the
-URL-derived topic.
+GitHub sources explicitly configured with `signature_type=github_sha256` verify
+`X-Hub-Signature-256` over the exact raw body. Sources explicitly configured
+with `signature_type=none` accept GitHub's optional unsigned delivery, while a
+configured source token remains required. Both modes route from
+`X-GitHub-Event`; generic token-authenticated sources, including legacy sources
+with an empty signature type, retain the URL-derived topic.
 
 Target behavior:
 

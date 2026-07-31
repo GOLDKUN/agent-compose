@@ -21,12 +21,18 @@ func TestUpsertWebhookSourceValidatesGitHubSignatureConfiguration(t *testing.T) 
 		want   string
 	}{
 		{name: "provider", mutate: func(source *domain.WebhookSource) { source.Provider = "gitlab" }, want: "github sha256 webhook source provider must be github"},
-		{name: "topic prefix", mutate: func(source *domain.WebhookSource) { source.TopicPrefix = "webhook.other." }, want: "github sha256 webhook source topic prefix must be webhook.github"},
+		{name: "topic prefix", mutate: func(source *domain.WebhookSource) { source.TopicPrefix = "webhook.other." }, want: `github webhook source topic prefix must be "webhook.github."`},
 		{name: "signature secret", mutate: func(source *domain.WebhookSource) { source.SignatureSecret = " " }, want: "github sha256 webhook source signature secret is required"},
 		{name: "case insensitive signature type", mutate: func(source *domain.WebhookSource) {
 			source.SignatureType = "GitHub_SHA256"
 			source.Provider = "gitlab"
 		}, want: "github sha256 webhook source provider must be github"},
+		{name: "unknown signature type", mutate: func(source *domain.WebhookSource) {
+			source.SignatureType = "unknown"
+		}, want: `github webhook source signature type must be "none" or "github_sha256"`},
+		{name: "unsigned signature secret", mutate: func(source *domain.WebhookSource) {
+			source.SignatureType = domain.WebhookSignatureNone
+		}, want: "unsigned github webhook source signature secret must be empty"},
 	}
 
 	for _, test := range tests {
@@ -49,5 +55,12 @@ func TestUpsertWebhookSourceValidatesGitHubSignatureConfiguration(t *testing.T) 
 	}
 	if _, err := store.UpsertWebhookSource(ctx, valid); err != nil {
 		t.Fatalf("UpsertWebhookSource with valid GitHub signature configuration returned error: %v", err)
+	}
+	unsigned := valid
+	unsigned.ID = "github-unsigned"
+	unsigned.SignatureType = domain.WebhookSignatureNone
+	unsigned.SignatureSecret = ""
+	if _, err := store.UpsertWebhookSource(ctx, unsigned); err != nil {
+		t.Fatalf("UpsertWebhookSource with unsigned GitHub configuration returned error: %v", err)
 	}
 }

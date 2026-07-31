@@ -98,10 +98,14 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	if handled {
 		return err
 	}
-	if source.BodyLimitBytes > 0 && int64(len(rawBody)) > source.BodyLimitBytes {
+	if limit := h.sourceBodyLimit(source); limit > 0 && int64(len(rawBody)) > limit {
 		return c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "request body is too large"})
 	}
-	if strings.EqualFold(strings.TrimSpace(source.SignatureType), githubSignatureType) {
+	githubMode, err := domain.GitHubWebhookModeForSource(source)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid webhook source configuration"})
+	}
+	if githubMode != domain.GitHubWebhookModeGeneric {
 		var ok bool
 		topic, ok = githubTopic(c.Request())
 		if !ok {
@@ -350,21 +354,55 @@ func (h routeHandler) webhookSources(c echo.Context, topic string) ([]domain.Web
 	if len(sources) == 0 {
 		return nil, 0, true, c.JSON(http.StatusNotFound, map[string]string{"error": "webhook source not found"})
 	}
-	limit := h.opts.WebhookBodyLimit
+	validSources := make([]domain.WebhookSource, 0, len(sources))
+	var limit int64
 	for _, source := range sources {
-		if source.BodyLimitBytes > limit {
-			limit = source.BodyLimitBytes
+		if _, err := domain.GitHubWebhookModeForSource(source); err != nil {
+			continue
+		}
+		validSources = append(validSources, source)
+		if sourceLimit := h.sourceBodyLimit(source); sourceLimit > limit {
+			limit = sourceLimit
 		}
 	}
-	return sources, limit, false, nil
+	if len(validSources) == 0 {
+		return nil, 0, true, c.JSON(http.StatusInternalServerError, map[string]string{"error": "webhook source configuration is invalid"})
+	}
+	return validSources, limit, false, nil
+}
+
+func (h routeHandler) sourceBodyLimit(source domain.WebhookSource) int64 {
+	if source.BodyLimitBytes > 0 {
+		return source.BodyLimitBytes
+	}
+	if h.opts.WebhookBodyLimit > 0 {
+		return h.opts.WebhookBodyLimit
+	}
+	return defaultWebhookBodyLimit
 }
 
 func (h routeHandler) authorizeWebhookRequest(c echo.Context, sources []domain.WebhookSource, rawBody []byte) (domain.WebhookSource, bool, error) {
+	for _, source := range sources {
+		githubMode, err := domain.GitHubWebhookModeForSource(source)
+		if err == nil && githubMode == domain.GitHubWebhookModeUnsigned && source.TokenHash == "" && len(sources) > 1 {
+			return domain.WebhookSource{}, true, c.JSON(http.StatusConflict, map[string]string{"error": "unsigned webhook source is ambiguous"})
+		}
+	}
+
 	matches := make([]domain.WebhookSource, 0, 1)
 	for _, source := range sources {
+		githubMode, err := domain.GitHubWebhookModeForSource(source)
+		if err != nil {
+			continue
+		}
 		authenticated := source.TokenHash != "" && ValidTokenHash(c.Request(), source.TokenHash, source.TokenHeader)
-		if strings.EqualFold(strings.TrimSpace(source.SignatureType), githubSignatureType) {
-			authenticated = strings.TrimSpace(source.SignatureSecret) != "" && validGitHubSignature(c.Request(), rawBody, source.SignatureSecret)
+		switch githubMode {
+		case domain.GitHubWebhookModeUnsigned:
+			if source.TokenHash == "" {
+				authenticated = true
+			}
+		case domain.GitHubWebhookModeSHA256:
+			authenticated = validGitHubSignature(c.Request(), rawBody, source.SignatureSecret)
 		}
 		if authenticated {
 			matches = append(matches, source)

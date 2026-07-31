@@ -15,6 +15,8 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
+const defaultWebhookBodyLimit int64 = 1 << 20
+
 func PresentedToken(r *http.Request, tokenHeader ...string) string {
 	headerName := ""
 	if len(tokenHeader) > 0 {
@@ -55,7 +57,7 @@ func ValidTokenHash(r *http.Request, hash string, tokenHeader ...string) bool {
 
 func ReadBody(r *http.Request, limit int64) ([]byte, error) {
 	if limit <= 0 {
-		limit = 1 << 20
+		limit = defaultWebhookBodyLimit
 	}
 	reader := io.LimitReader(r.Body, limit+1)
 	data, err := io.ReadAll(reader)

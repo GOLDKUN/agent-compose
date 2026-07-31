@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-const githubSignatureType = "github_sha256"
-
 func validGitHubSignature(r *http.Request, body []byte, secret string) bool {
 	presented := strings.TrimSpace(r.Header.Get("X-Hub-Signature-256"))
 	prefix, encoded, ok := strings.Cut(presented, "=")
