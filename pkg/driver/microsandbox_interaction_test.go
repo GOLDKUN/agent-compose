@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -70,6 +71,56 @@ func TestMicrosandboxCommandInteractionMergesTTYOutput(t *testing.T) {
 	frames := receiveAllMicrosandboxInteractionFrames(t, interaction)
 	if len(frames) != 3 || frames[1].Type != RuntimeOutputStdout || string(frames[1].Data) != "terminal" {
 		t.Fatalf("TTY frames = %#v, want merged stdout", frames)
+	}
+}
+
+func TestMicrosandboxCommandInteractionBoundsDrainAfterExit(t *testing.T) {
+	handle := &fakeMicrosandboxInteractionExec{
+		events: []*microsandbox.ExecEvent{
+			{Kind: microsandbox.ExecEventStarted},
+			{Kind: microsandbox.ExecEventExited, ExitCode: 0},
+		},
+		blockRecv: true,
+	}
+	interaction := newTestMicrosandboxInteractionWithDrain(handle, nil, false, nil, 10*time.Millisecond)
+
+	frames := receiveAllMicrosandboxInteractionFrames(t, interaction)
+	result, err := interaction.Wait()
+	if err != nil {
+		t.Fatalf("Wait() error = %v", err)
+	}
+	if !result.Success || result.ExitCode != 0 {
+		t.Fatalf("Wait() result = %#v, want successful exit after bounded drain", result)
+	}
+	if got := microsandboxInteractionFrameTypes(frames); !reflect.DeepEqual(got, []RuntimeOutputFrameType{RuntimeOutputStarted, RuntimeOutputResult}) {
+		t.Fatalf("frame types = %#v", got)
+	}
+	if handle.killCalls != 0 || handle.waitCalls != 0 || handle.closeCalls != 1 {
+		t.Fatalf("handle calls = kill:%d wait:%d close:%d, want graceful close only", handle.killCalls, handle.waitCalls, handle.closeCalls)
+	}
+}
+
+func TestMicrosandboxCommandInteractionBoundsMissingExitHeldByBackgroundOutputPipe(t *testing.T) {
+	handle := &fakeMicrosandboxInteractionExec{
+		events:    []*microsandbox.ExecEvent{{Kind: microsandbox.ExecEventStarted, PID: 42}},
+		blockRecv: true,
+	}
+	probe := func(context.Context, uint32) (bool, error) { return false, nil }
+	interaction := newTestMicrosandboxInteractionWithTiming(handle, nil, false, nil, 0, 10*time.Millisecond, probe)
+
+	frames := receiveAllMicrosandboxInteractionFrames(t, interaction)
+	result, err := interaction.Wait()
+	if err == nil || !strings.Contains(err.Error(), "still holding the output pipes open") {
+		t.Fatalf("Wait() error = %v, want bounded missing-exit failure", err)
+	}
+	if result.Success || result.ExitCode != -1 {
+		t.Fatalf("Wait() result = %#v, want failed unknown exit", result)
+	}
+	if got := microsandboxInteractionFrameTypes(frames); !reflect.DeepEqual(got, []RuntimeOutputFrameType{RuntimeOutputStarted, RuntimeOutputError, RuntimeOutputResult}) {
+		t.Fatalf("frame types = %#v", got)
+	}
+	if handle.killCalls != 0 || handle.waitCalls != 0 || handle.closeCalls != 1 {
+		t.Fatalf("handle calls = kill:%d wait:%d close:%d, want graceful close only", handle.killCalls, handle.waitCalls, handle.closeCalls)
 	}
 }
 
@@ -175,19 +226,30 @@ func TestMicrosandboxCommandInteractionPreservesCloseSendError(t *testing.T) {
 }
 
 func newTestMicrosandboxInteraction(handle microsandboxInteractionExec, stdin microsandboxInteractionStdin, tty bool, release func()) *microsandboxCommandInteraction {
+	return newTestMicrosandboxInteractionWithDrain(handle, stdin, tty, release, 0)
+}
+
+func newTestMicrosandboxInteractionWithDrain(handle microsandboxInteractionExec, stdin microsandboxInteractionStdin, tty bool, release func(), drainTime time.Duration) *microsandboxCommandInteraction {
+	return newTestMicrosandboxInteractionWithTiming(handle, stdin, tty, release, drainTime, 0, nil)
+}
+
+func newTestMicrosandboxInteractionWithTiming(handle microsandboxInteractionExec, stdin microsandboxInteractionStdin, tty bool, release func(), drainTime, probeTime time.Duration, probe microsandboxExecLivenessProbe) *microsandboxCommandInteraction {
 	ctx, cancel := context.WithCancel(context.Background())
 	interaction := &microsandboxCommandInteraction{
-		ctx:         ctx,
-		cancel:      cancel,
-		handle:      handle,
-		stdin:       stdin,
-		release:     release,
-		operationID: "operation-1",
-		tty:         tty,
-		attachStdin: stdin != nil,
-		startedAt:   time.Now(),
-		output:      make(chan RuntimeOutputFrame, 16),
-		done:        make(chan struct{}),
+		ctx:            ctx,
+		cancel:         cancel,
+		handle:         handle,
+		stdin:          stdin,
+		release:        release,
+		operationID:    "operation-1",
+		tty:            tty,
+		attachStdin:    stdin != nil,
+		startedAt:      time.Now(),
+		exitDrainTime:  drainTime,
+		probeAlive:     probe,
+		firstProbeTime: probeTime,
+		output:         make(chan RuntimeOutputFrame, 16),
+		done:           make(chan struct{}),
 	}
 	go interaction.run()
 	return interaction

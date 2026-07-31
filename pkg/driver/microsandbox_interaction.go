@@ -32,17 +32,20 @@ type microsandboxInteractionStdin interface {
 }
 
 type microsandboxCommandInteraction struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	handle        microsandboxInteractionExec
-	stdin         microsandboxInteractionStdin
-	release       func()
-	operationID   string
-	tty           bool
-	attachStdin   bool
-	startedAt     time.Time
-	stdoutDecoder utf8StreamDecoder
-	stderrDecoder utf8StreamDecoder
+	ctx            context.Context
+	cancel         context.CancelFunc
+	handle         microsandboxInteractionExec
+	stdin          microsandboxInteractionStdin
+	release        func()
+	operationID    string
+	tty            bool
+	attachStdin    bool
+	startedAt      time.Time
+	exitDrainTime  time.Duration
+	probeAlive     microsandboxExecLivenessProbe
+	firstProbeTime time.Duration
+	stdoutDecoder  utf8StreamDecoder
+	stderrDecoder  utf8StreamDecoder
 
 	output chan RuntimeOutputFrame
 	done   chan struct{}
@@ -126,17 +129,20 @@ func (r *microsandboxRuntime) OpenInteraction(ctx context.Context, session *Sand
 	}
 
 	interaction := &microsandboxCommandInteraction{
-		ctx:         childCtx,
-		cancel:      cancel,
-		handle:      handle,
-		stdin:       stdin,
-		release:     release,
-		operationID: spec.OperationID,
-		tty:         spec.TTY,
-		attachStdin: spec.AttachStdin,
-		startedAt:   time.Now(),
-		output:      make(chan RuntimeOutputFrame, 64),
-		done:        make(chan struct{}),
+		ctx:            childCtx,
+		cancel:         cancel,
+		handle:         handle,
+		stdin:          stdin,
+		release:        release,
+		operationID:    spec.OperationID,
+		tty:            spec.TTY,
+		attachStdin:    spec.AttachStdin,
+		startedAt:      time.Now(),
+		exitDrainTime:  microsandboxExecExitIdleGracePeriod,
+		probeAlive:     microsandboxExecLivenessProbeFor(sandbox),
+		firstProbeTime: microsandboxExecExitIdleGracePeriod,
+		output:         make(chan RuntimeOutputFrame, 64),
+		done:           make(chan struct{}),
 	}
 	go interaction.run()
 	return interaction, nil
@@ -249,59 +255,144 @@ func (i *microsandboxCommandInteraction) run() {
 	defer close(i.output)
 	defer i.cleanup()
 
-	exitCode := -1
-	sawExit := false
-	var runErr error
-	for runErr == nil {
-		event, err := i.handle.Recv(i.ctx)
-		if err != nil {
-			if i.ctx.Err() != nil {
-				runErr = i.ctx.Err()
-			} else {
-				runErr = err
-			}
-			break
-		}
-		if event == nil || event.Kind == microsandbox.ExecEventDone {
-			if !sawExit {
-				runErr = fmt.Errorf("microsandbox interaction stream ended without reporting a process exit status")
-			}
-			break
-		}
-		switch event.Kind {
-		case microsandbox.ExecEventStarted:
-			i.emit(RuntimeOutputFrame{Type: RuntimeOutputStarted, StartedAt: i.startedAt})
-		case microsandbox.ExecEventStdout:
-			i.emitBytes(event.Data, StdioStdout)
-		case microsandbox.ExecEventStderr:
-			i.emitBytes(event.Data, StdioStderr)
-		case microsandbox.ExecEventExited:
-			exitCode = event.ExitCode
-			sawExit = true
-		case microsandbox.ExecEventFailed:
-			runErr = formatMicrosandboxExecFailure(event.Failure)
-		case microsandbox.ExecEventStdinError:
-			i.emitBytes([]byte(formatMicrosandboxExecFailure(event.Failure).Error()+"\n"), StdioStderr)
-		}
-	}
+	state := i.consumeOutput()
 	i.flushOutput()
-
-	if runErr != nil && (i.ctx.Err() != nil || !sawExit) {
+	if state.err != nil && !state.processGone && (i.ctx.Err() != nil || !state.sawExit) {
 		terminationErr := terminateMicrosandboxExec(i.ctx, i.handle)
-		runErr = execTerminationResultError(RuntimeDriverMicrosandbox, i.operationID, runErr, terminationErr)
+		state.err = execTerminationResultError(RuntimeDriverMicrosandbox, i.operationID, state.err, terminationErr)
 	}
-	completedAt := time.Now()
+	i.finish(state)
+}
+
+type microsandboxInteractionRunState struct {
+	exitCode    int
+	pid         uint32
+	sawExit     bool
+	processGone bool
+	err         error
+}
+
+func (i *microsandboxCommandInteraction) consumeOutput() microsandboxInteractionRunState {
+	state := microsandboxInteractionRunState{exitCode: -1}
+	receiveCtx, cancelReceive := context.WithCancel(i.ctx)
+	received := receiveMicrosandboxExecEvents(receiveCtx, i.handle.Recv)
+	defer func() {
+		cancelReceive()
+		for range received {
+		}
+	}()
+	drain := newMicrosandboxInteractionExitDrain(i.exitDrainTime)
+	defer drain.stop()
+	probe := newMicrosandboxInteractionExitDrain(i.firstProbeTime)
+	defer probe.stop()
+
+	for state.err == nil {
+		select {
+		case <-i.ctx.Done():
+			state.err = i.ctx.Err()
+			return state
+		case <-drain.wait:
+			slog.Warn(
+				"microsandbox interaction stream timed out waiting for done after process exit; closing handle",
+				"operation_id", i.operationID,
+				"exit_code", state.exitCode,
+				"drain_window", drain.duration,
+			)
+			return state
+		case <-probe.wait:
+			gone, probeErr := microsandboxExecProcessGone(i.ctx, i.probeAlive, state.pid)
+			if probeErr != nil {
+				slog.Warn("failed to probe microsandbox interaction process liveness; continuing to wait", "operation_id", i.operationID, "pid", state.pid, "error", probeErr)
+				probe.duration = microsandboxExecSilenceProbeInterval
+				probe.reset()
+				continue
+			}
+			if !gone {
+				probe.duration = microsandboxExecSilenceProbeInterval
+				probe.reset()
+				continue
+			}
+			slog.Warn("microsandbox interaction process is gone but the stream never reported its exit; closing handle", "operation_id", i.operationID, "pid", state.pid)
+			state.processGone = true
+			state.err = fmt.Errorf("microsandbox interaction process %d exited without reporting its status; a process it started is still holding the output pipes open", state.pid)
+			return state
+		case result, ok := <-received:
+			if !ok {
+				if !state.sawExit {
+					state.err = fmt.Errorf("microsandbox interaction stream ended without reporting a process exit status")
+				}
+				return state
+			}
+			if result.err != nil {
+				if i.ctx.Err() != nil {
+					state.err = i.ctx.Err()
+				} else {
+					state.err = result.err
+				}
+				return state
+			}
+			if i.projectOutputEvent(result.event, &state, drain, probe) {
+				return state
+			}
+		}
+	}
+	return state
+}
+
+func (i *microsandboxCommandInteraction) projectOutputEvent(event *microsandbox.ExecEvent, state *microsandboxInteractionRunState, drain, probe *microsandboxInteractionExitDrain) bool {
+	if event == nil || event.Kind == microsandbox.ExecEventDone {
+		if !state.sawExit {
+			state.err = fmt.Errorf("microsandbox interaction stream ended without reporting a process exit status")
+		}
+		return true
+	}
+	switch event.Kind {
+	case microsandbox.ExecEventStarted:
+		state.pid = event.PID
+		i.emit(RuntimeOutputFrame{Type: RuntimeOutputStarted, StartedAt: i.startedAt})
+		if i.probeAlive != nil && state.pid != 0 {
+			probe.reset()
+		}
+	case microsandbox.ExecEventStdout:
+		i.emitBytes(event.Data, StdioStdout)
+		if state.sawExit {
+			drain.reset()
+		} else if i.probeAlive != nil && state.pid != 0 {
+			probe.reset()
+		}
+	case microsandbox.ExecEventStderr:
+		i.emitBytes(event.Data, StdioStderr)
+		if state.sawExit {
+			drain.reset()
+		} else if i.probeAlive != nil && state.pid != 0 {
+			probe.reset()
+		}
+	case microsandbox.ExecEventExited:
+		state.exitCode = event.ExitCode
+		state.sawExit = true
+		probe.stop()
+		drain.reset()
+	case microsandbox.ExecEventFailed:
+		state.err = formatMicrosandboxExecFailure(event.Failure)
+		return true
+	case microsandbox.ExecEventStdinError:
+		i.emitBytes([]byte(formatMicrosandboxExecFailure(event.Failure).Error()+"\n"), StdioStderr)
+	}
+	return false
+}
+
+func (i *microsandboxCommandInteraction) finish(state microsandboxInteractionRunState) {
 	i.result = RuntimeResult{
 		OperationID: i.operationID,
-		ExitCode:    exitCode,
-		Success:     runErr == nil && exitCode == 0,
+		ExitCode:    state.exitCode,
+		Success:     state.err == nil && state.exitCode == 0,
 		StartedAt:   i.startedAt,
-		CompletedAt: completedAt,
+		CompletedAt: time.Now(),
 	}
-	if runErr != nil {
-		i.err = runErr
-		i.result.Error = runErr.Error()
-		i.emit(RuntimeOutputFrame{Type: RuntimeOutputError, Error: &RuntimeError{Message: runErr.Error()}})
+	if state.err != nil {
+		i.err = state.err
+		i.result.Error = state.err.Error()
+		i.emit(RuntimeOutputFrame{Type: RuntimeOutputError, Error: &RuntimeError{Message: state.err.Error()}})
 	}
 	i.emit(RuntimeOutputFrame{Type: RuntimeOutputResult, Result: &i.result})
 }
