@@ -117,19 +117,59 @@ func (m *model) syncReleaseImageFields() {
 	if frontend == nil {
 		return
 	}
+	previousSelection := selectedChoice(frontend)
+	previousExplicit := !frontend.followsRelease
 	selected := m.release.DefaultFrontendVersion
 	if previewErr == nil && preview.FrontendVersion != "" {
 		selected = preview.FrontendVersion
 	}
 	frontend.choices = append(frontend.choices[:0], m.release.FrontendVersions...)
-	frontend.choice = 0
-	for index, version := range frontend.choices {
-		if version == selected {
-			frontend.choice = index
-			break
-		}
+	frontend.choice = choiceIndex(frontend.choices, selected)
+	if frontend.choice < 0 {
+		frontend.choice = 0
 	}
 	frontend.followsRelease = true
+
+	if previousExplicit {
+		if index := choiceIndex(frontend.choices, previousSelection); index >= 0 {
+			frontend.choice = index
+			frontend.followsRelease = false
+			m.options.FrontendVersion = previousSelection
+			m.options.FrontendVersionSet = true
+			return
+		}
+		m.fallbackToDefaultFrontendVersion(frontend)
+		return
+	}
+	if previewErr != nil && m.options.FrontendVersionSet && choiceIndex(frontend.choices, m.options.FrontendVersion) < 0 {
+		m.fallbackToDefaultFrontendVersion(frontend)
+	}
+}
+
+func (m *model) fallbackToDefaultFrontendVersion(frontend *formField) {
+	frontend.choice = choiceIndex(frontend.choices, m.release.DefaultFrontendVersion)
+	if frontend.choice < 0 {
+		frontend.choice = 0
+	}
+	frontend.followsRelease = false
+	m.options.FrontendVersion = m.release.DefaultFrontendVersion
+	m.options.FrontendVersionSet = true
+}
+
+func selectedChoice(field *formField) string {
+	if field.choice < 0 || field.choice >= len(field.choices) {
+		return ""
+	}
+	return field.choices[field.choice]
+}
+
+func choiceIndex(choices []string, selected string) int {
+	for index, choice := range choices {
+		if choice == selected {
+			return index
+		}
+	}
+	return -1
 }
 
 func (m *model) showConfirmation() {

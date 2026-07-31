@@ -148,6 +148,64 @@ func TestModelVersionChangePreservesExplicitImage(t *testing.T) {
 	}
 }
 
+func TestModelVersionChangePreservesSupportedExplicitFrontendVersion(t *testing.T) {
+	m := installForm(t)
+	frontend := m.field(fieldFrontendVersion)
+	frontend.choice = 1
+	frontend.followsRelease = false
+	m.options.BundleDir = makeTUITestBundleWithFrontendVersions(t, "v2", "ui-v2", "ui-v2", "ui-v1-legacy")
+
+	resolveVersionChange(t, m, "v2")
+
+	if got := selectedChoice(frontend); got != "ui-v1-legacy" || frontend.followsRelease {
+		t.Fatalf("frontend version = %q, follows release = %t", got, frontend.followsRelease)
+	}
+	if !m.options.FrontendVersionSet || m.options.FrontendVersion != "ui-v1-legacy" {
+		t.Fatalf("frontend option = %q, set = %t", m.options.FrontendVersion, m.options.FrontendVersionSet)
+	}
+}
+
+func TestModelVersionChangeReplacesUnsupportedExplicitFrontendVersion(t *testing.T) {
+	m := installForm(t)
+	m.field(fieldWithUI).on = true
+	frontend := m.field(fieldFrontendVersion)
+	frontend.choice = 1
+	frontend.followsRelease = false
+	if err := m.readFields(); err != nil {
+		t.Fatal(err)
+	}
+	m.options.BundleDir = makeTUITestBundle(t, "v2", "ui-v2")
+	m.field(fieldVersion).input.SetValue("v2")
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("version change did not start resolution")
+	}
+	m.Update(cmd())
+
+	if got := selectedChoice(frontend); got != "ui-v2" || frontend.followsRelease {
+		t.Fatalf("frontend version = %q, follows release = %t", got, frontend.followsRelease)
+	}
+	if !m.options.FrontendVersionSet || m.options.FrontendVersion != "ui-v2" {
+		t.Fatalf("frontend option = %q, set = %t", m.options.FrontendVersion, m.options.FrontendVersionSet)
+	}
+	if m.err != nil || m.screen != screenConfirm {
+		t.Fatalf("fallback frontend version did not reach confirmation: screen=%d err=%v", m.screen, m.err)
+	}
+}
+
+func resolveVersionChange(t *testing.T, m *model, version string) {
+	t.Helper()
+	m.focus = indexOfField(t, m, fieldVersion)
+	m.focusFields()
+	m.field(fieldVersion).input.SetValue(version)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if cmd == nil {
+		t.Fatal("version change did not start resolution")
+	}
+	m.Update(cmd())
+}
+
 func setExplicitImage(t *testing.T, m *model, id fieldID, value string) {
 	t.Helper()
 	field := m.field(id)
@@ -325,13 +383,18 @@ func attachTestRelease(t *testing.T, m *model, version, frontendVersion string) 
 
 func makeTUITestBundle(t *testing.T, version, frontendVersion string) string {
 	t.Helper()
+	return makeTUITestBundleWithFrontendVersions(t, version, frontendVersion, frontendVersion, frontendVersion+"-legacy")
+}
+
+func makeTUITestBundleWithFrontendVersions(t *testing.T, version, frontendVersion string, frontendVersions ...string) string {
+	t.Helper()
 	dir := t.TempDir()
 	writeTUITestFile(t, filepath.Join(dir, "docker-compose.yml"), "services: {}\n")
 	writeTUITestFile(t, filepath.Join(dir, ".env.example"), "AUTH_PASSWORD=\nAUTH_SECRET=\n")
 	manifest := "INSTALLER_PAYLOAD_VERSION=1\n" +
 		"AGENT_COMPOSE_IMAGE=registry.example/agent-compose:" + version + "\n" +
 		"AGENT_COMPOSE_FRONTEND_VERSION=" + frontendVersion + "\n" +
-		"AGENT_COMPOSE_FRONTEND_VERSIONS=" + frontendVersion + "," + frontendVersion + "-legacy\n" +
+		"AGENT_COMPOSE_FRONTEND_VERSIONS=" + strings.Join(frontendVersions, ",") + "\n" +
 		"AGENT_COMPOSE_FRONTEND_IMAGE=registry.example/agent-compose-ui:" + frontendVersion + "\n" +
 		"DEFAULT_IMAGE=registry.example/agent-compose-guest:" + version + "\n"
 	writeTUITestFile(t, filepath.Join(dir, "images", "manifest.env"), manifest)
