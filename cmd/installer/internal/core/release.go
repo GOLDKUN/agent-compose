@@ -165,9 +165,10 @@ func (p imageReferencePlan) selection(key string) ImageSelection { return p[key]
 func planImageReferences(env, state, manifest *envFile, options Options, mode string) imageReferencePlan {
 	desired := desiredImageReferences(manifest, options)
 	explicit := map[string]bool{
-		backendImageKey:  options.BackendImageSet,
-		frontendImageKey: options.FrontendImageSet,
-		guestImageKey:    options.GuestImageSet,
+		backendImageKey:    options.BackendImageSet,
+		frontendVersionKey: options.FrontendVersionSet,
+		frontendImageKey:   options.FrontendImageSet,
+		guestImageKey:      options.GuestImageSet,
 	}
 	plan := imageReferencePlan{}
 	for _, key := range []string{backendImageKey, frontendVersionKey, frontendImageKey, guestImageKey} {
@@ -221,7 +222,8 @@ func desiredImageReferences(manifest *envFile, options Options) map[string]strin
 				}
 			}
 		}
-		if frontend, ok := desired[frontendImageKey]; ok {
+		defaultFrontendVersion, _ := manifest.Get(frontendVersionKey)
+		if frontend, ok := desired[frontendImageKey]; ok && options.FrontendVersion != strings.TrimSpace(defaultFrontendVersion) {
 			desired[frontendImageKey] = replaceImageTag(frontend, options.FrontendVersion)
 		}
 		desired[frontendVersionKey] = options.FrontendVersion

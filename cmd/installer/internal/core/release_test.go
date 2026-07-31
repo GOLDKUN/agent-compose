@@ -89,6 +89,38 @@ func TestPreviewAppliesRegistryAndSelectedFrontendVersion(t *testing.T) {
 	}
 }
 
+func TestPreviewPreservesDigestPinnedDefaultFrontendImage(t *testing.T) {
+	options := DefaultOptions()
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v2", "v2", "v2,v1")
+	options.InstallDir = filepath.Join(t.TempDir(), "install")
+	pinned := "registry.example/agent-compose-ui@sha256:abcdef"
+	setTestBundleManifestValue(t, options.BundleDir, frontendImageKey, pinned)
+	service := Service{}
+	release, err := service.ResolveRelease(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release.Close()
+
+	preview, err := service.PreviewImages(OperationInstall, options, release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if release.Images.Frontend != pinned || preview.Frontend.Value != pinned {
+		t.Fatalf("default frontend images = release %q, preview %q; want %q", release.Images.Frontend, preview.Frontend.Value, pinned)
+	}
+
+	options.FrontendVersion = "v1"
+	options.FrontendVersionSet = true
+	preview, err = service.PreviewImages(OperationInstall, options, release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Frontend.Value != "registry.example/agent-compose-ui:v1" {
+		t.Fatalf("selected frontend image = %q", preview.Frontend.Value)
+	}
+}
+
 func TestInstallPersistsRegistryAndFrontendVersion(t *testing.T) {
 	root := t.TempDir()
 	options := DefaultOptions()
@@ -165,6 +197,43 @@ func TestUpgradePreservesSupportedFrontendVersionAndRejectsRemovedVersion(t *tes
 	if _, err := service.Apply(context.Background(), OperationUpgrade, options); err == nil || !strings.Contains(err.Error(), "not supported") {
 		t.Fatalf("removed frontend version error = %v", err)
 	}
+}
+
+func TestUpgradeExplicitFrontendVersionOverridesOperatorEditedValue(t *testing.T) {
+	root := t.TempDir()
+	installDir := filepath.Join(root, "install")
+	options := DefaultOptions()
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v1", "v1", "v1,v2")
+	options.InstallDir = installDir
+	options.KVMPath = filepath.Join(root, "missing-kvm")
+	options.NoStart = true
+	options.FrontendVersion = "v1"
+	options.FrontendVersionSet = true
+	service := Service{Runner: &fakeRunner{}}
+	if _, err := service.Apply(context.Background(), OperationInstall, options); err != nil {
+		t.Fatal(err)
+	}
+
+	envPath := filepath.Join(installDir, ".env")
+	env := readTestEnv(t, envPath)
+	if err := env.Set(frontendVersionKey, "operator-edited"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(envPath, env.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	options.BundleDir = makeTestBundleWithFrontendVersions(t, "v2", "v2", "v2,v1")
+	options.FrontendVersion = "v2"
+	if _, err := service.Apply(context.Background(), OperationUpgrade, options); err != nil {
+		t.Fatal(err)
+	}
+	env = readTestEnv(t, envPath)
+	assertTestEnv(t, env, frontendVersionKey, "v2")
+	assertTestEnv(t, env, frontendImageKey, "registry.example/agent-compose-ui:v2")
+	state := readTestEnv(t, filepath.Join(installDir, ".installer-state.env"))
+	assertTestEnv(t, state, frontendVersionKey, "v2")
+	assertTestEnv(t, state, installerFrontendVersionKey, "v2")
 }
 
 func TestResolveReleaseReportsManifestImages(t *testing.T) {
@@ -276,4 +345,16 @@ func makeTestBundleWithFrontendVersions(t *testing.T, releaseVersion, defaultVer
 		t.Fatal(err)
 	}
 	return dir
+}
+
+func setTestBundleManifestValue(t *testing.T, dir, key, value string) {
+	t.Helper()
+	path := filepath.Join(dir, "images", "manifest.env")
+	manifest := readTestEnv(t, path)
+	if err := manifest.Set(key, value); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, manifest.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
