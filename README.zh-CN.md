@@ -2,6 +2,17 @@
   <img src="images/agent-compose-logo.png" alt="Agent-compose" width="384">
 </p>
 <p align="center">
+  <a href="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml">
+    <img src="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
+  </a>
+  <a href="https://github.com/chaitin/agent-compose/actions/workflows/images.yml">
+    <img src="https://github.com/chaitin/agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
+  </a>
+  <a href="LICENSE.txt">
+    <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3">
+  </a>
+</p>
+<p align="center">
   <a href="https://agent-compose.ai">官网</a> ·
   <a href="https://demo.agent-compose.ai">Demo</a> ·
   <a href="README.md">English</a>
