@@ -95,8 +95,8 @@ preservation, and mirror/private-registry options.
 
 ### Option B — Pull published images (without the installer)
 
-Published daemon and guest images are available from [Docker
-Hub](https://hub.docker.com/u/chaitin). Pull the latest published images:
+Published daemon, guest, and UI images are available from [Docker
+Hub](https://hub.docker.com/u/chaitin):
 
 ```bash
 docker pull chaitin/agent-compose:latest
@@ -106,7 +106,7 @@ docker pull chaitin/agent-compose-ui:latest
 
 The daemon and standard guest images publish `linux/amd64` and `linux/arm64`
 manifests. To deploy with Compose, copy `.env.example` to `.env`, fill in the
-required settings, and use the latest image tags:
+required settings, and use these image references:
 
 ```dotenv
 AGENT_COMPOSE_IMAGE=chaitin/agent-compose:latest

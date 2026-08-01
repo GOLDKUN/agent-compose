@@ -60,7 +60,7 @@ installer 还会预先拉取 sandbox guest 镜像，避免首次运行 agent 时
 
 ### 方式 B —— 直接获取发布镜像（无需 install.sh）
 
-daemon 和 guest 镜像发布在 [Docker Hub](https://hub.docker.com/u/chaitin)。直接拉取最新发布的镜像：
+daemon、guest 和 UI 镜像发布在 [Docker Hub](https://hub.docker.com/u/chaitin)：
 
 ```bash
 docker pull chaitin/agent-compose:latest
@@ -70,7 +70,7 @@ docker pull chaitin/agent-compose-ui:latest
 
 daemon 和标准 guest 镜像提供 `linux/amd64`、`linux/arm64` manifest。要用
 Compose 手工部署，请将 `.env.example` 复制为 `.env` 并填写必需配置，然后在
-`.env` 中使用 latest 镜像：
+`.env` 中使用以下镜像引用：
 
 ```dotenv
 AGENT_COMPOSE_IMAGE=chaitin/agent-compose:latest
