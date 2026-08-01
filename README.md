@@ -1,6 +1,7 @@
 <p align="center">
   <img src="images/agent-compose-logo.png" alt="Agent-compose" width="384">
-  <div align="center">
+</p>
+<p align="center">
   <a href="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml">
     <img src="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
   </a>
@@ -10,14 +11,14 @@
   <a href="LICENSE.txt">
     <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3">
   </a>
-</div>
+</p>
+<p align="center">
+  <a href="https://agent-compose.ai">Website</a> ·
+  <a href="https://demo.agent-compose.ai">Demo</a> ·
+  <a href="README.zh-CN.md">中文文档</a>
 </p>
 
 **agent-compose is a daemon + CLI control plane that runs AI coding agents in isolated sandboxes.** You describe your agents in an `agent-compose.yml` file, and a long-lived daemon builds, runs, schedules, and proxies an isolated runtime for each one.
-
-> Public preview. APIs, runtime packaging, and deployment defaults may still change. It is suitable for experimentation, local development, and preview deployments — not yet a stable production platform.
-
-📖 中文文档：[中文 README](README.zh-CN.md)
 
 ## What is agent-compose?
 
@@ -25,8 +26,7 @@ If you know Docker Compose, the mental model is familiar: instead of declaring
 containers, you declare **agents**. Each agent picks a provider CLI — `codex`,
 `claude` (Claude Code), `gemini`, `opencode`, or `pi` — and the daemon gives it its own
 isolated sandbox with a workspace, then runs it on a prompt, a shell command, a
-schedule, or an event. Provider API keys stay on the daemon and are never exposed
-inside the guest.
+schedule, or an event.
 
 You manage the whole lifecycle with a Compose-style CLI (`up`, `run`, `ps`,
 `logs`, `down`), and everything is driven by one declarative file.
@@ -39,15 +39,12 @@ Concretely, agent-compose provides:
 - A **scheduler** with `cron`, `interval`, `timeout`, and `event` triggers — or full inline JavaScript scheduler scripts.
 - **Event triggers and webhooks** for event-driven agent runs.
 - **Workspaces** provisioned from a local directory or a Git repository.
-- A **Runtime LLM Facade** that brokers LLM credentials so provider keys never enter guest containers.
 - **MCP servers, reusable skills, and named volumes** per agent.
-- A **Jupyter proxy** for notebook-style guest runtimes.
-- **v2 Connect APIs**; the separate web UI repository tracks generated TypeScript clients.
 
 ## How it works
 
 The **daemon** is the single source of truth: it owns persistence, scheduler
-execution, runtime lifecycle, the Connect/HTTP APIs, and Jupyter proxying. The
+execution, runtime lifecycle, and control-plane APIs. The
 **CLI** is a thin client — it reads your local `agent-compose.yml`, validates it,
 and calls the daemon. The compose file describes *projects and agents*, not
 already-running sandboxes. The **web UI** is a separate service
@@ -98,34 +95,23 @@ preservation, and mirror/private-registry options.
 
 ### Option B — Pull published images (without the installer)
 
-Published daemon and guest images are available from [Docker
-Hub](https://hub.docker.com/u/chaitin). Always use an explicit release tag when
-pulling images. Select `AGENT_COMPOSE_VERSION` from the
-[agent-compose Releases](https://github.com/chaitin/agent-compose/releases)
-page, and select `AGENT_COMPOSE_UI_VERSION` independently from the
-[agent-compose-ui Releases](https://github.com/chaitin/agent-compose-ui/releases)
-page:
+Published daemon, guest, and UI images are available from [Docker
+Hub](https://hub.docker.com/u/chaitin):
 
 ```bash
-export AGENT_COMPOSE_VERSION=<agent-compose-release-tag>
-export AGENT_COMPOSE_UI_VERSION=<agent-compose-ui-release-tag>
-
-docker pull chaitin/agent-compose:${AGENT_COMPOSE_VERSION}
-docker pull chaitin/agent-compose-guest:${AGENT_COMPOSE_VERSION}
-docker pull chaitin/agent-compose-ui:${AGENT_COMPOSE_UI_VERSION}
+docker pull chaitin/agent-compose:latest
+docker pull chaitin/agent-compose-guest:latest
+docker pull chaitin/agent-compose-ui:latest
 ```
 
 The daemon and standard guest images publish `linux/amd64` and `linux/arm64`
-manifests. The UI tag is selected independently from the daemon release. To
-deploy with Compose, use `docker-compose.yml` and `.env.example` from the
-matching agent-compose repository tag, copy `.env.example` to `.env`, and fill
-in the required settings. Set the image references in `.env` to the tags you
-selected above:
+manifests. To deploy with Compose, copy `.env.example` to `.env`, fill in the
+required settings, and use these image references:
 
 ```dotenv
-AGENT_COMPOSE_IMAGE=chaitin/agent-compose:<agent-compose-release-tag>
-DEFAULT_IMAGE=chaitin/agent-compose-guest:<agent-compose-release-tag>
-AGENT_COMPOSE_FRONTEND_IMAGE=chaitin/agent-compose-ui:<agent-compose-ui-release-tag>
+AGENT_COMPOSE_IMAGE=chaitin/agent-compose:latest
+DEFAULT_IMAGE=chaitin/agent-compose-guest:latest
+AGENT_COMPOSE_FRONTEND_IMAGE=chaitin/agent-compose-ui:latest
 ```
 
 Then run `docker compose pull` and `docker compose up -d`, adding
@@ -181,102 +167,6 @@ agent-compose down                                # stop sandboxes, disable sche
 
 More runnable examples (cron, timeout, scheduler scripts) live in
 [examples/agent-compose/](examples/agent-compose/).
-
-## One-time V2 storage migration
-
-`agent-compose-v2-storage-migrator` is a transitional, one-time tool for data
-roots created by the legacy storage layout. It is intentionally not included
-in daemon images or the default `task build`.
-
-Databases with a valid, versioned migration prefix and only project-managed
-agents and schedulers upgrade normally when opened by the new daemon. Use the
-migrator for legacy or unversioned roots, including standalone or mixed
-agent/loader layouts.
-
-### Stop running sandboxes
-
-Do not use `agent-compose down` for migration cutover. In legacy releases,
-`down` also marks the project removed, disables its schedulers, and removes
-its volume associations. Without the original compose file, the migrated
-project cannot be restored safely from those changes.
-
-Keep the old daemon running and stop every running sandbox by its full ID:
-
-```bash
-agent-compose stop <sandbox-id> [<sandbox-id>...]
-```
-
-Using a full ID does not require a compose file or project selection and also
-works for legacy standalone sandboxes. The dry run below reports all sandbox
-IDs whose persisted metadata is still `running`.
-
-Dry-run only inspects the source and uses a temporary database copy. It does
-not modify either data root, create the target, copy sandbox workspaces, or
-create an in-place backup.
-
-Immediately after the last `stop` command, stop the old daemon and keep it
-stopped. A scheduler may create another sandbox in the short interval before
-daemon shutdown, so the post-shutdown dry run is the authority: if it reports
-any running IDs, restart the old daemon, stop every reported ID, stop the
-daemon again, and repeat the dry run. Do not use `docker stop` for sandboxes;
-the old daemon must persist their stopped state.
-
-### Build and run from source
-
-Build the migrator explicitly from the repository root, then select the
-resulting binary:
-
-```bash
-task build:migrator
-MIGRATOR=./build/agent-compose-migrate
-```
-
-The migrator is not built by the default `task build`.
-
-### Run a published binary
-
-Download `SHASUMS256.txt` and the matching manually published Linux release
-asset:
-
-- `agent-compose-v2-storage-migrator-linux-amd64`
-- `agent-compose-v2-storage-migrator-linux-arm64`
-
-Verify it, make it executable, and select it. For example, on amd64:
-
-```bash
-grep '  agent-compose-v2-storage-migrator-linux-amd64$' SHASUMS256.txt | sha256sum -c -
-chmod +x agent-compose-v2-storage-migrator-linux-amd64
-MIGRATOR=./agent-compose-v2-storage-migrator-linux-amd64
-```
-
-### Perform the migration
-
-Set `DATA_ROOT` to the deployment's data directory. Set `RUNTIME_ROOT` to the
-path that the new daemon will see (`/data` for the standard container
-deployment, or the same path as `DATA_ROOT` for a native daemon). You may run
-the read-only dry run while the old daemon is still available to discover all
-running sandbox IDs, then stop those IDs with the old CLI as described above.
-After stopping the old daemon, run the same dry run again before migration:
-
-```bash
-DATA_ROOT=/opt/agent-compose/data
-RUNTIME_ROOT=/data
-"$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
-  --runtime-root "$RUNTIME_ROOT" --dry-run
-```
-
-The post-shutdown dry run must succeed. Back up the complete data root, then
-run the migration without `--dry-run`:
-
-```bash
-"$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
-  --runtime-root "$RUNTIME_ROOT" --json
-```
-
-Keep the old daemon stopped until migration and validation finish. When a
-separate rollback copy is required, pass different `--source` and `--target`
-directories and set `--runtime-root` to the target path visible to the new
-daemon.
 
 ## The compose file
 
@@ -395,15 +285,6 @@ Each agent sets a `provider`, which selects the CLI it runs inside the sandbox:
 | `opencode` | OpenCode CLI |
 | `pi` | Pi coding agent CLI |
 
-You configure LLM credentials once, on the daemon (in `.env`) — not per guest.
-For Codex, Claude, OpenCode, and Pi, the daemon's **Runtime LLM Facade** hands each
-sandbox a scoped token instead of your real API key, so provider keys never enter
-the guest. When that token pins an upstream provider, the model in each runtime
-request is forwarded to that provider and does not need to be listed in
-agent-compose first; an unsupported model returns the upstream provider's error.
-Compatibility tokens without a provider keep the existing configured
-model/provider resolution behavior.
-
 Set the variables for the backend family your agents use. **OpenAI-family**
 (Codex, plus the daemon's own `LLMService` and scheduler LLM calls):
 
@@ -425,17 +306,12 @@ ANTHROPIC_MODEL=claude-...
 Set `LLM_API_PROTOCOL=chat_completions` to target any OpenAI-compatible endpoint
 (DeepSeek, vLLM, Ollama).
 
-**Per-provider notes.** OpenCode picks its upstream family from the agent's
-`model` (`provider/model`, e.g. `anthropic/…` or `openai/…`) and gets a facade
-token for it; only OpenCode's own native provider uses OpenCode's login instead.
-**Gemini is the exception** — it is never handed an LLM key (`GEMINI_API_KEY` /
+**Gemini** is never handed an LLM key (`GEMINI_API_KEY` /
 `GOOGLE_API_KEY` are filtered out of the guest) and authenticates through the
 Gemini CLI's own login, persisted under the sandbox home (`~/.gemini`).
 
 See [`.env.example`](.env.example) for the full list (timeouts, endpoint aliases,
-`OPENAI_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) and the
-[daemon LLM client design](docs/design/agent-compose_design.md#daemon-llm-client)
-for how brokering works.
+`OPENAI_API_KEY` / `ANTHROPIC_AUTH_TOKEN`).
 
 ## Deployment & configuration
 
@@ -475,18 +351,14 @@ configuration reference.** At minimum, review these before exposing a deployment
 - `AUTH_PASSWORD`, `AUTH_SECRET` — UI server login secrets (replace the examples).
 - `AGENT_COMPOSE_AUTH_TOKEN` — optional shared Bearer token for daemon HTTP(S) control-plane access.
 - `AGENT_COMPOSE_HTTP_PORT` — host port for the web UI / reverse proxy (`with-ui`).
-- `AGENT_COMPOSE_RUNTIME_BASE_URL` — guest-reachable daemon URL used for the LLM facade.
 - `RUNTIME_DRIVER` — default runtime driver.
 
 ## Web UI
 
 The web UI lives in a separate repository,
-[agent-compose-ui](https://github.com/chaitin/agent-compose-ui). It directly tracks
-the generated `agentcompose/v2` and `health/v1` TypeScript clients built from this
-repository's `proto/`; the generated files are reviewed together with protocol
-changes. The daemon does not host the UI or browser
+[agent-compose-ui](https://github.com/chaitin/agent-compose-ui). The daemon does not host the UI or browser
 login flows; the UI image runs nginx in front of a Go UI server that owns
-auth/OAuth and proxies API and Jupyter routes to the daemon.
+auth/OAuth and proxies API routes to the daemon.
 
 ## Security
 
@@ -497,7 +369,6 @@ deployment to a network:
 - Set a stable, high-entropy `AUTH_SECRET`, and terminate HTTPS in production.
 - Keep the daemon TCP API (`HTTP_LISTEN`) behind container networking, a reverse proxy, or a VPN.
 - When daemon token authentication is enabled, use HTTPS or another protected tunnel across machines; plain HTTP does not prevent token capture and replay.
-- Do not expose guest Jupyter ports directly — reach them through the agent-compose proxy.
 - Treat Git credentials, uploaded workspaces, environment variables, and LLM API keys as secrets.
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and hardening notes.
@@ -544,6 +415,102 @@ components live under `runtime/`.
 - [Documentation homepage](https://chaitin.github.io/agent-compose/)
 - [Command line manual](docs/pages/command-line-manual.md)
 - [agent-compose.yml manual](docs/pages/agent-compose-yaml-manual.md)
+
+## One-time V2 storage migration
+
+`agent-compose-v2-storage-migrator` is a transitional, one-time tool for data
+roots created by the legacy storage layout. It is intentionally not included
+in daemon images or the default `task build`.
+
+Databases with a valid, versioned migration prefix and only project-managed
+agents and schedulers upgrade normally when opened by the new daemon. Use the
+migrator for legacy or unversioned roots, including standalone or mixed
+agent/loader layouts.
+
+### Stop running sandboxes
+
+Do not use `agent-compose down` for migration cutover. In legacy releases,
+`down` also marks the project removed, disables its schedulers, and removes
+its volume associations. Without the original compose file, the migrated
+project cannot be restored safely from those changes.
+
+Keep the old daemon running and stop every running sandbox by its full ID:
+
+```bash
+agent-compose stop <sandbox-id> [<sandbox-id>...]
+```
+
+Using a full ID does not require a compose file or project selection and also
+works for legacy standalone sandboxes. The dry run below reports all sandbox
+IDs whose persisted metadata is still `running`.
+
+Dry-run only inspects the source and uses a temporary database copy. It does
+not modify either data root, create the target, copy sandbox workspaces, or
+create an in-place backup.
+
+Immediately after the last `stop` command, stop the old daemon and keep it
+stopped. A scheduler may create another sandbox in the short interval before
+daemon shutdown, so the post-shutdown dry run is the authority: if it reports
+any running IDs, restart the old daemon, stop every reported ID, stop the
+daemon again, and repeat the dry run. Do not use `docker stop` for sandboxes;
+the old daemon must persist their stopped state.
+
+### Build and run from source
+
+Build the migrator explicitly from the repository root, then select the
+resulting binary:
+
+```bash
+task build:migrator
+MIGRATOR=./build/agent-compose-migrate
+```
+
+The migrator is not built by the default `task build`.
+
+### Run a published binary
+
+Download `SHASUMS256.txt` and the matching manually published Linux release
+asset:
+
+- `agent-compose-v2-storage-migrator-linux-amd64`
+- `agent-compose-v2-storage-migrator-linux-arm64`
+
+Verify it, make it executable, and select it. For example, on amd64:
+
+```bash
+grep '  agent-compose-v2-storage-migrator-linux-amd64$' SHASUMS256.txt | sha256sum -c -
+chmod +x agent-compose-v2-storage-migrator-linux-amd64
+MIGRATOR=./agent-compose-v2-storage-migrator-linux-amd64
+```
+
+### Perform the migration
+
+Set `DATA_ROOT` to the deployment's data directory. Set `RUNTIME_ROOT` to the
+path that the new daemon will see (`/data` for the standard container
+deployment, or the same path as `DATA_ROOT` for a native daemon). You may run
+the read-only dry run while the old daemon is still available to discover all
+running sandbox IDs, then stop those IDs with the old CLI as described above.
+After stopping the old daemon, run the same dry run again before migration:
+
+```bash
+DATA_ROOT=/opt/agent-compose/data
+RUNTIME_ROOT=/data
+"$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
+  --runtime-root "$RUNTIME_ROOT" --dry-run
+```
+
+The post-shutdown dry run must succeed. Back up the complete data root, then
+run the migration without `--dry-run`:
+
+```bash
+"$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
+  --runtime-root "$RUNTIME_ROOT" --json
+```
+
+Keep the old daemon stopped until migration and validation finish. When a
+separate rollback copy is required, pass different `--source` and `--target`
+directories and set `--runtime-root` to the target path visible to the new
+daemon.
 
 ## Contributing
 
