@@ -606,7 +606,8 @@ func registerRuntimeLLMFacadeRoutes(app *echo.Echo, di do.Injector) {
 		ResolveTarget: func(ctx context.Context, requestedModel, providerID string) (llms.ResolvedTarget, error) {
 			return llms.ResolveRuntimeLLMTarget(ctx, config, configDB, requestedModel, providerID)
 		},
-		Client: proxy.NewRuntimeLLMHTTPClient(config.LLMTimeout),
+		Client:          proxy.NewRuntimeLLMHTTPClient(config.LLMTimeout),
+		MaxOutputTokens: config.LLMMaxOutputTokens,
 	})
 }
 

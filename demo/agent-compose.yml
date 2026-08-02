@@ -1,0 +1,8 @@
+name: demo
+
+agents:
+  hello:
+    provider: codex
+    image: chaitin/agent-compose-guest:latest
+    driver:
+      docker: {}
