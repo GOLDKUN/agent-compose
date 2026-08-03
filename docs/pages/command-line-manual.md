@@ -219,6 +219,8 @@ agent-compose ls
 agent-compose agent ls --json
 ```
 
+`MODEL` shows the model selected for a new run without request- or session-level overrides. `MODEL SOURCE` distinguishes a project declaration (`project`), an agent environment value (`agent_env`), a daemon default (`daemon_default`), a provider-owned default (`provider_default`), or an unresolved required selection (`unresolved`). JSON output preserves `model` as the project-declared value and adds `resolved_model` and `model_source`; daemon defaults are not written back into the project.
+
 ## `project up`: Apply a Project
 
 Read the config file and apply the project to the daemon. This starts or updates project schedulers and daemon-managed state.

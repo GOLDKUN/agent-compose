@@ -99,7 +99,7 @@ func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testin
 		}
 	}
 
-	handler := NewProjectHandler(nil, store, nil)
+	handler := NewProjectHandler(nil, store, nil, nil)
 	mux := http.NewServeMux()
 	path, connectHandler := agentcomposev2connect.NewProjectServiceHandler(handler)
 	mux.Handle(path, connectHandler)

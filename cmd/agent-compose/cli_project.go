@@ -182,6 +182,8 @@ type composeProjectAgentOutput struct {
 	ShortID          string `json:"short_id"`
 	Provider         string `json:"provider,omitempty"`
 	Model            string `json:"model,omitempty"`
+	ResolvedModel    string `json:"resolved_model,omitempty"`
+	ModelSource      string `json:"model_source,omitempty"`
 	Image            string `json:"image,omitempty"`
 	Driver           string `json:"driver,omitempty"`
 	SchedulerEnabled bool   `json:"scheduler_enabled"`
@@ -571,9 +573,28 @@ func composeProjectAgentOutputFromProto(agent *agentcomposev2.ProjectAgent) comp
 		ShortID:          shortOpaqueID(agent.GetManagedAgentId()),
 		Provider:         agent.GetProvider(),
 		Model:            agent.GetModel(),
+		ResolvedModel:    agent.GetResolvedModel(),
+		ModelSource:      agentModelSourceOutput(agent.GetModelSource()),
 		Image:            agent.GetImage(),
 		Driver:           agent.GetDriver(),
 		SchedulerEnabled: agent.GetSchedulerEnabled(),
+	}
+}
+
+func agentModelSourceOutput(source agentcomposev2.AgentModelSource) string {
+	switch source {
+	case agentcomposev2.AgentModelSource_AGENT_MODEL_SOURCE_PROJECT:
+		return "project"
+	case agentcomposev2.AgentModelSource_AGENT_MODEL_SOURCE_AGENT_ENV:
+		return "agent_env"
+	case agentcomposev2.AgentModelSource_AGENT_MODEL_SOURCE_DAEMON_DEFAULT:
+		return "daemon_default"
+	case agentcomposev2.AgentModelSource_AGENT_MODEL_SOURCE_PROVIDER_DEFAULT:
+		return "provider_default"
+	case agentcomposev2.AgentModelSource_AGENT_MODEL_SOURCE_UNRESOLVED:
+		return "unresolved"
+	default:
+		return ""
 	}
 }
 

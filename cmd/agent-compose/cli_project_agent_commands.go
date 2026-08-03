@@ -118,13 +118,33 @@ func runComposeListAgentsCommand(cmd *cobra.Command, options cliOptions) error {
 
 func writeAgentListText(out io.Writer, agents []composeProjectAgentOutput) error {
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "AGENT\tPROVIDER\tMODEL\tIMAGE\tDRIVER\tSCHEDULER"); err != nil {
+	if _, err := fmt.Fprintln(tw, "AGENT\tPROVIDER\tMODEL\tMODEL SOURCE\tIMAGE\tDRIVER\tSCHEDULER"); err != nil {
 		return err
 	}
 	for _, agent := range agents {
-		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%t\n", agent.Name, agent.Provider, agent.Model, agent.Image, agent.Driver, agent.SchedulerEnabled); err != nil {
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%t\n", agent.Name, agent.Provider, agentListModel(agent), agentListModelSource(agent), agent.Image, agent.Driver, agent.SchedulerEnabled); err != nil {
 			return err
 		}
 	}
 	return tw.Flush()
+}
+
+func agentListModel(agent composeProjectAgentOutput) string {
+	if agent.ResolvedModel != "" {
+		return agent.ResolvedModel
+	}
+	if agent.Model != "" {
+		return agent.Model
+	}
+	return "-"
+}
+
+func agentListModelSource(agent composeProjectAgentOutput) string {
+	if agent.ModelSource != "" {
+		return agent.ModelSource
+	}
+	if agent.Model != "" {
+		return "project"
+	}
+	return "unknown"
 }

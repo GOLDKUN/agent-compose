@@ -511,6 +511,18 @@ message ProjectAgent {
   ProjectAgentLatestRun latest_run = 13;
   string display_name = 14;
   string description = 15;
+  // Model selected for a new run when no request- or session-level override is present.
+  string resolved_model = 16;
+  AgentModelSource model_source = 17;
+}
+
+enum AgentModelSource {
+  AGENT_MODEL_SOURCE_UNSPECIFIED = 0;
+  AGENT_MODEL_SOURCE_PROJECT = 1;
+  AGENT_MODEL_SOURCE_AGENT_ENV = 2;
+  AGENT_MODEL_SOURCE_DAEMON_DEFAULT = 3;
+  AGENT_MODEL_SOURCE_PROVIDER_DEFAULT = 4;
+  AGENT_MODEL_SOURCE_UNRESOLVED = 5;
 }
 
 message ProjectAgentCurrentRun {

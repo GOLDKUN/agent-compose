@@ -45,6 +45,9 @@ agents:
     provider: codex
 `)
 	project := testCLIProject("project-test", "agent-list", composePath)
+	project.Agents[1].Model = ""
+	project.Agents[1].ResolvedModel = "dev/gpt-5.5"
+	project.Agents[1].ModelSource = agentcomposev2.AgentModelSource_AGENT_MODEL_SOURCE_DAEMON_DEFAULT
 	server := newComposeServiceStubServer(t, composeServiceStubs{project: projectServiceStub{
 		getProject: func(_ context.Context, _ *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
 			return connect.NewResponse(&agentcomposev2.GetProjectResponse{Project: project}), nil
@@ -57,7 +60,7 @@ agents:
 		if code != 0 || stderr != "" {
 			t.Fatalf("%s code/stderr = %d / %q", strings.Join(args, " "), code, stderr)
 		}
-		for _, want := range []string{"AGENT", "reviewer", "worker", "gpt-test", "boxlite"} {
+		for _, want := range []string{"AGENT", "MODEL SOURCE", "reviewer", "worker", "gpt-test", "dev/gpt-5.5", "daemon_default", "boxlite"} {
 			if !strings.Contains(stdout, want) {
 				t.Fatalf("%s stdout = %q, want %q", strings.Join(args, " "), stdout, want)
 			}
@@ -74,6 +77,9 @@ agents:
 	}
 	if output.Project.Name != "agent-list" || len(output.Agents) != 2 {
 		t.Fatalf("agent list JSON = %#v", output)
+	}
+	if worker := output.Agents[1]; worker.Model != "" || worker.ResolvedModel != "dev/gpt-5.5" || worker.ModelSource != "daemon_default" {
+		t.Fatalf("worker model output = %#v", worker)
 	}
 }
 
