@@ -113,10 +113,10 @@ func (s *projectStore) FinalizeProjectRunCompletion(ctx context.Context, run dom
 	run.CleanupError = ""
 	result, err := tx.ExecContext(ctx, `UPDATE project_run SET
 		project_id=?, project_name=?, project_revision=?, agent_name=?, agent_id=?, source=?, scheduler_id=?, scheduler_run_id=?, trigger_id=?, status=?,
-		sandbox_id=?, exit_code=?, error=?, prompt=?, output=?, result_json=?, logs_path=?, artifacts_dir=?, cleanup_error='', cleanup_policy=?, sandbox_created=?, driver=?, image_ref=?,
+		sandbox_id=?, exit_code=?, error=?, error_stack=?, prompt=?, output=?, result_json=?, logs_path=?, artifacts_dir=?, cleanup_error='', cleanup_policy=?, sandbox_created=?, driver=?, image_ref=?,
 		started_at=?, completed_at=?, duration_ms=?, updated_at=? WHERE run_id=?`,
 		run.ProjectID, run.ProjectName, run.ProjectRevision, run.AgentName, run.AgentID, run.Source, run.SchedulerID, nullableSchedulerRunID(run.SchedulerRunID), run.TriggerID, run.Status,
-		run.SandboxID, run.ExitCode, run.Error, run.Prompt, run.Output, run.ResultJSON, run.LogsPath, run.ArtifactsDir, run.CleanupPolicy, BoolToInt(run.SandboxCreated), run.Driver, run.ImageRef,
+		run.SandboxID, run.ExitCode, run.Error, run.ErrorStack, run.Prompt, run.Output, run.ResultJSON, run.LogsPath, run.ArtifactsDir, run.CleanupPolicy, BoolToInt(run.SandboxCreated), run.Driver, run.ImageRef,
 		domain.NonZeroTimeUnixMilli(run.StartedAt), domain.NonZeroTimeUnixMilli(run.CompletedAt), run.DurationMs, time.Now().UTC().Unix(), run.RunID)
 	if err != nil {
 		return domain.ProjectRunRecord{}, err

@@ -113,11 +113,11 @@ func TestRunsCoordinatorAndHelperWorkflows(t *testing.T) {
 	}
 	cell := domain.NotebookCell{ID: "cell-1", Type: execution.CellTypeAgent, Agent: "codex", AgentThreadID: "agent-thread", Output: "output", Success: false, ExitCode: 0, Stderr: "stderr"}
 	transition := TransitionFromAgentCell(run, &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1", WorkspacePath: t.TempDir()}}, cell, nil)
-	if transition.ExitCode == 0 || !strings.Contains(transition.Error, "stderr") || transition.ArtifactsDir == "" {
+	if transition.ExitCode == 0 || !strings.Contains(transition.ErrorStack, "stderr") || transition.ArtifactsDir == "" {
 		t.Fatalf("transition from failed cell = %#v", transition)
 	}
 	transition = TransitionFromAgentCell(run, nil, cell, errors.New("boom"))
-	if transition.ExitCode == 0 || !strings.Contains(transition.Error, "boom") {
+	if transition.ExitCode == 0 || !strings.Contains(transition.ErrorStack, "boom") {
 		t.Fatalf("transition from exec error = %#v", transition)
 	}
 	if !CleanupPolicyStopsSandbox(agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_STOP_ON_COMPLETION) ||
@@ -1697,7 +1697,7 @@ func TestRunsControllerRunProjectAgentCleanupErrorRecording(t *testing.T) {
 		if err != nil || execErr == nil || !strings.Contains(execErr.Error(), "agent failed") {
 			t.Fatalf("RunProjectAgent err=%v execErr=%v run=%#v", err, execErr, run)
 		}
-		if run.Status != domain.ProjectRunStatusRunning || !strings.Contains(run.Error, "agent failed") || !strings.Contains(run.CleanupError, "stop failed") {
+		if run.Status != domain.ProjectRunStatusRunning || !strings.Contains(run.ErrorStack, "agent failed") || !strings.Contains(run.CleanupError, "stop failed") {
 			t.Fatalf("run = %#v", run)
 		}
 		assertNoTerminalStatusEvent(t, fixture.configDB.events)

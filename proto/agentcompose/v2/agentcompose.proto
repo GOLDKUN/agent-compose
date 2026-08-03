@@ -1362,6 +1362,7 @@ message RunDetail {
   string driver = 8;
   string image_ref = 9;
   repeated string warnings = 10;
+  string error_stack = 11;
 }
 
 message ExecRequest {

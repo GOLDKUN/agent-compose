@@ -171,7 +171,7 @@ func TestProjectNormalizeAndScanCoverage(t *testing.T) {
 		t.Fatalf("ScanProject scanned=%#v err=%v", scanned, err)
 	}
 	scannedRun, err := ScanProjectRun(func(dest ...any) error {
-		values := []any{"run-1", "project-1", "Project", int64(1), "worker", "agent-1", "api", "scheduler-1", "scheduler-run-1", "trigger-1", "running", "session-1", 0, "", "prompt", "output", "{}", "logs", "artifacts", "", "stop_on_completion", 0, "docker", "image", int64(1_720_000_000_000), "1720000001000", int64(1000), float64(1720000002), time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC).Format(time.RFC3339)}
+		values := []any{"run-1", "project-1", "Project", int64(1), "worker", "agent-1", "api", "scheduler-1", "scheduler-run-1", "trigger-1", "running", "session-1", 0, "", "", "prompt", "output", "{}", "logs", "artifacts", "", "stop_on_completion", 0, "docker", "image", int64(1_720_000_000_000), "1720000001000", int64(1000), float64(1720000002), time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC).Format(time.RFC3339)}
 		for i, value := range values {
 			switch ptr := dest[i].(type) {
 			case *string:
