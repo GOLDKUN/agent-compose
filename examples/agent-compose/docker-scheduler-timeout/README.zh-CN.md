@@ -110,8 +110,8 @@ ID              NAME                      TYPE       ACTION
 <scheduler-id>  reviewer                  scheduler  created
 
 $ agent-compose ls
-AGENT     PROVIDER  MODEL  IMAGE                       DRIVER  SCHEDULER
-reviewer  codex            agent-compose-guest:latest  docker  true
+AGENT     PROVIDER  MODEL  MODEL SOURCE      IMAGE                       DRIVER  SCHEDULER
+reviewer  codex     -      provider_default  agent-compose-guest:latest  docker  true
 ```
 
 如果外层 scheduler run 成功但看不到预期 transcript，请通过 `logs reviewer`

@@ -102,8 +102,8 @@ ID              NAME                   TYPE       ACTION
 <scheduler-id>  reviewer               scheduler  created
 
 $ agent-compose ls
-AGENT     PROVIDER  MODEL  IMAGE                       DRIVER  SCHEDULER
-reviewer  codex            agent-compose-guest:latest  docker  true
+AGENT     PROVIDER  MODEL  MODEL SOURCE      IMAGE                       DRIVER  SCHEDULER
+reviewer  codex     -      provider_default  agent-compose-guest:latest  docker  true
 
 $ agent-compose down
 ID              NAME                   TYPE       ACTION   MESSAGE

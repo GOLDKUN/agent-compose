@@ -121,6 +121,28 @@ func (d projectControllerDelegate) ApplyProject(ctx context.Context, req *connec
 	if err != nil {
 		return nil, projectConnectError(err)
 	}
+	return connect.NewResponse(applyProjectResponse(result)), nil
+}
+
+func (d projectControllerDelegate) PatchProject(ctx context.Context, req *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
+	raw, issues, err := parseProjectRequest(req.Msg.GetSpec())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	result, err := d.controller.PatchProject(ctx, projects.PatchRequest{
+		Project:                 projectRefFromProto(req.Msg.GetProject()),
+		ExpectedCurrentSpecHash: req.Msg.GetExpectedCurrentSpecHash(),
+		Spec:                    raw,
+		Issues:                  issues,
+		DryRun:                  req.Msg.GetDryRun(),
+	})
+	if err != nil {
+		return nil, projectConnectError(err)
+	}
+	return connect.NewResponse(applyProjectResponse(result)), nil
+}
+
+func applyProjectResponse(result projects.ApplyResult) *agentcomposev2.ApplyProjectResponse {
 	spec := normalizedSpecToProto(result.RevisionSpec)
 	resp := &agentcomposev2.ApplyProjectResponse{
 		Changes:   projectChangesToProto(result.Changes),
@@ -134,7 +156,7 @@ func (d projectControllerDelegate) ApplyProject(ctx context.Context, req *connec
 	if strings.TrimSpace(result.Revision.ProjectID) != "" {
 		resp.Revision = api.ProjectRevisionToProto(result.Revision, spec)
 	}
-	return connect.NewResponse(resp), nil
+	return resp
 }
 
 func (d projectControllerDelegate) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
@@ -159,20 +181,9 @@ func (d projectControllerDelegate) WatchProject(ctx context.Context, req *connec
 }
 
 func normalizeProjectRequest(spec *agentcomposev2.ProjectSpec, source *agentcomposev2.ProjectSource, submittedHash string) (projects.NormalizedProject, []projects.ValidationIssue, error) {
-	if spec == nil {
-		return projects.NormalizedProject{}, []projects.ValidationIssue{{Path: "spec", Message: "project spec is required"}}, nil
-	}
-	raw, protoIssues := api.ProjectSpecYAMLShape(spec)
-	if len(protoIssues) > 0 {
-		return projects.NormalizedProject{}, validationIssuesFromProto(protoIssues), nil
-	}
-	data, err := yaml.Marshal(raw)
-	if err != nil {
-		return projects.NormalizedProject{}, nil, fmt.Errorf("marshal project spec: %w", err)
-	}
-	parsed, err := compose.Parse(data)
-	if err != nil {
-		return projects.NormalizedProject{}, []projects.ValidationIssue{validationIssueFromProto(api.IssueFromComposeError(err))}, nil
+	parsed, issues, err := parseProjectRequest(spec)
+	if err != nil || len(issues) > 0 {
+		return projects.NormalizedProject{}, issues, err
 	}
 	sourcePath := api.ProjectServiceSourcePath(source)
 	projectDir := ""
@@ -201,6 +212,25 @@ func normalizeProjectRequest(spec *agentcomposev2.ProjectSpec, source *agentcomp
 		return result, []projects.ValidationIssue{{Path: "submitted_spec_hash", Message: fmt.Sprintf("submitted spec hash %s does not match normalized spec hash %s", submittedHash, hash)}}, nil
 	}
 	return result, nil, nil
+}
+
+func parseProjectRequest(spec *agentcomposev2.ProjectSpec) (*compose.ProjectSpec, []projects.ValidationIssue, error) {
+	if spec == nil {
+		return nil, []projects.ValidationIssue{{Path: "spec", Message: "project spec is required"}}, nil
+	}
+	raw, protoIssues := api.ProjectSpecYAMLShape(spec)
+	if len(protoIssues) > 0 {
+		return nil, validationIssuesFromProto(protoIssues), nil
+	}
+	data, err := yaml.Marshal(raw)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal project spec: %w", err)
+	}
+	parsed, err := compose.Parse(data)
+	if err != nil {
+		return nil, []projects.ValidationIssue{validationIssueFromProto(api.IssueFromComposeError(err))}, nil
+	}
+	return parsed, nil, nil
 }
 
 func normalizedSpecToProto(spec *compose.NormalizedProjectSpec) *agentcomposev2.ProjectSpec {
@@ -291,6 +321,8 @@ func projectConnectError(err error) error {
 		return nil
 	}
 	switch {
+	case errors.Is(err, projects.ErrRevisionConflict):
+		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, projects.ErrInvalidRequest), errors.Is(err, domain.ErrRequired), errors.Is(err, domain.ErrAmbiguous), errors.Is(err, domain.ErrInvalidArgument):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, projects.ErrUnavailable):

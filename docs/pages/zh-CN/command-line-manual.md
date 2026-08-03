@@ -207,6 +207,8 @@ agent-compose ls
 agent-compose agent ls --json
 ```
 
+`MODEL` 显示在没有请求级或 Session 级覆盖时，新一次运行将选择的模型。`MODEL SOURCE` 用于区分项目声明（`project`）、Agent 环境值（`agent_env`）、daemon 默认值（`daemon_default`）、provider 自身默认值（`provider_default`）和缺少必填模型（`unresolved`）。JSON 输出继续用 `model` 表示项目声明值，并新增 `resolved_model` 和 `model_source`；daemon 默认值不会写回项目配置。
+
 ## `project up`：启动或更新 project
 
 读取配置文件，将 project 应用到 daemon，并启动或更新 project 中的 scheduler 和服务。

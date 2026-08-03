@@ -61,6 +61,9 @@ const (
 	// ProjectServiceApplyProjectProcedure is the fully-qualified name of the ProjectService's
 	// ApplyProject RPC.
 	ProjectServiceApplyProjectProcedure = "/agentcompose.v2.ProjectService/ApplyProject"
+	// ProjectServicePatchProjectProcedure is the fully-qualified name of the ProjectService's
+	// PatchProject RPC.
+	ProjectServicePatchProjectProcedure = "/agentcompose.v2.ProjectService/PatchProject"
 	// ProjectServiceGetProjectProcedure is the fully-qualified name of the ProjectService's GetProject
 	// RPC.
 	ProjectServiceGetProjectProcedure = "/agentcompose.v2.ProjectService/GetProject"
@@ -268,6 +271,7 @@ const (
 type ProjectServiceClient interface {
 	ValidateProject(context.Context, *connect.Request[v2.ValidateProjectRequest]) (*connect.Response[v2.ValidateProjectResponse], error)
 	ApplyProject(context.Context, *connect.Request[v2.ApplyProjectRequest]) (*connect.Response[v2.ApplyProjectResponse], error)
+	PatchProject(context.Context, *connect.Request[v2.PatchProjectRequest]) (*connect.Response[v2.ApplyProjectResponse], error)
 	GetProject(context.Context, *connect.Request[v2.GetProjectRequest]) (*connect.Response[v2.GetProjectResponse], error)
 	ListProjects(context.Context, *connect.Request[v2.ListProjectsRequest]) (*connect.Response[v2.ListProjectsResponse], error)
 	RemoveProject(context.Context, *connect.Request[v2.RemoveProjectRequest]) (*connect.Response[v2.RemoveProjectResponse], error)
@@ -319,6 +323,12 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ProjectServiceApplyProjectProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("ApplyProject")),
+			connect.WithClientOptions(opts...),
+		),
+		patchProject: connect.NewClient[v2.PatchProjectRequest, v2.ApplyProjectResponse](
+			httpClient,
+			baseURL+ProjectServicePatchProjectProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("PatchProject")),
 			connect.WithClientOptions(opts...),
 		),
 		getProject: connect.NewClient[v2.GetProjectRequest, v2.GetProjectResponse](
@@ -448,6 +458,7 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 type projectServiceClient struct {
 	validateProject              *connect.Client[v2.ValidateProjectRequest, v2.ValidateProjectResponse]
 	applyProject                 *connect.Client[v2.ApplyProjectRequest, v2.ApplyProjectResponse]
+	patchProject                 *connect.Client[v2.PatchProjectRequest, v2.ApplyProjectResponse]
 	getProject                   *connect.Client[v2.GetProjectRequest, v2.GetProjectResponse]
 	listProjects                 *connect.Client[v2.ListProjectsRequest, v2.ListProjectsResponse]
 	removeProject                *connect.Client[v2.RemoveProjectRequest, v2.RemoveProjectResponse]
@@ -478,6 +489,11 @@ func (c *projectServiceClient) ValidateProject(ctx context.Context, req *connect
 // ApplyProject calls agentcompose.v2.ProjectService.ApplyProject.
 func (c *projectServiceClient) ApplyProject(ctx context.Context, req *connect.Request[v2.ApplyProjectRequest]) (*connect.Response[v2.ApplyProjectResponse], error) {
 	return c.applyProject.CallUnary(ctx, req)
+}
+
+// PatchProject calls agentcompose.v2.ProjectService.PatchProject.
+func (c *projectServiceClient) PatchProject(ctx context.Context, req *connect.Request[v2.PatchProjectRequest]) (*connect.Response[v2.ApplyProjectResponse], error) {
+	return c.patchProject.CallUnary(ctx, req)
 }
 
 // GetProject calls agentcompose.v2.ProjectService.GetProject.
@@ -584,6 +600,7 @@ func (c *projectServiceClient) SetSchedulerTriggerEnabled(ctx context.Context, r
 type ProjectServiceHandler interface {
 	ValidateProject(context.Context, *connect.Request[v2.ValidateProjectRequest]) (*connect.Response[v2.ValidateProjectResponse], error)
 	ApplyProject(context.Context, *connect.Request[v2.ApplyProjectRequest]) (*connect.Response[v2.ApplyProjectResponse], error)
+	PatchProject(context.Context, *connect.Request[v2.PatchProjectRequest]) (*connect.Response[v2.ApplyProjectResponse], error)
 	GetProject(context.Context, *connect.Request[v2.GetProjectRequest]) (*connect.Response[v2.GetProjectResponse], error)
 	ListProjects(context.Context, *connect.Request[v2.ListProjectsRequest]) (*connect.Response[v2.ListProjectsResponse], error)
 	RemoveProject(context.Context, *connect.Request[v2.RemoveProjectRequest]) (*connect.Response[v2.RemoveProjectResponse], error)
@@ -631,6 +648,12 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		ProjectServiceApplyProjectProcedure,
 		svc.ApplyProject,
 		connect.WithSchema(projectServiceMethods.ByName("ApplyProject")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServicePatchProjectHandler := connect.NewUnaryHandler(
+		ProjectServicePatchProjectProcedure,
+		svc.PatchProject,
+		connect.WithSchema(projectServiceMethods.ByName("PatchProject")),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceGetProjectHandler := connect.NewUnaryHandler(
@@ -759,6 +782,8 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceValidateProjectHandler.ServeHTTP(w, r)
 		case ProjectServiceApplyProjectProcedure:
 			projectServiceApplyProjectHandler.ServeHTTP(w, r)
+		case ProjectServicePatchProjectProcedure:
+			projectServicePatchProjectHandler.ServeHTTP(w, r)
 		case ProjectServiceGetProjectProcedure:
 			projectServiceGetProjectHandler.ServeHTTP(w, r)
 		case ProjectServiceListProjectsProcedure:
@@ -814,6 +839,10 @@ func (UnimplementedProjectServiceHandler) ValidateProject(context.Context, *conn
 
 func (UnimplementedProjectServiceHandler) ApplyProject(context.Context, *connect.Request[v2.ApplyProjectRequest]) (*connect.Response[v2.ApplyProjectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.ProjectService.ApplyProject is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) PatchProject(context.Context, *connect.Request[v2.PatchProjectRequest]) (*connect.Response[v2.ApplyProjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agentcompose.v2.ProjectService.PatchProject is not implemented"))
 }
 
 func (UnimplementedProjectServiceHandler) GetProject(context.Context, *connect.Request[v2.GetProjectRequest]) (*connect.Response[v2.GetProjectResponse], error) {
