@@ -99,7 +99,7 @@ func TestProjectHandlerPruneSchedulerRunsRejectsInvalidStatusAndDuration(t *test
 
 func TestProjectHandlerPruneSchedulerRunsRuntimeUnavailable(t *testing.T) {
 	store, _, _ := newSchedulerRunHandlerFixture()
-	handler := NewProjectHandler(nil, store, &schedulerRuntimeFake{})
+	handler := NewProjectHandler(nil, store, &schedulerRuntimeFake{}, nil)
 	_, err := handler.PruneSchedulerRuns(context.Background(), connect.NewRequest(&agentcomposev2.PruneSchedulerRunsRequest{
 		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 	}))

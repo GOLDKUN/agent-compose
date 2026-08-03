@@ -30,7 +30,7 @@ func TestProjectHandlerSchedulerUpdatesUseSchedulerRuntime(t *testing.T) {
 		Summary:  domain.SchedulerSummary{ID: schedulerID},
 		Triggers: []domain.SchedulerTrigger{{ID: triggerID, Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 3000}},
 	}}
-	handler := NewProjectHandler(nil, store, runtime)
+	handler := NewProjectHandler(nil, store, runtime, nil)
 
 	enabled, err := handler.SetSchedulerEnabled(context.Background(), connect.NewRequest(&agentcomposev2.SetSchedulerEnabledRequest{
 		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
@@ -70,7 +70,7 @@ func TestProjectHandlerGetSchedulerMapsPersistedNormalizedSpec(t *testing.T) {
 			SpecJSON:    `{"enabled":true,"sandbox_policy":"sticky","concurrency_policy":"parallel","display_name":"Nightly","triggers":[{"name":"heartbeat","kind":"interval","interval":"1m","sandbox_policy":"new"}]}`,
 		},
 	}
-	handler := NewProjectHandler(nil, store, nil)
+	handler := NewProjectHandler(nil, store, nil, nil)
 
 	response, err := handler.GetScheduler(context.Background(), connect.NewRequest(&agentcomposev2.GetSchedulerRequest{
 		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},

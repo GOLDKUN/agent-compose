@@ -67,17 +67,18 @@ type ProjectHandler struct {
 	agentcomposev2connect.UnimplementedProjectServiceHandler
 	delegate         ProjectDelegate
 	store            ProjectStore
+	agentModels      ProjectAgentModelResolver
 	schedulerRuntime ProjectSchedulerRuntime
 	schedulerRuns    ProjectSchedulerRunRuntime
 	invocations      ProjectSchedulerInvocationRuntime
 	schedulerPrune   ProjectSchedulerPruneRuntime
 }
 
-func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime) *ProjectHandler {
+func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver) *ProjectHandler {
 	schedulerRuns, _ := schedulerRuntime.(ProjectSchedulerRunRuntime)
 	invocations, _ := schedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := schedulerRuntime.(ProjectSchedulerPruneRuntime)
-	return &ProjectHandler{delegate: delegate, store: store, schedulerRuntime: schedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune}
+	return &ProjectHandler{delegate: delegate, store: store, agentModels: agentModels, schedulerRuntime: schedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune}
 }
 
 func (h *ProjectHandler) ValidateProject(ctx context.Context, req *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error) {
@@ -379,6 +380,9 @@ func (h *ProjectHandler) GetProject(ctx context.Context, req *connect.Request[ag
 		spec = RedactProjectSpecSecrets(spec)
 	}
 	projectProto := ProjectToProto(project, spec, agents, schedulers)
+	if err := h.enrichProjectAgentModels(ctx, project, projectProto); err != nil {
+		return nil, err
+	}
 	if err := h.enrichProjectAgentRuns(ctx, projectProto); err != nil {
 		return nil, err
 	}
