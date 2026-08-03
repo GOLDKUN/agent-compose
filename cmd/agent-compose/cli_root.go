@@ -60,7 +60,7 @@ func newRootCommand(out, errOut io.Writer, runDaemon daemonRunner) *cobra.Comman
 
 	root.PersistentFlags().StringVar(&options.Host, "host", "", "Daemon HTTP endpoint")
 	root.PersistentFlags().StringVarP(&options.ComposeFile, "file", "f", "", "Path to agent-compose.yml")
-	root.PersistentFlags().StringVar(&options.ProjectName, "project-name", "", "Select a deployed project by name (not supported by up or project up)")
+	root.PersistentFlags().StringVarP(&options.ProjectName, "project-name", "p", "", "Select a deployed project by name (not supported by up or project up)")
 	root.PersistentFlags().BoolVar(&options.JSON, "json", false, "Print machine-readable JSON")
 	root.PersistentFlags().DurationVar(&options.Timeout, "timeout", 0, "Maximum duration of each daemon RPC, including streams; 0 disables the timeout")
 
