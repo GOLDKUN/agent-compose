@@ -40,7 +40,7 @@ func TestIntegrationPatchProjectReplacementAndConcurrency(t *testing.T) {
 	controller := projects.NewController(projects.ControllerDependencies{
 		Config: config, Store: store, Volumes: volumes.NewManager(store),
 	})
-	handler := api.NewProjectHandler(projectControllerDelegate{controller: controller}, store, nil)
+	handler := api.NewProjectHandler(projectControllerDelegate{controller: controller}, store, nil, nil)
 	_, connectHandler := agentcomposev2connect.NewProjectServiceHandler(handler)
 	server := httptest.NewServer(connectHandler)
 	t.Cleanup(server.Close)
