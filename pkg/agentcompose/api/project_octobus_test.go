@@ -23,6 +23,9 @@ func TestProjectSpecOctoBusServersRoundTripAndRedaction(t *testing.T) {
 			"public":   {URL: "https://public.example"},
 			"internal": {URL: "https://internal.example", Token: "secret-token"},
 		},
+		Workspaces: map[string]compose.WorkspaceSpec{
+			"private": {Provider: "git", URL: "https://example.test/repo.git", Username: "git-user", Password: "git-password"},
+		},
 		Agents: []compose.NormalizedAgentSpec{{
 			Name: "worker",
 			Env:  map[string]compose.EnvVarSpec{"TOKEN": {Value: "agent-secret", Secret: true}},
@@ -32,6 +35,7 @@ func TestProjectSpecOctoBusServersRoundTripAndRedaction(t *testing.T) {
 					Headers: map[string]compose.EnvVarSpec{"Authorization": {Value: "agent-mcp-header", Secret: true}},
 				},
 			},
+			Workspace: &compose.WorkspaceSpec{Provider: "git", URL: "https://example.test/agent.git", Token: "git-token"},
 		}},
 	}
 
@@ -77,6 +81,12 @@ func TestProjectSpecOctoBusServersRoundTripAndRedaction(t *testing.T) {
 	if got := redacted.GetAgents()[0].GetMcpServers()[0].GetHeaders()[0].GetValue(); got != secretRedactedValue {
 		t.Fatalf("redacted agent MCP header = %q", got)
 	}
+	if workspace := redacted.GetWorkspaces()[0].GetWorkspace(); workspace.GetUsername() != secretRedactedValue || workspace.GetPassword() != secretRedactedValue {
+		t.Fatalf("redacted project workspace = %#v", workspace)
+	}
+	if got := redacted.GetAgents()[0].GetWorkspace().GetToken(); got != secretRedactedValue {
+		t.Fatalf("redacted agent workspace token = %q", got)
+	}
 	if got := wire.GetOctobusServers()[0].GetToken(); got != "secret-token" {
 		t.Fatalf("redaction mutated source token = %q", got)
 	}
@@ -88,5 +98,8 @@ func TestProjectSpecOctoBusServersRoundTripAndRedaction(t *testing.T) {
 	}
 	if got := wire.GetAgents()[0].GetMcpServers()[0].GetEnv()[0].GetValue(); got != "agent-mcp-env" {
 		t.Fatalf("redaction mutated source agent MCP env = %q", got)
+	}
+	if got := wire.GetWorkspaces()[0].GetWorkspace().GetPassword(); got != "git-password" {
+		t.Fatalf("redaction mutated source workspace password = %q", got)
 	}
 }

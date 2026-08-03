@@ -201,7 +201,7 @@ func Normalize(spec *ProjectSpec, options NormalizeOptions) (*NormalizedProjectS
 		return nil, err
 	}
 	normalized.Variables = variables
-	workspaces, err := normalizeProjectWorkspaces(spec.Workspaces)
+	workspaces, err := normalizeProjectWorkspaces(spec.Workspaces, options)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +296,7 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
-	workspace, err := resolveAgentWorkspace(joinPath("agents", name)+".workspace", agent.Workspace, projectWorkspaces)
+	workspace, err := resolveAgentWorkspace(joinPath("agents", name)+".workspace", agent.Workspace, projectWorkspaces, options)
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
@@ -342,7 +342,7 @@ func normalizeSandboxSpec(path string, sandbox *SandboxSpec) (*NormalizedSandbox
 	return &NormalizedSandboxSpec{StoppedRuntimePolicy: policy}, nil
 }
 
-func normalizeProjectWorkspaces(values map[string]WorkspaceSpec) (map[string]WorkspaceSpec, error) {
+func normalizeProjectWorkspaces(values map[string]WorkspaceSpec, options NormalizeOptions) (map[string]WorkspaceSpec, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -361,7 +361,7 @@ func normalizeProjectWorkspaces(values map[string]WorkspaceSpec) (map[string]Wor
 			return nil, &ValidationError{Path: joinPath("workspaces", rawKey), Message: fmt.Sprintf("duplicate workspace %q", key)}
 		}
 		item := values[rawKey]
-		workspace, err := normalizeInlineWorkspaceSpec(joinPath("workspaces", key), &item, key)
+		workspace, err := normalizeInlineWorkspaceSpec(joinPath("workspaces", key), &item, key, options)
 		if err != nil {
 			return nil, err
 		}
@@ -393,7 +393,7 @@ func normalizeMCPMap(path string, values map[string]MCPServerSpec, options Norma
 	return normalized, nil
 }
 
-func resolveAgentWorkspace(path string, spec *WorkspaceSpec, globals map[string]WorkspaceSpec) (*WorkspaceSpec, error) {
+func resolveAgentWorkspace(path string, spec *WorkspaceSpec, globals map[string]WorkspaceSpec, options NormalizeOptions) (*WorkspaceSpec, error) {
 	if spec == nil {
 		return nil, nil
 	}
@@ -410,13 +410,13 @@ func resolveAgentWorkspace(path string, spec *WorkspaceSpec, globals map[string]
 		resolved.Name = ""
 		return resolved, nil
 	case hasInline:
-		return normalizeInlineWorkspaceSpec(path, trimmed, trimmed.Name)
+		return normalizeInlineWorkspaceSpec(path, trimmed, trimmed.Name, options)
 	default:
 		return nil, &ValidationError{Path: path, Message: "workspace is required"}
 	}
 }
 
-func normalizeInlineWorkspaceSpec(path string, spec *WorkspaceSpec, defaultName string) (*WorkspaceSpec, error) {
+func normalizeInlineWorkspaceSpec(path string, spec *WorkspaceSpec, defaultName string, options NormalizeOptions) (*WorkspaceSpec, error) {
 	if spec == nil {
 		return nil, &ValidationError{Path: path, Message: "workspace is required"}
 	}
@@ -433,6 +433,20 @@ func normalizeInlineWorkspaceSpec(path string, spec *WorkspaceSpec, defaultName 
 	if err := validateSourceSecrets(path, normalizedSource); err != nil {
 		return nil, err
 	}
+	username, err := interpolateEnvValue(path+".username", normalizedSource.Username, options)
+	if err != nil {
+		return nil, err
+	}
+	normalizedSource.Username = username
+	normalizedSource.Password, err = interpolateEnvValue(path+".password", normalizedSource.Password, options)
+	if err != nil {
+		return nil, err
+	}
+	normalizedSource.Token, err = interpolateEnvValue(path+".token", normalizedSource.Token, options)
+	if err != nil {
+		return nil, err
+	}
+	applyWorkspaceSource(workspace, normalizedSource)
 	switch provider {
 	case sources.ProviderFile:
 		if strings.TrimSpace(workspace.URL) != "" {
