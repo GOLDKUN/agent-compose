@@ -10,6 +10,14 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
+func TestNewProjectHandlerAllowsOmittedSchedulerRuntime(t *testing.T) {
+	handler := NewProjectHandler(nil, nil)
+
+	if handler.schedulerRuntime != nil || handler.schedulerRuns != nil || handler.invocations != nil || handler.schedulerPrune != nil {
+		t.Fatalf("scheduler runtime dependencies = %#v", handler)
+	}
+}
+
 func TestProjectHandlerSchedulerUpdatesUseSchedulerRuntime(t *testing.T) {
 	const (
 		projectID   = "project-1"

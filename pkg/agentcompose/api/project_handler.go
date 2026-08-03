@@ -72,7 +72,11 @@ type ProjectHandler struct {
 	schedulerPrune   ProjectSchedulerPruneRuntime
 }
 
-func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime) *ProjectHandler {
+func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntimes ...ProjectSchedulerRuntime) *ProjectHandler {
+	var schedulerRuntime ProjectSchedulerRuntime
+	if len(schedulerRuntimes) > 0 {
+		schedulerRuntime = schedulerRuntimes[0]
+	}
 	schedulerRuns, _ := schedulerRuntime.(ProjectSchedulerRunRuntime)
 	invocations, _ := schedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := schedulerRuntime.(ProjectSchedulerPruneRuntime)
