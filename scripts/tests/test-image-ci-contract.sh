@@ -384,6 +384,13 @@ if [[ -n $merge_job ]]; then
   require_regex "$merge_job" 'docker buildx imagetools create' 'multi-arch manifest creation'
   require_regex "$merge_job" 'type=ref,event=tag,suffix=\$\{\{[[:space:]]*matrix\.tag_suffix' \
     'variant-aware pushed Git tag image metadata'
+  metadata_step=$(step_containing "$merge_job" 'docker/metadata-action@v5')
+  if [[ -z $metadata_step ]]; then
+    fail 'manifest Docker metadata step'
+  else
+    require_regex "$metadata_step" 'flavor:[[:space:]]*latest=false' \
+      'disabled automatic latest tag metadata'
+  fi
   require_regex "$merge_job" "type=raw,value=\\$\\{\\{[[:space:]]*matrix\.stable_tag[[:space:]]*\\}\\},enable=\\$\\{\\{[[:space:]]*startsWith\\(github\\.ref,[[:space:]]*['\"]refs/tags/v['\"]\\)[[:space:]]*\\}\\}" \
     'version-tag-only stable image metadata'
   require_regex "$merge_job" 'username:[[:space:]]*\$\{\{[[:space:]]*secrets\.DOCKERIO_USERNAME' \
