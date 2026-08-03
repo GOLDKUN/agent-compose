@@ -35,6 +35,7 @@ type NormalizeOptions struct {
 	ProjectDir           string
 	ComposePath          string
 	Env                  map[string]string
+	WorkspaceCredentials WorkspaceCredentialMode
 	ResolveScriptURLs    bool
 	ScriptSourceResolver ScriptSourceResolver
 	Context              context.Context
@@ -427,26 +428,14 @@ func normalizeInlineWorkspaceSpec(path string, spec *WorkspaceSpec, defaultName 
 		return nil, &ValidationError{Path: path + ".provider", Message: "workspace provider is required"}
 	}
 	normalizedSource := workspaceSource(*workspace).Normalized()
+	var err error
+	normalizedSource, err = normalizeWorkspaceCredentials(path, normalizedSource, options)
+	if err != nil {
+		return nil, err
+	}
 	applyWorkspaceSource(workspace, normalizedSource)
 	workspace.Provider = provider
 	workspace.Name = defaultName
-	if err := validateSourceSecrets(path, normalizedSource); err != nil {
-		return nil, err
-	}
-	username, err := interpolateEnvValue(path+".username", normalizedSource.Username, options)
-	if err != nil {
-		return nil, err
-	}
-	normalizedSource.Username = username
-	normalizedSource.Password, err = interpolateEnvValue(path+".password", normalizedSource.Password, options)
-	if err != nil {
-		return nil, err
-	}
-	normalizedSource.Token, err = interpolateEnvValue(path+".token", normalizedSource.Token, options)
-	if err != nil {
-		return nil, err
-	}
-	applyWorkspaceSource(workspace, normalizedSource)
 	switch provider {
 	case sources.ProviderFile:
 		if strings.TrimSpace(workspace.URL) != "" {

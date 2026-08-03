@@ -68,3 +68,52 @@ agents: {}
 		t.Fatalf("Normalize error = %v, want missing workspace token environment error", err)
 	}
 }
+
+func TestNormalizeAcceptsResolvedGitWorkspaceCredentials(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: private-workspaces
+workspaces:
+  shared:
+    provider: git
+    url: https://example.test/shared.git
+    username: git-user
+    password: git-password
+agents:
+  worker:
+    workspace:
+      provider: git
+      url: https://example.test/agent.git
+      token: git-token
+`)
+
+	normalized, err := Normalize(spec, NormalizeOptions{WorkspaceCredentials: WorkspaceCredentialsResolved})
+	if err != nil {
+		t.Fatalf("Normalize returned error: %v", err)
+	}
+	if workspace := normalized.Workspaces["shared"]; workspace.Username != "git-user" || workspace.Password != "git-password" {
+		t.Fatalf("shared workspace credentials = %#v", workspace)
+	}
+	if workspace := normalized.Agents[0].Workspace; workspace == nil || workspace.Token != "git-token" {
+		t.Fatalf("agent workspace = %#v", workspace)
+	}
+}
+
+func TestNormalizeResolvedGitWorkspaceRejectsEnvironmentReferences(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: private-workspace
+workspaces:
+  shared:
+    provider: git
+    url: https://example.test/shared.git
+    token: ${GIT_TOKEN}
+agents: {}
+`)
+
+	_, err := Normalize(spec, NormalizeOptions{
+		Env:                  map[string]string{"GIT_TOKEN": "daemon-token"},
+		WorkspaceCredentials: WorkspaceCredentialsResolved,
+	})
+	if err == nil || !strings.Contains(err.Error(), "workspaces.shared.token") || !strings.Contains(err.Error(), "must be resolved before submission") {
+		t.Fatalf("Normalize error = %v, want unresolved workspace token error", err)
+	}
+}
