@@ -38,13 +38,13 @@ func (r *projectAgentModelResolver) ResolveProjectAgentModels(ctx context.Contex
 	if err != nil {
 		return nil, fmt.Errorf("derive project agent definitions: %w", err)
 	}
+	resolved, err := llms.ResolveAgentModels(ctx, r.config, r.store, definitions)
+	if err != nil {
+		return nil, fmt.Errorf("resolve project agent models: %w", err)
+	}
 	resolutions := make(map[string]llms.AgentModelResolution, len(definitions))
-	for _, definition := range definitions {
-		resolution, err := llms.ResolveAgentModel(ctx, r.config, r.store, definition)
-		if err != nil {
-			return nil, fmt.Errorf("resolve agent %s model: %w", definition.AgentName, err)
-		}
-		resolutions[definition.AgentName] = resolution
+	for i, definition := range definitions {
+		resolutions[definition.AgentName] = resolved[i]
 	}
 	return resolutions, nil
 }

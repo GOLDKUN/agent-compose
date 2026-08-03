@@ -39,6 +39,22 @@ type AgentModelResolutionStore interface {
 	ListEnabledLLMModels(context.Context) ([]Model, error)
 }
 
+// ResolveAgentModels previews multiple agents against one read-only snapshot of
+// daemon LLM configuration. Shared provider, model, global environment, and
+// provider-model lookups are loaded at most once per batch.
+func ResolveAgentModels(ctx context.Context, config *appconfig.Config, store AgentModelResolutionStore, agents []domain.AgentDefinition) ([]AgentModelResolution, error) {
+	cachedStore := newAgentModelResolutionStoreCache(store)
+	resolutions := make([]AgentModelResolution, 0, len(agents))
+	for _, agent := range agents {
+		resolution, err := ResolveAgentModel(ctx, config, cachedStore, agent)
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent %s model: %w", agent.AgentName, err)
+		}
+		resolutions = append(resolutions, resolution)
+	}
+	return resolutions, nil
+}
+
 // ResolveAgentModel previews the model selected for a new run without a
 // request- or session-level override. An empty model with provider_default
 // means the agent provider owns the final selection.
@@ -189,4 +205,72 @@ func daemonEnvironmentModel(ctx context.Context, config *appconfig.Config, store
 		}
 	}
 	return "", nil
+}
+
+type agentModelResolutionStoreCache struct {
+	store AgentModelResolutionStore
+
+	providersLoaded bool
+	providers       []Provider
+	providersErr    error
+	modelsLoaded    bool
+	models          []Model
+	modelsErr       error
+	globalEnvLoaded bool
+	globalEnv       []domain.SandboxEnvVar
+	globalEnvErr    error
+	wireAPIs        map[string]agentModelWireAPIResult
+}
+
+type agentModelWireAPIResult struct {
+	wireAPI string
+	ok      bool
+	err     error
+}
+
+func newAgentModelResolutionStoreCache(store AgentModelResolutionStore) *agentModelResolutionStoreCache {
+	return &agentModelResolutionStoreCache{store: store, wireAPIs: make(map[string]agentModelWireAPIResult)}
+}
+
+func (s *agentModelResolutionStoreCache) ListEnabledLLMProviders(ctx context.Context) ([]Provider, error) {
+	if !s.providersLoaded {
+		s.providersLoaded = true
+		if s.store != nil {
+			s.providers, s.providersErr = s.store.ListEnabledLLMProviders(ctx)
+		}
+	}
+	return s.providers, s.providersErr
+}
+
+func (s *agentModelResolutionStoreCache) ListEnabledLLMModels(ctx context.Context) ([]Model, error) {
+	if !s.modelsLoaded {
+		s.modelsLoaded = true
+		if s.store != nil {
+			s.models, s.modelsErr = s.store.ListEnabledLLMModels(ctx)
+		}
+	}
+	return s.models, s.modelsErr
+}
+
+func (s *agentModelResolutionStoreCache) ListGlobalEnv(ctx context.Context) ([]domain.SandboxEnvVar, error) {
+	if !s.globalEnvLoaded {
+		s.globalEnvLoaded = true
+		if s.store != nil {
+			s.globalEnv, s.globalEnvErr = s.store.ListGlobalEnv(ctx)
+		}
+	}
+	return s.globalEnv, s.globalEnvErr
+}
+
+func (s *agentModelResolutionStoreCache) LLMProviderModelWireAPI(ctx context.Context, providerID, modelID string) (string, bool, error) {
+	key := providerID + "\x00" + modelID
+	if result, ok := s.wireAPIs[key]; ok {
+		return result.wireAPI, result.ok, result.err
+	}
+	result := agentModelWireAPIResult{}
+	if s.store != nil {
+		result.wireAPI, result.ok, result.err = s.store.LLMProviderModelWireAPI(ctx, providerID, modelID)
+	}
+	s.wireAPIs[key] = result
+	return result.wireAPI, result.ok, result.err
 }

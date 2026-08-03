@@ -15,9 +15,20 @@ type agentModelResolutionStoreStub struct {
 	globalEnv []domain.SandboxEnvVar
 	wireAPIs  map[string]string
 	err       error
+	calls     *agentModelResolutionStoreCalls
+}
+
+type agentModelResolutionStoreCalls struct {
+	providers int
+	models    int
+	globalEnv int
+	wireAPIs  int
 }
 
 func (s agentModelResolutionStoreStub) ListEnabledLLMProviders(context.Context) ([]Provider, error) {
+	if s.calls != nil {
+		s.calls.providers++
+	}
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -25,14 +36,23 @@ func (s agentModelResolutionStoreStub) ListEnabledLLMProviders(context.Context) 
 }
 
 func (s agentModelResolutionStoreStub) ListEnabledLLMModels(context.Context) ([]Model, error) {
+	if s.calls != nil {
+		s.calls.models++
+	}
 	return append([]Model(nil), s.models...), nil
 }
 
 func (s agentModelResolutionStoreStub) ListGlobalEnv(context.Context) ([]domain.SandboxEnvVar, error) {
+	if s.calls != nil {
+		s.calls.globalEnv++
+	}
 	return append([]domain.SandboxEnvVar(nil), s.globalEnv...), nil
 }
 
 func (s agentModelResolutionStoreStub) LLMProviderModelWireAPI(_ context.Context, providerID, modelID string) (string, bool, error) {
+	if s.calls != nil {
+		s.calls.wireAPIs++
+	}
 	wireAPI, ok := s.wireAPIs[providerID+"\x00"+modelID]
 	return wireAPI, ok, nil
 }
@@ -79,12 +99,48 @@ func TestResolveAgentModelUsesDaemonEnvironmentWithoutConfiguredProvider(t *test
 		t.Fatalf("resolution = %#v", resolution)
 	}
 
-	resolution, err = ResolveAgentModel(context.Background(), &appconfig.Config{LLMModel: "config-model"}, agentModelResolutionStoreStub{globalEnv: []domain.SandboxEnvVar{{Name: "CLAUDE_MODEL", Value: "global-claude"}}}, domain.AgentDefinition{Provider: "claude"})
+	resolution, err = ResolveAgentModel(context.Background(), &appconfig.Config{LLMModel: "config-model"}, agentModelResolutionStoreStub{globalEnv: []domain.SandboxEnvVar{{Name: "CLAUDE_MODEL", Value: "  global-claude  "}}}, domain.AgentDefinition{Provider: "claude"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resolution.Model != "global-claude" || resolution.Source != AgentModelSourceDaemonDefault {
 		t.Fatalf("resolution = %#v", resolution)
+	}
+}
+
+func TestResolveAgentModelsCachesSharedConfigurationQueries(t *testing.T) {
+	t.Setenv("LLM_MODEL", "")
+	calls := &agentModelResolutionStoreCalls{}
+	store := agentModelResolutionStoreStub{
+		providers: []Provider{{ID: "openai", ProviderType: ProviderFamilyOpenAI, Scope: ProviderScopeSystem, Enabled: true}},
+		models:    []Model{{ID: "daemon-model", Name: "daemon-model", DefaultModel: true, Enabled: true}},
+		wireAPIs:  map[string]string{"openai\x00daemon-model": APIProtocolResponses},
+		calls:     calls,
+	}
+	resolutions, err := ResolveAgentModels(context.Background(), nil, store, []domain.AgentDefinition{{Provider: "codex"}, {Provider: "codex"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resolutions) != 2 || resolutions[0].Model != "daemon-model" || resolutions[1].Model != "daemon-model" {
+		t.Fatalf("resolutions = %#v", resolutions)
+	}
+	if calls.providers != 1 || calls.models != 1 || calls.wireAPIs != 1 || calls.globalEnv != 0 {
+		t.Fatalf("store calls = %#v, want providers/models/wire once and no global env", calls)
+	}
+
+	envCalls := &agentModelResolutionStoreCalls{}
+	resolutions, err = ResolveAgentModels(context.Background(), nil, agentModelResolutionStoreStub{
+		globalEnv: []domain.SandboxEnvVar{{Name: "LLM_MODEL", Value: "global-model"}},
+		calls:     envCalls,
+	}, []domain.AgentDefinition{{Provider: "codex"}, {Provider: "codex"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resolutions) != 2 || resolutions[0].Model != "global-model" || resolutions[1].Model != "global-model" {
+		t.Fatalf("global env resolutions = %#v", resolutions)
+	}
+	if envCalls.providers != 1 || envCalls.models != 1 || envCalls.globalEnv != 1 || envCalls.wireAPIs != 0 {
+		t.Fatalf("global env store calls = %#v, want providers/models/global env once and no wire lookup", envCalls)
 	}
 }
 
