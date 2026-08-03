@@ -321,6 +321,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          # Stable tags are selected explicitly below. The action's automatic
+          # latest flavor would otherwise publish latest for every Git tag.
+          flavor: latest=false
           tags: |
             type=ref,event=branch,suffix=${{ matrix.tag_suffix }}
             type=ref,event=tag,suffix=${{ matrix.tag_suffix }}
