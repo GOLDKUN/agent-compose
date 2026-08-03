@@ -377,6 +377,10 @@ func (s *controllerCoverageStore) SaveProjectRevision(context.Context, domain.Pr
 	return domain.ProjectRevisionRecord{}, false, nil
 }
 
+func (s *controllerCoverageStore) GetProjectRevision(context.Context, string, int64) (domain.ProjectRevisionRecord, error) {
+	return domain.ProjectRevisionRecord{}, sql.ErrNoRows
+}
+
 func (s *controllerCoverageStore) GetProjectAgent(context.Context, string, string) (domain.ProjectAgentRecord, error) {
 	return domain.ProjectAgentRecord{}, sql.ErrNoRows
 }

@@ -370,7 +370,9 @@ map key 是 Server 名称，必须符合稳定标识符格式。Agent 通过 `<s
 
 OctoBus token 天然属于敏感信息。应把它保存在环境变量或 dotenv 配置中，并通过 `${NAME}` 引用。daemon 会保留解析后的 token 以代理请求，但会在面向用户的规范化输出中将其脱敏，也不会把它注入 sandbox。不要把字面 token 提交到 compose 文件中。
 
-项目 API 或规范化输出中的脱敏值 `********` 仅用于展示，不能作为 OctoBus 凭据重新 apply。编辑或重新 apply 项目时，请保留以环境变量为凭据来源的原始 compose 文件。
+项目 API 或规范化输出中的脱敏值 `********` 并不是凭据本身。`ApplyProject` 保持原有的完整替换语义，不会把该 marker 解释为“保留”；compose 和 CLI 的 re-apply 流程仍必须从原始、以环境变量为凭据来源的配置中解析并提交真实 secret。
+
+`PatchProject` 用于基于已脱敏的 `GetProject` 结果编辑现有项目。请求必须携带完整目标 `ProjectSpec`、项目引用和当前 spec hash。在现有 secret 的同一稳定位置提交 `********` 会保留已存值；在新增、移动后或非 secret 的位置使用 marker 会被拒绝。提交真实值会替换 secret，省略集合项则会删除该项。Patch 不能创建或重命名项目，也不能修改 source；当前 hash 过期时返回 `ABORTED`。CLI 仍使用 `ApplyProject`，这些 Patch 语义不会改变 CLI 行为。
 
 项目 re-apply 与 MCP Server 沿用相同的 managed agent 配置模型。运行中的 sandbox 保留创建时固化的 `capset_ids` 授权集合，后续调用则从当前 managed agent definition 解析所引用的 Server。因此，更新 Server URL 或 token 无需重建 sandbox 即可生效。新增 capset 只对新 sandbox 可用；如果旧 sandbox 已授权的 capset 所对应 Server 已无法解析，该调用会失败，不会回退到其他 Server。
 

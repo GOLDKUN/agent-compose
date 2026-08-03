@@ -9,6 +9,7 @@ option go_package = "agent-compose/proto/agentcompose/v2;agentcomposev2";
 service ProjectService {
   rpc ValidateProject(ValidateProjectRequest) returns (ValidateProjectResponse);
   rpc ApplyProject(ApplyProjectRequest) returns (ApplyProjectResponse);
+  rpc PatchProject(PatchProjectRequest) returns (ApplyProjectResponse);
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
   rpc RemoveProject(RemoveProjectRequest) returns (RemoveProjectResponse);
@@ -402,6 +403,22 @@ message ApplyProjectResponse {
   repeated ProjectValidationIssue issues = 4;
   bool applied = 5;
   bool unchanged = 6;
+}
+
+message PatchProjectRequest {
+  // Required. Selects an existing project. PatchProject does not create or
+  // rename projects.
+  ProjectRef project = 1;
+  // Required optimistic-concurrency precondition. A mismatch with the current
+  // persisted spec hash fails with ABORTED, including for dry runs.
+  string expected_current_spec_hash = 2;
+  // Required complete desired project specification. A redacted secret marker
+  // returned by GetProject preserves the secret only at the same stable
+  // location in the current revision. Other fields and collections retain the
+  // complete-replacement semantics documented by ApplyProject.
+  ProjectSpec spec = 3;
+  // False applies the update; true validates and plans it without side effects.
+  bool dry_run = 4;
 }
 
 message GetProjectRequest {
