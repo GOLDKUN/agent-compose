@@ -45,6 +45,10 @@ agents: {}
 			args: []string{"up", "--file", composePath, "--project-name", "file-project", "--host", server.URL},
 		},
 		{
+			name: "project name shorthand is still unsupported",
+			args: []string{"up", "--file", composePath, "-p", "file-project", "--host", server.URL},
+		},
+		{
 			name: "implicit compose source is not read",
 			args: []string{"up", "--project-name", "selected-project", "--host", server.URL},
 		},

@@ -21,7 +21,7 @@ Global options are placed between `agent-compose` and the subcommand, and apply 
 | --- | --- |
 | `-f, --file <path>` | Path to the project config file. Both `agent-compose.yml` and `agent-compose.yaml` are supported. When this option is used, the project root is the config file directory, so you do not need to `cd` into it. |
 | `--host <endpoint>` | Daemon HTTP endpoint. This can target a local daemon or a remote daemon. |
-| `--project-name <name>` | Select an existing daemon project by name. It is not supported by `up` or `project up` and never changes the project name declared by a compose file. |
+| `-p, --project-name <name>` | Select an existing daemon project by name. It is not supported by `up` or `project up` and never changes the project name declared by a compose file. |
 | `--json` | Print machine-readable JSON for scripts, AI agents, and automation. |
 | `--timeout <duration>` | Maximum total duration of each CLI-to-daemon RPC, including streaming responses. The default `0` disables the total RPC timeout. |
 

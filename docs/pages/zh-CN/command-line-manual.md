@@ -21,7 +21,7 @@ agent-compose [global options] <command> [command options] [arguments]
 | --- | --- |
 | `-f, --file <path>` | 指定 project 配置文件。支持 `agent-compose.yml` 和 `agent-compose.yaml`。使用该参数后，可以在任意目录操作该 project，project root 为配置文件所在目录。 |
 | `--host <endpoint>` | 指定 daemon 地址。可以连接本机 daemon，也可以连接远程 daemon。 |
-| `--project-name <name>` | 按名称选择 daemon 中已部署的 project；`up` 和 `project up` 不支持该参数，且它不会修改 compose 文件声明的项目名称。 |
+| `-p, --project-name <name>` | 按名称选择 daemon 中已部署的 project；`up` 和 `project up` 不支持该参数，且它不会修改 compose 文件声明的项目名称。 |
 | `--json` | 使用 JSON 输出，供脚本、AI 和自动化系统解析。 |
 | `--timeout <duration>` | 每个 CLI→daemon RPC 的最大总时长，包括读取流式响应；默认值 `0` 表示不设置 RPC 总超时。 |
 
