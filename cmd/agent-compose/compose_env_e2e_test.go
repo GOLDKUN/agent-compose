@@ -91,6 +91,19 @@ func TestE2EDockerComposeSandboxEnvContract(t *testing.T) {
 	if strings.Contains(dockerfile, "ENV SESSION_ROOT=") {
 		t.Fatalf("Dockerfile still defines legacy SESSION_ROOT")
 	}
+	for name, content := range map[string]string{
+		"Dockerfile":                     dockerfile,
+		"Dockerfile.agent-compose-local": localDockerfile,
+	} {
+		for _, want := range []string{
+			"ENV CAP_GRPC_LISTEN=0.0.0.0:7420",
+			"ENV CAP_GRPC_TARGET=agent-compose:7420",
+		} {
+			if !strings.Contains(content, want) {
+				t.Fatalf("%s missing image-level capability proxy default %q", name, want)
+			}
+		}
+	}
 	if strings.Contains(dockerfile, "/usr/share/zoneinfo/Asia/Shanghai") || strings.Contains(localDockerfile, "/usr/share/zoneinfo/Asia/Shanghai") {
 		t.Fatal("daemon Dockerfiles must not hard-code the timezone")
 	}
