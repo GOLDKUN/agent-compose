@@ -23,6 +23,7 @@ import (
 type ProjectDelegate interface {
 	ValidateProject(context.Context, *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error)
 	ApplyProject(context.Context, *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
+	PatchProject(context.Context, *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
 	RemoveProject(context.Context, *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error)
 	WatchProject(context.Context, *connect.Request[agentcomposev2.WatchProjectRequest], *connect.ServerStream[agentcomposev2.WatchProjectResponse]) error
 }
@@ -85,6 +86,10 @@ func (h *ProjectHandler) ValidateProject(ctx context.Context, req *connect.Reque
 
 func (h *ProjectHandler) ApplyProject(ctx context.Context, req *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
 	return h.delegate.ApplyProject(ctx, req)
+}
+
+func (h *ProjectHandler) PatchProject(ctx context.Context, req *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
+	return h.delegate.PatchProject(ctx, req)
 }
 
 func (h *ProjectHandler) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {

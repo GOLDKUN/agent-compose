@@ -371,7 +371,9 @@ The map key is the server name and must use the stable identifier format. Agents
 
 OctoBus tokens are inherently sensitive. Keep them in environment or dotenv configuration and reference them with `${NAME}`. The daemon retains the resolved token so it can proxy requests, but redacts it from normalized user-facing output and never injects it into the sandbox. Avoid committing literal tokens to compose files.
 
-The redacted `********` value in project API or normalized output is display-only and cannot be applied as an OctoBus credential. Preserve the original environment-backed compose source when editing or re-applying a project.
+The redacted `********` value in project API or normalized output is not the credential itself. `ApplyProject` keeps its existing complete-replacement behavior and does not interpret this marker as “preserve”; compose and CLI re-apply flows must still resolve and submit the real secret from the original environment-backed source.
+
+`PatchProject` is the API for editing an existing project from a redacted `GetProject` result. It takes the complete desired `ProjectSpec`, the project reference, and the required current spec hash. At an existing secret's same stable location, `********` preserves the stored value. Using the marker for a new, moved, or non-secret value is rejected; a real value replaces the secret, and omitting a collection item deletes it. Patch cannot create or rename a project or change its source. A stale current hash fails with `ABORTED`. The CLI continues to use `ApplyProject`; these Patch semantics do not change CLI behavior.
 
 Project re-apply follows the same managed agent configuration model as MCP servers. A running sandbox keeps the `capset_ids` authorization set captured when it was created, while subsequent calls resolve a referenced server from the current managed agent definition. Updating a server URL or token therefore takes effect without rebuilding the sandbox. Newly added capsets are available only to new sandboxes; if a server used by an existing authorized capset can no longer be resolved, that call fails instead of falling back to another server.
 

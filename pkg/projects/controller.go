@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	ErrInvalidRequest = errors.New("invalid project request")
-	ErrUnavailable    = errors.New("project dependency unavailable")
-	ErrUnimplemented  = errors.New("project operation unimplemented")
+	ErrInvalidRequest   = errors.New("invalid project request")
+	ErrRevisionConflict = errors.New("project revision conflict")
+	ErrUnavailable      = errors.New("project dependency unavailable")
+	ErrUnimplemented    = errors.New("project operation unimplemented")
 )
 
 type ValidationIssue struct {
@@ -61,6 +62,7 @@ type ControllerStore interface {
 	UpsertProject(context.Context, domain.ProjectRecord) (domain.ProjectRecord, error)
 	MarkProjectRemoved(context.Context, string) (domain.ProjectRecord, error)
 	SaveProjectRevision(context.Context, domain.ProjectRevisionRecord) (domain.ProjectRevisionRecord, bool, error)
+	GetProjectRevision(context.Context, string, int64) (domain.ProjectRevisionRecord, error)
 	GetProjectAgent(context.Context, string, string) (domain.ProjectAgentRecord, error)
 	UpsertProjectAgent(context.Context, domain.ProjectAgentRecord) (domain.ProjectAgentRecord, error)
 	ListProjectAgents(context.Context, string) ([]domain.ProjectAgentRecord, error)
@@ -173,6 +175,88 @@ type ApplyResult struct {
 }
 
 func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyResult, error) {
+	return c.applyProject(ctx, req, false)
+}
+
+type PatchRequest struct {
+	Project                 ProjectRef
+	ExpectedCurrentSpecHash string
+	Spec                    *compose.ProjectSpec
+	Issues                  []ValidationIssue
+	DryRun                  bool
+}
+
+func (c *Controller) PatchProject(ctx context.Context, req PatchRequest) (ApplyResult, error) {
+	if HasValidationErrors(req.Issues) {
+		return ApplyResult{Issues: req.Issues}, nil
+	}
+	if c.store == nil {
+		return ApplyResult{}, fmt.Errorf("patch project: config store is required")
+	}
+	expectedHash := strings.TrimSpace(req.ExpectedCurrentSpecHash)
+	if expectedHash == "" {
+		return ApplyResult{}, fmt.Errorf("%w: expected current spec hash is required", ErrInvalidRequest)
+	}
+	project, err := c.resolveProjectRef(ctx, req.Project, false)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	release, err := c.lifecycle.acquire(ctx, project.Name)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("patch project %s: wait for lifecycle operation: %w", project.Name, err)
+	}
+	defer release()
+	project, err = c.resolveProjectRef(ctx, ProjectRefByID(project.ID), false)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	if project.CurrentRevision <= 0 {
+		return ApplyResult{}, fmt.Errorf("%w: project %s has no current revision", ErrInvalidRequest, project.Name)
+	}
+	revision, err := c.store.GetProjectRevision(ctx, project.ID, project.CurrentRevision)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("patch project %s: load current revision: %w", project.Name, err)
+	}
+	if expectedHash != revision.SpecHash {
+		return ApplyResult{}, fmt.Errorf("%w: expected spec hash %s does not match current spec hash %s", ErrRevisionConflict, expectedHash, revision.SpecHash)
+	}
+	current, err := compose.ParseCanonicalJSON([]byte(revision.SpecJSON))
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("patch project %s: parse current revision: %w", project.Name, err)
+	}
+	if req.Spec == nil {
+		return ApplyResult{Issues: []ValidationIssue{{Path: "spec", Message: "project spec is required"}}, RevisionSpec: current}, nil
+	}
+	if strings.TrimSpace(req.Spec.Name) != project.Name {
+		return ApplyResult{Issues: []ValidationIssue{{Path: "spec.name", Message: "project name cannot be changed by PatchProject"}}, RevisionSpec: current}, nil
+	}
+	restored, restoreIssues, err := RestoreProjectSecrets(current, req.Spec)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("patch project %s: restore secrets: %w", project.Name, err)
+	}
+	if HasValidationErrors(restoreIssues) {
+		return ApplyResult{Issues: restoreIssues, RevisionSpec: current}, nil
+	}
+	normalizedSpec, err := compose.Normalize(restored, compose.NormalizeOptions{ComposePath: project.SourcePath})
+	if err != nil {
+		var validationErr *compose.ValidationError
+		if errors.As(err, &validationErr) {
+			return ApplyResult{Issues: []ValidationIssue{{Path: validationErr.Path, Message: validationErr.Message}}, RevisionSpec: current}, nil
+		}
+		return ApplyResult{}, fmt.Errorf("patch project %s: normalize candidate: %w", project.Name, err)
+	}
+	specHash, err := normalizedSpec.Hash()
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("patch project %s: hash candidate: %w", project.Name, err)
+	}
+	return c.applyProject(ctx, ApplyRequest{
+		Normalized: NormalizedProject{Spec: normalizedSpec, SpecHash: specHash, SourcePath: project.SourcePath},
+		Issues:     req.Issues,
+		DryRun:     req.DryRun,
+	}, true)
+}
+
+func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecycleHeld bool) (ApplyResult, error) {
 	normalized := req.Normalized
 	if HasValidationErrors(req.Issues) {
 		return ApplyResult{Issues: req.Issues, RevisionSpec: normalized.Spec}, nil
@@ -187,9 +271,12 @@ func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyR
 	if issues := c.validateProjectAgentDefinitions(normalized); len(issues) > 0 {
 		return ApplyResult{Issues: issues, RevisionSpec: normalized.Spec}, nil
 	}
-	release, err := c.lifecycle.acquire(ctx, project.Name)
-	if err != nil {
-		return ApplyResult{}, fmt.Errorf("apply project %s: wait for lifecycle operation: %w", normalized.Spec.Name, err)
+	release := func() {}
+	if !lifecycleHeld {
+		release, err = c.lifecycle.acquire(ctx, project.Name)
+		if err != nil {
+			return ApplyResult{}, fmt.Errorf("apply project %s: wait for lifecycle operation: %w", normalized.Spec.Name, err)
+		}
 	}
 	defer release()
 	existingByName, nameFound, err := c.projectByNameIfExists(ctx, project.Name)

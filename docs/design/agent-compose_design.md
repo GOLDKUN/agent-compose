@@ -280,6 +280,7 @@ owned by `ProjectService` alongside project reconciliation:
 - `ProjectService`
   - `ValidateProject`
   - `ApplyProject`
+  - `PatchProject`
   - `GetProject`
   - `ListProjects`
   - `RemoveProject`
