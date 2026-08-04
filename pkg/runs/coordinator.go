@@ -33,6 +33,7 @@ type TransitionRequest struct {
 	SandboxID      string
 	ExitCode       int
 	Error          string
+	ErrorStack     string
 	Output         string
 	ResultJSON     string
 	LogsPath       string
@@ -263,6 +264,9 @@ func applyProjectRunTransitionFields(run *domain.ProjectRunRecord, req Transitio
 	}
 	if value := strings.TrimSpace(req.Error); value != "" {
 		run.Error = value
+	}
+	if value := strings.TrimSpace(req.ErrorStack); value != "" {
+		run.ErrorStack = value
 	}
 	if req.Output != "" {
 		run.Output = req.Output

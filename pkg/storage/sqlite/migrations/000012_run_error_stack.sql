@@ -1,0 +1,1 @@
+ALTER TABLE project_run ADD COLUMN error_stack TEXT NOT NULL DEFAULT '';

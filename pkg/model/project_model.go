@@ -92,6 +92,7 @@ type ProjectRunRecord struct {
 	SandboxID       string    `json:"sandbox_id,omitempty"`
 	ExitCode        int       `json:"exit_code,omitempty"`
 	Error           string    `json:"error,omitempty"`
+	ErrorStack      string    `json:"error_stack,omitempty"`
 	Prompt          string    `json:"prompt,omitempty"`
 	Output          string    `json:"output,omitempty"`
 	ResultJSON      string    `json:"result_json,omitempty"`
