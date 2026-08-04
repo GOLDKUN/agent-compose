@@ -3,6 +3,8 @@ package runs
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
 	"agent-compose/pkg/capabilities"
@@ -13,12 +15,14 @@ import (
 )
 
 type recordingCapabilitySandboxIndexer struct {
-	indexed []*domain.Sandbox
-	revoked []string
+	indexed        []*domain.Sandbox
+	trustedHeaders [][]domain.TrustedHeader
+	revoked        []string
 }
 
-func (i *recordingCapabilitySandboxIndexer) IndexSandbox(sandbox *domain.Sandbox) {
+func (i *recordingCapabilitySandboxIndexer) IndexSandbox(sandbox *domain.Sandbox, headers []domain.TrustedHeader) {
 	i.indexed = append(i.indexed, sandbox)
+	i.trustedHeaders = append(i.trustedHeaders, append([]domain.TrustedHeader(nil), headers...))
 }
 
 func (i *recordingCapabilitySandboxIndexer) RevokeSandbox(sandboxID string) {
@@ -41,7 +45,7 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 		fixture.controller.capTokens = indexer
 		sandbox := newProjectRunCapabilitySandbox(t, fixture, domain.VMStatusStopped)
 
-		if err := fixture.controller.startProjectRunSandbox(fixture.ctx, sandbox, "sandbox.resumed", "resumed"); err != nil {
+		if err := fixture.controller.startProjectRunSandbox(fixture.ctx, sandbox, "sandbox.resumed", "resumed", nil); err != nil {
 			t.Fatalf("startProjectRunSandbox: %v", err)
 		}
 		if len(indexer.indexed) != 1 {
@@ -67,7 +71,7 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 		fixture.driver.startErr = errors.New("start failed")
 		sandbox := newProjectRunCapabilitySandbox(t, fixture, domain.VMStatusStopped)
 
-		if err := fixture.controller.startProjectRunSandbox(fixture.ctx, sandbox, "sandbox.resumed", "resumed"); !errors.Is(err, fixture.driver.startErr) {
+		if err := fixture.controller.startProjectRunSandbox(fixture.ctx, sandbox, "sandbox.resumed", "resumed", nil); !errors.Is(err, fixture.driver.startErr) {
 			t.Fatalf("startProjectRunSandbox error = %v", err)
 		}
 		if len(indexer.indexed) != 0 || len(indexer.revoked) != 0 {
@@ -189,6 +193,102 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 			t.Fatal("removed sandbox is still present")
 		}
 	})
+}
+
+func TestProjectRunTrustedHeadersRemainTransientAndClearOnReuse(t *testing.T) {
+	fixture := newControllerRunFixture(t)
+	indexer := &recordingCapabilitySandboxIndexer{}
+	fixture.controller.capTokens = indexer
+	run := persistControllerFixtureRun(t, fixture, domain.ProjectRunRecord{
+		RunID:       "run-trusted-headers",
+		ProjectID:   "project-1",
+		ProjectName: "Project",
+		AgentID:     "agent-1",
+		AgentName:   "worker",
+		Driver:      driverpkg.RuntimeDriverDocker,
+		ImageRef:    "guest:latest",
+	})
+	tags := append(SandboxTags(run), domain.SandboxTag{Name: capabilities.CapsetTagName, Value: "dev"})
+	sandbox, err := fixture.store.CreateSandbox(
+		fixture.ctx,
+		"trusted headers",
+		"",
+		driverpkg.RuntimeDriverDocker,
+		"guest:latest",
+		"",
+		domain.SandboxTypeManual,
+		nil,
+		[]domain.SandboxEnvVar{{Name: capabilities.SandboxTokenEnvName, Value: "sandbox-token", Secret: true}},
+		tags,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sandbox.Summary.VMStatus = domain.VMStatusRunning
+	if err := fixture.store.UpdateSandbox(fixture.ctx, sandbox); err != nil {
+		t.Fatal(err)
+	}
+
+	trusted := []domain.TrustedHeader{{Name: "x-mpi-user-id", Value: "user-1"}}
+	ctx := domain.NewContextWithTrustedHeaders(fixture.ctx, trusted)
+	result, err := fixture.controller.ensureProjectRunSandbox(ctx, run, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(indexer.trustedHeaders) != 1 || !reflect.DeepEqual(indexer.trustedHeaders[0], trusted) {
+		t.Fatalf("indexed trusted headers = %#v, want %#v", indexer.trustedHeaders, trusted)
+	}
+	for _, tag := range result.Sandbox.Summary.Tags {
+		if strings.HasPrefix(strings.ToLower(tag.Name), "x-mpi-") {
+			t.Fatalf("trusted header persisted as sandbox tag: %#v", tag)
+		}
+	}
+	persisted, err := fixture.store.LoadSandbox(sandbox.Summary.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tag := range persisted.Summary.Tags {
+		if strings.HasPrefix(strings.ToLower(tag.Name), "x-mpi-") {
+			t.Fatalf("trusted header persisted in sandbox store: %#v", tag)
+		}
+	}
+
+	if _, err := fixture.controller.ensureProjectRunSandbox(fixture.ctx, run, Preparation{}, RunAgentRequest{SandboxID: sandbox.Summary.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if len(indexer.trustedHeaders) != 2 || len(indexer.trustedHeaders[1]) != 0 {
+		t.Fatalf("reused sandbox retained prior trusted headers: %#v", indexer.trustedHeaders)
+	}
+}
+
+func TestStartProjectRunPreservesTrustedHeadersForDetachedExecution(t *testing.T) {
+	fixture := newControllerRunFixture(t)
+	indexer := &recordingCapabilitySandboxIndexer{}
+	fixture.controller.capTokens = indexer
+	trusted := []domain.TrustedHeader{{Name: "x-mpi-user-id", Value: "user-1"}}
+	requestCtx := domain.NewContextWithTrustedHeaders(fixture.ctx, trusted)
+
+	started, err := fixture.controller.StartProjectRun(requestCtx, RunAgentRequest{
+		ProjectID: "project-1",
+		AgentName: "worker",
+		Prompt:    "do work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// RunSupervisor.StartRun executes with a daemon-root-derived context so the
+	// started run must carry the request metadata across that async boundary.
+	execCtx, cancel := context.WithCancelCause(fixture.ctx)
+	defer cancel(nil)
+	_, _, _ = started.Execute(execCtx, nil)
+
+	if len(indexer.trustedHeaders) == 0 {
+		t.Fatal("sandbox was not indexed")
+	}
+	if !reflect.DeepEqual(indexer.trustedHeaders[0], trusted) {
+		t.Fatalf("indexed trusted headers = %#v, want %#v", indexer.trustedHeaders[0], trusted)
+	}
 }
 
 func sandboxEventTypeExists(events []domain.SandboxEvent, eventType string) bool {

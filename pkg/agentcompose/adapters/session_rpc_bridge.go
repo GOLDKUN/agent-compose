@@ -340,7 +340,7 @@ func (b *SandboxRPCBridge) stopSandbox(ctx context.Context, sandboxID, source st
 
 func (b *SandboxRPCBridge) indexCapabilitySandbox(session *domain.Sandbox) {
 	if b != nil && b.capTokens != nil {
-		b.capTokens.IndexSandbox(session)
+		b.capTokens.IndexSandbox(session, nil)
 	}
 }
 

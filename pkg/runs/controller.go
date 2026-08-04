@@ -69,7 +69,7 @@ type DashboardNotifier interface {
 }
 
 type CapabilitySandboxIndexer interface {
-	IndexSandbox(*domain.Sandbox)
+	IndexSandbox(*domain.Sandbox, []domain.TrustedHeader)
 	RevokeSandbox(string)
 }
 
@@ -242,6 +242,7 @@ func (c *Controller) StartProjectRun(ctx context.Context, req RunAgentRequest) (
 	if c.configDB == nil {
 		return StartedProjectRun{}, fmt.Errorf("config store is required")
 	}
+	trustedHeaders := domain.TrustedHeadersFromContext(ctx)
 	commandText := strings.TrimSpace(req.Command)
 	if commandText != "" && (strings.TrimSpace(req.Prompt) != "" || strings.TrimSpace(req.TriggerID) != "") {
 		return StartedProjectRun{}, fmt.Errorf("%w: run requires only one of command, prompt, or trigger", ErrInvalidRequest)
@@ -280,6 +281,9 @@ func (c *Controller) StartProjectRun(ctx context.Context, req RunAgentRequest) (
 		Run:      run,
 		Warnings: warnings,
 		Execute: func(execCtx context.Context, stream *StreamSink) (domain.ProjectRunRecord, error, error) {
+			// Async runs execute from the daemon root context. Restore only the
+			// request metadata they need instead of retaining the transport context.
+			execCtx = domain.NewContextWithTrustedHeaders(execCtx, trustedHeaders)
 			return c.executeStartedProjectRun(execCtx, coordinator, run, req, warnings, stream)
 		},
 	}, nil
@@ -2093,6 +2097,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	tags = append(tags, domain.SandboxTag{Name: domain.AgentSandboxTagProvider, Value: agentConfig.Provider})
 	capabilityVars, capabilityTags := capabilities.BuildGatewaySandboxVars(capabilities.ProxyTarget(c.cap), prepared.CapsetIDs)
 	tags = append(tags, capabilityTags...)
+	trustedHeaders := domain.TrustedHeadersFromContext(ctx)
 	bindingStore, hasBindingStore := c.configDB.(stickyBindingStore)
 	var previousStickyBinding *domain.SchedulerBinding
 	boundSandbox := false
@@ -2193,7 +2198,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			}
 			sandbox.EnvItems = domain.MergeEnvItems(sandbox.EnvItems, capabilityVars)
 			sandbox.Summary.Tags = MergeSandboxTags(sandbox.Summary.Tags, tags)
-			if err := c.startProjectRunSandbox(ctx, sandbox, "sandbox.resumed", "sandbox resumed for project run"); err != nil {
+			if err := c.startProjectRunSandbox(ctx, sandbox, "sandbox.resumed", "sandbox resumed for project run", trustedHeaders); err != nil {
 				return SandboxResult{Sandbox: sandbox}, err
 			}
 			return SandboxResult{Sandbox: sandbox, Warnings: warnings}, nil
@@ -2261,7 +2266,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 		_ = c.store.UpdateSandbox(ctx, sandbox)
 		return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, err
 	}
-	if err := c.startProjectRunSandboxRuntime(ctx, sandbox, "sandbox.created", "sandbox started for project run"); err != nil {
+	if err := c.startProjectRunSandboxRuntime(ctx, sandbox, "sandbox.created", "sandbox started for project run", trustedHeaders); err != nil {
 		return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, err
 	}
 	if stickySchedulerID != "" {
@@ -2378,7 +2383,7 @@ func (c *Controller) applyJupyterOptionsToSandbox(sandbox *domain.Sandbox, optio
 	return c.store.SaveProxyState(sandbox.Summary.ID, proxyState)
 }
 
-func (c *Controller) startProjectRunSandbox(ctx context.Context, sandbox *domain.Sandbox, eventType, eventMessage string) error {
+func (c *Controller) startProjectRunSandbox(ctx context.Context, sandbox *domain.Sandbox, eventType, eventMessage string, trustedHeaders []domain.TrustedHeader) error {
 	if sandbox == nil {
 		return fmt.Errorf("sandbox is required")
 	}
@@ -2393,7 +2398,7 @@ func (c *Controller) startProjectRunSandbox(ctx context.Context, sandbox *domain
 		_ = c.store.UpdateSandbox(ctx, sandbox)
 		return err
 	}
-	return c.startProjectRunSandboxRuntime(ctx, sandbox, eventType, eventMessage)
+	return c.startProjectRunSandboxRuntime(ctx, sandbox, eventType, eventMessage, trustedHeaders)
 }
 
 func (c *Controller) ensureProjectRunSandboxWorkspace(ctx context.Context, sandbox *domain.Sandbox) error {
@@ -2422,7 +2427,7 @@ func (c *Controller) prepareFreshStartAgentEnvironment(ctx context.Context, sand
 	return c.executor.PrepareSandboxAgentEnvironmentFromTags(ctx, sandbox)
 }
 
-func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox *domain.Sandbox, eventType, eventMessage string) error {
+func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox *domain.Sandbox, eventType, eventMessage string, trustedHeaders []domain.TrustedHeader) error {
 	writeCapabilityGuide(ctx, c.cap, c.store, c.streams, sandbox, capabilities.SandboxCapsets(sandbox))
 	if sandbox.Summary.VMStatus != domain.VMStatusRunning {
 		if err := c.driver.StartSandboxVM(ctx, sandbox); err != nil {
@@ -2444,7 +2449,7 @@ func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox 
 	domain.RestoreSandboxTransientFields(loaded, sandbox)
 	*sandbox = *loaded
 	if c.capTokens != nil {
-		c.capTokens.IndexSandbox(loaded)
+		c.capTokens.IndexSandbox(loaded, trustedHeaders)
 	}
 	return nil
 }

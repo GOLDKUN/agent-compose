@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 
+	domain "agent-compose/pkg/model"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -35,6 +37,10 @@ type SandboxBinding struct {
 	// CapsetIDs is the set of capsets the sandbox is allowed to use. The guest
 	// picks one per call (x-octobus-capset); capproxy validates membership.
 	CapsetIDs []string
+	// TrustedHeaders carries request-scoped x-octobus-ext-* headers. They are
+	// injected into outgoing calls after all guest-supplied values with that
+	// prefix have been stripped.
+	TrustedHeaders []domain.TrustedHeader
 }
 
 type SandboxResolver interface {
@@ -120,7 +126,7 @@ func (s *Server) handleUnknown(_ any, stream grpc.ServerStream) error {
 	if err != nil {
 		return err
 	}
-	outgoing := buildOutgoingMetadata(stream.Context(), target.CapsetID)
+	outgoing := buildOutgoingMetadata(stream.Context(), target.CapsetID, binding)
 	if !isReflectionMethod(method) {
 		// Business calls route by capset + instance + method. The instance comes
 		// from the injected guide.
@@ -163,13 +169,29 @@ func containsString(values []string, target string) bool {
 // auth is injected in proxyStream).
 // x-octobus-capset is forced to the resolved, sandbox-allowed value so the guest
 // cannot reach a capset outside its set.
-func buildOutgoingMetadata(ctx context.Context, capset string) metadata.MD {
+// Trusted x-octobus-ext-* headers from the sandbox binding replace any values
+// the guest may have supplied.
+func buildOutgoingMetadata(ctx context.Context, capset string, binding SandboxBinding) metadata.MD {
 	incoming, _ := metadata.FromIncomingContext(ctx)
 	outgoing := incoming.Copy()
 	outgoing.Delete(SandboxTokenMetadata)
 	outgoing.Delete(deprecatedSessionTokenMetadata)
 	outgoing.Delete("authorization")
 	outgoing.Set("x-octobus-capset", capset)
+
+	// Strip every guest-supplied extension value, including names that the
+	// trusted ingress did not provide for this sandbox.
+	for name := range outgoing {
+		if strings.HasPrefix(strings.ToLower(name), "x-octobus-ext-") {
+			outgoing.Delete(name)
+		}
+	}
+
+	// Preserve repeated trusted values in their original HTTP order.
+	for _, h := range binding.TrustedHeaders {
+		outgoing.Append(h.Name, h.Value)
+	}
+
 	return outgoing
 }
 

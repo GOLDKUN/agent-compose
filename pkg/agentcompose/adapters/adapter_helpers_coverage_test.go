@@ -257,7 +257,7 @@ func TestCapabilitySandboxResolverCoverage(t *testing.T) {
 	if _, err := resolver.ResolveCapabilitySandbox(ctx, "token-2"); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("revoked token error = %v", err)
 	}
-	resolver.IndexSandbox(running)
+	resolver.IndexSandbox(running, nil)
 	binding, err = resolver.ResolveCapabilitySandbox(ctx, "token-2")
 	if err != nil || binding.SandboxID != "sandbox-running" {
 		t.Fatalf("indexed binding = %#v err=%v", binding, err)
