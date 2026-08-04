@@ -61,6 +61,7 @@ type Config struct {
 	LLMAPIKey                  string
 	LLMModel                   string
 	LLMTimeout                 time.Duration
+	LLMMaxOutputTokens         int
 	CodexRequestMaxRetries     uint64
 	CodexStreamMaxRetries      uint64
 	CodexStreamIdleTimeout     time.Duration
@@ -176,6 +177,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 	llmAPIKey := getenvFirst("LLM_API_KEY", "OPENAI_API_KEY")
 
 	llmModel := os.Getenv("LLM_MODEL")
+	llmMaxOutputTokens := envPositiveInt(logger, "LLM_MAX_OUTPUT_TOKENS")
 	runtimeBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_COMPOSE_RUNTIME_BASE_URL")), "/")
 
 	llmTimeout := 60 * time.Second
@@ -495,6 +497,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		LLMAPIKey:                  llmAPIKey,
 		LLMModel:                   llmModel,
 		LLMTimeout:                 llmTimeout,
+		LLMMaxOutputTokens:         llmMaxOutputTokens,
 		CodexRequestMaxRetries:     codexRuntime.requestMaxRetries,
 		CodexStreamMaxRetries:      codexRuntime.streamMaxRetries,
 		CodexStreamIdleTimeout:     codexRuntime.streamIdleTimeout,

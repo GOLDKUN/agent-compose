@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -35,6 +36,11 @@ type RuntimeLLMOptions struct {
 	Sandboxes     RuntimeLLMSandboxStore
 	ResolveTarget RuntimeLLMTargetResolver
 	Client        HTTPDoer
+	// MaxOutputTokens, when > 0, is injected into every proxied upstream LLM
+	// request using the field names supported by the upstream protocol. codex
+	// does not send max_output_tokens itself, so without this API proxies that
+	// default to a small limit silently truncate long outputs.
+	MaxOutputTokens int
 }
 
 func RegisterRuntimeLLMFacadeRoutes(app *echo.Echo, opts RuntimeLLMOptions) {
@@ -126,6 +132,7 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 			raw, status := inboundAdapter.EncodeError(err)
 			return WriteRuntimeLLMEncodedError(c, raw, status)
 		}
+		upstreamBody = injectMaxOutputTokens(upstreamBody, upstreamProtocol, h.opts.MaxOutputTokens)
 		return h.proxyTransparent(c, upstreamEndpoint, upstreamBody, target, upstreamProtocol)
 	}
 	upstreamBody, err := llms.EncodeRuntimeUpstreamRequest(inboundProtocol, upstreamProtocol, target, llmReq)
@@ -133,6 +140,7 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 		raw, status := inboundAdapter.EncodeError(err)
 		return WriteRuntimeLLMEncodedError(c, raw, status)
 	}
+	upstreamBody = injectMaxOutputTokens(upstreamBody, upstreamProtocol, h.opts.MaxOutputTokens)
 	upstreamReq, err := http.NewRequestWithContext(c.Request().Context(), http.MethodPost, upstreamEndpoint, bytes.NewReader(upstreamBody))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "create upstream llm request failed"})
@@ -170,6 +178,43 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 	c.Response().WriteHeader(resp.StatusCode)
 	_, err = c.Response().Writer.Write(clientBody)
 	return err
+}
+
+// injectMaxOutputTokens adds the configured output-token limit to a proxied
+// upstream LLM request body. codex does not send max_output_tokens itself
+// (see openai/codex#36180), and the protocol bridge defaults the chat
+// completions max_completion_tokens to a small value (e.g. 4096); upstream
+// proxies honor that field and silently truncate long agent outputs. Setting
+// both OpenAI Chat field names ensures the configured limit wins. Anthropic
+// Messages receives only max_tokens because it rejects max_completion_tokens.
+func injectMaxOutputTokens(body []byte, upstreamProtocol protocolbridge.Protocol, maxTokens int) []byte {
+	if maxTokens <= 0 || len(body) == 0 {
+		return body
+	}
+	fields := map[string]int{}
+	switch upstreamProtocol {
+	case protocolbridge.ProtocolOpenAIResponses:
+		fields["max_output_tokens"] = maxTokens
+	case protocolbridge.ProtocolOpenAIChat:
+		fields["max_tokens"] = maxTokens
+		fields["max_completion_tokens"] = maxTokens
+	case protocolbridge.ProtocolAnthropicMessages:
+		fields["max_tokens"] = maxTokens
+	default:
+		return body
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return body
+	}
+	for field, value := range fields {
+		obj[field] = value
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return body
+	}
+	return out
 }
 
 func (h runtimeLLMHandler) proxyTransparent(c echo.Context, upstreamEndpoint string, body []byte, target llms.ResolvedTarget, upstreamProtocol protocolbridge.Protocol) error {

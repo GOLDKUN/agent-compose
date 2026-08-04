@@ -58,3 +58,18 @@ func codexIdleTimeoutEnv(logger *slog.Logger, defaultValue time.Duration) time.D
 	}
 	return parsed
 }
+
+// envPositiveInt reads a positive integer environment variable. Returns 0 when
+// unset, so callers can treat 0 as "not configured".
+func envPositiveInt(logger *slog.Logger, name string) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		logger.Warn("invalid positive integer", "name", name, "value", raw, "error", err)
+		return 0
+	}
+	return parsed
+}
