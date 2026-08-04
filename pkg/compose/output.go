@@ -13,6 +13,7 @@ import (
 
 const redactedEnvValue = "********"
 const redactedOctoBusToken = "********"
+const redactedSourceCredential = "********"
 
 type orderedEnvVarSpec struct {
 	Name   string `yaml:"name" json:"name"`
@@ -161,9 +162,9 @@ func (s *NormalizedProjectSpec) ordered(redactSecrets bool) orderedProjectSpec {
 			Env:          orderedEnvVars(agent.Env, redactSecrets),
 			MCPServers:   orderedMCPServers(agent.MCPServers, redactSecrets),
 			CapsetIDs:    slices.Clone(agent.CapsetIDs),
-			Skills:       cloneNormalizedSkillSpecs(agent.Skills),
+			Skills:       outputSkillSpecs(agent.Skills, redactSecrets),
 			Volumes:      cloneNormalizedVolumeMountSpecs(agent.Volumes),
-			Workspace:    cloneWorkspaceSpec(agent.Workspace),
+			Workspace:    outputWorkspace(agent.Workspace, redactSecrets),
 			Sandbox:      agent.Sandbox,
 			Scheduler:    cloneNormalizedSchedulerSpec(agent.Scheduler),
 			Jupyter:      cloneJupyterSpec(agent.Jupyter),
@@ -175,7 +176,7 @@ func (s *NormalizedProjectSpec) ordered(redactSecrets bool) orderedProjectSpec {
 	return orderedProjectSpec{
 		Name:           s.Name,
 		Variables:      orderedEnvVars(s.Variables, redactSecrets),
-		Workspaces:     orderedWorkspaces(s.Workspaces),
+		Workspaces:     orderedWorkspaces(s.Workspaces, redactSecrets),
 		MCPServers:     mcps,
 		OctoBusServers: octobusServers,
 		Volumes:        orderedVolumes(s.Volumes),
@@ -219,7 +220,7 @@ func (s *NormalizedProjectSpec) clone(redactSecrets bool) *NormalizedProjectSpec
 	return cloned
 }
 
-func orderedWorkspaces(values map[string]WorkspaceSpec) []orderedNamedWorkspace {
+func orderedWorkspaces(values map[string]WorkspaceSpec, redactSecrets bool) []orderedNamedWorkspace {
 	if len(values) == 0 {
 		return nil
 	}
@@ -231,6 +232,7 @@ func orderedWorkspaces(values map[string]WorkspaceSpec) []orderedNamedWorkspace 
 	out := make([]orderedNamedWorkspace, 0, len(keys))
 	for _, key := range keys {
 		value := values[key]
+		credentials := outputWorkspace(&value, redactSecrets)
 		out = append(out, orderedNamedWorkspace{
 			Key:      key,
 			Name:     value.Name,
@@ -239,13 +241,49 @@ func orderedWorkspaces(values map[string]WorkspaceSpec) []orderedNamedWorkspace 
 			Ref:      value.Ref,
 			Path:     value.Path,
 			Format:   value.Format,
-			Username: value.Username,
-			Password: value.Password,
-			Token:    value.Token,
+			Username: credentials.Username,
+			Password: credentials.Password,
+			Token:    credentials.Token,
 			Target:   value.Target,
 		})
 	}
 	return out
+}
+
+func outputWorkspace(value *WorkspaceSpec, redactSecrets bool) *WorkspaceSpec {
+	result := cloneWorkspaceSpec(value)
+	if result == nil || !redactSecrets {
+		return result
+	}
+	if result.Username != "" {
+		result.Username = redactedSourceCredential
+	}
+	if result.Password != "" {
+		result.Password = redactedSourceCredential
+	}
+	if result.Token != "" {
+		result.Token = redactedSourceCredential
+	}
+	return result
+}
+
+func outputSkillSpecs(values []NormalizedSkillSpec, redactSecrets bool) []NormalizedSkillSpec {
+	result := cloneNormalizedSkillSpecs(values)
+	if !redactSecrets {
+		return result
+	}
+	for index := range result {
+		if result[index].Username != "" {
+			result[index].Username = redactedSourceCredential
+		}
+		if result[index].Password != "" {
+			result[index].Password = redactedSourceCredential
+		}
+		if result[index].Token != "" {
+			result[index].Token = redactedSourceCredential
+		}
+	}
+	return result
 }
 
 func workspaceMapFromOrdered(values []orderedNamedWorkspace) map[string]WorkspaceSpec {

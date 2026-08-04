@@ -282,7 +282,7 @@ func newSchedulerRunHandlerFixture() (*schedulerRunProjectStoreFake, *schedulerR
 		},
 	}
 	runtime := &schedulerRunRuntimeFake{}
-	return store, runtime, NewProjectHandler(nil, store, runtime, nil)
+	return store, runtime, NewProjectHandler(nil, store, runtime)
 }
 
 type schedulerRunProjectStoreFake struct {

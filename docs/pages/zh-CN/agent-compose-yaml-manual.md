@@ -169,9 +169,9 @@ agents:
 - `agents.*.env.*.value`
 - 项目级和 Agent 内联 MCP 的 `url`、`env.*.value`、`headers.*.value`
 - 项目级 OctoBus 的 `url` 和 `token`
-- Skill 的 `name`、`source`、`url`、`path`、`ref`、`username`
+- Skill 的 `name`、`source`、`url`、`path`、`ref`、`username`、`password` 和 `token`；其中 `password`、`token` 必须是完整 `${NAME}` 引用
 
-其他字符串字段不会自动插值，例如 `name`、`provider`、`image`、`system_prompt`、Workspace 字段、Build 字段和 Scheduler 字段。
+其他字符串字段不会自动插值，例如 `name`、`provider`、`image`、`system_prompt`、Workspace 的其他字段、Build 字段和 Scheduler 字段。
 
 ### 环境值的两种写法
 
@@ -675,7 +675,7 @@ skills:
 | `password` | string | HTTP/Git 密码，只允许完整环境引用 `${NAME}`。 |
 | `token` | string | HTTP/Git token，只允许完整环境引用 `${NAME}`。 |
 
-`password` 和 `token` 不允许明文。它们在 Skill 解析阶段通过 daemon 环境解析，避免把凭证展开后写入项目规范。远程 ZIP 下载限制为 HTTP(S)，并执行大小、压缩包和网络地址安全检查。
+`password` 和 `token` 不允许明文。执行 `config` 或 `up` 时，CLI 会从项目 dotenv/进程环境解析完整的 `${NAME}` 引用，再把项目提交给 daemon；引用对应的变量缺失时保留引用本身而不是报错，并在 clone 时再解析。面向用户的规范化输出和项目 API 会对解析后的凭据脱敏。远程 ZIP 下载限制为 HTTP(S)，并执行大小、压缩包和网络地址安全检查。
 
 Git ref 会在各自业务生命周期中解析：Skill 在 Agent run 时解析，Workspace 在 sandbox provisioning 时解析，Scheduler 来源在 `config`/`up` 时解析并保存脚本快照。因此 moving branch 在三处可能得到不同 commit；需要严格一致时，应在 `ref` 中直接填写 commit SHA。
 

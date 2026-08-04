@@ -354,6 +354,8 @@ agents:
         provider: git
         url: https://github.com/anthropics/skills.git
         path: skills/pdf
+        username: ${GIT_USER}
+        password: ${GIT_PASSWORD}
         token: ${GIT_TOKEN}
       - name: report
         provider: http
@@ -366,7 +368,14 @@ agents:
         format: zip
 `)
 
-	normalized, err := Normalize(spec, NormalizeOptions{ComposePath: composePath})
+	normalized, err := Normalize(spec, NormalizeOptions{
+		ComposePath: composePath,
+		Env: map[string]string{
+			"GIT_USER":     "git-user",
+			"GIT_PASSWORD": "git-password",
+			"GIT_TOKEN":    "git-token",
+		},
+	})
 	if err != nil {
 		t.Fatalf("Normalize returned error: %v", err)
 	}
@@ -377,7 +386,7 @@ agents:
 	if skills[0].Name != "local-review" || skills[0].Provider != "file" || skills[0].Path != filepath.Join(dir, "skills", "local-review") {
 		t.Fatalf("local skill = %#v", skills[0])
 	}
-	if skills[1].Name != "pdf" || skills[1].Provider != "git" || skills[1].Token != "${GIT_TOKEN}" {
+	if skills[1].Name != "pdf" || skills[1].Provider != "git" || skills[1].Username != "git-user" || skills[1].Password != "git-password" || skills[1].Token != "git-token" {
 		t.Fatalf("git skill = %#v", skills[1])
 	}
 	if skills[2].Provider != "http" || skills[2].Format != "zip" || skills[2].URL != "https://example.com/report.zip" || skills[2].Path != "report" {
@@ -447,6 +456,53 @@ agents:
 	}
 	if got := err.Error(); !strings.Contains(got, "agents.reviewer.skills[0].token") || !strings.Contains(got, "environment reference") {
 		t.Fatalf("error = %q, want token environment reference validation", got)
+	}
+}
+
+func TestNormalizeAgentSkillsAcceptsResolvedCredentials(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: skills-project
+agents:
+  reviewer:
+    skills:
+      - name: private
+        provider: git
+        url: https://git.example/skills.git
+        username: git-user
+        password: git-password
+        token: git-token
+`)
+
+	normalized, err := Normalize(spec, NormalizeOptions{SourceCredentials: SourceCredentialsResolved})
+	if err != nil {
+		t.Fatalf("Normalize returned error: %v", err)
+	}
+	skill := normalized.Agents[0].Skills[0]
+	if skill.Username != "git-user" || skill.Password != "git-password" || skill.Token != "git-token" {
+		t.Fatalf("skill credentials = %#v", skill)
+	}
+}
+
+func TestNormalizeResolvedAcceptsAgentSkillEnvironmentReferences(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: skills-project
+agents:
+  reviewer:
+    skills:
+      - name: private
+        provider: git
+        url: https://git.example/skills.git
+        token: ${GIT_TOKEN}
+`)
+
+	// Resolved mode must accept legacy persisted environment references for
+	// skills just like workspaces so unrelated patches keep working.
+	normalized, err := Normalize(spec, NormalizeOptions{SourceCredentials: SourceCredentialsResolved})
+	if err != nil {
+		t.Fatalf("Normalize returned error for legacy skill reference: %v", err)
+	}
+	if got := normalized.Agents[0].Skills[0].Token; got != "${GIT_TOKEN}" {
+		t.Fatalf("skill token = %q, want legacy reference preserved", got)
 	}
 }
 

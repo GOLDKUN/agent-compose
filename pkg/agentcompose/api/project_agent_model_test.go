@@ -21,6 +21,15 @@ func (s projectAgentModelResolverStub) ResolveProjectAgentModels(context.Context
 	return s.resolutions, s.err
 }
 
+func TestNewProjectHandlerWithAgentModelsSetsResolver(t *testing.T) {
+	resolver := projectAgentModelResolverStub{}
+	handler := NewProjectHandlerWithAgentModels(nil, nil, nil, resolver)
+
+	if _, ok := handler.agentModels.(projectAgentModelResolverStub); !ok {
+		t.Fatalf("agent model resolver = %#v", handler.agentModels)
+	}
+}
+
 func TestEnrichProjectAgentModelsMapsResolvedModelAndSource(t *testing.T) {
 	handler := &ProjectHandler{agentModels: projectAgentModelResolverStub{resolutions: map[string]llms.AgentModelResolution{
 		"coder": {Model: "dev/gpt-5.5", Source: llms.AgentModelSourceDaemonDefault},

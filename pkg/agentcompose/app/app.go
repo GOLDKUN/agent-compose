@@ -97,7 +97,7 @@ func RegisterDependencies(di do.Injector) {
 func RegisterRoutes(di do.Injector) {
 	app := do.MustInvoke[*echo.Echo](di)
 
-	projectHandler := api.NewProjectHandler(
+	projectHandler := api.NewProjectHandlerWithAgentModels(
 		projectControllerDelegate{controller: do.MustInvoke[*projects.Controller](di)},
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[*schedulers.Controller](di),

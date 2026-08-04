@@ -74,7 +74,20 @@ type ProjectHandler struct {
 	schedulerPrune   ProjectSchedulerPruneRuntime
 }
 
-func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver) *ProjectHandler {
+func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntimes ...ProjectSchedulerRuntime) *ProjectHandler {
+	var schedulerRuntime ProjectSchedulerRuntime
+	if len(schedulerRuntimes) > 0 {
+		schedulerRuntime = schedulerRuntimes[0]
+	}
+	return newProjectHandler(delegate, store, schedulerRuntime, nil)
+}
+
+// NewProjectHandlerWithAgentModels constructs a project handler that enriches project responses with resolved agent models.
+func NewProjectHandlerWithAgentModels(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver) *ProjectHandler {
+	return newProjectHandler(delegate, store, schedulerRuntime, agentModels)
+}
+
+func newProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver) *ProjectHandler {
 	schedulerRuns, _ := schedulerRuntime.(ProjectSchedulerRunRuntime)
 	invocations, _ := schedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := schedulerRuntime.(ProjectSchedulerPruneRuntime)

@@ -35,6 +35,7 @@ type NormalizeOptions struct {
 	ProjectDir           string
 	ComposePath          string
 	Env                  map[string]string
+	SourceCredentials    SourceCredentialMode
 	ResolveScriptURLs    bool
 	ScriptSourceResolver ScriptSourceResolver
 	Context              context.Context
@@ -201,7 +202,7 @@ func Normalize(spec *ProjectSpec, options NormalizeOptions) (*NormalizedProjectS
 		return nil, err
 	}
 	normalized.Variables = variables
-	workspaces, err := normalizeProjectWorkspaces(spec.Workspaces)
+	workspaces, err := normalizeProjectWorkspaces(spec.Workspaces, options)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +297,7 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
-	workspace, err := resolveAgentWorkspace(joinPath("agents", name)+".workspace", agent.Workspace, projectWorkspaces)
+	workspace, err := resolveAgentWorkspace(joinPath("agents", name)+".workspace", agent.Workspace, projectWorkspaces, options)
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
@@ -342,7 +343,7 @@ func normalizeSandboxSpec(path string, sandbox *SandboxSpec) (*NormalizedSandbox
 	return &NormalizedSandboxSpec{StoppedRuntimePolicy: policy}, nil
 }
 
-func normalizeProjectWorkspaces(values map[string]WorkspaceSpec) (map[string]WorkspaceSpec, error) {
+func normalizeProjectWorkspaces(values map[string]WorkspaceSpec, options NormalizeOptions) (map[string]WorkspaceSpec, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -361,7 +362,7 @@ func normalizeProjectWorkspaces(values map[string]WorkspaceSpec) (map[string]Wor
 			return nil, &ValidationError{Path: joinPath("workspaces", rawKey), Message: fmt.Sprintf("duplicate workspace %q", key)}
 		}
 		item := values[rawKey]
-		workspace, err := normalizeInlineWorkspaceSpec(joinPath("workspaces", key), &item, key)
+		workspace, err := normalizeInlineWorkspaceSpec(joinPath("workspaces", key), &item, key, options)
 		if err != nil {
 			return nil, err
 		}
@@ -393,7 +394,7 @@ func normalizeMCPMap(path string, values map[string]MCPServerSpec, options Norma
 	return normalized, nil
 }
 
-func resolveAgentWorkspace(path string, spec *WorkspaceSpec, globals map[string]WorkspaceSpec) (*WorkspaceSpec, error) {
+func resolveAgentWorkspace(path string, spec *WorkspaceSpec, globals map[string]WorkspaceSpec, options NormalizeOptions) (*WorkspaceSpec, error) {
 	if spec == nil {
 		return nil, nil
 	}
@@ -410,13 +411,13 @@ func resolveAgentWorkspace(path string, spec *WorkspaceSpec, globals map[string]
 		resolved.Name = ""
 		return resolved, nil
 	case hasInline:
-		return normalizeInlineWorkspaceSpec(path, trimmed, trimmed.Name)
+		return normalizeInlineWorkspaceSpec(path, trimmed, trimmed.Name, options)
 	default:
 		return nil, &ValidationError{Path: path, Message: "workspace is required"}
 	}
 }
 
-func normalizeInlineWorkspaceSpec(path string, spec *WorkspaceSpec, defaultName string) (*WorkspaceSpec, error) {
+func normalizeInlineWorkspaceSpec(path string, spec *WorkspaceSpec, defaultName string, options NormalizeOptions) (*WorkspaceSpec, error) {
 	if spec == nil {
 		return nil, &ValidationError{Path: path, Message: "workspace is required"}
 	}
@@ -427,12 +428,14 @@ func normalizeInlineWorkspaceSpec(path string, spec *WorkspaceSpec, defaultName 
 		return nil, &ValidationError{Path: path + ".provider", Message: "workspace provider is required"}
 	}
 	normalizedSource := workspaceSource(*workspace).Normalized()
+	var err error
+	normalizedSource, err = normalizeSourceCredentials(path, normalizedSource, options)
+	if err != nil {
+		return nil, err
+	}
 	applyWorkspaceSource(workspace, normalizedSource)
 	workspace.Provider = provider
 	workspace.Name = defaultName
-	if err := validateSourceSecrets(path, normalizedSource); err != nil {
-		return nil, err
-	}
 	switch provider {
 	case sources.ProviderFile:
 		if strings.TrimSpace(workspace.URL) != "" {
@@ -655,12 +658,6 @@ func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) 
 	}
 	format = strings.ToLower(strings.TrimSpace(format))
 	username := strings.TrimSpace(value.Username)
-	if username != "" {
-		username, err = interpolateEnvValue(path+".username", username, options)
-		if err != nil {
-			return NormalizedSkillSpec{}, err
-		}
-	}
 	password := strings.TrimSpace(value.Password)
 	token := strings.TrimSpace(value.Token)
 	commonSource := sources.Source{
@@ -673,7 +670,8 @@ func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) 
 		Password: password,
 		Token:    token,
 	}.Normalized()
-	if err := validateSourceSecrets(path, commonSource); err != nil {
+	commonSource, err = normalizeSourceCredentials(path, commonSource, options)
+	if err != nil {
 		return NormalizedSkillSpec{}, err
 	}
 	if commonSource.Provider == "" {
@@ -1421,6 +1419,34 @@ func interpolateEnvValue(path string, value string, options NormalizeOptions) (s
 			return "", &ValidationError{Path: path, Message: fmt.Sprintf("environment variable %s is required", name)}
 		}
 		b.WriteString(envValue)
+		last = match[1]
+	}
+	b.WriteString(value[last:])
+	return b.String(), nil
+}
+
+// interpolateEnvValueLoose resolves environment references like
+// interpolateEnvValue, but leaves a reference unresolved when its variable is
+// missing from the environment instead of failing. It is used for source
+// credential fields where a reference may be intentionally resolved later at
+// clone time, and where persisted legacy data may still contain references.
+func interpolateEnvValueLoose(path string, value string, options NormalizeOptions) (string, error) {
+	matches := envReferencePattern.FindAllStringSubmatchIndex(value, -1)
+	if len(matches) == 0 {
+		return value, nil
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	last := 0
+	for _, match := range matches {
+		b.WriteString(value[last:match[0]])
+		name := value[match[2]:match[3]]
+		envValue, ok := lookupInterpolationEnv(name, options)
+		if ok {
+			b.WriteString(envValue)
+		} else {
+			b.WriteString(value[match[0]:match[1]])
+		}
 		last = match[1]
 	}
 	b.WriteString(value[last:])

@@ -51,6 +51,48 @@ agents:
 	}
 }
 
+func TestCanonicalOutputRedactsSkillCredentials(t *testing.T) {
+	normalized := mustNormalizeCompose(t, `
+name: private-skills
+agents:
+  reviewer:
+    skills:
+      - name: private
+        provider: git
+        url: https://git.example/skills.git
+        username: ${SKILL_USER}
+        password: ${SKILL_PASSWORD}
+        token: ${SKILL_TOKEN}
+`, map[string]string{
+		"SKILL_USER":     "skill-user",
+		"SKILL_PASSWORD": "skill-password",
+		"SKILL_TOKEN":    "skill-token",
+	})
+
+	redacted, err := normalized.MarshalCanonicalJSON(true)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalJSON redacted: %v", err)
+	}
+	for _, secret := range []string{"skill-user", "skill-password", "skill-token"} {
+		if bytes.Contains(redacted, []byte(secret)) {
+			t.Fatalf("redacted output leaked skill credential %q: %s", secret, redacted)
+		}
+	}
+	if got := bytes.Count(redacted, []byte(redactedSourceCredential)); got != 3 {
+		t.Fatalf("redacted marker count = %d, want 3: %s", got, redacted)
+	}
+
+	unredacted, err := normalized.MarshalCanonicalJSON(false)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalJSON unredacted: %v", err)
+	}
+	for _, secret := range []string{"skill-user", "skill-password", "skill-token"} {
+		if !bytes.Contains(unredacted, []byte(secret)) {
+			t.Fatalf("unredacted output missing skill credential %q: %s", secret, unredacted)
+		}
+	}
+}
+
 func TestAgentPresentationMetadataSurvivesNormalizationAndCanonicalOutput(t *testing.T) {
 	normalized := mustNormalizeCompose(t, `
 name: presentation

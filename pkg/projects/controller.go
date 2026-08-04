@@ -237,7 +237,10 @@ func (c *Controller) PatchProject(ctx context.Context, req PatchRequest) (ApplyR
 	if HasValidationErrors(restoreIssues) {
 		return ApplyResult{Issues: restoreIssues, RevisionSpec: current}, nil
 	}
-	normalizedSpec, err := compose.Normalize(restored, compose.NormalizeOptions{ComposePath: project.SourcePath})
+	normalizedSpec, err := compose.Normalize(restored, compose.NormalizeOptions{
+		ComposePath:       project.SourcePath,
+		SourceCredentials: compose.SourceCredentialsResolved,
+	})
 	if err != nil {
 		var validationErr *compose.ValidationError
 		if errors.As(err, &validationErr) {

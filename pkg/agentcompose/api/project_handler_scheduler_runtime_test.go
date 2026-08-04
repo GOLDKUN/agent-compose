@@ -10,6 +10,14 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
+func TestNewProjectHandlerAllowsOmittedSchedulerRuntime(t *testing.T) {
+	handler := NewProjectHandler(nil, nil)
+
+	if handler.schedulerRuntime != nil || handler.schedulerRuns != nil || handler.invocations != nil || handler.schedulerPrune != nil {
+		t.Fatalf("scheduler runtime dependencies = %#v", handler)
+	}
+}
+
 func TestProjectHandlerSchedulerUpdatesUseSchedulerRuntime(t *testing.T) {
 	const (
 		projectID   = "project-1"
@@ -30,7 +38,7 @@ func TestProjectHandlerSchedulerUpdatesUseSchedulerRuntime(t *testing.T) {
 		Summary:  domain.SchedulerSummary{ID: schedulerID},
 		Triggers: []domain.SchedulerTrigger{{ID: triggerID, Kind: domain.SchedulerTriggerKindInterval, IntervalMs: 3000}},
 	}}
-	handler := NewProjectHandler(nil, store, runtime, nil)
+	handler := NewProjectHandler(nil, store, runtime)
 
 	enabled, err := handler.SetSchedulerEnabled(context.Background(), connect.NewRequest(&agentcomposev2.SetSchedulerEnabledRequest{
 		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},
@@ -70,7 +78,7 @@ func TestProjectHandlerGetSchedulerMapsPersistedNormalizedSpec(t *testing.T) {
 			SpecJSON:    `{"enabled":true,"sandbox_policy":"sticky","concurrency_policy":"parallel","display_name":"Nightly","triggers":[{"name":"heartbeat","kind":"interval","interval":"1m","sandbox_policy":"new"}]}`,
 		},
 	}
-	handler := NewProjectHandler(nil, store, nil, nil)
+	handler := NewProjectHandler(nil, store, nil)
 
 	response, err := handler.GetScheduler(context.Background(), connect.NewRequest(&agentcomposev2.GetSchedulerRequest{
 		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: projectID}},

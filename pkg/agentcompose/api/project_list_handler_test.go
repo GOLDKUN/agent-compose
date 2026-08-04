@@ -21,7 +21,7 @@ func TestListProjectsUsesAggregatedResourceCounts(t *testing.T) {
 			TotalCount: 1,
 		},
 	}
-	handler := NewProjectHandler(nil, store, nil, nil)
+	handler := NewProjectHandler(nil, store, nil)
 
 	response, err := handler.ListProjects(context.Background(), connect.NewRequest(&agentcomposev2.ListProjectsRequest{
 		Query: "project", IncludeRemoved: true, Offset: 4, Limit: 25,

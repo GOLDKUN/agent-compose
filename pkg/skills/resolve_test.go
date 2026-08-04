@@ -305,6 +305,30 @@ func TestDownloadAppliesSourceAuthentication(t *testing.T) {
 	}
 }
 
+func TestDownloadUsesResolvedSourceAuthenticationWithoutEnvironmentLookup(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if got := request.Header.Get("Authorization"); got != "Bearer resolved-skill-secret" {
+			t.Errorf("Authorization = %q", got)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{"Content-Type": []string{"application/zip"}},
+			Body:       io.NopCloser(strings.NewReader("not-a-zip")),
+			Request:    request,
+		}, nil
+	})}
+	resolver := Resolver{HTTPClient: client, Env: map[string]string{"TOKEN": "daemon-environment-secret"}}
+	path, cleanup, err := resolver.download(context.Background(), "https://example.com/skill.zip", sources.Source{Token: "resolved-skill-secret"})
+	if err != nil {
+		t.Fatalf("download returned error: %v", err)
+	}
+	cleanup()
+	if path == "" {
+		t.Fatal("download path is empty")
+	}
+}
+
 func TestExtractZipRejectsBackslashTraversal(t *testing.T) {
 	root := t.TempDir()
 	archivePath := filepath.Join(root, "escape.zip")
