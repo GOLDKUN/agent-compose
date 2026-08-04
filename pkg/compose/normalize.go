@@ -1425,6 +1425,34 @@ func interpolateEnvValue(path string, value string, options NormalizeOptions) (s
 	return b.String(), nil
 }
 
+// interpolateEnvValueLoose resolves environment references like
+// interpolateEnvValue, but leaves a reference unresolved when its variable is
+// missing from the environment instead of failing. It is used for source
+// credential fields where a reference may be intentionally resolved later at
+// clone time, and where persisted legacy data may still contain references.
+func interpolateEnvValueLoose(path string, value string, options NormalizeOptions) (string, error) {
+	matches := envReferencePattern.FindAllStringSubmatchIndex(value, -1)
+	if len(matches) == 0 {
+		return value, nil
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	last := 0
+	for _, match := range matches {
+		b.WriteString(value[last:match[0]])
+		name := value[match[2]:match[3]]
+		envValue, ok := lookupInterpolationEnv(name, options)
+		if ok {
+			b.WriteString(envValue)
+		} else {
+			b.WriteString(value[match[0]:match[1]])
+		}
+		last = match[1]
+	}
+	b.WriteString(value[last:])
+	return b.String(), nil
+}
+
 func lookupInterpolationEnv(name string, options NormalizeOptions) (string, bool) {
 	if options.Env != nil {
 		value, ok := options.Env[name]

@@ -483,7 +483,7 @@ agents:
 	}
 }
 
-func TestNormalizeResolvedAgentSkillRejectsEnvironmentReferences(t *testing.T) {
+func TestNormalizeResolvedAcceptsAgentSkillEnvironmentReferences(t *testing.T) {
 	spec := mustParseCompose(t, `
 name: skills-project
 agents:
@@ -495,9 +495,14 @@ agents:
         token: ${GIT_TOKEN}
 `)
 
-	_, err := Normalize(spec, NormalizeOptions{SourceCredentials: SourceCredentialsResolved})
-	if err == nil || !strings.Contains(err.Error(), "agents.reviewer.skills[0].token") || !strings.Contains(err.Error(), "must be resolved before submission") {
-		t.Fatalf("Normalize error = %v, want unresolved skill token error", err)
+	// Resolved mode must accept legacy persisted environment references for
+	// skills just like workspaces so unrelated patches keep working.
+	normalized, err := Normalize(spec, NormalizeOptions{SourceCredentials: SourceCredentialsResolved})
+	if err != nil {
+		t.Fatalf("Normalize returned error for legacy skill reference: %v", err)
+	}
+	if got := normalized.Agents[0].Skills[0].Token; got != "${GIT_TOKEN}" {
+		t.Fatalf("skill token = %q, want legacy reference preserved", got)
 	}
 }
 

@@ -13,10 +13,13 @@ type SourceCredentialMode uint8
 const (
 	// SourceCredentialsFromReferences requires password and token fields to use
 	// environment references and resolves all credential references from
-	// NormalizeOptions.Env. This is the default for compose authoring input.
+	// NormalizeOptions.Env. References that cannot be resolved from the
+	// environment are kept as-is so authoring input remains valid without the
+	// variable present; runtime resolution happens at clone time.
 	SourceCredentialsFromReferences SourceCredentialMode = iota
 	// SourceCredentialsResolved accepts credential values that the CLI already
-	// resolved and rejects remaining environment references.
+	// resolved as well as legacy environment references persisted by older
+	// daemons. Runtime resolution happens at clone time for references.
 	SourceCredentialsResolved
 )
 
@@ -39,48 +42,30 @@ func normalizeSourceCredentials(path string, source sources.Source, options Norm
 		}
 		return resolveSourceCredentialReferences(path, source, options)
 	case SourceCredentialsResolved:
-		if err := validateResolvedSourceCredentials(path, source); err != nil {
-			return sources.Source{}, err
-		}
 		return source, nil
 	default:
 		return sources.Source{}, fmt.Errorf("unsupported source credential mode %d", options.SourceCredentials)
 	}
 }
 
+// resolveSourceCredentialReferences resolves each credential reference from
+// NormalizeOptions.Env. A reference whose variable is missing from the
+// environment is kept as-is instead of failing: authoring input may rely on
+// runtime resolution at clone time, and persisted legacy data may still
+// contain references. Literal credential values are never rewritten.
 func resolveSourceCredentialReferences(path string, source sources.Source, options NormalizeOptions) (sources.Source, error) {
 	var err error
-	source.Username, err = interpolateEnvValue(path+".username", source.Username, options)
+	source.Username, err = interpolateEnvValueLoose(path+".username", source.Username, options)
 	if err != nil {
 		return sources.Source{}, err
 	}
-	source.Password, err = interpolateEnvValue(path+".password", source.Password, options)
+	source.Password, err = interpolateEnvValueLoose(path+".password", source.Password, options)
 	if err != nil {
 		return sources.Source{}, err
 	}
-	source.Token, err = interpolateEnvValue(path+".token", source.Token, options)
+	source.Token, err = interpolateEnvValueLoose(path+".token", source.Token, options)
 	if err != nil {
 		return sources.Source{}, err
 	}
 	return source.Normalized(), nil
-}
-
-func validateResolvedSourceCredentials(path string, source sources.Source) error {
-	credentials := []struct {
-		name  string
-		value string
-	}{
-		{name: "username", value: source.Username},
-		{name: "password", value: source.Password},
-		{name: "token", value: source.Token},
-	}
-	for _, credential := range credentials {
-		if envReferencePattern.MatchString(credential.value) {
-			return &ValidationError{
-				Path:    path + "." + credential.name,
-				Message: "source credential must be resolved before submission",
-			}
-		}
-	}
-	return nil
 }

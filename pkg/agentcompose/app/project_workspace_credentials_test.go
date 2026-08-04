@@ -69,7 +69,7 @@ agents:
 	}
 }
 
-func TestNormalizeProjectRequestRejectsUnresolvedWorkspaceCredentials(t *testing.T) {
+func TestNormalizeProjectRequestAcceptsLegacyWorkspaceCredentialReferences(t *testing.T) {
 	parsed, err := compose.Parse([]byte(`
 name: private-workspace
 workspaces:
@@ -82,6 +82,9 @@ agents: {}
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
+	// A legacy persisted reference arriving at the daemon boundary must be
+	// accepted (not rejected) so unrelated patches keep working. It is resolved
+	// at clone time.
 	wireSpec, err := api.ProjectSpecToProtoChecked(&compose.NormalizedProjectSpec{
 		Name:       parsed.Name,
 		Workspaces: parsed.Workspaces,
@@ -90,11 +93,14 @@ agents: {}
 		t.Fatalf("ProjectSpecToProtoChecked returned error: %v", err)
 	}
 
-	_, issues, err := normalizeProjectRequest(wireSpec, nil, "")
+	normalized, issues, err := normalizeProjectRequest(wireSpec, nil, "")
 	if err != nil {
 		t.Fatalf("normalizeProjectRequest returned error: %v", err)
 	}
-	if len(issues) != 1 || issues[0].Path != "workspaces.shared.token" {
-		t.Fatalf("normalizeProjectRequest issues = %#v, want unresolved workspace token", issues)
+	if len(issues) != 0 {
+		t.Fatalf("normalizeProjectRequest issues = %#v, want none for legacy reference", issues)
+	}
+	if got := normalized.Spec.Workspaces["shared"].Token; got != "${GIT_TOKEN}" {
+		t.Fatalf("daemon workspace token = %q, want legacy reference preserved", got)
 	}
 }

@@ -2,7 +2,7 @@ package compose
 
 import (
 	"bytes"
-	"strings"
+
 	"testing"
 )
 
@@ -52,7 +52,7 @@ agents:
 	}
 }
 
-func TestNormalizeGitWorkspaceRequiresCredentialEnvironment(t *testing.T) {
+func TestNormalizeGitWorkspaceKeepsUnresolvedCredentialReference(t *testing.T) {
 	spec := mustParseCompose(t, `
 name: private-workspace
 workspaces:
@@ -63,9 +63,14 @@ workspaces:
 agents: {}
 `)
 
-	_, err := Normalize(spec, NormalizeOptions{Env: map[string]string{}})
-	if err == nil || !strings.Contains(err.Error(), "workspaces.shared.token") || !strings.Contains(err.Error(), "GIT_TOKEN") {
-		t.Fatalf("Normalize error = %v, want missing workspace token environment error", err)
+	// A missing environment variable must not fail authoring normalization:
+	// the reference is kept so runtime clone-time resolution can apply.
+	normalized, err := Normalize(spec, NormalizeOptions{Env: map[string]string{}})
+	if err != nil {
+		t.Fatalf("Normalize returned error for missing credential env: %v", err)
+	}
+	if got := normalized.Workspaces["shared"].Token; got != "${GIT_TOKEN}" {
+		t.Fatalf("workspace token = %q, want unresolved reference kept", got)
 	}
 }
 
@@ -98,7 +103,7 @@ agents:
 	}
 }
 
-func TestNormalizeResolvedGitWorkspaceRejectsEnvironmentReferences(t *testing.T) {
+func TestNormalizeResolvedAcceptsEnvironmentReferenceCredentials(t *testing.T) {
 	spec := mustParseCompose(t, `
 name: private-workspace
 workspaces:
@@ -109,11 +114,56 @@ workspaces:
 agents: {}
 `)
 
-	_, err := Normalize(spec, NormalizeOptions{
+	// Resolved mode must accept legacy persisted environment references so
+	// unrelated patches keep working for projects created before resolution.
+	normalized, err := Normalize(spec, NormalizeOptions{
 		Env:               map[string]string{"GIT_TOKEN": "daemon-token"},
 		SourceCredentials: SourceCredentialsResolved,
 	})
-	if err == nil || !strings.Contains(err.Error(), "workspaces.shared.token") || !strings.Contains(err.Error(), "must be resolved before submission") {
-		t.Fatalf("Normalize error = %v, want unresolved workspace token error", err)
+	if err != nil {
+		t.Fatalf("Normalize returned error for legacy reference: %v", err)
+	}
+	if got := normalized.Workspaces["shared"].Token; got != "${GIT_TOKEN}" {
+		t.Fatalf("workspace token = %q, want legacy reference preserved", got)
+	}
+}
+
+func TestNormalizeCLIAndDaemonHashMatchWhenReferenceKept(t *testing.T) {
+	raw := `
+name: probe
+workspaces:
+  shared:
+    provider: git
+    url: https://example.test/shared.git
+    token: ${GIT_TOKEN}
+agents: {}
+`
+	parsedCLI, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	cliNormalized, err := Normalize(parsedCLI, NormalizeOptions{Env: map[string]string{}})
+	if err != nil {
+		t.Fatalf("CLI Normalize returned error: %v", err)
+	}
+	cliHash, err := cliNormalized.Hash()
+	if err != nil {
+		t.Fatalf("CLI Hash returned error: %v", err)
+	}
+
+	parsedDaemon, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	daemonNormalized, err := Normalize(parsedDaemon, NormalizeOptions{SourceCredentials: SourceCredentialsResolved})
+	if err != nil {
+		t.Fatalf("daemon Normalize returned error: %v", err)
+	}
+	daemonHash, err := daemonNormalized.Hash()
+	if err != nil {
+		t.Fatalf("daemon Hash returned error: %v", err)
+	}
+	if cliHash != daemonHash {
+		t.Fatalf("CLI hash %s != daemon hash %s; kept reference must round-trip", cliHash, daemonHash)
 	}
 }

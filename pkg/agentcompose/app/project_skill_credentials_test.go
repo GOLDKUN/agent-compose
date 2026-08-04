@@ -62,7 +62,7 @@ agents:
 	}
 }
 
-func TestNormalizeProjectRequestRejectsUnresolvedSkillCredentials(t *testing.T) {
+func TestNormalizeProjectRequestAcceptsLegacySkillCredentialReferences(t *testing.T) {
 	wireSpec, err := api.ProjectSpecToProtoChecked(&compose.NormalizedProjectSpec{
 		Name: "private-skills",
 		Agents: []compose.NormalizedAgentSpec{{
@@ -80,11 +80,16 @@ func TestNormalizeProjectRequestRejectsUnresolvedSkillCredentials(t *testing.T) 
 		t.Fatalf("ProjectSpecToProtoChecked returned error: %v", err)
 	}
 
-	_, issues, err := normalizeProjectRequest(wireSpec, nil, "")
+	// A legacy persisted reference arriving at the daemon boundary must be
+	// accepted so unrelated patches keep working; it is resolved at clone time.
+	normalized, issues, err := normalizeProjectRequest(wireSpec, nil, "")
 	if err != nil {
 		t.Fatalf("normalizeProjectRequest returned error: %v", err)
 	}
-	if len(issues) != 1 || issues[0].Path != "agents.worker.skills[0].token" {
-		t.Fatalf("normalizeProjectRequest issues = %#v, want unresolved skill token", issues)
+	if len(issues) != 0 {
+		t.Fatalf("normalizeProjectRequest issues = %#v, want none for legacy reference", issues)
+	}
+	if got := normalized.Spec.Agents[0].Skills[0].Token; got != "${SKILL_TOKEN}" {
+		t.Fatalf("daemon skill token = %q, want legacy reference preserved", got)
 	}
 }
