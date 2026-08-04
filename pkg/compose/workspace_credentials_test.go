@@ -47,7 +47,7 @@ agents:
 			t.Fatalf("redacted output leaked workspace credential %q: %s", secret, redacted)
 		}
 	}
-	if got := bytes.Count(redacted, []byte(redactedWorkspaceCredential)); got != 3 {
+	if got := bytes.Count(redacted, []byte(redactedSourceCredential)); got != 3 {
 		t.Fatalf("redacted marker count = %d, want 3: %s", got, redacted)
 	}
 }
@@ -86,7 +86,7 @@ agents:
       token: git-token
 `)
 
-	normalized, err := Normalize(spec, NormalizeOptions{WorkspaceCredentials: WorkspaceCredentialsResolved})
+	normalized, err := Normalize(spec, NormalizeOptions{SourceCredentials: SourceCredentialsResolved})
 	if err != nil {
 		t.Fatalf("Normalize returned error: %v", err)
 	}
@@ -110,8 +110,8 @@ agents: {}
 `)
 
 	_, err := Normalize(spec, NormalizeOptions{
-		Env:                  map[string]string{"GIT_TOKEN": "daemon-token"},
-		WorkspaceCredentials: WorkspaceCredentialsResolved,
+		Env:               map[string]string{"GIT_TOKEN": "daemon-token"},
+		SourceCredentials: SourceCredentialsResolved,
 	})
 	if err == nil || !strings.Contains(err.Error(), "workspaces.shared.token") || !strings.Contains(err.Error(), "must be resolved before submission") {
 		t.Fatalf("Normalize error = %v, want unresolved workspace token error", err)

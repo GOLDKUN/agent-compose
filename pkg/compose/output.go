@@ -13,7 +13,7 @@ import (
 
 const redactedEnvValue = "********"
 const redactedOctoBusToken = "********"
-const redactedWorkspaceCredential = "********"
+const redactedSourceCredential = "********"
 
 type orderedEnvVarSpec struct {
 	Name   string `yaml:"name" json:"name"`
@@ -162,7 +162,7 @@ func (s *NormalizedProjectSpec) ordered(redactSecrets bool) orderedProjectSpec {
 			Env:          orderedEnvVars(agent.Env, redactSecrets),
 			MCPServers:   orderedMCPServers(agent.MCPServers, redactSecrets),
 			CapsetIDs:    slices.Clone(agent.CapsetIDs),
-			Skills:       cloneNormalizedSkillSpecs(agent.Skills),
+			Skills:       outputSkillSpecs(agent.Skills, redactSecrets),
 			Volumes:      cloneNormalizedVolumeMountSpecs(agent.Volumes),
 			Workspace:    outputWorkspace(agent.Workspace, redactSecrets),
 			Sandbox:      agent.Sandbox,
@@ -256,13 +256,32 @@ func outputWorkspace(value *WorkspaceSpec, redactSecrets bool) *WorkspaceSpec {
 		return result
 	}
 	if result.Username != "" {
-		result.Username = redactedWorkspaceCredential
+		result.Username = redactedSourceCredential
 	}
 	if result.Password != "" {
-		result.Password = redactedWorkspaceCredential
+		result.Password = redactedSourceCredential
 	}
 	if result.Token != "" {
-		result.Token = redactedWorkspaceCredential
+		result.Token = redactedSourceCredential
+	}
+	return result
+}
+
+func outputSkillSpecs(values []NormalizedSkillSpec, redactSecrets bool) []NormalizedSkillSpec {
+	result := cloneNormalizedSkillSpecs(values)
+	if !redactSecrets {
+		return result
+	}
+	for index := range result {
+		if result[index].Username != "" {
+			result[index].Username = redactedSourceCredential
+		}
+		if result[index].Password != "" {
+			result[index].Password = redactedSourceCredential
+		}
+		if result[index].Token != "" {
+			result[index].Token = redactedSourceCredential
+		}
 	}
 	return result
 }

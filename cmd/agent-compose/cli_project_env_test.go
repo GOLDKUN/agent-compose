@@ -117,6 +117,29 @@ func TestLoadNormalizedComposeUsesProjectEnv(t *testing.T) {
 	}
 }
 
+func TestLoadNormalizedComposeResolvesSkillCredentialsFromProjectEnv(t *testing.T) {
+	projectDir := t.TempDir()
+	composePath := filepath.Join(projectDir, "agent-compose.yml")
+	writeTestFile(t, composePath, `name: private-skills
+agents:
+  reviewer:
+    skills:
+      - name: private
+        provider: git
+        url: https://git.example/skills.git
+        token: ${SKILL_TOKEN}
+`)
+	writeTestFile(t, filepath.Join(projectDir, ".env"), "SKILL_TOKEN=skill-from-project\n")
+
+	_, normalized, err := loadNormalizedCompose(cliOptions{ComposeFile: composePath})
+	if err != nil {
+		t.Fatalf("loadNormalizedCompose returned error: %v", err)
+	}
+	if got := normalized.Agents[0].Skills[0].Token; got != "skill-from-project" {
+		t.Fatalf("skill token = %q, want project environment value", got)
+	}
+}
+
 func TestResolveCLIProjectEnvMissingExplicitFileFails(t *testing.T) {
 	composePath := filepath.Join(t.TempDir(), "agent-compose.yml")
 	_, err := resolveCLIProjectEnv(&compose.ProjectSpec{EnvFiles: compose.EnvFileSpec{"missing.env"}}, composePath)

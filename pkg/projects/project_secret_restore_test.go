@@ -23,6 +23,12 @@ func TestRestoreProjectSecretsPreservesStableRedactedValues(t *testing.T) {
 		"  capabilities:",
 		"    url: https://octobus.example.test",
 		"    token: octobus-secret",
+		"workspaces:",
+		"  source:",
+		"    provider: git",
+		"    url: https://git.example/workspace.git",
+		"    username: workspace-user",
+		"    token: workspace-token",
 		"agents:",
 		"  reviewer:",
 		"    provider: openai",
@@ -35,6 +41,13 @@ func TestRestoreProjectSecretsPreservesStableRedactedValues(t *testing.T) {
 		"        command: tools",
 		"        env:",
 		"          MCP_TOKEN: {value: mcp-secret, secret: true}",
+		"    skills:",
+		"      - name: private-skill",
+		"        provider: git",
+		"        url: https://git.example/skill.git",
+		"        username: skill-user",
+		"        password: skill-password",
+		"        token: skill-token",
 	}, "\n"))
 	submitted := projectSpecForSecretRestoreTest(t, strings.Join([]string{
 		"name: demo",
@@ -51,6 +64,12 @@ func TestRestoreProjectSecretsPreservesStableRedactedValues(t *testing.T) {
 		"  capabilities:",
 		"    url: https://octobus.example.test",
 		"    token: '********'",
+		"workspaces:",
+		"  source:",
+		"    provider: git",
+		"    url: https://git.example/workspace.git",
+		"    username: '********'",
+		"    token: '********'",
 		"agents:",
 		"  reviewer:",
 		"    provider: openai",
@@ -63,6 +82,13 @@ func TestRestoreProjectSecretsPreservesStableRedactedValues(t *testing.T) {
 		"        command: tools",
 		"        env:",
 		"          MCP_TOKEN: {value: '********', secret: true}",
+		"    skills:",
+		"      - name: private-skill",
+		"        provider: git",
+		"        url: https://git.example/skill.git",
+		"        username: '********'",
+		"        password: '********'",
+		"        token: '********'",
 	}, "\n"))
 
 	restored, issues, err := RestoreProjectSecrets(current, submitted)
@@ -78,12 +104,18 @@ func TestRestoreProjectSecretsPreservesStableRedactedValues(t *testing.T) {
 	if got := restored.OctoBusServers["capabilities"].Token; got != "octobus-secret" {
 		t.Fatalf("OctoBus token = %q", got)
 	}
+	if workspace := restored.Workspaces["source"]; workspace.Username != "workspace-user" || workspace.Token != "workspace-token" {
+		t.Fatalf("workspace credentials = %#v", workspace)
+	}
 	agent := restored.Agents["reviewer"]
 	if got := agent.Env["AGENT_TOKEN"].Value; got != "agent-secret" {
 		t.Fatalf("agent token = %q", got)
 	}
 	if got := agent.MCPServers[0].Env["MCP_TOKEN"].Value; got != "mcp-secret" {
 		t.Fatalf("agent MCP token = %q", got)
+	}
+	if skill := agent.Skills[0]; skill.Username != "skill-user" || skill.Password != "skill-password" || skill.Token != "skill-token" {
+		t.Fatalf("skill credentials = %#v", skill)
 	}
 	if got := agent.Model; got != "new-model" {
 		t.Fatalf("agent model = %q", got)
@@ -176,7 +208,7 @@ func projectSpecForSecretRestoreTest(t *testing.T, data string) *compose.Project
 func normalizedProjectForSecretRestoreTest(t *testing.T, data string) *compose.NormalizedProjectSpec {
 	t.Helper()
 	spec := projectSpecForSecretRestoreTest(t, data)
-	normalized, err := compose.Normalize(spec, compose.NormalizeOptions{})
+	normalized, err := compose.Normalize(spec, compose.NormalizeOptions{SourceCredentials: compose.SourceCredentialsResolved})
 	if err != nil {
 		t.Fatalf("compose.Normalize() error = %v", err)
 	}

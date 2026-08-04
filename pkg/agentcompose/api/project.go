@@ -229,8 +229,8 @@ func ProjectSpecToProtoRedacted(spec *compose.NormalizedProjectSpec) *agentcompo
 
 // RedactProjectSpecSecrets returns a user-facing copy of a project spec. It
 // leaves the persisted/runtime representation untouched while hiding every
-// explicitly secret environment value and every inherently secret OctoBus
-// token.
+// explicitly secret environment value and every inherently secret source or
+// OctoBus credential.
 func RedactProjectSpecSecrets(spec *agentcomposev2.ProjectSpec) *agentcomposev2.ProjectSpec {
 	if spec == nil {
 		return nil
@@ -247,8 +247,26 @@ func RedactProjectSpecSecrets(spec *agentcomposev2.ProjectSpec) *agentcomposev2.
 		redactEnvVarSpecs(agent.Env)
 		redactMCPServerSpecs(agent.McpServers)
 		redactWorkspaceSpec(agent.Workspace)
+		redactSkillSpecs(agent.Skills)
 	}
 	return redacted
+}
+
+func redactSkillSpecs(values []*agentcomposev2.SkillSpec) {
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		if value.GetUsername() != "" {
+			value.Username = secretRedactedValue
+		}
+		if value.GetPassword() != "" {
+			value.Password = secretRedactedValue
+		}
+		if value.GetToken() != "" {
+			value.Token = secretRedactedValue
+		}
+	}
 }
 
 func redactNamedWorkspaceSpecs(values []*agentcomposev2.NamedWorkspaceSpec) {

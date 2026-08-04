@@ -170,9 +170,9 @@ Interpolation is implemented in these locations:
 - `agents.*.env.*.value`
 - Project and inline-agent MCP `url`, `env.*.value`, and `headers.*.value`
 - Project OctoBus `url` and `token`
-- Skill `name`, `source`, `url`, `path`, `ref`, and `username`
+- Skill `name`, `source`, `url`, `path`, `ref`, `username`, `password`, and `token`; `password` and `token` must be exact `${NAME}` references
 
-Other strings are not interpolated, including `name`, `provider`, `image`, `system_prompt`, workspace fields, build fields, and scheduler fields.
+Other strings are not interpolated, including `name`, `provider`, `image`, `system_prompt`, other workspace fields, build fields, and scheduler fields.
 
 ### Environment value shape
 
@@ -670,7 +670,7 @@ skills:
 | `password` | string | HTTP/Git password. Only an exact environment reference such as `${NAME}` is allowed. |
 | `token` | string | HTTP/Git token. Only an exact environment reference such as `${NAME}` is allowed. |
 
-`password` and `token` cannot contain plaintext. They are resolved against the daemon environment during skill resolution, avoiding expanded credentials in the project specification. Remote ZIP downloads are restricted to HTTP(S) and are subject to size, archive, and network-address safety checks.
+`password` and `token` cannot contain plaintext. During `config` or `up`, the CLI resolves their exact `${NAME}` references from the project dotenv/process environment before submitting the project to the daemon. User-facing normalized output and project APIs redact the resolved credentials. Remote ZIP downloads are restricted to HTTP(S) and are subject to size, archive, and network-address safety checks.
 
 Git refs are resolved at each business lifecycle: skills during an agent run, workspaces during sandbox provisioning, and scheduler sources during `config`/`up` before the script snapshot is stored. A moving branch can therefore resolve to different commits across those operations. Use a commit SHA in `ref` when all consumers must use the exact same revision.
 

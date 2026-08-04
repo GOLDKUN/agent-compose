@@ -191,9 +191,9 @@ func normalizeProjectRequest(spec *agentcomposev2.ProjectSpec, source *agentcomp
 		projectDir = strings.TrimSpace(source.GetProjectDir())
 	}
 	normalized, err := compose.Normalize(parsed, compose.NormalizeOptions{
-		ComposePath:          sourcePath,
-		ProjectDir:           projectDir,
-		WorkspaceCredentials: compose.WorkspaceCredentialsResolved,
+		ComposePath:       sourcePath,
+		ProjectDir:        projectDir,
+		SourceCredentials: compose.SourceCredentialsResolved,
 	})
 	if err != nil {
 		return projects.NormalizedProject{}, []projects.ValidationIssue{validationIssueFromProto(api.IssueFromComposeError(err))}, nil

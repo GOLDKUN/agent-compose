@@ -35,7 +35,7 @@ type NormalizeOptions struct {
 	ProjectDir           string
 	ComposePath          string
 	Env                  map[string]string
-	WorkspaceCredentials WorkspaceCredentialMode
+	SourceCredentials    SourceCredentialMode
 	ResolveScriptURLs    bool
 	ScriptSourceResolver ScriptSourceResolver
 	Context              context.Context
@@ -429,7 +429,7 @@ func normalizeInlineWorkspaceSpec(path string, spec *WorkspaceSpec, defaultName 
 	}
 	normalizedSource := workspaceSource(*workspace).Normalized()
 	var err error
-	normalizedSource, err = normalizeWorkspaceCredentials(path, normalizedSource, options)
+	normalizedSource, err = normalizeSourceCredentials(path, normalizedSource, options)
 	if err != nil {
 		return nil, err
 	}
@@ -658,12 +658,6 @@ func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) 
 	}
 	format = strings.ToLower(strings.TrimSpace(format))
 	username := strings.TrimSpace(value.Username)
-	if username != "" {
-		username, err = interpolateEnvValue(path+".username", username, options)
-		if err != nil {
-			return NormalizedSkillSpec{}, err
-		}
-	}
 	password := strings.TrimSpace(value.Password)
 	token := strings.TrimSpace(value.Token)
 	commonSource := sources.Source{
@@ -676,7 +670,8 @@ func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) 
 		Password: password,
 		Token:    token,
 	}.Normalized()
-	if err := validateSourceSecrets(path, commonSource); err != nil {
+	commonSource, err = normalizeSourceCredentials(path, commonSource, options)
+	if err != nil {
 		return NormalizedSkillSpec{}, err
 	}
 	if commonSource.Provider == "" {

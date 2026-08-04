@@ -28,7 +28,7 @@ func RestoreProjectSecrets(current *compose.NormalizedProjectSpec, submitted *co
 	restoreEnvSecrets("variables", current.Variables, cloned.Variables, &issues)
 	restoreMCPSecrets("mcp_servers", current.MCPServers, cloned.MCPServers, &issues)
 	restoreOctoBusSecrets(current.OctoBusServers, cloned.OctoBusServers, &issues)
-	rejectWorkspaceMarkers("workspaces", cloned.Workspaces, &issues)
+	restoreWorkspaceMarkers("workspaces", current.Workspaces, cloned.Workspaces, &issues)
 
 	currentAgents := make(map[string]compose.NormalizedAgentSpec, len(current.Agents))
 	for _, agent := range current.Agents {
@@ -43,8 +43,8 @@ func RestoreProjectSecrets(current *compose.NormalizedProjectSpec, submitted *co
 		}
 		restoreEnvSecrets(path+".env", currentAgent.Env, agent.Env, &issues)
 		restoreAgentMCPSecrets(path+".mcp_servers", currentAgent.MCPServers, agent.MCPServers, &issues)
-		rejectWorkspaceMarker(path+".workspace", agent.Workspace, &issues)
-		rejectSkillMarkers(path+".skills", agent.Skills, &issues)
+		restoreWorkspaceMarker(path+".workspace", currentAgent.Workspace, agent.Workspace, &issues)
+		restoreSkillMarkers(path+".skills", currentAgent.Skills, agent.Skills, &issues)
 		cloned.Agents[name] = agent
 	}
 	return cloned, issues, nil
@@ -123,39 +123,62 @@ func restoreOctoBusSecrets(current map[string]compose.NormalizedOctoBusServerSpe
 func rejectAgentMarkers(path string, agent compose.AgentSpec, issues *[]ValidationIssue) {
 	restoreEnvSecrets(path+".env", nil, agent.Env, issues)
 	restoreAgentMCPSecrets(path+".mcp_servers", nil, agent.MCPServers, issues)
-	rejectWorkspaceMarker(path+".workspace", agent.Workspace, issues)
-	rejectSkillMarkers(path+".skills", agent.Skills, issues)
+	restoreWorkspaceMarker(path+".workspace", nil, agent.Workspace, issues)
+	restoreSkillMarkers(path+".skills", nil, agent.Skills, issues)
 }
 
-func rejectWorkspaceMarkers(path string, workspaces map[string]compose.WorkspaceSpec, issues *[]ValidationIssue) {
-	for name, workspace := range workspaces {
-		rejectWorkspaceMarker(path+"."+name, &workspace, issues)
+func restoreWorkspaceMarkers(path string, current map[string]compose.WorkspaceSpec, submitted map[string]compose.WorkspaceSpec, issues *[]ValidationIssue) {
+	for name, workspace := range submitted {
+		existing, found := current[name]
+		if !found {
+			restoreWorkspaceMarker(path+"."+name, nil, &workspace, issues)
+		} else {
+			restoreWorkspaceMarker(path+"."+name, &existing, &workspace, issues)
+		}
+		submitted[name] = workspace
 	}
 }
 
-func rejectWorkspaceMarker(path string, workspace *compose.WorkspaceSpec, issues *[]ValidationIssue) {
-	if workspace == nil {
+func restoreWorkspaceMarker(path string, current, submitted *compose.WorkspaceSpec, issues *[]ValidationIssue) {
+	if submitted == nil {
 		return
 	}
-	if workspace.Password == secretRedactionMarker {
-		*issues = append(*issues, ValidationIssue{Path: path + ".password", Message: "redacted secret marker cannot be used as a credential"})
+	currentUsername, currentPassword, currentToken := "", "", ""
+	if current != nil {
+		currentUsername = current.Username
+		currentPassword = current.Password
+		currentToken = current.Token
 	}
-	if workspace.Token == secretRedactionMarker {
-		*issues = append(*issues, ValidationIssue{Path: path + ".token", Message: "redacted secret marker cannot be used as a credential"})
-	}
+	restoreSourceCredentialMarker(path+".username", currentUsername, &submitted.Username, issues)
+	restoreSourceCredentialMarker(path+".password", currentPassword, &submitted.Password, issues)
+	restoreSourceCredentialMarker(path+".token", currentToken, &submitted.Token, issues)
 }
 
-func rejectSkillMarkers(path string, skills []compose.SkillSpec, issues *[]ValidationIssue) {
-	for index, skill := range skills {
+func restoreSkillMarkers(path string, current []compose.NormalizedSkillSpec, submitted []compose.SkillSpec, issues *[]ValidationIssue) {
+	currentByName := make(map[string]compose.NormalizedSkillSpec, len(current))
+	for _, skill := range current {
+		currentByName[skill.Name] = skill
+	}
+	for index := range submitted {
+		skill := &submitted[index]
 		itemPath := fmt.Sprintf("%s[%d]", path, index)
 		if skill.Name != "" {
 			itemPath = path + "." + skill.Name
 		}
-		if skill.Password == secretRedactionMarker {
-			*issues = append(*issues, ValidationIssue{Path: itemPath + ".password", Message: "redacted secret marker cannot be used as a credential"})
-		}
-		if skill.Token == secretRedactionMarker {
-			*issues = append(*issues, ValidationIssue{Path: itemPath + ".token", Message: "redacted secret marker cannot be used as a credential"})
-		}
+		existing := currentByName[skill.Name]
+		restoreSourceCredentialMarker(itemPath+".username", existing.Username, &skill.Username, issues)
+		restoreSourceCredentialMarker(itemPath+".password", existing.Password, &skill.Password, issues)
+		restoreSourceCredentialMarker(itemPath+".token", existing.Token, &skill.Token, issues)
 	}
+}
+
+func restoreSourceCredentialMarker(path, current string, submitted *string, issues *[]ValidationIssue) {
+	if submitted == nil || *submitted != secretRedactionMarker {
+		return
+	}
+	if current == "" {
+		*issues = append(*issues, ValidationIssue{Path: path, Message: "redacted secret marker has no existing credential to preserve"})
+		return
+	}
+	*submitted = current
 }
