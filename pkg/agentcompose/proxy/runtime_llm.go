@@ -37,9 +37,9 @@ type RuntimeLLMOptions struct {
 	ResolveTarget RuntimeLLMTargetResolver
 	Client        HTTPDoer
 	// MaxOutputTokens, when > 0, is injected into every proxied upstream LLM
-	// request (max_tokens for chat completions, max_output_tokens for
-	// responses). codex does not send max_output_tokens itself, so without this
-	// API proxies that default to a small limit silently truncate long outputs.
+	// request using the field names supported by the upstream protocol. codex
+	// does not send max_output_tokens itself, so without this API proxies that
+	// default to a small limit silently truncate long outputs.
 	MaxOutputTokens int
 }
 
@@ -185,20 +185,30 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 // (see openai/codex#36180), and the protocol bridge defaults the chat
 // completions max_completion_tokens to a small value (e.g. 4096); upstream
 // proxies honor that field and silently truncate long agent outputs. Setting
-// both the legacy and modern fields ensures the configured limit wins.
+// both OpenAI Chat field names ensures the configured limit wins. Anthropic
+// Messages receives only max_tokens because it rejects max_completion_tokens.
 func injectMaxOutputTokens(body []byte, upstreamProtocol protocolbridge.Protocol, maxTokens int) []byte {
 	if maxTokens <= 0 || len(body) == 0 {
+		return body
+	}
+	fields := map[string]int{}
+	switch upstreamProtocol {
+	case protocolbridge.ProtocolOpenAIResponses:
+		fields["max_output_tokens"] = maxTokens
+	case protocolbridge.ProtocolOpenAIChat:
+		fields["max_tokens"] = maxTokens
+		fields["max_completion_tokens"] = maxTokens
+	case protocolbridge.ProtocolAnthropicMessages:
+		fields["max_tokens"] = maxTokens
+	default:
 		return body
 	}
 	var obj map[string]any
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return body
 	}
-	if upstreamProtocol == protocolbridge.ProtocolOpenAIResponses {
-		obj["max_output_tokens"] = maxTokens
-	} else {
-		obj["max_tokens"] = maxTokens
-		obj["max_completion_tokens"] = maxTokens
+	for field, value := range fields {
+		obj[field] = value
 	}
 	out, err := json.Marshal(obj)
 	if err != nil {
