@@ -9,6 +9,8 @@ import { extractText, jsonString } from "../text.js";
 import { TranscriptWriter, type TranscriptTextWriter } from "../transcript.js";
 import type { AgentResult, RunnerOptions, StoredThread } from "../types.js";
 import { flattenEnvMap } from "../mcp-config.js";
+import { cancellationRequested } from "../shutdown.js";
+import { waitForChildExit } from "../child-process.js";
 
 export class OpenCodeRunner {
   private skillsConfigDir?: string;
@@ -219,7 +221,9 @@ export class OpenCodeRunner {
         cwd: this.options.workspace,
         env: await this.environment(),
         stdio: ["ignore", "pipe", "pipe"],
+        signal: this.options.abortController?.signal,
       });
+      const exit = waitForChildExit(child, this.options.abortController?.signal, "exit");
 
       const stderrChunks: string[] = [];
       child.stderr?.on("data", (chunk) => {
@@ -244,16 +248,22 @@ export class OpenCodeRunner {
           this.handleEvent(event, result);
         }
       } catch (error) {
-        child.kill("SIGTERM");
-        throw error;
+        if (!cancellationRequested(this.options.abortController?.signal)) {
+          child.kill("SIGTERM");
+          throw error;
+        }
       }
 
-      const exitCode = await new Promise<number>((resolve, reject) => {
-        child.once("error", reject);
-        child.once("exit", (code) => resolve(code ?? 1));
-      });
-      if (exitCode !== 0) {
-        throw new Error(`opencode exited with code ${exitCode}: ${stderrChunks.join("")}`);
+      const processResult = await exit;
+      const cancelled = cancellationRequested(this.options.abortController?.signal);
+      if (processResult.spawnError && !cancelled) {
+        throw processResult.spawnError;
+      }
+      if (processResult.exitCode !== 0 && !cancelled) {
+        throw new Error(`opencode exited with code ${processResult.exitCode}: ${stderrChunks.join("")}`);
+      }
+      if (cancelled) {
+        result.stopReason = "cancelled";
       }
     } finally {
       await this.cleanupSkillsConfig();
@@ -264,7 +274,9 @@ export class OpenCodeRunner {
       result.finalText = result.transcript;
       result.finalTextSource = "transcript_fallback";
     }
-    await writeStoredThread(this.options.stateRoot, "opencode", result.threadId);
+    if (result.threadId) {
+      await writeStoredThread(this.options.stateRoot, "opencode", result.threadId);
+    }
     return result;
   }
 }

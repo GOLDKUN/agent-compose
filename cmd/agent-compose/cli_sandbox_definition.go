@@ -1,6 +1,16 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"time"
+
+	"github.com/spf13/cobra"
+)
+
+type composeSandboxStopOptions struct {
+	Graceful    bool
+	Force       bool
+	GracePeriod time.Duration
+}
 
 func newCLISandboxCommand(cli *cliOptions) *cobra.Command {
 	cmd := &cobra.Command{
@@ -30,12 +40,20 @@ func newCLILegacySandboxCommands(cli *cliOptions) []*cobra.Command {
 }
 
 func newCLISandboxActionCommand(cli *cliOptions, use, short, action, status string) *cobra.Command {
-	return &cobra.Command{
+	options := composeSandboxStopOptions{}
+	cmd := &cobra.Command{
 		Use: use + " <sandbox> [<sandbox N>]", Short: short, Args: sandboxActionArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runComposeSandboxActionCommand(cmd, *cli, action, status, args)
+			return runComposeSandboxActionCommand(cmd, *cli, action, status, options, args)
 		},
 	}
+	if action == "stop" {
+		cmd.Flags().BoolVar(&options.Graceful, "graceful", false, "Ask active guest executions to finish before stopping the sandbox")
+		cmd.Flags().BoolVar(&options.Force, "force", false, "Stop immediately without waiting for guest execution cleanup")
+		cmd.Flags().DurationVar(&options.GracePeriod, "grace-period", 0, "Maximum time to wait for graceful guest execution cleanup")
+		cmd.MarkFlagsMutuallyExclusive("graceful", "force")
+	}
+	return cmd
 }
 
 func newCLISandboxRemoveCommand(cli *cliOptions) *cobra.Command {

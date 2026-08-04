@@ -111,6 +111,27 @@ func TestCLIStopRequiresSandboxUsageError(t *testing.T) {
 	}
 }
 
+func TestCLIStopRejectsInvalidExplicitGracePeriod(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "zero", args: []string{"stop", "--graceful", "--grace-period", "0s", "sandbox-1"}, want: "--grace-period must be greater than zero"},
+		{name: "negative", args: []string{"stop", "--graceful", "--grace-period", "-1s", "sandbox-1"}, want: "--grace-period must be greater than zero"},
+		{name: "zero without graceful", args: []string{"stop", "--grace-period", "0s", "sandbox-1"}, want: "--grace-period must be greater than zero"},
+		{name: "positive without graceful", args: []string{"stop", "--grace-period", "1s", "sandbox-1"}, want: "--grace-period requires --graceful"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stdout, stderr, _, exitCode := executeCLICommand(test.args...)
+			if exitCode != exitCodeUsage || stdout != "" || !strings.Contains(stderr, test.want) {
+				t.Fatalf("stop args=%v code/stdout/stderr = %d / %q / %q", test.args, exitCode, stdout, stderr)
+			}
+		})
+	}
+}
+
 func TestCLIResumeRejectsEmptySandboxUsageError(t *testing.T) {
 	stdout, stderr, _, exitCode := executeCLICommand("resume", " ")
 	if exitCode != exitCodeUsage {

@@ -6,6 +6,8 @@ import { flattenEnvMap } from "../mcp-config.js";
 import { extractText, jsonString } from "../text.js";
 import { TranscriptWriter } from "../transcript.js";
 import type { AgentResult, RunnerOptions } from "../types.js";
+import { cancellationRequested } from "../shutdown.js";
+import { waitForChildExit } from "../child-process.js";
 
 export class GeminiRunner {
   private readonly writer = new TranscriptWriter();
@@ -78,7 +80,9 @@ export class GeminiRunner {
       cwd: this.options.workspace,
       env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
+      signal: this.options.abortController?.signal,
     });
+    const exit = waitForChildExit(child, this.options.abortController?.signal, "exit");
 
     const stderrChunks: string[] = [];
     child.stderr?.on("data", (chunk) => {
@@ -88,7 +92,8 @@ export class GeminiRunner {
     });
 
     const rl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
-    for await (const line of rl) {
+    try {
+      for await (const line of rl) {
       if (!line.trim()) {
         continue;
       }
@@ -136,14 +141,23 @@ export class GeminiRunner {
         }
         result.stopReason = event?.error ? "error" : "completed";
       }
+      }
+    } catch (error) {
+      if (!cancellationRequested(this.options.abortController?.signal)) {
+        throw error;
+      }
     }
 
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code) => resolve(code ?? 1));
-    });
-    if (exitCode !== 0) {
-      throw new Error(`gemini exited with code ${exitCode}: ${stderrChunks.join("")}`);
+    const processResult = await exit;
+    const cancelled = cancellationRequested(this.options.abortController?.signal);
+    if (processResult.spawnError && !cancelled) {
+      throw processResult.spawnError;
+    }
+    if (processResult.exitCode !== 0 && !cancelled) {
+      throw new Error(`gemini exited with code ${processResult.exitCode}: ${stderrChunks.join("")}`);
+    }
+    if (cancelled) {
+      result.stopReason = "cancelled";
     }
 
     result.transcript = this.writer.transcript();

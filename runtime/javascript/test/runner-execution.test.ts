@@ -187,6 +187,30 @@ describe("runner execution", () => {
     });
   });
 
+  it("returns a cancelled Codex result with partial transcript and thread state", async () => {
+    const { CodexRunner } = await import("../src/runners/codex.js");
+    await withTempSession(async (root) => {
+      codexState.events = [
+        { type: "thread.started", thread_id: "thread-partial" },
+        { type: "item.completed", item: { id: "a1", type: "agent_message", text: "partial answer" } },
+      ];
+      const abortController = new AbortController();
+      abortController.abort();
+
+      const result = await new CodexRunner({ ...runnerOptions(root), abortController }).runPrompt("prompt");
+
+      expect(result).toMatchObject({
+        threadId: "thread-new",
+        stopReason: "cancelled",
+        finalText: "partial answer",
+        transcript: "partial answer",
+      });
+      expect(codexState.runStreamedCalls.at(-1)?.options).toMatchObject({ signal: abortController.signal });
+      const stored = JSON.parse(await fs.readFile(path.join(root, "state", "agents", "providers", "codex.json"), "utf8"));
+      expect(stored.threadId).toBe("thread-new");
+    });
+  });
+
   it("passes MCP servers to Claude SDK options", async () => {
     const { ClaudeRunner } = await import("../src/runners/claude.js");
     await withTempSession(async (root) => {

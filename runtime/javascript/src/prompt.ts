@@ -22,6 +22,7 @@ export interface PromptCommandOptions {
   model?: string;
   outputSchemaFile?: string;
   skills?: string[];
+  abortController?: AbortController;
 }
 
 export async function buildPromptRuntimeOptions(commandOptions: Omit<PromptCommandOptions, "messageFile">) {
@@ -52,6 +53,7 @@ export async function buildPromptRuntimeOptions(commandOptions: Omit<PromptComma
     mcpConfig: mcpConfig.mcp_servers,
     skills,
     outputSchema,
+    abortController: commandOptions.abortController,
   };
 }
 

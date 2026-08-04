@@ -132,6 +132,23 @@ func TestNewConfigDefaultsSandboxArchiveRootWithoutChangingWorkspaceCleanupTTL(t
 	if config.SandboxArchiveRoot != filepath.Join(config.DataRoot, "archives", "sandboxes") {
 		t.Fatalf("SandboxArchiveRoot = %q", config.SandboxArchiveRoot)
 	}
+	if config.SandboxGracefulStopTimeout != 10*time.Second {
+		t.Fatalf("SandboxGracefulStopTimeout = %s, want 10s", config.SandboxGracefulStopTimeout)
+	}
+}
+
+func TestNewConfigRejectsNonPositiveSandboxGracefulStopTimeout(t *testing.T) {
+	t.Setenv("DATA_ROOT", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("SANDBOX_GRACEFUL_STOP_TIMEOUT", "0s")
+	di := do.New()
+	do.ProvideValue(di, slog.Default())
+	config, err := NewConfig(di)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.SandboxGracefulStopTimeout != 10*time.Second {
+		t.Fatalf("SandboxGracefulStopTimeout = %s, want 10s fallback", config.SandboxGracefulStopTimeout)
+	}
 }
 
 func testNewConfigParsesEnvironment(t *testing.T) {
@@ -173,6 +190,7 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	t.Setenv("JUPYTER_PROXY_BASE", "/agent-compose/jupyter/")
 	t.Setenv("SANDBOX_START_TIMEOUT", "9s")
 	t.Setenv("SANDBOX_STOP_TIMEOUT", "10s")
+	t.Setenv("SANDBOX_GRACEFUL_STOP_TIMEOUT", "12s")
 	t.Setenv("JUPYTER_READY_TIMEOUT", "45s")
 	t.Setenv("WEBHOOK_BODY_LIMIT_BYTES", "1234")
 	t.Setenv("WEBHOOK_QUEUE_RULES_JSON", `[{"name":"repo-a","workers":2,"match":{"topic":"webhook.github.push"}}]`)
@@ -216,7 +234,7 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	if config.ImageStoreMode != ImageStoreModeOCI || config.ImageCacheRoot != filepath.Join(root, "custom-images") {
 		t.Fatalf("image store config = %#v", config)
 	}
-	if config.JupyterGuestPort != 9999 || config.SandboxStartTimeout != 9*time.Second || config.SandboxStopTimeout != 10*time.Second {
+	if config.JupyterGuestPort != 9999 || config.SandboxStartTimeout != 9*time.Second || config.SandboxStopTimeout != 10*time.Second || config.SandboxGracefulStopTimeout != 12*time.Second {
 		t.Fatalf("session config = %#v", config)
 	}
 	if config.JupyterReadyTimeout != 45*time.Second {

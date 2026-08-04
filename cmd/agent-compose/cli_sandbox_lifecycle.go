@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type composeSandboxActionOutput struct {
@@ -21,6 +22,7 @@ type composeSandboxActionOutput struct {
 type composeSandboxActionResult struct {
 	SandboxID string `json:"sandbox_id"`
 	Status    string `json:"status"`
+	Outcome   string `json:"outcome,omitempty"`
 }
 
 type composeSandboxRemoveOptions struct {
@@ -34,7 +36,16 @@ func sandboxActionArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runComposeSandboxActionCommand(cmd *cobra.Command, cli cliOptions, action, status string, sandboxes []string) error {
+func runComposeSandboxActionCommand(cmd *cobra.Command, cli cliOptions, action, status string, options composeSandboxStopOptions, sandboxes []string) error {
+	gracePeriodSet := action == "stop" && cmd.Flags().Changed("grace-period")
+	if gracePeriodSet {
+		if options.GracePeriod <= 0 {
+			return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("--grace-period must be greater than zero")}
+		}
+		if !options.Graceful {
+			return commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("--grace-period requires --graceful")}
+		}
+	}
 	clients, err := newCLIServiceClients(cli)
 	if err != nil {
 		return err
@@ -53,7 +64,20 @@ func runComposeSandboxActionCommand(cmd *cobra.Command, cli cliOptions, action, 
 		}
 		switch action {
 		case "stop":
-			_, err = clients.sandbox.StopSandbox(cmd.Context(), connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandbox}))
+			request := &agentcomposev2.StopSandboxRequest{SandboxId: sandbox, Mode: agentcomposev2.SandboxStopMode_SANDBOX_STOP_MODE_FORCE}
+			if options.Graceful {
+				request.Mode = agentcomposev2.SandboxStopMode_SANDBOX_STOP_MODE_GRACEFUL
+				if gracePeriodSet {
+					request.GracePeriod = durationpb.New(options.GracePeriod)
+				}
+			}
+			var response *connect.Response[agentcomposev2.StopSandboxResponse]
+			response, err = clients.sandbox.StopSandbox(cmd.Context(), connect.NewRequest(request))
+			if err == nil {
+				outcome := sandboxStopOutcomeText(response.Msg.GetOutcome())
+				output.Results = append(output.Results, composeSandboxActionResult{SandboxID: sandbox, Status: status, Outcome: outcome})
+				continue
+			}
 		case "resume":
 			_, err = clients.sandbox.ResumeSandbox(cmd.Context(), connect.NewRequest(&agentcomposev2.ResumeSandboxRequest{SandboxId: sandbox}))
 		default:
@@ -72,14 +96,34 @@ func runComposeSandboxActionCommand(cmd *cobra.Command, cli cliOptions, action, 
 		if err != nil {
 			return err
 		}
-		return writeCommandOutput(cmd.OutOrStdout(), append(data, '\n'))
+		if err := writeCommandOutput(cmd.OutOrStdout(), append(data, '\n')); err != nil {
+			return err
+		}
+		return nil
 	}
 	for _, result := range output.Results {
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s sandbox %s\n", result.Status, result.SandboxID); err != nil {
+		suffix := ""
+		if options.Graceful {
+			suffix = " (" + result.Outcome + ")"
+		}
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s sandbox %s%s\n", result.Status, result.SandboxID, suffix); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func sandboxStopOutcomeText(outcome agentcomposev2.SandboxStopOutcome) string {
+	switch outcome {
+	case agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_GRACEFUL:
+		return "graceful"
+	case agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE_AFTER_GRACE_TIMEOUT:
+		return "forced-after-grace-timeout"
+	case agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE_AFTER_GRACE_ERROR:
+		return "forced-after-grace-error"
+	default:
+		return "force"
+	}
 }
 
 func runComposeSandboxRemoveCommand(cmd *cobra.Command, cli cliOptions, options composeSandboxRemoveOptions, sandboxes []string) error {

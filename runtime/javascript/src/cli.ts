@@ -9,6 +9,7 @@ import { COMMAND_RESULT_PREFIX, RESULT_PREFIX } from "./constants.js";
 import { formatError } from "./errors.js";
 import { runPromptCommand } from "./prompt.js";
 import { runStreamCommand } from "./stream.js";
+import { RuntimeShutdownController } from "./shutdown.js";
 
 function collectRepeated(value: string, previous: string[] = []): string[] {
   return [...previous, value];
@@ -44,8 +45,13 @@ export function createProgram(options: { exitOverride?: boolean } = {}): Command
       skill?: string[];
     }) => {
       const { skill, ...promptOptions } = options;
-      const result = await runPromptCommand({ ...promptOptions, skills: skill });
-      process.stdout.write(`${RESULT_PREFIX}${JSON.stringify(result)}\n`);
+      const shutdown = new RuntimeShutdownController();
+      try {
+        const result = await runPromptCommand({ ...promptOptions, skills: skill, abortController: shutdown.abortController });
+        process.stdout.write(`${RESULT_PREFIX}${JSON.stringify(result)}\n`);
+      } finally {
+        shutdown.dispose();
+      }
     });
 
   program
@@ -60,15 +66,25 @@ export function createProgram(options: { exitOverride?: boolean } = {}): Command
       workspace?: string;
       home?: string;
     }) => {
-      const result = await runExecCommand(options);
-      process.stdout.write(`${COMMAND_RESULT_PREFIX}${JSON.stringify(result)}\n`);
+      const shutdown = new RuntimeShutdownController();
+      try {
+        const result = await runExecCommand({ ...options, signal: shutdown.abortController.signal });
+        process.stdout.write(`${COMMAND_RESULT_PREFIX}${JSON.stringify(result)}\n`);
+      } finally {
+        shutdown.dispose();
+      }
     });
 
   program
     .command("stream")
     .description("run the runtime NDJSON stream protocol on stdin/stdout")
     .action(async () => {
-      await runStreamCommand();
+      const shutdown = new RuntimeShutdownController();
+      try {
+        await runStreamCommand({ abortController: shutdown.abortController });
+      } finally {
+        shutdown.dispose();
+      }
     });
 
   return program;

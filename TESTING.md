@@ -84,6 +84,26 @@ a new sandbox receives the latest Workspace Source without state leaking back
 to that source. It also checks resource cleanup. Inspect verbose test output and
 daemon logs when it fails.
 
+Graceful sandbox stop has an opt-in host-daemon E2E that exercises the public
+project, run, exec, and sandbox APIs against real runtimes:
+
+```bash
+task image:agent-compose-guest
+task test:e2e:graceful-stop
+```
+
+By default it verifies successful guest cleanup on Docker, BoxLite, and
+Microsandbox, plus timeout escalation and explicit force stop on Docker. Set
+`AGENT_COMPOSE_E2E_GRACEFUL_STOP_IMAGE` to select another compatible local
+guest image or `AGENT_COMPOSE_E2E_GRACEFUL_STOP_DRIVERS` to run a comma-separated
+subset. BoxLite and Microsandbox require a prepared Linux/KVM host. The success
+cases prove that the guest TERM hook, partial output, and command result artifact
+are persisted before the sandbox reaches `STOPPED`.
+
+Set `AGENT_COMPOSE_E2E_GRACEFUL_STOP_LEGACY_IMAGE` to an older guest image that
+does not publish runtime signal readiness. The Docker compatibility case verifies
+that it safely escalates after the grace timeout and still reaches `STOPPED`.
+
 To exercise an upgrade boundary, build a baseline binary and the candidate
 binary separately, then run the same test directly with the baseline in
 `AGENT_COMPOSE_E2E_BINARY` and the candidate in

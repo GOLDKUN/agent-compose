@@ -121,6 +121,9 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandb
 	if err != nil {
 		return execution.SanitizeAgentExecResult(result), domain.AgentRunResult{}, err
 	}
+	if strings.EqualFold(strings.TrimSpace(parsed.StopReason), "cancelled") {
+		return execution.SanitizeAgentExecResult(result), parsed, context.Canceled
+	}
 	return execution.SanitizeAgentExecResult(result), parsed, nil
 }
 

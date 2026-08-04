@@ -137,6 +137,37 @@ daemon 会显式传递 workspace、state 和 home 路径，并注入：
 
 `prompt` 和 `exec` 的 stdout payload、stream 分离、artifact 文件以及交互式 NDJSON frame 都属于协议，而不仅是 CLI 展示。自行替换 runtime 时，必须实现对应 release 的完整协议。强烈建议直接复用仓库 runtime，协议详见 [agent-compose 与 runtime 调用约定](https://github.com/chaitin/agent-compose/blob/main/docs/design/agent-compose-runtime_contract.md)。
 
+### 4.1 Graceful-stop 能力
+
+请求 graceful sandbox stop 时，daemon 只向已跟踪的外层
+`agent-compose-runtime` 进程发送信号。daemon 不会发现、持有或发送信号给
+runtime 的子进程树。与 daemon release 匹配的 runtime 负责取消任务、清理
+子进程、持久化部分结果并最终退出自身进程。
+
+daemon 会为每个受管 runtime execution 注入以下私有变量：
+
+| 变量 | 内容 |
+| --- | --- |
+| `AGENT_COMPOSE_INTERNAL_EXECUTION_ID` | 唯一的 execution UUID |
+| `AGENT_COMPOSE_INTERNAL_EXECUTION_READY_FILE` | `/tmp/agent-compose-runtime-ready/<execution-id>` |
+
+runtime 安装 `SIGTERM` handler 后，**必须**以十进制形式将自身 PID 写入
+ready file，并将文件 mode 设为 `0600`；handler dispose 时**应该**删除该
+文件。同版本的仓库 runtime 已实现此协议。
+
+daemon 会打开独立的 driver control execution，读取准确的 ready file，
+通过 `/proc` 校验 PID 的 execution ID、可执行文件和 command line，并且只向
+该 PID 发送 `SIGTERM`。支持此能力的 guest **必须**挂载可读 procfs，并提供
+`sh`、`cat`、`tr`、`grep`、`readlink` 和 shell `kill`。当前 runtime
+可执行文件必须解析为 `node` 或 `nodejs`，command line 必须能识别出
+`agent-compose-runtime`。
+
+忽略这些变量的旧 runtime 在普通执行场景中仍保持兼容。由于 ready file
+不会出现，graceful stop 会等待完整 grace period，再安全升级为 sandbox
+stop。不完整或已失效的 readiness 最终也会超时；缺少 control utility 则会
+被视为信号发送失败。两种结果都会安全升级，daemon 都不会扫描或管理任意
+guest 进程。
+
 ## 5. 可选能力要求
 
 ### 5.1 Agent Provider

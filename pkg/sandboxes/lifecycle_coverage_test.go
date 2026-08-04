@@ -649,6 +649,7 @@ func lifecycleTestSession(id, driver, status string) *domain.Sandbox {
 type fakeLifecycleStore struct {
 	session    *domain.Sandbox
 	vmState    domain.VMState
+	vmStateErr error
 	savedVM    domain.VMState
 	proxyState domain.ProxyState
 	updated    int
@@ -672,7 +673,7 @@ func (s *fakeLifecycleStore) UpdateSandbox(_ context.Context, session *domain.Sa
 }
 
 func (s *fakeLifecycleStore) GetVMState(string) (domain.VMState, error) {
-	return s.vmState, nil
+	return s.vmState, s.vmStateErr
 }
 
 func (s *fakeLifecycleStore) SaveVMState(_ string, state domain.VMState) error {

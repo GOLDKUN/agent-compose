@@ -62,6 +62,7 @@ describe("commander CLI", () => {
       model: "anthropic/claude-sonnet-4-5",
       outputSchemaFile: "/tmp/schema.json",
       skills: ["pdf", "docx"],
+      abortController: expect.any(AbortController),
     });
     expect(stdio.stdout).toBe(`${RESULT_PREFIX}{"provider":"codex","threadId":"s1","stopReason":"completed","finalText":"done","json":null,"transcript":"done","stderr":""}\n`);
     expect(stdio.stderr).toBe("");
@@ -106,6 +107,7 @@ describe("commander CLI", () => {
       output: "ok\n",
       exitCode: 0,
       success: true,
+      cancelled: false,
       stdoutTruncated: false,
       stderrTruncated: false,
       outputTruncated: false,
@@ -141,8 +143,9 @@ describe("commander CLI", () => {
       stateRoot: "/data/state",
       workspace: "/data/workspace",
       home: "/data/home",
+      signal: expect.any(AbortSignal),
     });
-    expect(stdio.stdout).toBe(`${COMMAND_RESULT_PREFIX}{"stdout":"ok\\n","stderr":"","output":"ok\\n","exitCode":0,"success":true,"stdoutTruncated":false,"stderrTruncated":false,"outputTruncated":false,"artifacts":{"stdout":"/tmp/stdout.txt","stderr":"/tmp/stderr.txt","output":"/tmp/output.txt","request":"/tmp/request.json","result":"/tmp/result.json"}}\n`);
+    expect(stdio.stdout).toBe(`${COMMAND_RESULT_PREFIX}{"stdout":"ok\\n","stderr":"","output":"ok\\n","exitCode":0,"success":true,"cancelled":false,"stdoutTruncated":false,"stderrTruncated":false,"outputTruncated":false,"artifacts":{"stdout":"/tmp/stdout.txt","stderr":"/tmp/stderr.txt","output":"/tmp/output.txt","request":"/tmp/request.json","result":"/tmp/result.json"}}\n`);
     expect(stdio.stderr).toBe("");
   });
 
@@ -153,6 +156,7 @@ describe("commander CLI", () => {
       output: "out\nerr\n",
       exitCode: 9,
       success: false,
+      cancelled: false,
       stdoutTruncated: false,
       stderrTruncated: false,
       outputTruncated: false,
@@ -197,7 +201,7 @@ describe("commander CLI", () => {
       stdio.restore();
     }
 
-    expect(runStream).toHaveBeenCalledWith();
+    expect(runStream).toHaveBeenCalledWith({ abortController: expect.any(AbortController) });
     expect(stdio.stdout).toBe("");
     expect(stdio.stderr).toBe("");
   });

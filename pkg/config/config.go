@@ -103,6 +103,7 @@ type Config struct {
 	JupyterGuestPort           int
 	SandboxStartTimeout        time.Duration
 	SandboxStopTimeout         time.Duration
+	SandboxGracefulStopTimeout time.Duration
 	JupyterReadyTimeout        time.Duration
 	JupyterProxyBasePath       string
 	CapGRPCListen              string
@@ -386,6 +387,16 @@ func NewConfig(di do.Injector) (*Config, error) {
 			stopTimeout = parsed
 		}
 	}
+	gracefulStopTimeout := 10 * time.Second
+	if raw := os.Getenv("SANDBOX_GRACEFUL_STOP_TIMEOUT"); raw != "" {
+		if parsed, err := time.ParseDuration(raw); err != nil {
+			logger.Warn("failed to parse SANDBOX_GRACEFUL_STOP_TIMEOUT", "value", raw, "error", err)
+		} else if parsed <= 0 {
+			logger.Warn("SANDBOX_GRACEFUL_STOP_TIMEOUT must be positive", "value", raw)
+		} else {
+			gracefulStopTimeout = parsed
+		}
+	}
 
 	jupyterReadyTimeout := 30 * time.Second
 	if raw := os.Getenv("JUPYTER_READY_TIMEOUT"); raw != "" {
@@ -539,6 +550,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		JupyterGuestPort:           jupyterGuestPort,
 		SandboxStartTimeout:        startTimeout,
 		SandboxStopTimeout:         stopTimeout,
+		SandboxGracefulStopTimeout: gracefulStopTimeout,
 		JupyterReadyTimeout:        jupyterReadyTimeout,
 		JupyterProxyBasePath:       jupyterProxyBase,
 		CapGRPCListen:              strings.TrimSpace(os.Getenv("CAP_GRPC_LISTEN")),

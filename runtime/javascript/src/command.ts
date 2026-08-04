@@ -4,6 +4,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runtimeRootForStateRoot } from "./paths.js";
+import { waitForChildExit } from "./child-process.js";
 
 export const DEFAULT_COMMAND_MAX_OUTPUT_BYTES = 1024 * 1024;
 
@@ -36,6 +37,7 @@ export interface RuntimeCommandResult {
   output: string;
   exitCode: number;
   success: boolean;
+  cancelled: boolean;
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
   outputTruncated: boolean;
@@ -53,6 +55,7 @@ interface RunProcessResult {
   stderr: StreamCapture;
   output: StreamCapture;
   exitCode: number;
+  cancelled: boolean;
 }
 
 export interface RunRuntimeCommandOptions {
@@ -66,6 +69,7 @@ export interface RunRuntimeCommandOptions {
   onStdout?: (chunk: Buffer) => void;
   onStderr?: (chunk: Buffer) => void;
   onOutput?: (chunk: Buffer, stream: "stdout" | "stderr") => void;
+  signal?: AbortSignal;
 }
 
 export async function runExecCommand(options: {
@@ -73,6 +77,7 @@ export async function runExecCommand(options: {
   stateRoot?: string;
   workspace?: string;
   home?: string;
+  signal?: AbortSignal;
 }): Promise<RuntimeCommandResult> {
   const requestPath = path.resolve(options.requestFile);
   const request = await readCommandRequest(requestPath);
@@ -85,6 +90,7 @@ export async function runExecCommand(options: {
     home: options.home,
     stdout: process.stdout,
     stderr: process.stderr,
+    signal: options.signal,
   });
 }
 
@@ -114,13 +120,15 @@ export async function runRuntimeCommand(options: RunRuntimeCommandOptions): Prom
     onStdout: options.onStdout,
     onStderr: options.onStderr,
     onOutput: options.onOutput,
+    signal: options.signal,
   });
   const result: RuntimeCommandResult = {
     stdout: processResult.stdout.text,
     stderr: processResult.stderr.text,
     output: processResult.output.text,
     exitCode: processResult.exitCode,
-    success: processResult.exitCode === 0,
+    success: processResult.exitCode === 0 && !processResult.cancelled,
+    cancelled: processResult.cancelled,
     stdoutTruncated: processResult.stdout.truncated,
     stderrTruncated: processResult.stderr.truncated,
     outputTruncated: processResult.output.truncated,
@@ -179,7 +187,7 @@ export function normalizeCommandRequest(
 async function runProcess(
   request: ReturnType<typeof normalizeCommandRequest>,
   artifacts: Pick<RuntimeCommandArtifacts, "stdout" | "stderr" | "output">,
-  options: Pick<RunRuntimeCommandOptions, "stdout" | "stderr" | "onStdout" | "onStderr" | "onOutput"> = {},
+  options: Pick<RunRuntimeCommandOptions, "stdout" | "stderr" | "onStdout" | "onStderr" | "onOutput" | "signal"> = {},
 ): Promise<RunProcessResult> {
   await Promise.all([
     fsp.mkdir(path.dirname(artifacts.stdout), { recursive: true }),
@@ -206,15 +214,29 @@ async function runProcess(
       ...request.env,
     },
     shell: false,
+    detached: process.platform !== "win32",
   });
 
+  const processExit = waitForChildExit(child, options.signal);
+  let cancelled = options.signal?.aborted === true;
+  const handleAbort = () => {
+    cancelled = true;
+    signalCommand(child, "SIGTERM");
+  };
+  options.signal?.addEventListener("abort", handleAbort, { once: true });
+  if (cancelled) {
+    signalCommand(child, "SIGTERM");
+  }
+
   let timeout: NodeJS.Timeout | undefined;
+  let timeoutEscalation: NodeJS.Timeout | undefined;
   let timedOut = false;
   if (request.timeoutMs && request.timeoutMs > 0) {
     timeout = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 1000).unref();
+      signalCommand(child, "SIGTERM");
+      timeoutEscalation = setTimeout(() => signalCommand(child, "SIGKILL"), 1000);
+      timeoutEscalation.unref();
     }, request.timeoutMs);
   }
 
@@ -238,7 +260,10 @@ async function runProcess(
   });
 
   try {
-    const exitCode = await waitForProcess(child);
+    const { exitCode, spawnError } = await processExit;
+    if (spawnError && !options.signal?.aborted) {
+      throw spawnError;
+    }
     if (timedOut) {
       throw new Error(`command timed out after ${request.timeoutMs}ms`);
     }
@@ -250,10 +275,15 @@ async function runProcess(
       stderr: finalizeCapture(stderrCapture),
       output: finalizeCapture(outputCapture),
       exitCode,
+      cancelled,
     };
   } finally {
+    options.signal?.removeEventListener("abort", handleAbort);
     if (timeout) {
       clearTimeout(timeout);
+    }
+    if (timeoutEscalation) {
+      clearTimeout(timeoutEscalation);
     }
     await Promise.all([
       closeWritable(stdoutFile),
@@ -263,11 +293,22 @@ async function runProcess(
   }
 }
 
-function waitForProcess(child: ReturnType<typeof spawn>): Promise<number> {
-  return new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code) => resolve(code ?? 1));
-  });
+function signalCommand(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
+  if (!child.pid) {
+    return;
+  }
+  try {
+    if (process.platform === "win32") {
+      child.kill(signal);
+    } else {
+      process.kill(-child.pid, signal);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+      // The child exit event remains the source of truth. Signal delivery can
+      // race with process-group exit, so there is no actionable error here.
+    }
+  }
 }
 
 function createStreamCapture(limit: number) {

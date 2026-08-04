@@ -23,6 +23,7 @@ export interface RunnerOptions {
   mcpConfig?: Record<string, unknown>;
   skills?: string[];
   outputSchema?: RuntimeJsonSchema;
+  abortController?: AbortController;
 }
 
 export interface StoredThread {

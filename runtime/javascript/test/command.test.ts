@@ -7,6 +7,7 @@ import {
   normalizeCommandRequest,
   readCommandRequest,
   runExecCommand,
+  runRuntimeCommand,
 } from "../src/command.js";
 import { captureStdio, withTempSession } from "./helpers.js";
 
@@ -258,6 +259,98 @@ describe("runtime command execution", () => {
       await expect(runExecCommand({ requestFile, workspace: root })).rejects.toThrow("command timed out");
     });
   });
+
+  it("forwards cancellation to the child and persists partial command artifacts", async () => {
+    await withTempSession(async (root) => {
+      const abortController = new AbortController();
+      const artifactDir = path.join(root, "artifacts");
+      let requested = false;
+      const result = await runRuntimeCommand({
+        request: {
+          mode: "exec",
+          command: "node",
+          args: ["-e", [
+            "process.on('SIGTERM', () => { process.stdout.write('cleanup\\n'); process.exit(0); });",
+            "process.stdout.write('partial\\n');",
+            "setInterval(() => {}, 1000);",
+          ].join(" ")],
+          artifactDir,
+        },
+        workspace: root,
+        signal: abortController.signal,
+        onStdout(chunk) {
+          if (!requested && chunk.toString("utf8").includes("partial")) {
+            requested = true;
+            abortController.abort();
+          }
+        },
+      });
+
+      expect(result).toMatchObject({ success: false, cancelled: true, exitCode: 0 });
+      expect(result.stdout).toContain("partial");
+      expect(result.stdout).toContain("cleanup");
+      expect(JSON.parse(await fs.readFile(result.artifacts.result, "utf8"))).toMatchObject({
+        success: false,
+        cancelled: true,
+        exitCode: 0,
+        stdout: expect.stringContaining("cleanup"),
+      });
+    });
+  });
+
+  it("signals the owned command process group so descendants cannot delay cleanup", async () => {
+    await withTempSession(async (root) => {
+      const abortController = new AbortController();
+      let childPID = 0;
+      let requested = false;
+      const resultPromise = runRuntimeCommand({
+        request: {
+          mode: "shell",
+          script: [
+            "trap 'printf cleanup\\n; exit 0' TERM",
+            "sleep 60 &",
+            "child=$!",
+            "printf 'child:%s\\n' \"$child\"",
+            "wait \"$child\"",
+          ].join("\n"),
+          artifactDir: path.join(root, "artifacts"),
+        },
+        workspace: root,
+        signal: abortController.signal,
+        onStdout(chunk) {
+          const match = /child:(\d+)/.exec(chunk.toString("utf8"));
+          if (match && !requested) {
+            requested = true;
+            childPID = Number(match[1]);
+            abortController.abort();
+          }
+        },
+      });
+      let fallbackUsed = false;
+      let fallbackError: unknown;
+      const fallback = setTimeout(() => {
+        fallbackUsed = true;
+        if (childPID > 0) {
+          try {
+            process.kill(childPID, "SIGKILL");
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+              fallbackError = error;
+            }
+          }
+        }
+      }, 2_000);
+      try {
+        const result = await resultPromise;
+        expect(fallbackUsed).toBe(false);
+        expect(fallbackError).toBeUndefined();
+        expect(result).toMatchObject({ success: false, cancelled: true, exitCode: 0 });
+        expect(result.stdout).toContain("cleanup");
+      } finally {
+        clearTimeout(fallback);
+      }
+    });
+  }, 5_000);
 
   it("truncates returned output while keeping full artifact files", async () => {
     await withTempSession(async (root) => {
