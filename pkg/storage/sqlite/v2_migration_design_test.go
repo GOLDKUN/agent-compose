@@ -428,8 +428,8 @@ func loadV2MigrationDesignChain(t *testing.T) []migration {
 	if err != nil {
 		t.Fatalf("load migrations: %v", err)
 	}
-	if len(chain) != 11 {
-		t.Fatalf("migration count = %d, want 11", len(chain))
+	if len(chain) != 12 {
+		t.Fatalf("migration count = %d, want 12", len(chain))
 	}
 	return chain
 }

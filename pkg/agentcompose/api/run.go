@@ -23,6 +23,7 @@ func ProjectRunDetailToProto(run domain.ProjectRunRecord) *agentcomposev2.RunDet
 		Driver:       run.Driver,
 		ImageRef:     run.ImageRef,
 		Warnings:     append([]string(nil), run.Warnings...),
+		ErrorStack:   run.ErrorStack,
 	}
 }
 

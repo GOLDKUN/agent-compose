@@ -2,7 +2,6 @@ package runs
 
 import (
 	"encoding/json"
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -39,14 +38,18 @@ func TransitionFromAgentCell(run domain.ProjectRunRecord, sandbox *domain.Sandbo
 	}
 	if execErr != nil {
 		req.ExitCode = execution.FirstNonZeroInt(req.ExitCode, 1)
-		req.Error = fmt.Sprintf("agent execution failed: %v", execErr)
+		req.Error = "agent execution failed"
+		req.ErrorStack = execErr.Error()
 		return req
 	}
 	if !cell.Success {
 		req.ExitCode = execution.FirstNonZeroInt(req.ExitCode, 1)
 		req.Error = "agent execution failed"
-		if detail := firstNonEmpty(cell.Stderr, cell.Output); strings.TrimSpace(detail) != "" {
-			req.Error += ": " + strings.TrimSpace(detail)
+		if reason := strings.TrimSpace(cell.StopReason); reason != "" {
+			req.Error += ": " + reason
+		}
+		if detail := strings.TrimSpace(cell.Stderr); detail != "" {
+			req.ErrorStack = detail
 		}
 	}
 	return req
