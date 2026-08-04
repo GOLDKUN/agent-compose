@@ -190,6 +190,39 @@ func (d *SandboxDriver) StopSandboxVM(ctx context.Context, session *domain.Sandb
 	return d.Store.SaveVMState(session.Summary.ID, vmState)
 }
 
+func (d *SandboxDriver) PrepareSandboxStop(ctx context.Context, session *domain.Sandbox, vmState domain.VMState, gracePeriod time.Duration) (sandboxes.StopPreparationResult, error) {
+	_, runtime, err := d.runtimeForSession(session)
+	if err != nil {
+		return sandboxes.StopPreparationResult{}, err
+	}
+	preparer, ok := runtime.(SandboxGracefulStopRuntime)
+	if !ok {
+		return sandboxes.StopPreparationResult{}, domain.ClassifyError(domain.ErrUnsupported, "runtime does not support graceful sandbox stop", nil)
+	}
+	return preparer.PrepareSandboxStop(ctx, session, vmState, gracePeriod)
+}
+
+func (d *SandboxDriver) BeginSandboxForceStop(session *domain.Sandbox) error {
+	_, runtime, err := d.runtimeForSession(session)
+	if err != nil {
+		return err
+	}
+	if initiator, ok := runtime.(interface{ BeginSandboxForceStop(*domain.Sandbox) }); ok {
+		initiator.BeginSandboxForceStop(session)
+	}
+	return nil
+}
+
+func (d *SandboxDriver) FinishSandboxStop(session *domain.Sandbox) {
+	_, runtime, err := d.runtimeForSession(session)
+	if err != nil {
+		return
+	}
+	if finalizer, ok := runtime.(interface{ FinishSandboxStop(*domain.Sandbox) }); ok {
+		finalizer.FinishSandboxStop(session)
+	}
+}
+
 func (d *SandboxDriver) RemoveSandboxVM(ctx context.Context, session *domain.Sandbox) error {
 	driver, runtime, err := d.runtimeForSession(session)
 	if err != nil {

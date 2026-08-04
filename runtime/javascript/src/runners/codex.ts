@@ -12,6 +12,7 @@ import { readStoredThread, writeStoredThread } from "../session-state.js";
 import { extractText, jsonString } from "../text.js";
 import { appendDelta, TranscriptWriter, type TextWriter } from "../transcript.js";
 import type { AgentResult, RunnerOptions } from "../types.js";
+import { cancellationRequested } from "../shutdown.js";
 
 interface CodexItemState {
   commandStarted?: boolean;
@@ -231,12 +232,25 @@ export class CodexRunner {
       stderr: "",
     };
 
-    const { events } = await thread.runStreamed(
-      promptText,
-      this.options.outputSchema ? { outputSchema: this.options.outputSchema } : undefined,
-    );
-    for await (const event of events) {
-      this.handleEvent(event as Record<string, unknown>, result);
+    try {
+      const turnOptions = this.options.outputSchema || this.options.abortController
+        ? {
+          ...(this.options.outputSchema ? { outputSchema: this.options.outputSchema } : {}),
+          ...(this.options.abortController ? { signal: this.options.abortController.signal } : {}),
+        }
+        : undefined;
+      const { events } = await thread.runStreamed(promptText, turnOptions);
+      for await (const event of events) {
+        this.handleEvent(event as Record<string, unknown>, result);
+      }
+    } catch (error) {
+      if (!cancellationRequested(this.options.abortController?.signal)) {
+        throw error;
+      }
+      result.stopReason = "cancelled";
+    }
+    if (cancellationRequested(this.options.abortController?.signal)) {
+      result.stopReason = "cancelled";
     }
     result.threadId = thread.id || result.threadId;
     result.transcript = this.writer.transcript();
@@ -244,13 +258,15 @@ export class CodexRunner {
       result.finalText = result.transcript;
       result.finalTextSource = "transcript_fallback";
     }
-    await writeStoredThread(
-      this.options.stateRoot,
-      "codex",
-      result.threadId,
-      new Date(),
-      codexThreadStateMetadata(systemContextHash),
-    );
+    if (result.threadId) {
+      await writeStoredThread(
+        this.options.stateRoot,
+        "codex",
+        result.threadId,
+        new Date(),
+        codexThreadStateMetadata(systemContextHash),
+      );
+    }
     return result;
   }
 }

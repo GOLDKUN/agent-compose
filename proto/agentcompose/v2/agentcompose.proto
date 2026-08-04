@@ -3,6 +3,7 @@ syntax = "proto3";
 package agentcompose.v2;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 option go_package = "agent-compose/proto/agentcompose/v2;agentcomposev2";
 
@@ -205,6 +206,20 @@ enum SandboxStatus {
   SANDBOX_STATUS_STOPPED = 3;
   SANDBOX_STATUS_FAILED = 4;
   SANDBOX_STATUS_DELETING = 5;
+}
+
+enum SandboxStopMode {
+  SANDBOX_STOP_MODE_UNSPECIFIED = 0;
+  SANDBOX_STOP_MODE_FORCE = 1;
+  SANDBOX_STOP_MODE_GRACEFUL = 2;
+}
+
+enum SandboxStopOutcome {
+  SANDBOX_STOP_OUTCOME_UNSPECIFIED = 0;
+  SANDBOX_STOP_OUTCOME_FORCE = 1;
+  SANDBOX_STOP_OUTCOME_GRACEFUL = 2;
+  SANDBOX_STOP_OUTCOME_FORCE_AFTER_GRACE_TIMEOUT = 3;
+  SANDBOX_STOP_OUTCOME_FORCE_AFTER_GRACE_ERROR = 4;
 }
 
 enum WorkspaceReclamationState {
@@ -1319,10 +1334,13 @@ message GetSandboxResponse {
 
 message StopSandboxRequest {
   string sandbox_id = 1;
+  SandboxStopMode mode = 2;
+  google.protobuf.Duration grace_period = 3;
 }
 
 message StopSandboxResponse {
   Sandbox sandbox = 1;
+  SandboxStopOutcome outcome = 2;
 }
 
 message ResumeSandboxRequest {

@@ -375,6 +375,7 @@ agent-compose ps --json
 agent-compose sandbox ls
 agent-compose sandbox ls --all --json
 agent-compose sandbox stop <sandbox>
+agent-compose sandbox stop --graceful --grace-period 10s <sandbox>
 agent-compose sandbox resume <sandbox>
 agent-compose sandbox rm <sandbox>
 agent-compose sandbox rm --force <sandbox>
@@ -390,7 +391,7 @@ agent-compose sandbox prune --include-orphans
 | 命令 | 说明 |
 | --- | --- |
 | `sandbox ls` | 等价于 `ps`；支持 `--all/-a`、`--status`、`--verbose` 和 `--json`。 |
-| `sandbox stop <sandbox...>` | 等价于 `stop`；停止一个或多个 sandbox。 |
+| `sandbox stop <sandbox...>` | 等价于 `stop`；停止一个或多个 sandbox。默认仍为 force；使用 `--graceful` 时会先终止 active guest JS runtime execution。 |
 | `sandbox resume <sandbox...>` | 等价于 `resume`；恢复一个或多个 stopped sandbox。 |
 | `sandbox rm <sandbox...>` | 等价于 `rm`；删除一个或多个 sandbox。仅在确认要删除 running sandbox 时使用 `--force`。 |
 | `sandbox prune` | 对当前 project 中 stopped 或 failed sandbox 做 dry-run 清理预览；使用 `--force` 才会删除匹配项。 |
@@ -414,7 +415,11 @@ agent-compose sandbox prune --include-orphans
 - `sandbox prune` 调用 daemon 的 `SandboxService.PruneSandboxes` use case，删除 sandbox 自有 runtime/data，不删除共享 cache artifact；cache inventory 仍由 `cache prune` 或 `cache rm` 管理。
 - forced prune 中某个 sandbox 删除失败时，命令会继续处理后续匹配项，输出 skipped 项，并以非零退出码结束。
 
-`sandbox stop` 会应用 sandbox 创建时快照的 stopped-runtime 策略：`retain` 保留可恢复的 driver state；`remove` 先确认最近一次启动已经停止，再释放私有 runtime，同时保留 sandbox 的持久数据。可使用 `agent-compose inspect sandbox <sandbox> --json` 查看有效策略和 release 状态。`sandbox rm` 在 `<SANDBOX_ROOT>/.lifecycle` 写入持久 deletion journal；running sandbox 必须显式使用 `--force`，删除会按可恢复阶段清理 driver resource、sandbox accessories、sandbox 目录和 metadata。处于 `DELETING` 的 sandbox 不能 resume，也不能接收新的 exec/run；daemon 启动时只继续未完成的 deletion journal，不会猜测或自动删除普通历史残留。
+`sandbox stop` 会应用 sandbox 创建时快照的 stopped-runtime 策略：`retain` 保留可恢复的 driver state；`remove` 先确认最近一次启动已经停止，再释放私有 runtime，同时保留 sandbox 的持久数据。为保持兼容，默认行为是立即 force stop。使用 `--graceful` 时，daemon 会拒绝新的 execution，向每个 active `agent-compose-runtime` 进程发送 `SIGTERM`，等待 JS runtime 取消 provider、执行已有的 `finally` 清理、持久化部分输出并退出。默认 grace period 为 10 秒，可通过 `SANDBOX_GRACEFUL_STOP_TIMEOUT` 修改；单次请求可用 `--grace-period` 覆盖，最大 5 分钟。等待超时或发送信号失败时，daemon 会先强制终止已跟踪 execution，再停止 sandbox。文本与 JSON 输出会给出 `graceful`、`forced-after-grace-timeout` 或 `forced-after-grace-error`。只要 sandbox 最终成功停止，升级为 force 仍属于成功的停止操作，因此 API 和 CLI 都返回成功，并保留 outcome 用于观测；只有 sandbox 本身无法停止时才返回错误。
+
+Graceful stop 只覆盖由当前 daemon 进程启动并跟踪的 active guest execution；它不提供持久 cleanup hook、daemon 重启后的进行中 stop 恢复，也不管理 guest 内的 out-of-band process。
+
+可使用 `agent-compose inspect sandbox <sandbox> --json` 查看有效策略和 release 状态。`sandbox rm` 在 `<SANDBOX_ROOT>/.lifecycle` 写入持久 deletion journal；running sandbox 必须显式使用 `--force`，删除会按可恢复阶段清理 driver resource、sandbox accessories、sandbox 目录和 metadata。处于 `DELETING` 的 sandbox 不能 resume，也不能接收新的 exec/run；daemon 启动时只继续未完成的 deletion journal，不会猜测或自动删除普通历史残留。
 
 新建 sandbox 的目录位于 `<SANDBOX_ROOT>/<年>/<月>/<日>/<sandbox-id>`，日期取创建时 daemon 的本地日历时间，metadata 时间戳仍使用 UTC。升级时不会迁移已有的扁平 `<SANDBOX_ROOT>/<sandbox-id>` 目录，新版本仍可继续使用这些目录。旧版 daemon 不会扫描日期分层布局，因此降级后无法发现升级后新建的 sandbox，恢复新版本后可重新使用。如部署要求稳定的日期边界，应为 daemon 配置一致的 `TZ`。
 
@@ -441,6 +446,8 @@ driver 没有稳定 stats 能力入口时，命令会返回 unsupported，而不
 ```bash
 agent-compose stop <sandbox>
 agent-compose stop <sandbox> [<sandbox N>]
+agent-compose stop --graceful [--grace-period 10s] <sandbox>
+agent-compose stop --force <sandbox>
 ```
 
 示例：
@@ -448,7 +455,10 @@ agent-compose stop <sandbox> [<sandbox N>]
 ```bash
 agent-compose stop sandbox_123
 agent-compose stop sandbox_123 sandbox_456
+agent-compose stop --graceful --grace-period 20s sandbox_123
 ```
+
+`--graceful` 与 `--force` 互斥。不指定模式或显式使用 `--force` 都保留原有 force 行为。graceful outcome 与限制见上方 `sandbox stop` 说明。
 
 ## `resume`：恢复 sandbox
 

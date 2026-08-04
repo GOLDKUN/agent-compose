@@ -1043,10 +1043,10 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 					if result.ExitCode != 0 || !result.Success {
 						promptTransition.ExitCode = execution.FirstNonZeroInt(result.ExitCode, promptTransition.ExitCode)
 						promptTransition.Error = firstNonEmpty(promptTransition.Error, result.Error, "agent execution failed")
-						return *promptTransition, errors.New(promptTransition.Error)
+						return *promptTransition, promptWrapperTransitionError(*promptTransition)
 					}
 					if promptTransition.ExitCode != 0 || strings.TrimSpace(promptTransition.Error) != "" {
-						return *promptTransition, errors.New(firstNonEmpty(promptTransition.Error, "agent execution failed"))
+						return *promptTransition, promptWrapperTransitionError(*promptTransition)
 					}
 					return *promptTransition, nil
 				}
@@ -1105,10 +1105,10 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 				if result.ExitCode != 0 || !result.Success {
 					promptTransition.ExitCode = execution.FirstNonZeroInt(result.ExitCode, promptTransition.ExitCode)
 					promptTransition.Error = firstNonEmpty(promptTransition.Error, result.Error, "agent execution failed")
-					return *promptTransition, errors.New(promptTransition.Error)
+					return *promptTransition, promptWrapperTransitionError(*promptTransition)
 				}
 				if promptTransition.ExitCode != 0 || strings.TrimSpace(promptTransition.Error) != "" {
-					return *promptTransition, errors.New(firstNonEmpty(promptTransition.Error, "agent execution failed"))
+					return *promptTransition, promptWrapperTransitionError(*promptTransition)
 				}
 				return *promptTransition, nil
 			}
@@ -1331,6 +1331,13 @@ func transitionFromPromptWrapperResult(run domain.ProjectRunRecord, sandbox *dom
 		transition.Error = "agent execution cancelled"
 	}
 	return transition
+}
+
+func promptWrapperTransitionError(transition TransitionRequest) error {
+	if strings.EqualFold(strings.TrimSpace(transition.Error), "agent execution cancelled") {
+		return context.Canceled
+	}
+	return errors.New(firstNonEmpty(transition.Error, "agent execution failed"))
 }
 
 func transitionFromPromptRuntimeResult(run domain.ProjectRunRecord, sandbox *domain.Sandbox, logsPath string, result driverpkg.RuntimeResult, execErr error) TransitionRequest {

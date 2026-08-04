@@ -227,6 +227,23 @@ tasks:
           GOCACHE={{.GO_BUILD_CACHE_DIR}} \
           {{.GO_TOOLCHAIN_ENV}} go test ./test/e2e -run '^TestE2EDockerJupyterHostDaemonStopResume$' -count=1 -v
 
+  test:e2e:graceful-stop:
+    desc: Run the opt-in host-daemon graceful sandbox stop E2E test
+    dir: '{{.TASKFILE_DIR}}'
+    deps: ['build:agent-compose']
+    cmds:
+      - |
+        image="${AGENT_COMPOSE_E2E_GRACEFUL_STOP_IMAGE:-agent-compose-guest:latest}"
+        if ! docker image inspect "$image" >/dev/null 2>&1; then
+          echo "Graceful-stop guest image $image is unavailable; run 'task image:agent-compose-guest' or set AGENT_COMPOSE_E2E_GRACEFUL_STOP_IMAGE" >&2
+          exit 1
+        fi
+        AGENT_COMPOSE_E2E_BINARY="$PWD/build/agent-compose" \
+          AGENT_COMPOSE_E2E_GRACEFUL_STOP_IMAGE="$image" \
+          AGENT_COMPOSE_E2E_GRACEFUL_STOP_DRIVERS="${AGENT_COMPOSE_E2E_GRACEFUL_STOP_DRIVERS:-docker,boxlite,microsandbox}" \
+          GOCACHE={{.GO_BUILD_CACHE_DIR}} \
+          {{.GO_TOOLCHAIN_ENV}} go test ./test/e2e -run '^TestE2EGracefulSandboxStopHostDaemon$' -count=1 -timeout 25m -v
+
   test:e2e:docker-workspace-resume:
     desc: Run the opt-in host-daemon Docker file-workspace restart/resume E2E test
     dir: '{{.TASKFILE_DIR}}'

@@ -38,6 +38,17 @@ type fakeRPCSandboxDriver struct {
 	releaseErr    error
 }
 
+type cancellationAwareRPCSandboxDriver struct {
+	*fakeRPCSandboxDriver
+	preparationStarted chan struct{}
+}
+
+func (d *cancellationAwareRPCSandboxDriver) PrepareSandboxStop(ctx context.Context, _ *domain.Sandbox, _ domain.VMState, _ time.Duration) (sandboxes.StopPreparationResult, error) {
+	close(d.preparationStarted)
+	<-ctx.Done()
+	return sandboxes.StopPreparationResult{}, ctx.Err()
+}
+
 func (d *fakeRPCSandboxDriver) ValidateSandboxRuntime(*domain.Sandbox) error {
 	return d.validateErr
 }
@@ -187,6 +198,36 @@ func TestSandboxRPCBridgeCallJSONSupportsSandboxRPCs(t *testing.T) {
 	}
 	if _, err := bridge.CallJSON(ctx, "GetSandbox", `{bad json`); err == nil || !strings.Contains(err.Error(), "decode sandbox rpc request") {
 		t.Fatalf("bad json error = %v", err)
+	}
+}
+
+func TestSandboxRPCBridgeGracefulStopPreservesRequestCancellation(t *testing.T) {
+	bridge, baseDriver := newTestSandboxRPCBridge(t)
+	sandbox, err := bridge.createSandbox(context.Background(), sandboxRPCCreateRequest{Title: "cancel graceful stop"}, domain.SandboxTypeManual)
+	if err != nil {
+		t.Fatalf("createSandbox() error = %v", err)
+	}
+	driver := &cancellationAwareRPCSandboxDriver{
+		fakeRPCSandboxDriver: baseDriver,
+		preparationStarted:   make(chan struct{}),
+	}
+	bridge.driver = driver
+	ctx, cancel := context.WithCancel(context.Background())
+	resultCh := make(chan error, 1)
+	go func() {
+		_, stopErr := bridge.StopSandboxWithOptions(ctx, sandbox.Summary.ID, sandboxes.StopOptions{Mode: sandboxes.StopModeGraceful, GracePeriod: time.Hour})
+		resultCh <- stopErr
+	}()
+	<-driver.preparationStarted
+	cancel()
+
+	select {
+	case stopErr := <-resultCh:
+		if !errors.Is(stopErr, context.Canceled) && connect.CodeOf(stopErr) != connect.CodeCanceled {
+			t.Fatalf("StopSandboxWithOptions() error = %v, want request cancellation", stopErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StopSandboxWithOptions() ignored request cancellation")
 	}
 }
 
@@ -544,6 +585,10 @@ func TestSandboxRuntimeLivenessAndNotifierBranches(t *testing.T) {
 	runtime := driverRuntimeAdapter{runtime: fakeDriverRuntime{alive: true}}
 	if alive, checked, err := (sandboxRuntimeLiveness{runtimes: fakeRuntimeProvider{runtime: runtime}}).IsSandboxAlive(ctx, "microsandbox", session, domain.VMState{}); err != nil || !alive || !checked {
 		t.Fatalf("driver runtime adapter liveness = alive %v checked %v err %v", alive, checked, err)
+	}
+	unsupported := driverRuntimeAdapter{runtime: &gracefulStopRuntimeFake{exec: successfulControlExec}}
+	if alive, checked, err := (sandboxRuntimeLiveness{runtimes: fakeRuntimeProvider{runtime: unsupported}}).IsSandboxAlive(ctx, "boxlite", session, domain.VMState{}); err != nil || alive || checked {
+		t.Fatalf("unsupported driver runtime liveness = alive %v checked %v err %v", alive, checked, err)
 	}
 
 	streams := sandboxes.NewStreamBrokerForTest()

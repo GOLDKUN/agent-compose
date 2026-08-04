@@ -79,6 +79,20 @@ func TestParseAgentExecResultClassifiesFinalTextFallback(t *testing.T) {
 	}
 }
 
+func TestParseAgentExecResultClassifiesCancelledResultAsUnsuccessful(t *testing.T) {
+	result, err := ParseAgentExecResult("codex", domain.ExecResult{
+		Stdout:   AgentResultPrefix + `{"provider":"codex","threadId":"thread-1","stopReason":"cancelled","finalText":"partial","transcript":"partial"}`,
+		ExitCode: 0,
+		Success:  true,
+	})
+	if err != nil {
+		t.Fatalf("ParseAgentExecResult() error = %v", err)
+	}
+	if result.Success || result.ExitCode == 0 || result.StopReason != "cancelled" || result.FinalText != "partial" || result.ThreadID != "thread-1" {
+		t.Fatalf("ParseAgentExecResult() = %#v", result)
+	}
+}
+
 func TestSummarizeAgentExecFailurePreservesUTF8(t *testing.T) {
 	detail := SummarizeAgentExecFailure(domain.ExecResult{Stderr: strings.Repeat("界", 241)})
 	if !strings.HasSuffix(detail, "...") {

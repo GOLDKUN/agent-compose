@@ -7,6 +7,8 @@ import { readStoredThread, writeStoredThread } from "../session-state.js";
 import { TranscriptWriter, type TranscriptTextWriter } from "../transcript.js";
 import type { AgentResult, RunnerOptions } from "../types.js";
 import { piMCPAdapterExtension, writePiMCPConfig } from "./pi-mcp.js";
+import { cancellationRequested } from "../shutdown.js";
+import { waitForChildExit } from "../child-process.js";
 
 const maxDiagnosticBytes = 64 * 1024;
 
@@ -31,6 +33,15 @@ export class PiRunner {
     await fs.mkdir(sessionDir, { recursive: true });
     await fs.mkdir(tempRoot, { recursive: true });
     const invocationDir = await fs.mkdtemp(path.join(tempRoot, "prompt-"));
+    const result: AgentResult = {
+      provider: "pi",
+      threadId: "",
+      stopReason: "completed",
+      finalText: "",
+      finalTextSource: "none",
+      transcript: "",
+      stderr: "",
+    };
 
     try {
       // Let Pi create the first session so its CLI follows the native creation
@@ -48,11 +59,12 @@ export class PiRunner {
           PI_TELEMETRY: "0",
         },
         stdio: ["ignore", "pipe", "pipe"],
+        signal: this.options.abortController?.signal,
       });
       // Attach the process error handler immediately. A failed spawn may emit
       // before stdout iteration completes, and an unhandled child "error"
       // event would otherwise terminate the runtime process.
-      const exit = waitForExit(child);
+      const exit = waitForChildExit(child, this.options.abortController?.signal);
 
       let stderrBytes: Buffer = Buffer.alloc(0);
       child.stderr?.on("data", (chunk) => {
@@ -61,15 +73,6 @@ export class PiRunner {
         this.writer.write(text);
       });
 
-      const result: AgentResult = {
-        provider: "pi",
-        threadId: "",
-        stopReason: "completed",
-        finalText: "",
-        finalTextSource: "none",
-        transcript: "",
-        stderr: "",
-      };
       let protocolError: Error | null = null;
       const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
       for await (const line of lines) {
@@ -89,21 +92,27 @@ export class PiRunner {
       const processResult = await exit;
       const stderr = stderrBytes.toString("utf8");
       result.stderr = stderr;
-      if (processResult.spawnError) throw processResult.spawnError;
-      if (protocolError) throw protocolError;
-      if (this.reportedError) throw this.reportedError;
-      if (processResult.exitCode !== 0) {
+      const cancelled = cancellationRequested(this.options.abortController?.signal);
+      if (processResult.spawnError && !cancelled) throw processResult.spawnError;
+      if (protocolError && !cancelled) throw protocolError;
+      if (this.reportedError && !cancelled) throw this.reportedError;
+      if (processResult.exitCode !== 0 && !cancelled) {
         throw new Error(`pi exited with code ${processResult.exitCode}${stderr ? `: ${stderr}` : ""}`);
       }
-      if (!result.threadId) {
+      if (!result.threadId && !cancelled) {
         throw new Error("pi completed without emitting a session id");
+      }
+      if (cancelled) {
+        result.stopReason = "cancelled";
       }
       result.transcript = this.writer.transcript();
       if (!result.finalText && result.transcript) {
         result.finalText = lastAssistantTextFromTranscript(result.transcript);
         result.finalTextSource = "transcript_fallback";
       }
-      await writeStoredThread(this.options.stateRoot, "pi", result.threadId);
+      if (result.threadId) {
+        await writeStoredThread(this.options.stateRoot, "pi", result.threadId);
+      }
       return result;
     } finally {
       await fs.rm(invocationDir, { recursive: true, force: true });
@@ -222,13 +231,6 @@ function piFacadeModel(model: string): string {
   if (normalized.startsWith("agent-compose/")) return normalized;
   const separator = normalized.indexOf("/");
   return `agent-compose/${separator >= 0 ? normalized.slice(separator + 1) : normalized}`;
-}
-
-function waitForExit(child: ReturnType<typeof spawn>): Promise<{ exitCode: number; spawnError?: Error }> {
-  return new Promise((resolve) => {
-    child.once("error", (error) => resolve({ exitCode: 1, spawnError: new Error("failed to start pi", { cause: error }) }));
-    child.once("close", (code) => resolve({ exitCode: code ?? 1 }));
-  });
 }
 
 function appendBounded(current: Buffer, next: Buffer, limit: number): Buffer {

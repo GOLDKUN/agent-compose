@@ -23,6 +23,7 @@ export interface InteractiveStartOptions {
   home?: string;
   model?: string;
   outputSchemaFile?: string;
+  abortController?: AbortController;
 }
 
 export type EmitInteractiveFrame = (type: string, fields?: object) => void;
@@ -109,14 +110,26 @@ export class CodexInteractiveSession implements InteractiveSession {
     this.turnCount++;
     this.result.finalText = "";
     this.result.finalTextSource = "none";
-    const { events } = await this.thread.runStreamed(
-      message,
-      this.options.outputSchema ? { outputSchema: this.options.outputSchema } : undefined,
-    );
-    for await (const event of events) {
-      const sdkEvent = event as Record<string, unknown>;
-      this.emit("agent_event", { event: sdkEvent });
-      this.runner.handleEvent(sdkEvent, this.result);
+    try {
+      const turnOptions = this.options.outputSchema || this.options.abortController
+        ? {
+          ...(this.options.outputSchema ? { outputSchema: this.options.outputSchema } : {}),
+          ...(this.options.abortController ? { signal: this.options.abortController.signal } : {}),
+        }
+        : undefined;
+      const { events } = await this.thread.runStreamed(message, turnOptions);
+      for await (const event of events) {
+        const sdkEvent = event as Record<string, unknown>;
+        this.emit("agent_event", { event: sdkEvent });
+        this.runner.handleEvent(sdkEvent, this.result);
+      }
+    } catch (error) {
+      if (!this.options.abortController?.signal.aborted) {
+        throw error;
+      }
+    }
+    if (this.options.abortController?.signal.aborted) {
+      this.result.stopReason = "cancelled";
     }
     this.result.threadId = this.thread.id || this.result.threadId;
     this.result.transcript = this.runner.transcript();

@@ -69,6 +69,7 @@ describe("runtime shape integration workflows", () => {
       const geminiSpy = vi.spyOn(await import("../src/runners/gemini.js"), "GeminiRunner").mockImplementation(function mockGemini(this: unknown, options: unknown) {
         Object.assign(this as object, { options, runPrompt });
       } as never);
+      const abortController = new AbortController();
       const stdio = captureStdio();
       try {
         await createProgram({ exitOverride: true }).parseAsync([
@@ -92,8 +93,10 @@ describe("runtime shape integration workflows", () => {
           stateRoot: path.join(root, "state"),
           workspace: path.join(root, "workspace"),
           home: path.join(root, "home"),
+          abortController,
         });
         expect(result.threadId).toBe("shape-session");
+        expect(geminiSpy).toHaveBeenLastCalledWith(expect.objectContaining({ abortController }));
       } finally {
         stdio.restore();
         geminiSpy.mockRestore();

@@ -74,6 +74,10 @@ type SandboxLifecycleDelegate interface {
 	GetSandboxProxy(context.Context, string) (SandboxProxy, error)
 }
 
+type SandboxGracefulLifecycleDelegate interface {
+	StopSandboxWithOptions(context.Context, string, sandboxes.StopOptions) (sandboxes.StopOutcome, error)
+}
+
 type SandboxProxy struct {
 	ProxyPath   string
 	NotebookURL string
@@ -305,6 +309,10 @@ func sandboxHistoryEventToV2(event *domain.SandboxEvent) *agentcomposev2.Sandbox
 }
 
 func (h *SandboxHandler) StopSandbox(ctx context.Context, req *connect.Request[agentcomposev2.StopSandboxRequest]) (*connect.Response[agentcomposev2.StopSandboxResponse], error) {
+	options, err := sandboxStopOptions(req.Msg)
+	if err != nil {
+		return nil, err
+	}
 	sandbox, err := h.loadSandbox(ctx, req.Msg.GetSandboxId())
 	if err != nil {
 		return nil, err
@@ -313,18 +321,71 @@ func (h *SandboxHandler) StopSandbox(ctx context.Context, req *connect.Request[a
 	state := domain.EffectiveStoppedRuntimeState(sandbox)
 	if sandbox.Summary.VMStatus == domain.VMStatusStopped &&
 		(policy == domain.StoppedRuntimePolicyRetain || state == domain.StoppedRuntimeStateReleased) {
-		return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Sandbox: h.sandboxToV2(ctx, sandbox)}), nil
+		outcome := agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE
+		if options.Mode == sandboxes.StopModeGraceful {
+			outcome = agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_GRACEFUL
+		}
+		return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Sandbox: h.sandboxToV2(ctx, sandbox), Outcome: outcome}), nil
 	}
 	retryRelease := sandbox.Summary.VMStatus == domain.VMStatusStopped &&
 		policy == domain.StoppedRuntimePolicyRemove && state == domain.StoppedRuntimeStateReleasePending
 	if sandbox.Summary.VMStatus != domain.VMStatusRunning && !retryRelease {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("sandbox %s cannot be stopped from state %s", sandbox.Summary.ID, sandbox.Summary.VMStatus))
 	}
-	stopped, err := h.delegate.StopSandbox(ctx, sandbox.Summary.ID)
-	if err != nil {
-		return nil, err
+	if options.Mode != sandboxes.StopModeGraceful {
+		stopped, stopErr := h.delegate.StopSandbox(ctx, sandbox.Summary.ID)
+		if stopErr != nil {
+			return nil, stopErr
+		}
+		return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Sandbox: h.sandboxToV2(ctx, stopped), Outcome: agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE}), nil
 	}
-	return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Sandbox: h.sandboxToV2(ctx, stopped)}), nil
+	graceful, ok := h.delegate.(SandboxGracefulLifecycleDelegate)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("graceful sandbox stop is unsupported"))
+	}
+	outcome, stopErr := graceful.StopSandboxWithOptions(ctx, sandbox.Summary.ID, options)
+	if stopErr != nil {
+		return nil, stopErr
+	}
+	return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Sandbox: h.sandboxToV2(ctx, outcome.Sandbox), Outcome: sandboxStopOutcomeToProto(outcome)}), nil
+}
+
+const maxSandboxGracePeriod = 5 * time.Minute
+
+func sandboxStopOptions(request *agentcomposev2.StopSandboxRequest) (sandboxes.StopOptions, error) {
+	mode := sandboxes.StopModeForce
+	if request.GetMode() == agentcomposev2.SandboxStopMode_SANDBOX_STOP_MODE_GRACEFUL {
+		mode = sandboxes.StopModeGraceful
+	} else if request.GetMode() != agentcomposev2.SandboxStopMode_SANDBOX_STOP_MODE_UNSPECIFIED && request.GetMode() != agentcomposev2.SandboxStopMode_SANDBOX_STOP_MODE_FORCE {
+		return sandboxes.StopOptions{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unsupported sandbox stop mode %s", request.GetMode()))
+	}
+	gracePeriod := time.Duration(0)
+	if request.GetGracePeriod() != nil {
+		if err := request.GetGracePeriod().CheckValid(); err != nil {
+			return sandboxes.StopOptions{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid grace period: %w", err))
+		}
+		gracePeriod = request.GetGracePeriod().AsDuration()
+		if gracePeriod <= 0 || gracePeriod > maxSandboxGracePeriod {
+			return sandboxes.StopOptions{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("grace period must be greater than zero and at most %s", maxSandboxGracePeriod))
+		}
+	}
+	if gracePeriod > 0 && mode != sandboxes.StopModeGraceful {
+		return sandboxes.StopOptions{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("grace period requires graceful stop mode"))
+	}
+	return sandboxes.StopOptions{Mode: mode, GracePeriod: gracePeriod}, nil
+}
+
+func sandboxStopOutcomeToProto(outcome sandboxes.StopOutcome) agentcomposev2.SandboxStopOutcome {
+	switch outcome.Preparation.Outcome {
+	case sandboxes.StopPreparationGraceful:
+		return agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_GRACEFUL
+	case sandboxes.StopPreparationTimeout:
+		return agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE_AFTER_GRACE_TIMEOUT
+	case sandboxes.StopPreparationFailed:
+		return agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE_AFTER_GRACE_ERROR
+	default:
+		return agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE
+	}
 }
 
 func (h *SandboxHandler) ResumeSandbox(ctx context.Context, req *connect.Request[agentcomposev2.ResumeSandboxRequest]) (*connect.Response[agentcomposev2.ResumeSandboxResponse], error) {

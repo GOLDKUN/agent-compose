@@ -8,6 +8,7 @@ export interface RunStreamOptions {
   stdin?: Readable;
   stdout?: Writable;
   stderr?: Writable;
+  abortController?: AbortController;
 }
 
 export async function runStreamCommand(options: RunStreamOptions = {}): Promise<void> {
@@ -26,27 +27,34 @@ export async function runStreamCommand(options: RunStreamOptions = {}): Promise<
   };
 
   const lines = createInterface({ input: stdin, crlfDelay: Infinity });
-  for await (const line of lines) {
-    if (!line.trim()) {
-      continue;
-    }
-    let frame: StreamFrame;
-    try {
-      frame = decodeFrame(line);
-    } catch (error) {
-      emitError(error);
-      continue;
-    }
+  const signal = options.abortController?.signal;
+  const closeOnAbort = () => lines.close();
+  signal?.addEventListener("abort", closeOnAbort, { once: true });
+  if (signal?.aborted) {
+    lines.close();
+  }
+  try {
+    for await (const line of lines) {
+      if (!line.trim()) {
+        continue;
+      }
+      let frame: StreamFrame;
+      try {
+        frame = decodeFrame(line);
+      } catch (error) {
+        emitError(error);
+        continue;
+      }
 
-    try {
-      switch (frame.type) {
+      try {
+        switch (frame.type) {
         case "start":
           if (session) {
             throw new Error("stream has already been started");
           }
           if (frame.mode === "command") {
             emit("started", { mode: "command" });
-            emit("result", await runCommandFrame(frame, emit));
+            emit("result", await runCommandFrame(frame, emit, signal));
             finished = true;
             lines.close();
             break;
@@ -58,6 +66,7 @@ export async function runStreamCommand(options: RunStreamOptions = {}): Promise<
             home: stringField(frame, "home"),
             model: stringField(frame, "model"),
             outputSchemaFile: stringField(frame, "outputSchemaFile"),
+            abortController: options.abortController,
           }, emit);
           break;
         case "human_message":
@@ -71,7 +80,7 @@ export async function runStreamCommand(options: RunStreamOptions = {}): Promise<
             throw new Error("command frames are not supported after interactive start");
           }
           emit("started", { mode: "command" });
-          emit("result", await runCommandFrame(frame, emit));
+          emit("result", await runCommandFrame(frame, emit, signal));
           finished = true;
           lines.close();
           break;
@@ -86,31 +95,37 @@ export async function runStreamCommand(options: RunStreamOptions = {}): Promise<
           lines.close();
           break;
         }
-        default:
-          throw new Error(`unsupported input frame type ${frame.type}`);
-      }
-    } catch (error) {
-      emitError(error, frame.seq);
-      if (error instanceof UnsupportedProviderError) {
-        finished = true;
-        lines.close();
+          default:
+            throw new Error(`unsupported input frame type ${frame.type}`);
+        }
+      } catch (error) {
+        emitError(error, frame.seq);
+        if (error instanceof UnsupportedProviderError) {
+          finished = true;
+          lines.close();
+        }
       }
     }
+  } finally {
+    signal?.removeEventListener("abort", closeOnAbort);
   }
 
   if (!finished && session) {
     try {
-      emit("result", await session.finish("eof"));
+      emit("result", await session.finish(signal?.aborted ? "cancelled" : "eof"));
     } catch (error) {
       stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
       emitError(error);
     }
+  } else if (!finished && signal?.aborted) {
+    emit("result", { stopReason: "cancelled" });
   }
 }
 
 async function runCommandFrame(
   frame: StreamFrame,
   emit: (type: string, fields?: object) => void,
+  signal?: AbortSignal,
 ) {
   const request = commandRequest(frame);
   return runRuntimeCommand({
@@ -127,6 +142,7 @@ async function runCommandFrame(
       emitTextFrame(emit, "stderr", chunk);
       emitOutputFrame(emit, "stderr", chunk);
     },
+    signal,
   });
 }
 

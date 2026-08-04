@@ -5,6 +5,7 @@ import { readStoredThread, writeStoredThread } from "../session-state.js";
 import { jsonString } from "../text.js";
 import { TranscriptWriter, type TranscriptTextWriter } from "../transcript.js";
 import type { AgentResult, RunnerOptions, StoredThread } from "../types.js";
+import { cancellationRequested } from "../shutdown.js";
 
 type PendingToolUse = {
   name: string;
@@ -116,6 +117,7 @@ export class ClaudeRunner {
           append: this.options.systemContext,
         },
       } : {}),
+      ...(this.options.abortController ? { abortController: this.options.abortController } : {}),
     };
   }
 
@@ -272,8 +274,17 @@ export class ClaudeRunner {
             break;
         }
       }
+    } catch (error) {
+      if (!cancellationRequested(this.options.abortController?.signal)) {
+        throw error;
+      }
+      result.stopReason = "cancelled";
     } finally {
       stream.close?.();
+    }
+
+    if (cancellationRequested(this.options.abortController?.signal)) {
+      result.stopReason = "cancelled";
     }
 
     result.transcript = this.writer.transcript();
@@ -281,7 +292,9 @@ export class ClaudeRunner {
       result.finalText = result.transcript;
       result.finalTextSource = "transcript_fallback";
     }
-    await writeStoredThread(this.options.stateRoot, "claude", result.threadId);
+    if (result.threadId) {
+      await writeStoredThread(this.options.stateRoot, "claude", result.threadId);
+    }
     return result;
   }
 }

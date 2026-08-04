@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 )
 
 type SandboxRuntime interface {
@@ -23,6 +25,10 @@ type SandboxStatsRuntime interface {
 	Stats(context.Context, *domain.Sandbox, domain.VMState) (domain.SandboxStats, error)
 }
 
+type SandboxGracefulStopRuntime interface {
+	PrepareSandboxStop(context.Context, *domain.Sandbox, domain.VMState, time.Duration) (sandboxes.StopPreparationResult, error)
+}
+
 type RuntimeProvider interface {
 	ForDriver(string) (SandboxRuntime, error)
 	ForSession(*domain.Sandbox) (SandboxRuntime, error)
@@ -34,7 +40,8 @@ type runtimeProvider struct {
 }
 
 type driverRuntimeAdapter struct {
-	runtime driverpkg.SandboxRuntime
+	runtime    driverpkg.SandboxRuntime
+	executions *sandboxExecutions
 }
 
 func NewRuntimeProvider(config *appconfig.Config) (RuntimeProvider, error) {
@@ -57,12 +64,13 @@ func NewRuntimeProvider(config *appconfig.Config) (RuntimeProvider, error) {
 	if err != nil {
 		return nil, err
 	}
+	executions := newSandboxExecutions()
 	return &runtimeProvider{
 		config: config,
 		runtimes: map[string]SandboxRuntime{
-			driverpkg.RuntimeDriverBoxlite:      driverRuntimeAdapter{runtime: boxliteRuntime},
-			driverpkg.RuntimeDriverDocker:       driverRuntimeAdapter{runtime: dockerRuntime},
-			driverpkg.RuntimeDriverMicrosandbox: driverRuntimeAdapter{runtime: microsandboxRuntime},
+			driverpkg.RuntimeDriverBoxlite:      driverRuntimeAdapter{runtime: boxliteRuntime, executions: executions},
+			driverpkg.RuntimeDriverDocker:       driverRuntimeAdapter{runtime: dockerRuntime, executions: executions},
+			driverpkg.RuntimeDriverMicrosandbox: driverRuntimeAdapter{runtime: microsandboxRuntime, executions: executions},
 		},
 	}, nil
 }
@@ -109,7 +117,15 @@ func (r driverRuntimeAdapter) EnsureSandbox(ctx context.Context, session *domain
 }
 
 func (r driverRuntimeAdapter) StopSandbox(ctx context.Context, session *domain.Sandbox, vmState domain.VMState) (bool, error) {
-	return r.runtime.StopSandbox(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState))
+	if r.executions != nil {
+		r.executions.ensureBlocked(session.Summary.ID)
+		// Preserve the runtime driver's complete stop deadline. The sandbox stop
+		// is the final containment boundary for executions that have not yet
+		// returned after cancellation.
+		r.executions.cancel(session.Summary.ID)
+	}
+	missing, err := r.runtime.StopSandbox(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState))
+	return missing, err
 }
 
 func (r driverRuntimeAdapter) RemoveSandbox(ctx context.Context, session *domain.Sandbox, vmState domain.VMState) error {
@@ -117,17 +133,27 @@ func (r driverRuntimeAdapter) RemoveSandbox(ctx context.Context, session *domain
 }
 
 func (r driverRuntimeAdapter) Exec(ctx context.Context, session *domain.Sandbox, vmState domain.VMState, spec domain.ExecSpec) (domain.ExecResult, error) {
-	result, err := r.runtime.Exec(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), execution.ToDriverExecSpec(spec))
+	execCtx, marked, finish, err := r.beginExecution(ctx, session, spec)
+	if err != nil {
+		return domain.ExecResult{}, err
+	}
+	defer finish()
+	result, err := r.runtime.Exec(execCtx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), execution.ToDriverExecSpec(marked))
 	return execution.FromDriverExecResult(result), classifyExecTerminationError(err)
 }
 
 func (r driverRuntimeAdapter) ExecStream(ctx context.Context, session *domain.Sandbox, vmState domain.VMState, spec domain.ExecSpec, stream domain.ExecStreamWriter) (domain.ExecResult, error) {
+	execCtx, marked, finish, err := r.beginExecution(ctx, session, spec)
+	if err != nil {
+		return domain.ExecResult{}, err
+	}
+	defer finish()
 	driverStream := func(chunk driverpkg.ExecChunk) {
 		if stream != nil {
 			stream(domain.ExecChunk{Text: chunk.Text, Stream: domainStreamFromDriver(chunk.Stream)})
 		}
 	}
-	result, err := r.runtime.ExecStream(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), execution.ToDriverExecSpec(spec), driverStream)
+	result, err := r.runtime.ExecStream(execCtx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), execution.ToDriverExecSpec(marked), driverStream)
 	return execution.FromDriverExecResult(result), classifyExecTerminationError(err)
 }
 
@@ -143,7 +169,22 @@ func (r driverRuntimeAdapter) OpenInteraction(ctx context.Context, session *doma
 	if !ok {
 		return driverpkg.UnsupportedRuntimeInteraction(vmState.Driver, driverpkg.RuntimeInteractionCapabilities{}, spec)
 	}
-	return interactor.OpenInteraction(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), spec)
+	execCtx, marked, finish, err := r.beginInteraction(ctx, session, spec)
+	if err != nil {
+		return nil, err
+	}
+	interaction, err := interactor.OpenInteraction(execCtx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), marked)
+	if err != nil {
+		finish()
+		return nil, err
+	}
+	tracked := &trackedRuntimeInteraction{
+		RuntimeInteraction: interaction,
+		finish:             finish,
+		done:               make(chan struct{}),
+	}
+	go tracked.finishWhenContextEnds(execCtx)
+	return tracked, nil
 }
 
 func domainStreamFromDriver(stream driverpkg.StdioStream) domain.StdioStream {
@@ -169,7 +210,7 @@ func (r driverRuntimeAdapter) IsSandboxAlive(ctx context.Context, session *domai
 		IsSandboxAlive(context.Context, *driverpkg.Sandbox, driverpkg.VMState) (bool, error)
 	})
 	if !ok {
-		return false, fmt.Errorf("runtime does not support session liveness checks")
+		return false, domain.ClassifyError(domain.ErrUnsupported, "runtime does not support sandbox liveness checks", nil)
 	}
 	return aliveRuntime.IsSandboxAlive(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState))
 }

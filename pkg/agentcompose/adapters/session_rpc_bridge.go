@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -315,27 +316,40 @@ func (b *SandboxRPCBridge) RecoverStoppedRuntimeReleases(ctx context.Context) []
 }
 
 func (b *SandboxRPCBridge) StopSandbox(ctx context.Context, sandboxID string) (*domain.Sandbox, error) {
-	return b.stopSandbox(ctx, sandboxID, domain.SandboxTypeManual)
+	outcome, err := b.stopSandboxWithOptions(ctx, sandboxID, domain.SandboxTypeManual, sandboxes.StopOptions{Mode: sandboxes.StopModeForce})
+	return outcome.Sandbox, err
+}
+
+func (b *SandboxRPCBridge) StopSandboxWithOptions(ctx context.Context, sandboxID string, options sandboxes.StopOptions) (sandboxes.StopOutcome, error) {
+	return b.stopSandboxWithOptions(ctx, sandboxID, domain.SandboxTypeManual, options)
 }
 
 func (b *SandboxRPCBridge) stopSandbox(ctx context.Context, sandboxID, source string) (*domain.Sandbox, error) {
+	outcome, err := b.stopSandboxWithOptions(ctx, sandboxID, source, sandboxes.StopOptions{Mode: sandboxes.StopModeForce})
+	return outcome.Sandbox, err
+}
+
+func (b *SandboxRPCBridge) stopSandboxWithOptions(ctx context.Context, sandboxID, source string, options sandboxes.StopOptions) (sandboxes.StopOutcome, error) {
 	session, err := b.store.GetSandbox(ctx, sandboxID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return sandboxes.StopOutcome{}, connect.NewError(connect.CodeNotFound, err)
 	}
 	if reconciled, recErr := b.ReconcileRuntimeState(ctx, session); recErr != nil {
 		slog.Warn("failed to reconcile sandbox runtime state before stop", "sandbox_id", session.Summary.ID, "error", recErr)
 	} else {
 		session = reconciled
 	}
-	outcome, stopErr := b.sessionLifecycle().StopLoaded(ctx, session)
+	outcome, stopErr := b.sessionLifecycle().StopLoadedWithOptions(ctx, session, options)
+	if outcome.Preparation.Error != nil {
+		slog.Warn("graceful sandbox stop escalated to force", "sandbox_id", session.Summary.ID, "outcome", outcome.Preparation.Outcome, "error", outcome.Preparation.Error)
+	}
 	if outcome.DriverStopped && outcome.Sandbox != nil {
 		b.publishSchedulerTopic("agent-compose.session.stopped", schedulers.SessionTopicPayload(outcome.Sandbox, source))
 	}
 	if stopErr != nil {
-		return nil, api.ConnectErrorForDomain(stopErr)
+		return outcome, api.ConnectErrorForDomain(stopErr)
 	}
-	return outcome.Sandbox, nil
+	return outcome, nil
 }
 
 func (b *SandboxRPCBridge) indexCapabilitySandbox(session *domain.Sandbox) {
@@ -441,6 +455,9 @@ func (p sandboxRuntimeLiveness) IsSandboxAlive(ctx context.Context, driver strin
 		return false, false, nil
 	}
 	alive, err := aliveRuntime.IsSandboxAlive(ctx, session, vmState)
+	if errors.Is(err, domain.ErrUnsupported) {
+		return false, false, nil
+	}
 	return alive, true, err
 }
 

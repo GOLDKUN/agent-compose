@@ -28,6 +28,18 @@ type SandboxDriver interface {
 	StopSandboxVM(context.Context, *domain.Sandbox) error
 }
 
+type SandboxStopPreparer interface {
+	PrepareSandboxStop(context.Context, *domain.Sandbox, domain.VMState, time.Duration) (StopPreparationResult, error)
+}
+
+type SandboxForceStopInitiator interface {
+	BeginSandboxForceStop(*domain.Sandbox) error
+}
+
+type SandboxStopFinalizer interface {
+	FinishSandboxStop(*domain.Sandbox)
+}
+
 type SandboxRuntimeValidator interface {
 	ValidateSandboxRuntime(*domain.Sandbox) error
 }
@@ -284,7 +296,10 @@ type StopOutcome struct {
 	Sandbox         *domain.Sandbox
 	DriverStopped   bool
 	RuntimeReleased bool
+	Preparation     StopPreparationResult
 }
+
+const defaultSandboxForceStopTimeout = 30 * time.Second
 
 // Changed reports whether the driver was stopped or its private runtime was
 // released by this operation.
@@ -296,15 +311,90 @@ func (o StopOutcome) Changed() bool {
 // sandbox, including policy application, persistence, events, and access
 // revocation.
 func (l Lifecycle) StopLoaded(ctx context.Context, session *domain.Sandbox) (StopOutcome, error) {
+	return l.StopLoadedWithOptions(ctx, session, StopOptions{Mode: StopModeForce})
+}
+
+func (l Lifecycle) StopLoadedWithOptions(ctx context.Context, session *domain.Sandbox, options StopOptions) (StopOutcome, error) {
 	if session == nil {
 		return StopOutcome{}, fmt.Errorf("sandbox is required")
 	}
+	finalizer, canFinalize := l.Driver.(SandboxStopFinalizer)
+	stopAcquired := false
+	defer func() {
+		if stopAcquired && canFinalize {
+			finalizer.FinishSandboxStop(session)
+		}
+	}()
+	preparation := StopPreparationResult{Outcome: StopPreparationSkipped}
+	stopCtx := ctx
+	if options.Mode == StopModeGraceful {
+		prepared, err := l.prepareSandboxStop(ctx, session, options.GracePeriod)
+		if err != nil {
+			return StopOutcome{}, err
+		}
+		preparation = prepared
+		stopAcquired = true
+		// Graceful preparation is request-scoped, but runtime containment must
+		// complete even when that request is cancelled. Keep the request's
+		// values for logging/tracing while removing its cancellation and
+		// deadline, then apply the daemon-owned stop timeout.
+		stopTimeout := defaultSandboxForceStopTimeout
+		if l.Config != nil && l.Config.SandboxStopTimeout > 0 {
+			stopTimeout = l.Config.SandboxStopTimeout
+		}
+		runtimeDriver := session.Summary.Driver
+		if runtimeDriver == "" && l.Config != nil {
+			runtimeDriver = l.Config.RuntimeDriver
+		}
+		stopTimeout = driverpkg.SandboxStopContextTimeout(runtimeDriver, stopTimeout)
+		var cancel context.CancelFunc
+		stopCtx, cancel = context.WithTimeout(context.WithoutCancel(ctx), stopTimeout)
+		defer cancel()
+	} else if initiator, ok := l.Driver.(SandboxForceStopInitiator); ok {
+		// Exec handlers hold the same lifecycle lock while guest work is active.
+		// Cancellation must therefore start before waiting for that lock; the
+		// locked stop path remains the boundary that waits and stops the runtime.
+		if err := initiator.BeginSandboxForceStop(session); err != nil {
+			return StopOutcome{}, err
+		}
+		stopAcquired = true
+	} else {
+		stopAcquired = true
+	}
 	if l.Locks == nil {
-		return l.stopLoadedWhileLocked(ctx, session)
+		outcome, err := l.stopLoadedWhileLocked(stopCtx, session)
+		outcome.Preparation = preparation
+		if err == nil && ctx.Err() != nil {
+			err = ctx.Err()
+		}
+		return outcome, err
 	}
 	unlock := l.Locks.Lock(session.Summary.ID)
 	defer unlock()
-	return l.stopLoadedWhileLocked(ctx, session)
+	outcome, err := l.stopLoadedWhileLocked(stopCtx, session)
+	outcome.Preparation = preparation
+	if err == nil && ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	return outcome, err
+}
+
+func (l Lifecycle) prepareSandboxStop(ctx context.Context, session *domain.Sandbox, gracePeriod time.Duration) (StopPreparationResult, error) {
+	preparer, ok := l.Driver.(SandboxStopPreparer)
+	if !ok {
+		return StopPreparationResult{}, domain.ClassifyError(domain.ErrUnsupported, "sandbox driver does not support graceful stop", nil)
+	}
+	if gracePeriod <= 0 && l.Config != nil {
+		gracePeriod = l.Config.SandboxGracefulStopTimeout
+	}
+	if gracePeriod <= 0 {
+		gracePeriod = 10 * time.Second
+	}
+	vmState, err := l.Store.GetVMState(session.Summary.ID)
+	if err != nil {
+		return StopPreparationResult{}, fmt.Errorf("load sandbox VM state before graceful stop: %w", err)
+	}
+	return preparer.PrepareSandboxStop(ctx, session, vmState, gracePeriod)
 }
 
 // StopLoadedWhileLocked performs the complete stop lifecycle while the caller
@@ -312,6 +402,14 @@ func (l Lifecycle) StopLoaded(ctx context.Context, session *domain.Sandbox) (Sto
 func (l Lifecycle) StopLoadedWhileLocked(ctx context.Context, session *domain.Sandbox) (StopOutcome, error) {
 	if session == nil {
 		return StopOutcome{}, fmt.Errorf("sandbox is required")
+	}
+	if initiator, ok := l.Driver.(SandboxForceStopInitiator); ok {
+		if err := initiator.BeginSandboxForceStop(session); err != nil {
+			return StopOutcome{}, err
+		}
+	}
+	if finalizer, ok := l.Driver.(SandboxStopFinalizer); ok {
+		defer finalizer.FinishSandboxStop(session)
 	}
 	return l.stopLoadedWhileLocked(ctx, session)
 }

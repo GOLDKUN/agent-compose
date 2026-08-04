@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 )
@@ -119,6 +120,68 @@ func TestIntegrationCLIStopSandbox(t *testing.T) {
 	}
 	if len(stopped) != 1 || stopped[0] != "sandbox-stop" {
 		t.Fatalf("stopped sandboxes = %#v", stopped)
+	}
+}
+
+func TestIntegrationCLIGracefulStopSandbox(t *testing.T) {
+	var request *agentcomposev2.StopSandboxRequest
+	server := newComposeServiceStubServer(t, composeServiceStubs{
+		session: sessionServiceStub{
+			stopSession: func(_ context.Context, req *connect.Request[agentcomposev2.StopSandboxRequest]) (*connect.Response[agentcomposev2.StopSandboxResponse], error) {
+				request = req.Msg
+				return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Outcome: agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_GRACEFUL}), nil
+			},
+		},
+	})
+	defer server.Close()
+
+	stdout, stderr, _, exitCode := executeCLICommand("stop", "--host", server.URL, "--graceful", "--grace-period", "2s", "sandbox-graceful")
+	if exitCode != 0 || stderr != "" || stdout != "stopped sandbox sandbox-graceful (graceful)\n" {
+		t.Fatalf("graceful stop code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
+	}
+	if request == nil || request.GetMode() != agentcomposev2.SandboxStopMode_SANDBOX_STOP_MODE_GRACEFUL || request.GetGracePeriod().AsDuration() != 2*time.Second {
+		t.Fatalf("graceful stop request = %#v", request)
+	}
+}
+
+func TestIntegrationCLIGracefulStopEscalationReturnsSuccessWithOutcome(t *testing.T) {
+	tests := []struct {
+		name        string
+		outcome     agentcomposev2.SandboxStopOutcome
+		outcomeText string
+	}{
+		{name: "timeout", outcome: agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE_AFTER_GRACE_TIMEOUT, outcomeText: "forced-after-grace-timeout"},
+		{name: "preparation error", outcome: agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE_AFTER_GRACE_ERROR, outcomeText: "forced-after-grace-error"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := newComposeServiceStubServer(t, composeServiceStubs{
+				session: sessionServiceStub{
+					stopSession: func(_ context.Context, _ *connect.Request[agentcomposev2.StopSandboxRequest]) (*connect.Response[agentcomposev2.StopSandboxResponse], error) {
+						return connect.NewResponse(&agentcomposev2.StopSandboxResponse{Outcome: test.outcome}), nil
+					},
+				},
+			})
+			defer server.Close()
+
+			stdout, stderr, _, exitCode := executeCLICommand("stop", "--host", server.URL, "--graceful", "sandbox-escalated")
+			wantStdout := "stopped sandbox sandbox-escalated (" + test.outcomeText + ")\n"
+			if exitCode != 0 || stdout != wantStdout || stderr != "" {
+				t.Fatalf("escalated stop code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
+			}
+
+			jsonOut, jsonErr, _, jsonCode := executeCLICommand("stop", "--host", server.URL, "--graceful", "--json", "sandbox-escalated")
+			if jsonCode != 0 || jsonErr != "" {
+				t.Fatalf("escalated JSON stop code/stderr = %d / %q", jsonCode, jsonErr)
+			}
+			var decoded composeSandboxActionOutput
+			if err := json.Unmarshal([]byte(jsonOut), &decoded); err != nil {
+				t.Fatalf("escalated stop JSON decode failed: %v\n%s", err, jsonOut)
+			}
+			if len(decoded.Results) != 1 || decoded.Results[0].Status != "stopped" || decoded.Results[0].Outcome != test.outcomeText {
+				t.Fatalf("escalated stop JSON = %#v", decoded)
+			}
+		})
 	}
 }
 

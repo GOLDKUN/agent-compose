@@ -50,6 +50,12 @@ func ParseAgentExecResult(agent string, result domain.ExecResult) (domain.AgentR
 	}
 	finalText := strings.TrimSpace(payload.FinalText)
 	transcript := strings.TrimSpace(payload.Transcript)
+	exitCode := result.ExitCode
+	success := result.Success
+	if strings.EqualFold(strings.TrimSpace(payload.StopReason), "cancelled") {
+		exitCode = FirstNonZeroInt(exitCode, 1)
+		success = false
+	}
 	return domain.AgentRunResult{
 		Agent:           firstNonEmpty(strings.TrimSpace(payload.Provider), domain.NormalizeAgentKind(agent)),
 		DisplayOutput:   humanOutput,
@@ -59,8 +65,8 @@ func ParseAgentExecResult(agent string, result domain.ExecResult) (domain.AgentR
 		Transcript:      transcript,
 		ThreadID:        strings.TrimSpace(payload.ThreadID),
 		StopReason:      strings.TrimSpace(payload.StopReason),
-		ExitCode:        result.ExitCode,
-		Success:         result.Success,
+		ExitCode:        exitCode,
+		Success:         success,
 	}, nil
 }
 

@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	dockerExecMarkerEnv = "AGENT_COMPOSE_INTERNAL_EXECUTION_ID"
+	dockerExecMarkerEnv = "AGENT_COMPOSE_INTERNAL_DOCKER_EXEC_ID"
 )
 
 // Docker has no kill-exec API. Every exec therefore carries a driver-owned

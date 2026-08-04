@@ -196,6 +196,39 @@ replacement runtime **MUST** implement the matching release protocol. Reusing
 the repository runtime is strongly recommended; see
 [agent-compose and runtime call contract](https://github.com/chaitin/agent-compose/blob/main/docs/design/agent-compose-runtime_contract.md).
 
+### 4.1 Graceful-stop capability
+
+When graceful sandbox stop is requested, the daemon signals only the tracked
+outer `agent-compose-runtime` process. It does not discover, retain, or signal
+the runtime's child-process tree. A release-matched runtime owns cancellation,
+child cleanup, partial-result persistence, and its eventual process exit.
+
+The daemon injects these private variables into each managed runtime execution:
+
+| Variable | Value |
+| --- | --- |
+| `AGENT_COMPOSE_INTERNAL_EXECUTION_ID` | A unique execution UUID |
+| `AGENT_COMPOSE_INTERNAL_EXECUTION_READY_FILE` | `/tmp/agent-compose-runtime-ready/<execution-id>` |
+
+After installing its `SIGTERM` handler, the runtime **MUST** write its decimal
+PID to the ready file with mode `0600`. It **SHOULD** remove the file when the
+handler is disposed. The matching repository runtime implements this protocol.
+
+The daemon opens a separate driver control execution, reads the exact ready
+file, verifies the PID's execution ID, executable, and command line through
+`/proc`, and sends `SIGTERM` only to that PID. A guest that supports this
+capability **MUST** mount a readable procfs and provide `sh`, `cat`, `tr`,
+`grep`, `readlink`, and a shell `kill` implementation. The runtime executable
+must currently resolve to `node` or `nodejs`, and its command line must identify
+`agent-compose-runtime`.
+
+An older runtime that ignores these variables remains compatible for normal
+execution. Its ready file never appears, so graceful stop waits for the grace
+period and then safely escalates to sandbox stop. Incomplete or stale readiness
+also eventually times out, while a missing control utility is treated as a
+signaling failure. Both outcomes escalate safely; neither causes the daemon to
+scan or manage arbitrary guest processes.
+
 ## 5. Optional Capability Requirements
 
 ### 5.1 Agent providers

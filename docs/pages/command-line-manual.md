@@ -383,6 +383,7 @@ Use the `sandbox` command group to manage project sandboxes from a single namesp
 agent-compose sandbox ls
 agent-compose sandbox ls --all --json
 agent-compose sandbox stop <sandbox>
+agent-compose sandbox stop --graceful --grace-period 10s <sandbox>
 agent-compose sandbox resume <sandbox>
 agent-compose sandbox rm <sandbox>
 agent-compose sandbox rm --force <sandbox>
@@ -398,7 +399,7 @@ Subcommands:
 | Command | Description |
 | --- | --- |
 | `sandbox ls` | Equivalent to `ps`; supports `--all/-a`, `--status`, `--verbose`, and `--json`. |
-| `sandbox stop <sandbox...>` | Equivalent to `stop`; stops one or more sandboxes. |
+| `sandbox stop <sandbox...>` | Equivalent to `stop`; stops one or more sandboxes. The default remains force; use `--graceful` to terminate active guest JS runtime executions first. |
 | `sandbox resume <sandbox...>` | Equivalent to `resume`; resumes one or more stopped sandboxes. |
 | `sandbox rm <sandbox...>` | Equivalent to `rm`; removes one or more sandboxes. Use `--force` only when intentionally removing running sandboxes. |
 | `sandbox prune` | Dry-run cleanup for stopped or failed sandboxes in the current project. Use `--force` to remove matched sandboxes. |
@@ -422,7 +423,11 @@ Rules:
 - `sandbox prune` calls the daemon `SandboxService.PruneSandboxes` use case. It removes sandbox-owned runtime/data state, not shared cache artifacts; use `cache prune` or `cache rm` for cache inventory.
 - If a forced prune fails to remove one matched sandbox, it continues with later matches, writes the skipped item, and exits non-zero.
 
-`sandbox stop` applies the stopped-runtime policy snapshotted when the sandbox was created. `retain` preserves resumable driver state; `remove` first confirms the latest start has stopped and then releases the private runtime while keeping durable sandbox data. Use `agent-compose inspect sandbox <sandbox> --json` to inspect the effective policy and release state. `sandbox rm` writes a durable deletion journal under `<SANDBOX_ROOT>/.lifecycle`, rejects a running sandbox unless `--force` is supplied, and removes the driver resource, sandbox accessories, sandbox directory, and metadata in restart-safe stages. A sandbox in `DELETING` cannot be resumed or used for new exec/run work; daemon startup resumes only incomplete deletion journals and never guesses that an ordinary historical resource is orphaned.
+`sandbox stop` applies the stopped-runtime policy snapshotted when the sandbox was created. `retain` preserves resumable driver state; `remove` first confirms the latest start has stopped and then releases the private runtime while keeping durable sandbox data. The compatibility default is an immediate force stop. With `--graceful`, the daemon rejects new executions, sends `SIGTERM` to each active `agent-compose-runtime` process, and waits for the JS runtime to cancel its provider, run `finally` cleanup, persist partial output, and exit. The default grace period is 10 seconds and can be changed with `SANDBOX_GRACEFUL_STOP_TIMEOUT`; `--grace-period` overrides it for one request, up to 5 minutes. After timeout or signaling failure, the daemon force-terminates tracked executions before stopping the sandbox. Text and JSON output include `graceful`, `forced-after-grace-timeout`, or `forced-after-grace-error`. Escalation is a successful stop when the sandbox is ultimately stopped, so both the API and CLI return success while preserving the outcome for observability; an error is returned only if the sandbox itself cannot be stopped.
+
+Graceful stop covers active guest executions launched and tracked by the current daemon process. It does not register persistent cleanup hooks, recover an in-progress graceful stop after daemon restart, or manage out-of-band guest processes.
+
+Use `agent-compose inspect sandbox <sandbox> --json` to inspect the effective policy and release state. `sandbox rm` writes a durable deletion journal under `<SANDBOX_ROOT>/.lifecycle`, rejects a running sandbox unless `--force` is supplied, and removes the driver resource, sandbox accessories, sandbox directory, and metadata in restart-safe stages. A sandbox in `DELETING` cannot be resumed or used for new exec/run work; daemon startup resumes only incomplete deletion journals and never guesses that an ordinary historical resource is orphaned.
 
 New sandbox directories are stored under `<SANDBOX_ROOT>/<year>/<month>/<day>/<sandbox-id>`, using the daemon's local calendar date at creation time. Metadata timestamps remain UTC. Existing flat `<SANDBOX_ROOT>/<sandbox-id>` directories are not migrated and remain usable after upgrade. Because older daemon versions do not scan the date-partitioned layout, downgrading makes newly created sandboxes unavailable until the newer version is restored. Set a consistent daemon `TZ` when deployments require stable calendar boundaries.
 
@@ -449,6 +454,8 @@ Stop one or more sandboxes.
 ```bash
 agent-compose stop <sandbox>
 agent-compose stop <sandbox> [<sandbox N>]
+agent-compose stop --graceful [--grace-period 10s] <sandbox>
+agent-compose stop --force <sandbox>
 ```
 
 Examples:
@@ -456,7 +463,10 @@ Examples:
 ```bash
 agent-compose stop sandbox_123
 agent-compose stop sandbox_123 sandbox_456
+agent-compose stop --graceful --grace-period 20s sandbox_123
 ```
+
+`--graceful` and `--force` are mutually exclusive. Unspecified stop mode and explicit `--force` preserve the existing force behavior. See the `sandbox stop` section above for graceful outcomes and limitations.
 
 ## `resume`: Resume Sandboxes
 
