@@ -46,7 +46,7 @@ func (r *CapabilitySandboxResolver) Rebuild(ctx context.Context) error {
 			return err
 		}
 		for _, sandbox := range result.Sandboxes {
-			indexCapabilitySandbox(tokens, tokensBySandbox, sandbox)
+			indexCapabilitySandbox(tokens, tokensBySandbox, sandbox, nil)
 		}
 		if !result.HasMore {
 			break
@@ -61,7 +61,10 @@ func (r *CapabilitySandboxResolver) Rebuild(ctx context.Context) error {
 	return nil
 }
 
-func (r *CapabilitySandboxResolver) IndexSandbox(sandbox *domain.Sandbox) {
+// IndexSandbox replaces a sandbox binding with request-scoped trusted headers.
+// The headers live only in this resolver and are lost on rebuild or daemon
+// restart. Passing nil explicitly clears headers from an earlier binding.
+func (r *CapabilitySandboxResolver) IndexSandbox(sandbox *domain.Sandbox, headers []domain.TrustedHeader) {
 	if r == nil || sandbox == nil {
 		return
 	}
@@ -69,7 +72,7 @@ func (r *CapabilitySandboxResolver) IndexSandbox(sandbox *domain.Sandbox) {
 	defer r.mu.Unlock()
 	r.ensureMapsLocked()
 	r.revokeSandboxLocked(sandbox.Summary.ID)
-	indexCapabilitySandbox(r.tokens, r.tokensBySandbox, sandbox)
+	indexCapabilitySandbox(r.tokens, r.tokensBySandbox, sandbox, headers)
 }
 
 func (r *CapabilitySandboxResolver) RevokeSandbox(sandboxID string) {
@@ -133,7 +136,7 @@ func (r *CapabilitySandboxResolver) revokeSandboxLocked(sandboxID string) {
 	delete(r.tokensBySandbox, sandboxID)
 }
 
-func indexCapabilitySandbox(tokens map[string]capproxy.SandboxBinding, tokensBySandbox map[string]map[string]struct{}, sandbox *domain.Sandbox) {
+func indexCapabilitySandbox(tokens map[string]capproxy.SandboxBinding, tokensBySandbox map[string]map[string]struct{}, sandbox *domain.Sandbox, headers []domain.TrustedHeader) {
 	if sandbox == nil || sandbox.Summary.VMStatus != domain.VMStatusRunning {
 		return
 	}
@@ -147,10 +150,11 @@ func indexCapabilitySandbox(tokens map[string]capproxy.SandboxBinding, tokensByS
 	}
 	scope := capabilities.GuideScopeFromSandbox(sandbox)
 	binding := capproxy.SandboxBinding{
-		SandboxID: sandbox.Summary.ID,
-		ProjectID: scope.ProjectID,
-		AgentID:   scope.AgentID,
-		CapsetIDs: capsetIDs,
+		SandboxID:      sandbox.Summary.ID,
+		ProjectID:      scope.ProjectID,
+		AgentID:        scope.AgentID,
+		CapsetIDs:      capsetIDs,
+		TrustedHeaders: translateTrustedHeaders(headers),
 	}
 	tokens[token] = binding
 	tokenSet := tokensBySandbox[sandbox.Summary.ID]
@@ -159,4 +163,22 @@ func indexCapabilitySandbox(tokens map[string]capproxy.SandboxBinding, tokensByS
 		tokensBySandbox[sandbox.Summary.ID] = tokenSet
 	}
 	tokenSet[token] = struct{}{}
+}
+
+const (
+	xMPIPrefix        = "x-mpi-"
+	xOctobusExtPrefix = "x-octobus-ext-"
+)
+
+func translateTrustedHeaders(headers []domain.TrustedHeader) []domain.TrustedHeader {
+	var out []domain.TrustedHeader
+	for _, header := range headers {
+		name := strings.ToLower(header.Name)
+		if !strings.HasPrefix(name, xMPIPrefix) {
+			continue
+		}
+		key := xOctobusExtPrefix + strings.TrimPrefix(name, xMPIPrefix)
+		out = append(out, domain.TrustedHeader{Name: key, Value: header.Value})
+	}
+	return out
 }

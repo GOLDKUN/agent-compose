@@ -330,7 +330,7 @@ func TestSandboxRPCBridgeRuntimeReleaseFailureRevokesCapabilityAfterConfirmedSto
 	if err := bridge.store.UpdateSandbox(ctx, sandbox); err != nil {
 		t.Fatalf("UpdateSandbox returned error: %v", err)
 	}
-	resolver.IndexSandbox(sandbox)
+	resolver.IndexSandbox(sandbox, nil)
 	if _, ok := resolver.tokens[capabilityToken]; !ok {
 		t.Fatal("capability token was not indexed before stop")
 	}

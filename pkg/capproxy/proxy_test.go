@@ -6,8 +6,11 @@ import (
 	"crypto/x509"
 	"net"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
+
+	domain "agent-compose/pkg/model"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -111,6 +114,59 @@ func TestProxyForwardsGuestInstance(t *testing.T) {
 		if got := firstMetadata(received, key); got != want {
 			t.Fatalf("metadata %s = %q, want %q", key, got, want)
 		}
+	}
+}
+
+func TestProxyStripsAllGuestExtensionMetadata(t *testing.T) {
+	var received metadata.MD
+	octoAddr, stopOcto := startTestRawGRPC(t, func(_ any, stream grpc.ServerStream) error {
+		received, _ = metadata.FromIncomingContext(stream.Context())
+		req := rawFrame(nil)
+		if err := stream.RecvMsg(&req); err != nil {
+			return err
+		}
+		return stream.SendMsg(rawFrame("ok"))
+	})
+	defer stopOcto()
+
+	binding := SandboxBinding{
+		SandboxID: "s1",
+		CapsetIDs: []string{"dev"},
+		TrustedHeaders: []domain.TrustedHeader{
+			{Name: "x-octobus-ext-user-id", Value: "trusted-user"},
+			{Name: "x-octobus-ext-role", Value: "admin"},
+			{Name: "x-octobus-ext-role", Value: "auditor"},
+		},
+	}
+	proxyAddr, stopProxy := startTestProxy(t, Config{
+		Listen:  "127.0.0.1:0",
+		OctoBus: staticOctoBus(octoAddr, ""),
+	}, testResolver{binding: binding})
+	defer stopProxy()
+
+	conn, err := grpc.NewClient(proxyAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.ForceCodec(rawCodec{})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+		SandboxTokenMetadata, "sandbox-token",
+		"x-octobus-instance", "inst",
+		"x-octobus-ext-user-id", "forged-user",
+		"x-octobus-ext-admin", "true",
+	))
+	out := rawFrame(nil)
+	if err := conn.Invoke(ctx, "/pkg.Service/Call", rawFrame("ping"), &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := firstMetadata(received, "x-octobus-ext-user-id"); got != "trusted-user" {
+		t.Fatalf("trusted user metadata = %q, want trusted-user", got)
+	}
+	if got := firstMetadata(received, "x-octobus-ext-admin"); got != "" {
+		t.Fatalf("guest-supplied extension metadata reached OctoBus: %q", got)
+	}
+	if got := received.Get("x-octobus-ext-role"); !reflect.DeepEqual(got, []string{"admin", "auditor"}) {
+		t.Fatalf("trusted repeated metadata = %#v", got)
 	}
 }
 
@@ -255,7 +311,7 @@ func TestCapsetResolutionAndOutgoingMetadataHelpers(t *testing.T) {
 		"authorization":                []string{"Bearer guest-token"},
 		"x-octobus-capset":             []string{"old"},
 		"x-custom":                     []string{"kept"},
-	}), "new")
+	}), "new", SandboxBinding{})
 	if got := firstMetadata(outgoing, SandboxTokenMetadata); got != "" {
 		t.Fatalf("sandbox token metadata was forwarded: %q", got)
 	}

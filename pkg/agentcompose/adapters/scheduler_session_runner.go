@@ -344,7 +344,7 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 
 func (r *SchedulerSandboxRunner) indexCapabilitySandbox(session *domain.Sandbox) {
 	if r != nil && r.CapTokens != nil {
-		r.CapTokens.IndexSandbox(session)
+		r.CapTokens.IndexSandbox(session, nil)
 	}
 }
 
