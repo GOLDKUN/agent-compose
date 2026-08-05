@@ -422,10 +422,12 @@ components live under `runtime/`.
 roots created by the legacy storage layout. It is intentionally not included
 in daemon images or the default `task build`.
 
-Databases with a valid, versioned migration prefix and only project-managed
-agents and schedulers upgrade normally when opened by the new daemon. Use the
-migrator for legacy or unversioned roots, including standalone or mixed
-agent/loader layouts.
+The migrator applies to data roots created by agent-compose ≤ v2607.10.0.
+Starting from v2608.1.0, the daemon uses V2 storage natively and upgrades
+databases with a valid, versioned migration prefix automatically when they
+contain only project-managed agents and schedulers. Use the migrator for
+legacy or unversioned roots, including standalone or mixed agent/loader
+layouts.
 
 ### Stop running sandboxes
 
@@ -454,18 +456,6 @@ daemon shutdown, so the post-shutdown dry run is the authority: if it reports
 any running IDs, restart the old daemon, stop every reported ID, stop the
 daemon again, and repeat the dry run. Do not use `docker stop` for sandboxes;
 the old daemon must persist their stopped state.
-
-### Build and run from source
-
-Build the migrator explicitly from the repository root, then select the
-resulting binary:
-
-```bash
-task build:migrator
-MIGRATOR=./build/agent-compose-migrate
-```
-
-The migrator is not built by the default `task build`.
 
 ### Run a published binary
 

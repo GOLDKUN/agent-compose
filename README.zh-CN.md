@@ -337,7 +337,7 @@ macOS/Linux daemon 原生二进制只用于本地开发和 CI 验证。独立的
 
 `agent-compose-v2-storage-migrator` 是用于旧存储布局 data root 的一次性过渡工具。它不会进入 daemon 镜像，也不属于默认的 `task build`。
 
-具有合法 versioned migration prefix、且只包含 project-managed agent 和 scheduler 的数据库，可由新 daemon 正常升级。legacy 或 unversioned data root（包括 standalone 或 mixed agent/loader 布局）需要使用 migrator。
+migrator 适用于 agent-compose ≤ v2607.10.0 创建的 data root。自 v2608.1.0 起，daemon 原生采用 V2 存储，对于具有合法 versioned migration prefix、且只包含 project-managed agent 和 scheduler 的数据库，可直接由新 daemon 自动升级。legacy 或 unversioned data root（包括 standalone 或 mixed agent/loader 布局）需要使用 migrator。
 
 ### 停止运行态 sandbox
 
@@ -363,17 +363,6 @@ target、复制 sandbox workspace，也不会创建原地迁移备份。
 dry-run 为准：如果仍报告运行态 ID，应重新启动旧 daemon，停止所有已报告的
 ID，再次停止 daemon，然后重新执行 dry-run。不要使用 `docker stop` 停止
 sandbox；必须由旧 daemon 持久化其 stopped 状态。
-
-### 从源码构建并运行
-
-在仓库根目录显式构建 migrator，然后选择生成的二进制：
-
-```bash
-task build:migrator
-MIGRATOR=./build/agent-compose-migrate
-```
-
-migrator 不会由默认的 `task build` 构建。
 
 ### 使用发布的 Binary
 
