@@ -90,6 +90,12 @@ jobs:
             release_body="(This release has no release notes.)"
           fi
 
+          echo "::group::Debug LLM request"
+          echo "release_tag=${release_tag}"
+          echo "release_body_chars=${#release_body}"
+          echo "request_body_chars=${#request_body}"
+          echo "::endgroup::"
+
           temporary_response="$(mktemp)"
           trap 'rm -f "$temporary_response"' EXIT
 
@@ -122,10 +128,18 @@ jobs:
             exit 1
           fi
 
+          echo "::group::Debug LLM response"
+          head -c 4000 "$temporary_response"
+          echo
+          echo "::endgroup::"
+
           translated_body="$(jq -er '.choices[0].message.content // empty' "$temporary_response" 2>/dev/null || true)"
           if [[ -z "$translated_body" ]]; then
-            llm_error="$(jq -r '.error.message // "LLM response did not contain choices[0].message.content"' "$temporary_response" 2>/dev/null || true)"
-            echo "::error::Release note translation failed: ${llm_error:-unknown error}"
+            llm_error="$(jq -r '.error.message // ""' "$temporary_response" 2>/dev/null || true)"
+            if [[ -z "$llm_error" ]]; then
+              llm_error="LLM response did not contain choices[0].message.content. Raw response (first 2000 bytes): $(head -c 2000 "$temporary_response" | tr '\n' ' ')"
+            fi
+            echo "::error::Release note translation failed: ${llm_error}"
             exit 1
           fi
 
