@@ -552,7 +552,7 @@ SDK behavior：
 ```text
 <stateRoot>/workflows/runs/<runId>/run.json
 <stateRoot>/workflows/runs/<runId>/events.jsonl
-<stateRoot>/workflows/runs/<runId>/agents/<agentId>.json
+<stateRoot>/workflows/runs/<runId>/agents/<agentId>/record.json
 <stateRoot>/workflows/runs/<runId>/agents/<agentId>/state/
 <stateRoot>/workflows/worktrees/<runId>/<agentId>/
 ```
@@ -578,7 +578,7 @@ SDK behavior：
 }
 ```
 
-`agents/<agentId>.json`：
+`agents/<agentId>/record.json`：
 
 ```json
 {
@@ -615,7 +615,7 @@ SDK behavior：
 - 读取历史 run 时，将残留的 `running` run/agent 解释为 `interrupted`；`interrupted` 记录不能作为缓存命中。
 - `schemaVersion` 不受支持、重复 `invocationKey`、`done` 记录缺少可反序列化 result 等情况按历史状态损坏处理，不静默忽略。
 
-完整 prompt 可以不写入 `agents/<agentId>.json`，避免泄露大段敏感上下文；`inputHash` 必须包含完整 prompt。若为了调试需要完整 prompt，应写到同目录 `prompt.txt`，并在文档中标注它属于 guest runtime state。
+完整 prompt 可以不写入 `agents/<agentId>/record.json`，避免泄露大段敏感上下文；`inputHash` 必须包含完整 prompt。若为了调试需要完整 prompt，应写到同目录 `prompt.txt`，并在文档中标注它属于 guest runtime state。
 
 ### 包版本和依赖
 
@@ -631,7 +631,7 @@ SDK behavior：
 
 `runtime/javascript/package-lock.json` 更新。
 
-`runtime/javascript` 和 `runtime/agent-compose-runtime-sdk` package version 从 `0.4.0` 升到 `0.5.0`。`dist/` 不在 Git 跟踪文件内，不手工提交。
+`runtime/javascript` 和 `runtime/agent-compose-runtime-sdk` package version 从当前 `0.8.0` 升到 `0.9.0`。`dist/` 不在 Git 跟踪文件内，不手工提交。
 
 ## 工作流和失败语义
 
