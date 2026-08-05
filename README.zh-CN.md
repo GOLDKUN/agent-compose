@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/agent-compose-logo.png" alt="Agent-compose" width="384">
+  <img src="images/agent-compose-logo.png" alt="Agent-compose" height="60">
 </p>
 <p align="center">
   <a href="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml">
