@@ -61,10 +61,36 @@ describe("workflow runtime", () => {
       expect(secondPrompt).not.toHaveBeenCalled();
       expect(second.agents[0].status).toBe("cached");
 
+      const thirdPrompt = vi.fn(async () => agentResult("should not run either"));
+      const third = await createRuntime(root, "run_third", source, thirdPrompt as never, second.agents);
+      await expect(third.execute()).resolves.toBe("cached answer");
+      expect(thirdPrompt).not.toHaveBeenCalled();
+      expect(third.agents[0].status).toBe("cached");
+
       const changedPrompt = vi.fn(async () => agentResult("fresh answer"));
       const changed = await createRuntime(root, "run_changed", source.replace("cached answer", "changed answer"), changedPrompt as never, first.agents);
       await expect(changed.execute()).resolves.toBe("fresh answer");
       expect(changedPrompt).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("invalidates cached agents when their workflow system context changes", async () => {
+    await withTempSession(async (root) => {
+      const source = `export const meta = { name: "resume-context", description: "test" }
+        return await agent("review", { key: "stable", label: args.label, phase: args.phase })`;
+      const firstPrompt = vi.fn(async () => agentResult("first"));
+      const first = await createRuntime(root, "run_context_first", source, firstPrompt as never, [], {
+        args: { label: "Reviewer", phase: "Scan" },
+      });
+      await expect(first.execute()).resolves.toBe("first");
+
+      const secondPrompt = vi.fn(async () => agentResult("second"));
+      const second = await createRuntime(root, "run_context_second", source, secondPrompt as never, first.agents, {
+        args: { label: "Approver", phase: "Review" },
+      });
+      await expect(second.execute()).resolves.toBe("second");
+      expect(secondPrompt).toHaveBeenCalledTimes(1);
+      expect(second.agents[0].status).toBe("done");
     });
   });
 
@@ -154,6 +180,7 @@ describe("workflow runtime", () => {
           escapedEnvType: Object.constructor("return typeof process.env")(),
           agentConstructorType: typeof agent.constructor,
           randomType: typeof Math.random,
+          dateType: typeof Date,
         }`, vi.fn() as never);
       await expect(runtime.execute()).resolves.toEqual({
         requireType: "undefined",
@@ -161,6 +188,7 @@ describe("workflow runtime", () => {
         escapedEnvType: "undefined",
         agentConstructorType: "undefined",
         randomType: "undefined",
+        dateType: "undefined",
       });
     });
   });
@@ -197,7 +225,7 @@ async function createRuntime(
   source: string,
   runPrompt: never,
   resumeAgents = [],
-  overrides: { tokenBudget?: number; abortController?: AbortController } = {},
+  overrides: { tokenBudget?: number; abortController?: AbortController; args?: unknown } = {},
 ) {
   const stateRoot = path.join(root, "state");
   const store = await WorkflowStateStore.create(stateRoot, runId);
@@ -207,7 +235,7 @@ async function createRuntime(
   return new WorkflowRuntime({
     runId,
     parsed: parseWorkflowScript(source),
-    args: null,
+    args: overrides.args ?? null,
     scriptFile,
     stateRoot,
     workspace: path.join(root, "workspace"),

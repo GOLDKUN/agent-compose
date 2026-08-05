@@ -93,8 +93,8 @@ export class WorkflowStateStore {
         throw new Error(`workflow resume state contains invalid or duplicate invocationKey: ${record.invocationKey || "<empty>"}`);
       }
       keys.add(record.invocationKey);
-      if (record.status === "done" && !("result" in record)) {
-        throw new Error(`workflow resume state has done agent without result: ${record.agentId}`);
+      if ((record.status === "done" || record.status === "cached") && !("result" in record)) {
+        throw new Error(`workflow resume state has reusable agent without result: ${record.agentId}`);
       }
     }
     return records.map((record) => record.status === "running" ? { ...record, status: "interrupted" } : record);

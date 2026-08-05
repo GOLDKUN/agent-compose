@@ -98,7 +98,10 @@ export class WorkflowRuntime {
     };
     return await this.contexts.run(rootContext, async () => {
       const context = vm.createContext(this.globals(args, scriptFile));
-      vm.runInContext("Math.random = undefined; Object.freeze(Math); Object.freeze(process); Object.freeze(budget)", context);
+      vm.runInContext(
+        "globalThis.Date = undefined; Math.random = undefined; Object.freeze(Math); Object.freeze(process); Object.freeze(budget)",
+        context,
+      );
       const script = new vm.Script(`(async () => {${parsed.body}\n})()`, { filename: scriptFile });
       const result = await script.runInContext(context, { timeout: 1000 });
       return assertJSONSerializable(result);
@@ -158,6 +161,8 @@ export class WorkflowRuntime {
       model: options.model ?? "",
       effort: options.effort ?? "",
       schema: options.schema ?? null,
+      label,
+      phase,
       isolation: options.isolation ?? "",
       agentType: options.agentType ?? "",
     }));
@@ -166,7 +171,7 @@ export class WorkflowRuntime {
 
     const cached = this.resumeAgents.get(invocationKey);
     if (
-      cached?.status === "done" &&
+      (cached?.status === "done" || cached?.status === "cached") &&
       cached.inputHash === inputHash &&
       "result" in cached &&
       await this.cachedWorktreeIsValid(cached)

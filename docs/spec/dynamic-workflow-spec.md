@@ -664,7 +664,7 @@ VM context 暴露必要内置对象：
 - `require`、`import`。
 - writable `process`。
 
-该 VM 沙箱是确定性和 API 收口机制，不声明为强安全边界。workflow 脚本来源仍应是受信任用户或受信任 workspace。
+该 VM 沙箱是确定性和 API 收口机制，不声明为强安全边界。workflow 脚本来源仍应是受信任用户或受信任 workspace。运行时移除 `Date` 和 `Math.random`，避免通过别名或间接调用绕过 AST 确定性检查。
 
 ### 并发控制
 
@@ -748,6 +748,7 @@ resume 使用 `invocationKey` 定位历史逻辑调用，再以 `inputHash` 判�
 - `invocationKey`，其中包含 nested workflow 和 parallel/pipeline 结构路径。
 - agent prompt。
 - normalized options。
+- 最终 label 和 phase；两者会进入子 agent system context。
 - schema JSON。
 - default provider/model/effort。
 - isolation mode。
@@ -757,7 +758,7 @@ resume 使用 `invocationKey` 定位历史逻辑调用，再以 `inputHash` 判�
 命中条件：
 
 - 历史记录 `invocationKey` 完全一致。
-- 历史 agent record status 是 `done`。
+- 历史 agent record status 是 `done` 或 `cached`。
 - `inputHash` 完全一致。
 - result 字段存在且可 JSON 序列化。
 
