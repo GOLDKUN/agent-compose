@@ -10,6 +10,11 @@ import (
 )
 
 func TestUniqueProjectNameMigrationRenamesDuplicatesInStableOrder(t *testing.T) {
+	testUniqueProjectNameMigrationRenamesDuplicatesInStableOrder(t)
+}
+
+func testUniqueProjectNameMigrationRenamesDuplicatesInStableOrder(t *testing.T) {
+	t.Helper()
 	ctx := context.Background()
 	db := newMemoryDB(t)
 	if err := MigrateThrough(ctx, db, 8); err != nil {
