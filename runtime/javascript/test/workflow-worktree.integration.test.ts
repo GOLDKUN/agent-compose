@@ -1,0 +1,75 @@
+import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { promisify } from "node:util";
+import { describe, expect, it, vi } from "vitest";
+import type { AgentResult } from "../src/types.js";
+import { WorkflowEventWriter } from "../src/workflow/events.js";
+import { parseWorkflowScript } from "../src/workflow/parser.js";
+import { WorkflowRuntime } from "../src/workflow/runtime.js";
+import { WorkflowStateStore } from "../src/workflow/state.js";
+import { withTempSession } from "./helpers.js";
+
+const execFileAsync = promisify(execFile);
+
+describe("workflow worktree integration", () => {
+  it("runs an isolated agent in a detached worktree and preserves modifications", async () => {
+    await withTempSession(async (root) => {
+      const workspace = path.join(root, "repository");
+      await fs.mkdir(workspace);
+      await git(workspace, ["init"]);
+      await git(workspace, ["config", "user.email", "workflow@example.test"]);
+      await git(workspace, ["config", "user.name", "Workflow Test"]);
+      await fs.writeFile(path.join(workspace, "README.md"), "base\n");
+      await git(workspace, ["add", "README.md"]);
+      await git(workspace, ["commit", "-m", "initial"]);
+
+      const source = `export const meta = { name: "worktree", description: "test" }
+        return await agent("modify", { isolation: "worktree", key: "edit" })`;
+      const stateRoot = path.join(root, "state");
+      const store = await WorkflowStateStore.create(stateRoot, "run_worktree");
+      const events = new WorkflowEventWriter(store.eventsPath, { write: () => true } as never);
+      const runPrompt = vi.fn(async ({ workspace: agentWorkspace }: { workspace?: string }): Promise<AgentResult> => {
+        await fs.writeFile(path.join(agentWorkspace as string, "change.txt"), "changed\n");
+        return agentResult("modified");
+      });
+      const runtime = new WorkflowRuntime({
+        runId: "run_worktree",
+        parsed: parseWorkflowScript(source),
+        args: null,
+        scriptFile: path.join(root, "workflow.js"),
+        stateRoot,
+        workspace,
+        home: path.join(root, "home"),
+        provider: "codex",
+        abortController: new AbortController(),
+        store,
+        events,
+        runPrompt: runPrompt as never,
+      });
+
+      await expect(runtime.execute()).resolves.toBe("modified");
+      const record = runtime.agents[0];
+      expect(record.worktreePath).toContain(path.join("workflows", "worktrees", "run_worktree", "a1"));
+      expect(record.gitStatus).toContain("?? change.txt");
+      await expect(fs.readFile(path.join(record.worktreePath, "change.txt"), "utf8")).resolves.toBe("changed\n");
+      await expect(fs.access(path.join(workspace, "change.txt"))).rejects.toThrow();
+    });
+  });
+});
+
+async function git(cwd: string, args: string[]): Promise<void> {
+  await execFileAsync("git", ["-C", cwd, ...args]);
+}
+
+function agentResult(finalText: string): AgentResult {
+  return {
+    provider: "codex",
+    threadId: "thread",
+    stopReason: "completed",
+    finalText,
+    finalTextSource: "provider_message",
+    transcript: finalText,
+    stderr: "",
+  };
+}
