@@ -8,6 +8,7 @@ import { WorkflowEventWriter } from "../src/workflow/events.js";
 import { parseWorkflowScript } from "../src/workflow/parser.js";
 import { WorkflowRuntime } from "../src/workflow/runtime.js";
 import { WorkflowStateStore } from "../src/workflow/state.js";
+import { createManagedWorktree, isLinkedWorktree, removeManagedWorktree } from "../src/workflow/worktree.js";
 import { withTempSession } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
@@ -54,6 +55,26 @@ describe("workflow worktree integration", () => {
       expect(record.gitStatus).toContain("?? change.txt");
       await expect(fs.readFile(path.join(record.worktreePath, "change.txt"), "utf8")).resolves.toBe("changed\n");
       await expect(fs.access(path.join(workspace, "change.txt"))).rejects.toThrow();
+    });
+  });
+
+  it("distinguishes a registered linked worktree from an ordinary repository at the managed path", async () => {
+    await withTempSession(async (root) => {
+      const workspace = path.join(root, "repository");
+      await fs.mkdir(workspace);
+      await git(workspace, ["init"]);
+      await git(workspace, ["config", "user.email", "workflow@example.test"]);
+      await git(workspace, ["config", "user.name", "Workflow Test"]);
+      await fs.writeFile(path.join(workspace, "README.md"), "base\n");
+      await git(workspace, ["add", "README.md"]);
+      await git(workspace, ["commit", "-m", "initial"]);
+      const managed = await createManagedWorktree(workspace, path.join(root, "state"), "run_linked", "a1");
+      await expect(isLinkedWorktree(managed.path)).resolves.toBe(true);
+
+      await removeManagedWorktree(workspace, managed.path);
+      await fs.mkdir(managed.path, { recursive: true });
+      await git(managed.path, ["init"]);
+      await expect(isLinkedWorktree(managed.path)).resolves.toBe(false);
     });
   });
 });

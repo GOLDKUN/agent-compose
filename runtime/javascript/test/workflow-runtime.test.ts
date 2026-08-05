@@ -60,6 +60,11 @@ describe("workflow runtime", () => {
       await expect(second.execute()).resolves.toBe("cached answer");
       expect(secondPrompt).not.toHaveBeenCalled();
       expect(second.agents[0].status).toBe("cached");
+
+      const changedPrompt = vi.fn(async () => agentResult("fresh answer"));
+      const changed = await createRuntime(root, "run_changed", source.replace("cached answer", "changed answer"), changedPrompt as never, first.agents);
+      await expect(changed.execute()).resolves.toBe("fresh answer");
+      expect(changedPrompt).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -109,6 +114,79 @@ describe("workflow runtime", () => {
       const depth = await createRuntime(root, "run_depth", `export const meta = { name: "parent", description: "test" }
         return await workflow("child")`, vi.fn() as never);
       await expect(depth.execute()).rejects.toThrow("nested workflow depth exceeded");
+    });
+  });
+
+  it("assigns distinct stable paths and snapshots to repeated nested workflows", async () => {
+    await withTempSession(async (root) => {
+      const library = path.join(root, "workspace", ".agent-compose", "workflows");
+      await fs.mkdir(library, { recursive: true });
+      await fs.writeFile(path.join(library, "child.js"), `export const meta = { name: "child", description: "test" }
+        return await agent(args.prompt)`);
+      const source = `export const meta = { name: "parent", description: "test" }
+        return await parallel([
+          () => workflow("child", { prompt: "one" }),
+          () => workflow("child", { prompt: "two" }),
+        ])`;
+      const runPrompt = vi.fn(async ({ promptText }: { promptText?: string }) => agentResult(promptText ?? ""));
+      const runtime = await createRuntime(root, "run_repeated_nested", source, runPrompt as never);
+
+      await expect(runtime.execute()).resolves.toEqual(["one", "two"]);
+      expect(runtime.agents.map((agent) => agent.invocationKey)).toEqual([
+        "root/parallel:0/workflow:0:child/nested:child/agent:0",
+        "root/parallel:1/workflow:0:child/nested:child/agent:0",
+      ]);
+      const nestedRoot = path.join(root, "state", "workflows", "runs", "run_repeated_nested", "nested");
+      const snapshots = await Promise.all((await fs.readdir(nestedRoot)).map(async (name) =>
+        JSON.parse(await fs.readFile(path.join(nestedRoot, name), "utf8"))));
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots.map((snapshot) => snapshot.status)).toEqual(["completed", "completed"]);
+      expect(new Set(snapshots.map((snapshot) => snapshot.invocationKey)).size).toBe(2);
+    });
+  });
+
+  it("uses context intrinsics without exposing the host process", async () => {
+    await withTempSession(async (root) => {
+      const runtime = await createRuntime(root, "run_vm", `export const meta = { name: "vm", description: "test" }
+        return {
+          requireType: typeof require,
+          envType: typeof process.env,
+          escapedEnvType: Object.constructor("return typeof process.env")(),
+          agentConstructorType: typeof agent.constructor,
+          randomType: typeof Math.random,
+        }`, vi.fn() as never);
+      await expect(runtime.execute()).resolves.toEqual({
+        requireType: "undefined",
+        envType: "undefined",
+        escapedEnvType: "undefined",
+        agentConstructorType: "undefined",
+        randomType: "undefined",
+      });
+    });
+  });
+
+  it("settles a failed pipeline item and rejects non-serializable results", async () => {
+    await withTempSession(async (root) => {
+      const pipeline = await createRuntime(root, "run_pipeline_failure", `export const meta = { name: "pipeline", description: "test" }
+        return await pipeline(["ok", "bad"],
+          async (value) => value === "bad" ? (() => { throw new Error("bad item") })() : value + "-one",
+          async (value) => value + "-two")`, vi.fn() as never);
+      await expect(pipeline.execute()).resolves.toEqual(["ok-one-two", null]);
+
+      const invalid = await createRuntime(root, "run_invalid_result", `export const meta = { name: "invalid", description: "test" }
+        return () => "not json"`, vi.fn() as never);
+      await expect(invalid.execute()).rejects.toThrow("workflow result must be JSON-serializable");
+    });
+  });
+
+  it("enforces the 1000 agent invocation limit", async () => {
+    await withTempSession(async (root) => {
+      const runPrompt = vi.fn(async () => agentResult("ok"));
+      const runtime = await createRuntime(root, "run_limit", `export const meta = { name: "limit", description: "test" }
+        for (let index = 0; index < 1001; index++) await agent("call " + index)
+        return "unreachable"`, runPrompt as never);
+      await expect(runtime.execute()).rejects.toThrow("workflow agent limit exceeded: 1000");
+      expect(runPrompt).toHaveBeenCalledTimes(1000);
     });
   });
 });

@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { paths } from "./env.js";
 
 const WORKFLOW_RESULT_PREFIX = "__WORKFLOW_RESULT__";
@@ -180,7 +181,11 @@ async function runWorkflowFile<T>(
       return;
     }
     try {
-      resultPayloads.push(JSON.parse(line.slice(WORKFLOW_RESULT_PREFIX.length)) as RuntimeWorkflowOutcome<T>);
+      const payload = JSON.parse(line.slice(WORKFLOW_RESULT_PREFIX.length)) as unknown;
+      if (!isWorkflowOutcome(payload)) {
+        throw new Error("payload does not match the workflow result protocol");
+      }
+      resultPayloads.push(payload as RuntimeWorkflowOutcome<T>);
     } catch (error) {
       decoderError = new Error(`invalid workflow result payload: ${errorMessage(error)}`);
     }
@@ -188,7 +193,10 @@ async function runWorkflowFile<T>(
   const stderrDecoder = new LineDecoder((line, terminated) => {
     if (line.startsWith(WORKFLOW_EVENT_PREFIX)) {
       try {
-        const event = JSON.parse(line.slice(WORKFLOW_EVENT_PREFIX.length)) as RuntimeWorkflowEvent;
+        const event = JSON.parse(line.slice(WORKFLOW_EVENT_PREFIX.length)) as unknown;
+        if (!isWorkflowEvent(event)) {
+          throw new Error("payload does not match the workflow event protocol");
+        }
         events.push(event);
         options.onUpdate?.(event);
       } catch (error) {
@@ -250,11 +258,12 @@ async function runWorkflowFile<T>(
 
 class LineDecoder {
   private buffer = "";
+  private readonly decoder = new StringDecoder("utf8");
 
   constructor(private readonly onLine: (line: string, terminated: boolean) => void) {}
 
   push(chunk: Buffer): void {
-    this.buffer += chunk.toString("utf8");
+    this.buffer += this.decoder.write(chunk);
     let newline = this.buffer.indexOf("\n");
     while (newline >= 0) {
       const line = this.buffer.slice(0, newline).replace(/\r$/, "");
@@ -265,11 +274,55 @@ class LineDecoder {
   }
 
   finish(): void {
+    this.buffer += this.decoder.end();
     if (this.buffer) {
       this.onLine(this.buffer.replace(/\r$/, ""), false);
       this.buffer = "";
     }
   }
+}
+
+function isWorkflowOutcome(value: unknown): value is RuntimeWorkflowOutcome<unknown> {
+  if (!isRecord(value) || typeof value.runId !== "string" || !Array.isArray(value.phases) ||
+      !Array.isArray(value.logs) || !Array.isArray(value.agents) || typeof value.durationMs !== "number") {
+    return false;
+  }
+  if (value.status === "completed") {
+    return isWorkflowMeta(value.meta) && typeof value.agentCount === "number" && "result" in value;
+  }
+  return (value.status === "failed" || value.status === "aborted") &&
+    isRecord(value.error) && typeof value.error.message === "string";
+}
+
+function isWorkflowEvent(value: unknown): value is RuntimeWorkflowEvent {
+  if (!isRecord(value) || typeof value.type !== "string" || typeof value.runId !== "string") {
+    return false;
+  }
+  switch (value.type) {
+    case "workflow_start": return isWorkflowMeta(value.meta);
+    case "phase": return typeof value.title === "string";
+    case "log": return typeof value.message === "string";
+    case "agent_start":
+    case "agent_cached":
+    case "agent_end": return isWorkflowAgent(value.agent);
+    case "workflow_complete": return value.status === "completed" && typeof value.durationMs === "number";
+    case "workflow_error": return (value.status === "failed" || value.status === "aborted") && typeof value.message === "string";
+    default: return false;
+  }
+}
+
+function isWorkflowMeta(value: unknown): value is RuntimeWorkflowMeta {
+  return isRecord(value) && typeof value.name === "string" && typeof value.description === "string";
+}
+
+function isWorkflowAgent(value: unknown): value is RuntimeWorkflowAgent {
+  return isRecord(value) && typeof value.agentId === "string" && typeof value.invocationKey === "string" &&
+    typeof value.label === "string" && typeof value.phase === "string" && typeof value.provider === "string" &&
+    typeof value.status === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function appendOption(args: string[], name: string, value: string | number | undefined): void {

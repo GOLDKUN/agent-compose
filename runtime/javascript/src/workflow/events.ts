@@ -16,6 +16,9 @@ export class WorkflowEventWriter {
     this.pending = this.pending.then(async () => {
       await fs.appendFile(this.eventsPath, line, { encoding: "utf8", mode: 0o600 });
     });
+    // phase() and log() are synchronous workflow APIs. Mark their queued write as
+    // observed while retaining the rejection for flush() to surface as fatal.
+    void this.pending.catch(() => undefined);
     return this.pending;
   }
 

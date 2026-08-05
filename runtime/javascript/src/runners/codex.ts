@@ -55,6 +55,9 @@ export class CodexRunner {
   }
 
   threadOptions(): Record<string, unknown> {
+    if (this.options.effort === "max") {
+      throw new Error("Codex runner does not support reasoning effort max");
+    }
     return {
       workingDirectory: this.options.workspace,
       additionalDirectories: uniqueDirectories([this.options.stateRoot, this.options.home, this.options.runtimeRoot]),

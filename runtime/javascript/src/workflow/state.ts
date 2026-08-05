@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { WorkflowAgentRecord, WorkflowRunSnapshot } from "./types.js";
+import type { NestedWorkflowSnapshot, WorkflowAgentRecord, WorkflowRunSnapshot } from "./types.js";
 
 const safeIDPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
@@ -59,12 +59,19 @@ export class WorkflowStateStore {
     await atomicWriteJSON(path.join(root, "record.json"), record);
   }
 
+  async writeNested(snapshot: NestedWorkflowSnapshot): Promise<void> {
+    validateWorkflowID(snapshot.nestedId, "nestedId");
+    const root = path.join(this.runRoot, "nested");
+    await fs.mkdir(root, { recursive: true });
+    await atomicWriteJSON(path.join(root, `${snapshot.nestedId}.json`), snapshot);
+  }
+
   async readRun(): Promise<WorkflowRunSnapshot> {
     const snapshot = await readJSON<WorkflowRunSnapshot>(path.join(this.runRoot, "run.json"));
     if (snapshot.schemaVersion !== 1 || snapshot.runId !== this.runId) {
       throw new Error(`workflow run state is incompatible or corrupt: ${this.runId}`);
     }
-    return snapshot;
+    return snapshot.status === "running" ? { ...snapshot, status: "interrupted" } : snapshot;
   }
 
   async readAgents(): Promise<WorkflowAgentRecord[]> {
@@ -90,7 +97,7 @@ export class WorkflowStateStore {
         throw new Error(`workflow resume state has done agent without result: ${record.agentId}`);
       }
     }
-    return records;
+    return records.map((record) => record.status === "running" ? { ...record, status: "interrupted" } : record);
   }
 }
 

@@ -37,6 +37,22 @@ export async function worktreeHead(worktreePath: string): Promise<string> {
   return (await git(["-C", worktreePath, "rev-parse", "HEAD"])).trim();
 }
 
+export async function isLinkedWorktree(worktreePath: string): Promise<boolean> {
+  const resolved = path.resolve(worktreePath);
+  const gitDir = resolveGitPath(resolved, (await git(["-C", resolved, "rev-parse", "--git-dir"])).trim());
+  const commonDir = resolveGitPath(resolved, (await git(["-C", resolved, "rev-parse", "--git-common-dir"])).trim());
+  if (gitDir === commonDir) {
+    return false;
+  }
+  const output = await git(["-C", resolved, "worktree", "list", "--porcelain", "-z"]);
+  return output.split("\0").some((field) =>
+    field.startsWith("worktree ") && path.resolve(field.slice("worktree ".length)) === resolved);
+}
+
+function resolveGitPath(worktreePath: string, gitPath: string): string {
+  return path.resolve(worktreePath, gitPath);
+}
+
 export function isManagedWorktreePath(stateRoot: string, worktreePath: string): boolean {
   const managedRoot = path.resolve(stateRoot, "workflows", "worktrees");
   const relative = path.relative(managedRoot, path.resolve(worktreePath));

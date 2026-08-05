@@ -19,12 +19,14 @@ import { resolveNestedWorkflow } from "./library.js";
 import { parseWorkflowScript } from "./parser.js";
 import { WorkflowStateStore, validateWorkflowID } from "./state.js";
 import type {
+  NestedWorkflowSnapshot,
   ParsedWorkflowScript,
   WorkflowAgentOptions,
   WorkflowAgentRecord,
 } from "./types.js";
 import {
   createManagedWorktree,
+  isLinkedWorktree,
   isManagedWorktreePath,
   removeManagedWorktree,
   worktreeHead,
@@ -35,6 +37,7 @@ interface ExecutionContext {
   phase: string;
   path: string[];
   nextAgentOrdinal: number;
+  nextWorkflowOrdinal: number;
   usedKeys: Set<string>;
   nestedDepth: number;
   scriptHash: string;
@@ -70,6 +73,8 @@ export class WorkflowRuntime {
   private readonly runPrompt: typeof runPromptCommand;
   private invocationCount = 0;
   private spent = 0;
+  private nestedCount = 0;
+  private readonly invocationKeys = new Set<string>();
 
   constructor(private readonly options: WorkflowRuntimeOptions) {
     this.limiter = new WorkflowLimiter(normalizeConcurrency(options.concurrency));
@@ -86,12 +91,14 @@ export class WorkflowRuntime {
       phase: "",
       path: nestedDepth === 0 ? ["root"] : [...this.context().path, `nested:${parsed.meta.name}`],
       nextAgentOrdinal: 0,
+      nextWorkflowOrdinal: 0,
       usedKeys: new Set(),
       nestedDepth,
       scriptHash: parsed.scriptHash,
     };
     return await this.contexts.run(rootContext, async () => {
       const context = vm.createContext(this.globals(args, scriptFile));
+      vm.runInContext("Math.random = undefined; Object.freeze(Math); Object.freeze(process); Object.freeze(budget)", context);
       const script = new vm.Script(`(async () => {${parsed.body}\n})()`, { filename: scriptFile });
       const result = await script.runInContext(context, { timeout: 1000 });
       return assertJSONSerializable(result);
@@ -100,36 +107,24 @@ export class WorkflowRuntime {
 
   private globals(args: unknown, scriptFile: string): Record<string, unknown> {
     const runtime = this;
-    const math = Object.freeze(Object.fromEntries(
-      Object.getOwnPropertyNames(Math)
-        .filter((name) => name !== "random")
-        .map((name) => [name, Object.getOwnPropertyDescriptor(Math, name)?.value]),
-    ));
+    const cwd = hardenCallable(() => this.options.workspace);
+    const spent = hardenCallable(() => this.spent);
+    const remaining = hardenCallable(() => this.options.tokenBudget == null ? Infinity : this.options.tokenBudget - this.spent);
     return {
-      agent: async (prompt: string, options?: WorkflowAgentOptions) => await runtime.agent(prompt, options),
-      parallel: async <T>(thunks: Array<() => Promise<T>>) => await runtime.parallel(thunks),
-      pipeline: async <TItem, TResult>(items: TItem[], ...stages: Array<(previous: unknown, original: TItem, index: number) => TResult | Promise<TResult>>) => await runtime.pipeline(items, stages),
-      phase: <T>(title: string, body?: () => T | Promise<T>) => runtime.phase(title, body),
-      log: (message: unknown) => runtime.log(message),
-      workflow: async (reference: unknown, nestedArgs?: unknown) => await runtime.nestedWorkflow(reference, nestedArgs, scriptFile),
+      agent: hardenCallable(async (prompt: string, options?: WorkflowAgentOptions) => await runtime.agent(prompt, options)),
+      parallel: hardenCallable(async <T>(thunks: Array<() => Promise<T>>) => await runtime.parallel(thunks)),
+      pipeline: hardenCallable(async <TItem, TResult>(items: TItem[], ...stages: Array<(previous: unknown, original: TItem, index: number) => TResult | Promise<TResult>>) => await runtime.pipeline(items, stages)),
+      phase: hardenCallable(<T>(title: string, body?: () => T | Promise<T>) => runtime.phase(title, body)),
+      log: hardenCallable((message: unknown) => runtime.log(message)),
+      workflow: hardenCallable(async (reference: unknown, nestedArgs?: unknown) => await runtime.nestedWorkflow(reference, nestedArgs, scriptFile)),
       args: structuredClone(args),
       cwd: this.options.workspace,
-      process: Object.freeze({ cwd: () => this.options.workspace }),
+      process: Object.freeze({ cwd }),
       budget: Object.freeze({
         total: this.options.tokenBudget ?? null,
-        spent: () => this.spent,
-        remaining: () => this.options.tokenBudget == null ? Infinity : this.options.tokenBudget - this.spent,
+        spent,
+        remaining,
       }),
-      JSON,
-      Math: math,
-      Array,
-      Object,
-      String,
-      Number,
-      Boolean,
-      Set,
-      Map,
-      Promise,
     };
   }
 
@@ -148,6 +143,10 @@ export class WorkflowRuntime {
     const context = this.context();
     const options = normalizeAgentOptions(rawOptions, this.options.provider, this.options.model);
     const invocationKey = this.invocationKey(context, options.key);
+    if (this.invocationKeys.has(invocationKey)) {
+      throw new Error(`duplicate workflow invocationKey: ${invocationKey}`);
+    }
+    this.invocationKeys.add(invocationKey);
     const agentId = `a${this.invocationCount}`;
     const phase = options.phase ?? context.phase;
     const label = options.label ?? `${phase ? `${phase} ` : ""}agent ${this.invocationCount}`;
@@ -352,7 +351,53 @@ export class WorkflowRuntime {
     }
     const resolved = await resolveNestedWorkflow(reference, currentScriptFile, this.options.workspace, this.options.stateRoot);
     const parsed = parseWorkflowScript(resolved.source);
-    return await this.executeParsed(parsed, args, resolved.path, context.nestedDepth + 1);
+    const nestedPath = [...context.path, `workflow:${context.nextWorkflowOrdinal++}:${parsed.meta.name}`];
+    const nestedId = `n${++this.nestedCount}`;
+    const started = Date.now();
+    const snapshot: NestedWorkflowSnapshot = {
+      schemaVersion: 1,
+      nestedId,
+      invocationKey: nestedPath.join("/"),
+      status: "running",
+      meta: parsed.meta,
+      argsHash: sha256(canonicalJSON(args ?? null)),
+      scriptHash: parsed.scriptHash,
+      startedAt: new Date(started).toISOString(),
+    };
+    await this.options.store.writeNested(snapshot);
+    try {
+      const result = await this.contexts.run({ ...context, path: nestedPath }, async () =>
+        await this.executeParsed(parsed, args, resolved.path, context.nestedDepth + 1));
+      await this.completeNested(snapshot, "completed", started, result);
+      return result;
+    } catch (error) {
+      await this.completeNested(
+        snapshot,
+        isWorkflowAbort(error) || this.options.abortController.signal.aborted ? "aborted" : "failed",
+        started,
+        undefined,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  private async completeNested(
+    snapshot: NestedWorkflowSnapshot,
+    status: "completed" | "failed" | "aborted",
+    started: number,
+    result?: unknown,
+    error?: unknown,
+  ): Promise<void> {
+    const completed = Date.now();
+    await this.options.store.writeNested({
+      ...snapshot,
+      status,
+      ...(result !== undefined ? { result } : {}),
+      ...(error !== undefined ? { error: errorData(error) } : {}),
+      completedAt: new Date(completed).toISOString(),
+      durationMs: completed - started,
+    });
   }
 
   private invocationKey(context: ExecutionContext, key: string | undefined): string {
@@ -378,7 +423,8 @@ export class WorkflowRuntime {
       return false;
     }
     try {
-      return await worktreeHead(record.worktreePath) === record.worktreeHead &&
+      return await isLinkedWorktree(record.worktreePath) &&
+        await worktreeHead(record.worktreePath) === record.worktreeHead &&
         await worktreeStatus(record.worktreePath) === record.gitStatus;
     } catch {
       return false;
@@ -409,6 +455,7 @@ function childContext(parent: ExecutionContext, segment: string): ExecutionConte
     phase: parent.phase,
     path: [...parent.path, segment],
     nextAgentOrdinal: 0,
+    nextWorkflowOrdinal: 0,
     usedKeys: new Set(),
     nestedDepth: parent.nestedDepth,
     scriptHash: parent.scriptHash,
@@ -441,4 +488,9 @@ function assertJSONSerializable(value: unknown): unknown {
   } catch {
     throw new Error("workflow result must be JSON-serializable; did you forget to await agent(), parallel(), or pipeline()?");
   }
+}
+
+function hardenCallable<T extends (...args: never[]) => unknown>(callable: T): T {
+  Object.setPrototypeOf(callable, null);
+  return Object.freeze(callable);
 }

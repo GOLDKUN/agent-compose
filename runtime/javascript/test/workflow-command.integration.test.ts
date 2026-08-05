@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { runWorkflowCommand } from "../src/workflow/command.js";
+import { WorkflowStateStore } from "../src/workflow/state.js";
 import { withTempSession } from "./helpers.js";
 
 describe("workflow command integration", () => {
@@ -55,6 +56,24 @@ describe("workflow command integration", () => {
       });
       const snapshot = JSON.parse(await fs.readFile(path.join(stateRoot, "workflows", "runs", "run_invalid", "run.json"), "utf8"));
       expect(snapshot.status).toBe("failed");
+    });
+  });
+
+  it("interprets abandoned running state as interrupted", async () => {
+    await withTempSession(async (root) => {
+      const stateRoot = path.join(root, "state");
+      const store = await WorkflowStateStore.create(stateRoot, "run_interrupted");
+      await store.writeRun({
+        schemaVersion: 1, runId: "run_interrupted", status: "running", argsHash: "a", scriptHash: "s",
+        phases: [], logs: [], agentCount: 1, startedAt: new Date(0).toISOString(),
+      });
+      await store.writeAgent({
+        schemaVersion: 1, agentId: "a1", invocationKey: "root/agent:0", index: 1, inputHash: "h",
+        label: "agent", phase: "", provider: "codex", model: "", effort: "", agentType: "", isolation: "",
+        status: "running", promptPreview: "prompt", providerSessionId: "", worktreePath: "", gitStatus: "",
+      });
+      await expect(store.readRun()).resolves.toMatchObject({ status: "interrupted" });
+      await expect(store.readAgents()).resolves.toMatchObject([{ status: "interrupted" }]);
     });
   });
 });

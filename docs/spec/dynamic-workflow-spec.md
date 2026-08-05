@@ -554,6 +554,7 @@ SDK behavior：
 <stateRoot>/workflows/runs/<runId>/events.jsonl
 <stateRoot>/workflows/runs/<runId>/agents/<agentId>/record.json
 <stateRoot>/workflows/runs/<runId>/agents/<agentId>/state/
+<stateRoot>/workflows/runs/<runId>/nested/<nestedId>.json
 <stateRoot>/workflows/worktrees/<runId>/<agentId>/
 ```
 
@@ -760,7 +761,7 @@ resume 使用 `invocationKey` 定位历史逻辑调用，再以 `inputHash` 判�
 - `inputHash` 完全一致。
 - result 字段存在且可 JSON 序列化。
 
-`inputHash` 不匹配时是正常 cache miss，重新执行 agent，不视为 resume 错误。历史 run 中出现重复 `invocationKey`、无法解析的 record，或 `done` 记录缺少有效 result 时才报告缓存状态损坏。该策略允许 args 或脚本调整后安全地复用未受影响的逻辑调用，同时避免并发启动顺序影响恢复结果。
+`inputHash` 不匹配时是正常 cache miss，重新执行 agent，不视为 resume 错误。历史 run 中出现重复 `invocationKey`、无法解析的 record，或 `done` 记录缺少有效 result 时才报告缓存状态损坏。由于首版将完整 workflow script hash 纳入每次 invocation 的 `inputHash`，脚本发生任何变化都会使该脚本内的历史 agent 缓存 miss；仅 args 变化且没有影响最终 prompt/options 的调用仍可复用。该保守策略避免脚本语义变化后错误复用结果，同时避免并发启动顺序影响恢复结果。未来若需要局部脚本变更复用，应显式引入可审计的调用片段 hash，不能移除脚本身份校验后静默放宽。
 
 ### worktree 隔离
 
@@ -806,7 +807,7 @@ await workflow("workflows/audit.js", { area: "api" })
 nested workflow depth exceeded
 ```
 
-子 workflow 共享父 workflow 的 limiter、budget、abort signal。子 workflow 的 run state 写入父 run root 下的 nested 目录或以 parent run ID 派生 ID 写入。
+子 workflow 共享父 workflow 的 limiter、budget、abort signal。每次 `workflow()` 调用在父异步结构上下文中预分配稳定 ordinal，路径形如 `workflow:<ordinal>:<meta.name>`；同名 workflow 的重复或并发调用因此具有不同且可重放的 `invocationKey`。子 workflow 的状态写入父 run root 的 `nested/<nestedId>.json`，记录 invocationKey、meta、args/script hash、状态、结果或错误以及持续时间。
 
 ### abort 和 timeout
 

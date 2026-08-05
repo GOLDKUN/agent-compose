@@ -72,6 +72,21 @@ export interface WorkflowRunSnapshot {
   durationMs?: number;
 }
 
+export interface NestedWorkflowSnapshot {
+  schemaVersion: 1;
+  nestedId: string;
+  invocationKey: string;
+  status: WorkflowStatus;
+  meta: WorkflowMeta;
+  argsHash: string;
+  scriptHash: string;
+  result?: unknown;
+  error?: WorkflowErrorData;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+}
+
 export interface WorkflowAgentSummary {
   agentId: string;
   invocationKey: string;

@@ -112,6 +112,69 @@ describe("runtime.workflow", () => {
   it("exports workflow error classes", () => {
     expect(RuntimeWorkflowError).toBeTypeOf("function");
   });
+
+  it("decodes UTF-8 characters split across chunks", async () => {
+    await withTempDir(async (root) => {
+      const restorePath = await installFakeRuntime(root, [
+        "const payload = '__WORKFLOW_RESULT__' + JSON.stringify({ runId: 'run_utf8', status: 'completed', meta: { name: 'utf8', description: '中文' }, result: '完成', phases: [], logs: [], agents: [], agentCount: 0, durationMs: 1 }) + '\\n';",
+        "const bytes = Buffer.from(payload);",
+        "const marker = Buffer.from('中文');",
+        "const split = bytes.indexOf(marker) + 1;",
+        "process.stdout.write(bytes.subarray(0, split));",
+        "setTimeout(() => process.stdout.write(bytes.subarray(split)), 5);",
+      ]);
+      try {
+        await expect(runtime.workflow("export const meta = { name: 'x', description: 'y' }", { workspace: root }))
+          .resolves.toMatchObject({ result: "完成", meta: { description: "中文" } });
+      } finally {
+        restorePath();
+      }
+    });
+  });
+
+  it("rejects structurally invalid result and event payloads", async () => {
+    await withTempDir(async (root) => {
+      let restorePath = await installFakeRuntime(root, ["process.stdout.write('__WORKFLOW_RESULT__{}\\n');"]);
+      try {
+        await expect(runtime.workflow("export const meta = { name: 'x', description: 'y' }", { workspace: root }))
+          .rejects.toBeInstanceOf(RuntimeWorkflowProtocolError);
+      } finally {
+        restorePath();
+      }
+
+      restorePath = await installFakeRuntime(root, [
+        "process.stderr.write('__WORKFLOW_EVENT__' + JSON.stringify({ type: 'phase', runId: 3, title: 'bad' }) + '\\n');",
+        "process.stdout.write('__WORKFLOW_RESULT__' + JSON.stringify({ runId: 'run', status: 'completed', meta: { name: 'x', description: 'y' }, result: null, phases: [], logs: [], agents: [], agentCount: 0, durationMs: 1 }) + '\\n');",
+      ]);
+      try {
+        await expect(runtime.workflow("export const meta = { name: 'x', description: 'y' }", { workspace: root }))
+          .rejects.toBeInstanceOf(RuntimeWorkflowProtocolError);
+      } finally {
+        restorePath();
+      }
+    });
+  });
+
+  it("returns a typed aborted outcome when the CLI handles the timeout signal", async () => {
+    await withTempDir(async (root) => {
+      const restorePath = await installFakeRuntime(root, [
+        "process.on('SIGTERM', () => {",
+        "  process.stdout.write('__WORKFLOW_RESULT__' + JSON.stringify({ runId: 'run_aborted', status: 'aborted', error: { message: 'workflow aborted' }, phases: [], logs: [], agents: [], durationMs: 10 }) + '\\n');",
+        "  process.exit(0);",
+        "});",
+        "setInterval(() => {}, 1000);",
+      ]);
+      try {
+        await expect(runtime.workflow("export const meta = { name: 'x', description: 'y' }", { workspace: root, timeoutMs: 100 }))
+          .rejects.toMatchObject({
+            name: "RuntimeWorkflowError",
+            outcome: { runId: "run_aborted", status: "aborted" },
+          });
+      } finally {
+        restorePath();
+      }
+    });
+  });
 });
 
 async function installFakeRuntime(root: string, body: string[]): Promise<() => void> {

@@ -22,7 +22,7 @@ export interface PromptCommandOptions {
   workspace?: string;
   home?: string;
   model?: string;
-  effort?: "low" | "medium" | "high" | "xhigh";
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   outputSchemaFile?: string;
   outputSchema?: RuntimeJsonSchema;
   skills?: string[];

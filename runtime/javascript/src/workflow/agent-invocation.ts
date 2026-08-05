@@ -10,7 +10,7 @@ const agentKeyPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export interface NormalizedAgentOptions extends Omit<WorkflowAgentOptions, "provider" | "effort"> {
   provider: ReturnType<typeof normalizeProvider>;
-  effort?: Exclude<WorkflowEffort, "max">;
+  effort?: WorkflowEffort;
 }
 
 export function normalizeAgentOptions(
@@ -28,7 +28,7 @@ export function normalizeAgentOptions(
   if (raw.timeoutMs !== undefined && (!Number.isFinite(raw.timeoutMs) || raw.timeoutMs <= 0)) {
     throw new Error("workflow agent timeoutMs must be a positive number");
   }
-  if (raw.effort === "max") {
+  if (raw.effort === "max" && provider === "codex") {
     throw new Error("workflow agent effort max is not supported");
   }
   if (raw.effort && provider !== "codex" && provider !== "claude") {
