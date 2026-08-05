@@ -75,6 +75,31 @@ describe("workflow CLI E2E", () => {
       expect(promptState.prompts).toHaveLength(5);
       expect(stdio.stderr).toContain(`${WORKFLOW_EVENT_PREFIX}{"type":"workflow_start"`);
       expect(stdio.stderr).toContain(`${WORKFLOW_EVENT_PREFIX}{"type":"workflow_complete"`);
+
+      const replayStdio = captureStdio();
+      try {
+        await createProgram({ exitOverride: true }).parseAsync([
+          "node", "cli", "workflow",
+          "--script-file", scriptFile,
+          "--args-file", argsFile,
+          "--state-root", path.join(root, "state"),
+          "--workspace", workspace,
+          "--home", path.join(root, "home"),
+          "--run-id", "run_e2e_replay",
+          "--resume-run-id", "run_e2e",
+          "--concurrency", "2",
+        ]);
+      } finally {
+        replayStdio.restore();
+      }
+      const replayLine = replayStdio.stdout.trim().split("\n").find((line) => line.startsWith(WORKFLOW_RESULT_PREFIX));
+      const replay = JSON.parse((replayLine as string).slice(WORKFLOW_RESULT_PREFIX.length));
+      expect(replay.status).toBe("completed");
+      expect(replay.agents.every((agent: { status: string }) => agent.status === "cached")).toBe(true);
+      expect(promptState.prompts).toHaveLength(5);
+      expect(replayStdio.stderr).toContain(`${WORKFLOW_EVENT_PREFIX}{"type":"agent_cached"`);
+      await expect(fs.readFile(path.join(root, "state", "workflows", "runs", "run_e2e", "run.json"), "utf8"))
+        .resolves.toContain('"runId": "run_e2e"');
     });
   });
 });
