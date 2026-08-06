@@ -2979,7 +2979,12 @@ func runAttachInputFromTestProto(request *agentcomposev2.AttachAgentRunRequest) 
 	case *agentcomposev2.AttachAgentRunRequest_Start:
 		start := frame.Start
 		input.Kind = RunAttachInputStart
-		input.Request = runAgentRequestFromAttachStart(start)
+		message := start.GetRequest()
+		input.Request = RunAgentRequest{
+			ProjectID: message.GetProjectId(), AgentName: message.GetAgentName(), Prompt: message.GetPrompt(), Command: message.GetCommand(),
+			ClientRequestID: message.GetClientRequestId(), Env: message.GetEnv(), SandboxID: message.GetSandboxId(), Driver: message.GetDriver(),
+			OutputSchemaJSON: message.GetOutputSchemaJson(), CleanupPolicy: message.GetCleanupPolicy(), Jupyter: message.GetJupyter(),
+		}
 		input.AttachStdin = start.GetAttachStdin()
 		input.TTY = start.GetTty()
 		input.Rows = start.GetTerminalSize().GetRows()

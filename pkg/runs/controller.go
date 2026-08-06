@@ -1251,43 +1251,6 @@ func transitionFromCommandResult(run domain.ProjectRunRecord, sandbox *domain.Sa
 	return req
 }
 
-func runAgentRequestFromAttachStart(start *agentcomposev2.AttachAgentRunStart) RunAgentRequest {
-	msg := start.GetRequest()
-	if msg == nil {
-		return RunAgentRequest{}
-	}
-	return RunAgentRequest{
-		ProjectID:        msg.GetProjectId(),
-		AgentName:        msg.GetAgentName(),
-		Prompt:           msg.GetPrompt(),
-		Command:          msg.GetCommand(),
-		Source:           projectRunSourceFromAttachProto(msg.GetSource()),
-		SchedulerID:      msg.GetSchedulerId(),
-		TriggerID:        msg.GetTriggerId(),
-		PayloadJSON:      msg.GetPayloadJson(),
-		ClientRequestID:  msg.GetClientRequestId(),
-		Env:              msg.GetEnv(),
-		SandboxID:        msg.GetSandboxId(),
-		Driver:           msg.GetDriver(),
-		OutputSchemaJSON: msg.GetOutputSchemaJson(),
-		CleanupPolicy:    msg.GetCleanupPolicy(),
-		Jupyter:          msg.GetJupyter(),
-	}
-}
-
-func projectRunSourceFromAttachProto(source agentcomposev2.RunSource) string {
-	switch source {
-	case agentcomposev2.RunSource_RUN_SOURCE_SCHEDULER:
-		return domain.ProjectRunSourceScheduler
-	case agentcomposev2.RunSource_RUN_SOURCE_API:
-		return domain.ProjectRunSourceAPI
-	case agentcomposev2.RunSource_RUN_SOURCE_MANUAL:
-		return domain.ProjectRunSourceManual
-	default:
-		return domain.ProjectRunSourceManual
-	}
-}
-
 func transitionFromRuntimeResult(run domain.ProjectRunRecord, sandbox *domain.Sandbox, commandText, logsPath string, accumulated domain.ExecResult, result driverpkg.RuntimeResult, execErr error) TransitionRequest {
 	accumulated.ExitCode = result.ExitCode
 	accumulated.Success = result.Success
