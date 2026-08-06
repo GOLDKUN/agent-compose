@@ -24,8 +24,9 @@ for generated_file in "${generated_files[@]}"; do
 done
 
 for dockerfile in Dockerfile Dockerfile.agent-compose-local; do
-  if ! grep -Fq 'GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@v1.68.1' "$dockerfile"; then
-    echo "Dockerfile must install buf into PATH: $dockerfile" >&2
+  if ! grep -Eq '^ARG BUF_VERSION=v1\.68\.1$' "$dockerfile" ||
+    ! grep -Fq 'GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}' "$dockerfile"; then
+    echo "Dockerfile must install the pinned configurable buf version into PATH: $dockerfile" >&2
     exit 1
   fi
   if ! grep -Fq 'RUN buf generate' "$dockerfile"; then

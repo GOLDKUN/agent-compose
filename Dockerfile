@@ -1,6 +1,7 @@
 ARG REGISTRY_MIRROR=docker.io
 ARG GOPROXY=https://proxy.golang.org,direct
 ARG GITHUB_MIRROR=https://github.com
+ARG BUF_VERSION=v1.68.1
 
 FROM ${REGISTRY_MIRROR}/library/golang:1-alpine AS golang-toolchain
 
@@ -26,6 +27,7 @@ RUN set -e;     target_arch="${TARGETARCH:-$(dpkg --print-architecture)}";     c
 
 FROM ${REGISTRY_MIRROR}/library/debian:bookworm AS go-build
 ARG GOPROXY
+ARG BUF_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git tar && rm -rf /var/lib/apt/lists/*
 COPY --from=golang-toolchain /usr/local/go /usr/local/go
 ENV PATH=/usr/local/go/bin:${PATH}
@@ -36,7 +38,7 @@ COPY scripts/build-agent-compose-binary.sh scripts/build-agent-compose-binary.sh
 COPY scripts/with-go-toolchain.sh scripts/with-go-toolchain.sh
 COPY go.mod go.sum ./
 RUN go env -w GOPROXY="${GOPROXY}" && go mod download
-RUN GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@v1.68.1
+RUN GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
 COPY cmd ./cmd
 COPY pkg ./pkg
 COPY assets ./assets

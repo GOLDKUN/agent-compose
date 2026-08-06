@@ -2,8 +2,8 @@ ARG REGISTRY_MIRROR=docker.io
 ARG GOPROXY=https://proxy.golang.org,direct
 ARG GO_VERSION=1.26.4
 ARG GRPCURL_VERSION=v1.9.3
-ARG PYPI_INDEX_URL=https://pypi.org/simple
-ARG PYPI_TRUSTED_HOST
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST
 ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org
 ARG NODE_MAJOR=22
 ARG CODEX_VERSION=0.146.0
@@ -23,8 +23,8 @@ RUN CGO_ENABLED=0 \
     go install github.com/fullstorydev/grpcurl/cmd/grpcurl@"${GRPCURL_VERSION}"
 
 FROM ${REGISTRY_MIRROR}/library/debian:bookworm-slim
-ARG PYPI_INDEX_URL
-ARG PYPI_TRUSTED_HOST
+ARG PIP_INDEX_URL
+ARG PIP_TRUSTED_HOST
 ARG NPM_CONFIG_REGISTRY
 ARG NODE_MAJOR
 ARG CODEX_VERSION
@@ -51,8 +51,8 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /root/.npm /root/.cache
 
-ENV PIP_INDEX_URL=${PYPI_INDEX_URL}
-ENV PIP_TRUSTED_HOST=${PYPI_TRUSTED_HOST}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+ENV PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN PIP_REQUIRE_HASHES=0 python3 -m pip install --break-system-packages --no-cache-dir --no-input \

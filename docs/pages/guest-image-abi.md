@@ -377,6 +377,24 @@ defaults.
 | `PIP_INDEX_URL`, `PIP_TRUSTED_HOST` | Python package downloads | both guest variants |
 | `ARCHLINUX_MIRROR` | pacman packages | Arch Linux guest only |
 
+Lowercase `http_proxy`, `https_proxy`, `all_proxy`, and `no_proxy` inputs are
+accepted and normalized to the corresponding Docker proxy build arguments.
+The remaining build controls are:
+
+| Variable | Scope |
+| --- | --- |
+| `DOCKER_DEFAULT_PLATFORM` | Docker target platform; the daemon task derives it from `GOARCH`, while the Arch Linux guest defaults to `linux/amd64` |
+| `IMAGE_NAME`, `IMAGE_TAG` | Local daemon and guest image tags |
+| `NO_CACHE=1` | Passes Docker's `--no-cache` flag |
+| `GO_VERSION`, `GRPCURL_VERSION`, `NODE_MAJOR` | Default guest toolchain inputs; `NODE_MAJOR` applies only to the Debian guest |
+| `ARCHLINUX_TAG` | Arch Linux guest base-image tag |
+| `CODEX_VERSION`, `CLAUDE_CODE_VERSION`, `GEMINI_CLI_VERSION`, `OPENCODE_VERSION`, `PI_AGENT_VERSION`, `PI_MCP_ADAPTER_VERSION` | Guest provider package versions |
+
+`REGISTRY_MIRROR`, `GITHUB_MIRROR`, and `ARCHLINUX_MIRROR` have no equivalent
+cross-tool standard environment variable, so they remain narrowly scoped
+project inputs. `REGISTRY_MIRROR` is not a dockerd mirror configuration; it only
+rewrites repository Dockerfile base-image references.
+
 For example:
 
 ```bash
@@ -390,8 +408,8 @@ task image:agent-compose-guest \
 
 Passing variables after the task name and exporting the same environment
 variables are equivalent. Do not put credentials in committed files or build
-logs. The daemon image task derives Docker `--platform` from `GOARCH`, keeping
-the binary and BoxLite/Microsandbox artifacts on the same architecture.
+logs. The daemon image task derives `DOCKER_DEFAULT_PLATFORM` from `GOARCH`,
+keeping the binary and BoxLite/Microsandbox artifacts on the same architecture.
 
 ## 7. Recommended Build: Extend the Published Guest
 

@@ -17,8 +17,8 @@ build_args=(
   --build-arg "VERSION=$VERSION"
 )
 
-if [[ -n ${BUILD_PLATFORM:-} ]]; then
-  build_args+=(--platform "$BUILD_PLATFORM")
+if [[ -n ${DOCKER_DEFAULT_PLATFORM:-} ]]; then
+  build_args+=(--platform "$DOCKER_DEFAULT_PLATFORM")
 fi
 
 append_build_arg() {
@@ -29,19 +29,23 @@ append_build_arg() {
   fi
 }
 
-append_build_arg HTTP_PROXY "${HTTP_PROXY:-}"
-append_build_arg HTTPS_PROXY "${HTTPS_PROXY:-}"
-append_build_arg ALL_PROXY "${ALL_PROXY:-}"
+append_build_arg HTTP_PROXY "${HTTP_PROXY:-${http_proxy:-}}"
+append_build_arg HTTPS_PROXY "${HTTPS_PROXY:-${https_proxy:-}}"
+append_build_arg ALL_PROXY "${ALL_PROXY:-${all_proxy:-}}"
 append_build_arg NO_PROXY "${NO_PROXY:-${no_proxy:-}}"
 append_build_arg REGISTRY_MIRROR "${REGISTRY_MIRROR:-}"
 append_build_arg GOPROXY "${GOPROXY:-}"
-append_build_arg GITHUB_MIRROR "${GITHUB_MIRROR:-}"
+append_build_arg BUF_VERSION "${BUF_VERSION:-}"
 
 if [[ "$(basename "$DOCKERFILE")" == "Dockerfile.agent-compose-local" ]]; then
   build_args+=(
     --build-context "boxlite-local=$ROOT_DIR/build/boxlite"
     --build-context "microsandbox-local=$ROOT_DIR/build/microsandbox"
   )
+else
+  append_build_arg GITHUB_MIRROR "${GITHUB_MIRROR:-}"
+  append_build_arg BOXLITE_VERSION "${BOXLITE_VERSION:-}"
+  append_build_arg MICROSANDBOX_VERSION "${MICROSANDBOX_VERSION:-}"
 fi
 
 if [[ "${NO_CACHE:-}" == "1" ]]; then

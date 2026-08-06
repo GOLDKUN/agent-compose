@@ -27,6 +27,7 @@ case "$driver" in
       runtime/boxlite-shim
     )
     CLEAN_DIRS=(include lib runtime)
+    RUNTIME_VERSION_OVERRIDE=${BOXLITE_VERSION:-}
     ;;
   microsandbox)
     DISPLAY_NAME=Microsandbox
@@ -41,6 +42,7 @@ case "$driver" in
       bin/agentd
     )
     CLEAN_DIRS=(bin lib)
+    RUNTIME_VERSION_OVERRIDE=${MICROSANDBOX_VERSION:-}
     ;;
   -h|--help)
     usage
@@ -115,8 +117,8 @@ source_fingerprint() {
     awk '{print $1}'
 }
 
-expected_stamp=$(printf 'target_arch=%s\nsource_fingerprint=%s' \
-  "$TARGET_ARCH_VALUE" "$(source_fingerprint)")
+expected_stamp=$(printf 'target_arch=%s\nruntime_version_override=%s\nsource_fingerprint=%s' \
+  "$TARGET_ARCH_VALUE" "$RUNTIME_VERSION_OVERRIDE" "$(source_fingerprint)")
 
 stamp_matches() {
   [[ -s "$STAMP_FILE" ]] && [[ "$(<"$STAMP_FILE")" == "$expected_stamp" ]]
@@ -178,12 +180,16 @@ append_build_arg() {
   fi
 }
 
-append_build_arg HTTP_PROXY "${HTTP_PROXY:-}"
-append_build_arg HTTPS_PROXY "${HTTPS_PROXY:-}"
-append_build_arg ALL_PROXY "${ALL_PROXY:-}"
+append_build_arg HTTP_PROXY "${HTTP_PROXY:-${http_proxy:-}}"
+append_build_arg HTTPS_PROXY "${HTTPS_PROXY:-${https_proxy:-}}"
+append_build_arg ALL_PROXY "${ALL_PROXY:-${all_proxy:-}}"
 append_build_arg NO_PROXY "${NO_PROXY:-${no_proxy:-}}"
 append_build_arg REGISTRY_MIRROR "${REGISTRY_MIRROR:-}"
 append_build_arg GITHUB_MIRROR "${GITHUB_MIRROR:-}"
+case "$driver" in
+  boxlite) append_build_arg BOXLITE_VERSION "${BOXLITE_VERSION:-}" ;;
+  microsandbox) append_build_arg MICROSANDBOX_VERSION "${MICROSANDBOX_VERSION:-}" ;;
+esac
 
 docker build "${build_args[@]}" "$ROOT_DIR"
 

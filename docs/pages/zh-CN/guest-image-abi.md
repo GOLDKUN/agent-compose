@@ -263,6 +263,19 @@ task image:agent-compose-guest-archlinux
 | `PIP_INDEX_URL`、`PIP_TRUSTED_HOST` | Python 包下载 | 两种 guest |
 | `ARCHLINUX_MIRROR` | pacman 包下载 | 仅 Arch Linux guest |
 
+同时接受小写的 `http_proxy`、`https_proxy`、`all_proxy` 和 `no_proxy`，并将其规范化为对应的 Docker 代理构建参数。其余构建控制变量如下：
+
+| 变量 | 作用范围 |
+| --- | --- |
+| `DOCKER_DEFAULT_PLATFORM` | Docker 目标平台；daemon task 从 `GOARCH` 推导，Arch Linux guest 默认为 `linux/amd64` |
+| `IMAGE_NAME`、`IMAGE_TAG` | 本地 daemon 与 guest 镜像 tag |
+| `NO_CACHE=1` | 传递 Docker `--no-cache` 参数 |
+| `GO_VERSION`、`GRPCURL_VERSION`、`NODE_MAJOR` | 默认 guest 工具链参数；`NODE_MAJOR` 仅适用于 Debian guest |
+| `ARCHLINUX_TAG` | Arch Linux guest 基础镜像 tag |
+| `CODEX_VERSION`、`CLAUDE_CODE_VERSION`、`GEMINI_CLI_VERSION`、`OPENCODE_VERSION`、`PI_AGENT_VERSION`、`PI_MCP_ADAPTER_VERSION` | guest provider 包版本 |
+
+`REGISTRY_MIRROR`、`GITHUB_MIRROR` 和 `ARCHLINUX_MIRROR` 没有跨工具通用的标准环境变量，因此保留为作用域明确的项目参数。`REGISTRY_MIRROR` 不是 dockerd mirror 配置，只负责改写仓库 Dockerfile 中的基础镜像地址。
+
 例如：
 
 ```bash
@@ -274,7 +287,7 @@ task image:agent-compose-guest \
   PIP_INDEX_URL=https://pypi.example.com/simple
 ```
 
-写在 task 名称后的参数与导出同名环境变量效果一致。不要把凭据写入提交文件或构建日志。daemon 镜像任务从 `GOARCH` 推导 Docker `--platform`，保证 binary 与 BoxLite/Microsandbox artifact 使用同一架构。
+写在 task 名称后的参数与导出同名环境变量效果一致。不要把凭据写入提交文件或构建日志。daemon 镜像任务从 `GOARCH` 推导 `DOCKER_DEFAULT_PLATFORM`，保证 binary 与 BoxLite/Microsandbox artifact 使用同一架构。
 
 ## 7. 推荐构建方式：继承官方 Guest
 
