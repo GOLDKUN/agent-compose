@@ -16,6 +16,7 @@ type RunAttachMode string
 
 const (
 	RunAttachModeUnspecified RunAttachMode = ""
+	RunAttachModeInvalid     RunAttachMode = "invalid"
 	RunAttachModeCommand     RunAttachMode = "command"
 	RunAttachModePrompt      RunAttachMode = "prompt"
 )

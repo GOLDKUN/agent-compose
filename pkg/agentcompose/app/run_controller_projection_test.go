@@ -5,8 +5,22 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/runs"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
+
+func TestRunAttachInputFromProtoPreservesUnknownModeAsInvalid(t *testing.T) {
+	input := runAttachInputFromProto(&agentcomposev2.AttachAgentRunRequest{
+		Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
+			Mode:    agentcomposev2.AttachRunMode(99),
+			Request: &agentcomposev2.RunAgentRequest{Command: "echo hello"},
+		}},
+	})
+
+	if input.Mode != runs.RunAttachModeInvalid {
+		t.Fatalf("mode = %q, want invalid", input.Mode)
+	}
+}
 
 func TestRunAgentStreamStartedProjectionPreservesResponseFields(t *testing.T) {
 	createdAt := time.Date(2026, 7, 10, 8, 9, 10, 123456789, time.FixedZone("CST", 8*60*60))

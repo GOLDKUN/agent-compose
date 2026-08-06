@@ -901,6 +901,22 @@ func TestRunsControllerRunProjectCommandAttachValidatesStartFrame(t *testing.T) 
 	}
 }
 
+func TestRunsControllerRunProjectCommandAttachRejectsInvalidMode(t *testing.T) {
+	controller, _, _ := newTestRunAttachController(t, nil)
+	receive := func() (RunAttachInput, error) {
+		return RunAttachInput{
+			Kind:    RunAttachInputStart,
+			Mode:    RunAttachModeInvalid,
+			Request: RunAgentRequest{Command: "echo hello"},
+		}, nil
+	}
+
+	err := controller.RunProjectCommandAttach(context.Background(), receive, func(RunAttachOutput) error { return nil })
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("RunProjectCommandAttach invalid mode error = %v, want ErrInvalidRequest", err)
+	}
+}
+
 func TestRunsControllerRunProjectPromptAttachProjectsAgentFrames(t *testing.T) {
 	ctx := context.Background()
 	controller, configDB, runtime := newTestRunAttachController(t, []driverpkg.RuntimeOutputFrame{

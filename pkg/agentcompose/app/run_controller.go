@@ -237,6 +237,10 @@ func runAttachInputFromProto(request *agentcomposev2.AttachAgentRunRequest) runs
 			input.Mode = runs.RunAttachModeCommand
 		case agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT:
 			input.Mode = runs.RunAttachModePrompt
+		case agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_UNSPECIFIED:
+			input.Mode = runs.RunAttachModeUnspecified
+		default:
+			input.Mode = runs.RunAttachModeInvalid
 		}
 	case *agentcomposev2.AttachAgentRunRequest_Stdin:
 		input.Kind = runs.RunAttachInputStdin
