@@ -848,7 +848,8 @@ func TestRunsControllerRunProjectCommandAttachProjectsOutputAndResult(t *testing
 		}},
 	}}
 	var responses []*agentcomposev2.AttachAgentRunResponse
-	err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(resp *agentcomposev2.AttachAgentRunResponse) error {
+	err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(output RunAttachOutput) error {
+		resp := runAttachOutputToTestProto(output)
 		if started := resp.GetStarted(); started != nil {
 			stored, err := configDB.GetProjectRun(ctx, started.GetRunId())
 			if err != nil {
@@ -894,7 +895,7 @@ func TestRunsControllerRunProjectCommandAttachValidatesStartFrame(t *testing.T) 
 	controller, _, _ := newTestRunAttachController(t, nil)
 	err := controller.RunProjectCommandAttach(context.Background(), recvAttachAgentRunRequests([]*agentcomposev2.AttachAgentRunRequest{{
 		Frame: &agentcomposev2.AttachAgentRunRequest_Stdin{Stdin: &agentcomposev2.AttachStdin{Data: []byte("x")}},
-	}}), func(*agentcomposev2.AttachAgentRunResponse) error { return nil })
+	}}), func(RunAttachOutput) error { return nil })
 	if !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("RunProjectCommandAttach first frame error = %v, want ErrInvalidRequest", err)
 	}
@@ -918,7 +919,8 @@ func TestRunsControllerRunProjectPromptAttachProjectsAgentFrames(t *testing.T) {
 		}},
 	}}
 	var responses []*agentcomposev2.AttachAgentRunResponse
-	err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(resp *agentcomposev2.AttachAgentRunResponse) error {
+	err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(output RunAttachOutput) error {
+		resp := runAttachOutputToTestProto(output)
 		if started := resp.GetStarted(); started != nil {
 			stored, err := configDB.GetProjectRun(ctx, started.GetRunId())
 			if err != nil {
@@ -1001,7 +1003,8 @@ func TestRunsControllerRunProjectPromptAttachGatesQueuedTurnsAndOrdersTranscript
 				return RunAttachInput{}, io.EOF
 			}
 			return req, nil
-		}, func(resp *agentcomposev2.AttachAgentRunResponse) error {
+		}, func(output RunAttachOutput) error {
+			resp := runAttachOutputToTestProto(output)
 			responses = append(responses, resp)
 			return nil
 		})
@@ -1327,7 +1330,8 @@ func TestRunsControllerRunProjectPromptAttachUnsupportedProvidersDoNotOpenRuntim
 				}},
 			}}
 			var responses []*agentcomposev2.AttachAgentRunResponse
-			err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(resp *agentcomposev2.AttachAgentRunResponse) error {
+			err := controller.RunProjectCommandAttach(ctx, recvAttachAgentRunRequests(requests), func(output RunAttachOutput) error {
+				resp := runAttachOutputToTestProto(output)
 				responses = append(responses, resp)
 				return nil
 			})
@@ -3131,4 +3135,31 @@ func (s *fakeGuideSandboxStore) SaveProxyState(string, sandboxstore.ProxyState) 
 
 func (s *fakeGuideSandboxStore) AllocateHostPortForJupyter() (int, error) {
 	return 0, errors.New("not implemented")
+}
+
+func runAttachOutputToTestProto(output RunAttachOutput) *agentcomposev2.AttachAgentRunResponse {
+	response := &agentcomposev2.AttachAgentRunResponse{}
+	switch output.Kind {
+	case RunAttachOutputStarted:
+		response.Frame = &agentcomposev2.AttachAgentRunResponse_Started{Started: &agentcomposev2.AttachStarted{RunId: output.Run.RunID, SandboxId: output.SandboxID}}
+	case RunAttachOutputData:
+		stream := agentcomposev2.StdioStream_STDIO_STREAM_STDOUT
+		if output.Stream == domain.StdioStderr {
+			stream = agentcomposev2.StdioStream_STDIO_STREAM_STDERR
+		}
+		response.Frame = &agentcomposev2.AttachAgentRunResponse_Output{Output: &agentcomposev2.AttachOutput{Data: output.Data, Stream: stream, Transcript: &agentcomposev2.TranscriptEvent{Text: string(output.Data)}}}
+	case RunAttachOutputAgentEvent:
+		response.Frame = &agentcomposev2.AttachAgentRunResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Name: output.Name, Text: output.Text}}
+	case RunAttachOutputAgentTurnCompleted:
+		response.Frame = &agentcomposev2.AttachAgentRunResponse_AgentTurnCompleted{AgentTurnCompleted: &agentcomposev2.AttachAgentTurnCompleted{RunId: output.Run.RunID, ResultJson: output.ResultJSON}}
+	case RunAttachOutputResult:
+		status := agentcomposev2.RunStatus_RUN_STATUS_FAILED
+		if output.Run.Status == domain.ProjectRunStatusSucceeded {
+			status = agentcomposev2.RunStatus_RUN_STATUS_SUCCEEDED
+		}
+		response.Frame = &agentcomposev2.AttachAgentRunResponse_Result{Result: &agentcomposev2.AttachResult{Success: output.Success, Error: output.Error, Run: &agentcomposev2.RunSummary{RunId: output.Run.RunID, Status: status}}}
+	case RunAttachOutputError:
+		response.Frame = &agentcomposev2.AttachAgentRunResponse_Error{Error: &agentcomposev2.AttachError{Code: output.Code, Message: output.Error, Terminal: output.Terminal}}
+	}
+	return response
 }

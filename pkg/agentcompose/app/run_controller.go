@@ -199,7 +199,9 @@ func (d runControllerDelegate) AttachAgentRun(ctx context.Context, stream *conne
 	if d.controller == nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("run controller is required"))
 	}
-	if err := d.controller.RunProjectCommandAttach(ctx, receiveRunAttachInput(stream.Receive), stream.Send); err != nil {
+	if err := d.controller.RunProjectCommandAttach(ctx, receiveRunAttachInput(stream.Receive), func(output runs.RunAttachOutput) error {
+		return stream.Send(api.RunAttachOutputToProto(output))
+	}); err != nil {
 		var connectErr *connect.Error
 		if errors.As(err, &connectErr) {
 			return connectErr

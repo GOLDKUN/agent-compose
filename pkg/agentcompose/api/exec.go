@@ -242,8 +242,8 @@ func (h *ExecHandler) execPromptAttach(ctx context.Context, start *agentcomposev
 		}},
 	}
 	receiver := newExecPromptRunAttachReceiver(initial, receive)
-	return h.runAttach.RunProjectCommandAttach(ctx, receiver.Receive, func(resp *agentcomposev2.AttachAgentRunResponse) error {
-		return send(execAttachResponseFromRunAttach(resp))
+	return h.runAttach.RunProjectCommandAttach(ctx, receiver.Receive, func(output runs.RunAttachOutput) error {
+		return send(execAttachResponseFromRunAttach(RunAttachOutputToProto(output)))
 	})
 }
 

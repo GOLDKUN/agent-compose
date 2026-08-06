@@ -1187,10 +1187,10 @@ func (d *apiExecPromptRunAttachDelegate) RunProjectCommandAttach(_ context.Conte
 		return err
 	}
 	d.human = second.GetHumanMessage()
-	if err := send(&agentcomposev2.AttachAgentRunResponse{Frame: &agentcomposev2.AttachAgentRunResponse_AgentEvent{AgentEvent: &agentcomposev2.AttachAgentEvent{Text: "agent says hi"}}}); err != nil {
+	if err := send(runs.RunAttachOutput{Kind: runs.RunAttachOutputAgentEvent, Text: "agent says hi"}); err != nil {
 		return err
 	}
-	return send(&agentcomposev2.AttachAgentRunResponse{Frame: &agentcomposev2.AttachAgentRunResponse_Result{Result: &agentcomposev2.AttachResult{Success: true}}})
+	return send(runs.RunAttachOutput{Kind: runs.RunAttachOutputResult, Success: true})
 }
 
 type apiExecRuntime struct {
