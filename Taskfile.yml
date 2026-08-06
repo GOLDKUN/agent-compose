@@ -9,11 +9,6 @@ vars:
   GOLANGCI_LINT_CACHE_DIR: '{{.TASKFILE_DIR}}/.cache/golangci-lint'
   GO_BUILD_CACHE_DIR: '{{.TASKFILE_DIR}}/.cache/go-build'
   GO_LINT_PACKAGES: ./cmd/... ./pkg/... ./proto/health/v1 ./proto/health/v1/healthv1connect ./proto/agentcompose/v2 ./proto/agentcompose/v2/agentcomposev2connect
-  BUILD_HTTP_PROXY: '{{default "" .HTTP_PROXY}}'
-  BUILD_HTTPS_PROXY: '{{default "" .HTTPS_PROXY}}'
-  BUILD_ALL_PROXY: '{{default "" .ALL_PROXY}}'
-  BUILD_REGISTRY_MIRROR: '{{default "" .REGISTRY_MIRROR}}'
-  BUILD_GOPROXY: '{{default "" .GOPROXY}}'
   GOHOSTOS:
     sh: ./scripts/with-go-toolchain.sh go env GOHOSTOS
   GOHOSTARCH:
@@ -118,13 +113,13 @@ tasks:
     desc: Build the agent-compose guest image used by sandbox deployments
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - ./scripts/build-agent-compose-guest.sh
+      - HTTP_PROXY='{{default "" .HTTP_PROXY}}' HTTPS_PROXY='{{default "" .HTTPS_PROXY}}' ALL_PROXY='{{default "" .ALL_PROXY}}' NO_PROXY='{{default "" .NO_PROXY}}' REGISTRY_MIRROR='{{default "" .REGISTRY_MIRROR}}' GOPROXY='{{default "" .GOPROXY}}' NPM_CONFIG_REGISTRY='{{default "" .NPM_CONFIG_REGISTRY}}' PIP_INDEX_URL='{{default "" .PIP_INDEX_URL}}' PIP_TRUSTED_HOST='{{default "" .PIP_TRUSTED_HOST}}' ./scripts/build-agent-compose-guest.sh
 
   image:agent-compose-guest-archlinux:
     desc: Build the optional Arch Linux agent-compose guest image
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - GUEST_IMAGE_DOCKERFILE=./guest-images/Dockerfile.agent-compose-guest-archlinux IMAGE_TAG='{{default "agent-compose-guest:archlinux" .IMAGE_TAG}}' BUILD_PLATFORM='{{default "linux/amd64" .BUILD_PLATFORM}}' ./scripts/build-agent-compose-guest.sh
+      - GUEST_IMAGE_DOCKERFILE=./guest-images/Dockerfile.agent-compose-guest-archlinux IMAGE_TAG='{{default "agent-compose-guest:archlinux" .IMAGE_TAG}}' BUILD_PLATFORM='{{default "linux/amd64" .BUILD_PLATFORM}}' HTTP_PROXY='{{default "" .HTTP_PROXY}}' HTTPS_PROXY='{{default "" .HTTPS_PROXY}}' ALL_PROXY='{{default "" .ALL_PROXY}}' NO_PROXY='{{default "" .NO_PROXY}}' REGISTRY_MIRROR='{{default "" .REGISTRY_MIRROR}}' GOPROXY='{{default "" .GOPROXY}}' NPM_CONFIG_REGISTRY='{{default "" .NPM_CONFIG_REGISTRY}}' PIP_INDEX_URL='{{default "" .PIP_INDEX_URL}}' PIP_TRUSTED_HOST='{{default "" .PIP_TRUSTED_HOST}}' ARCHLINUX_MIRROR='{{default "" .ARCHLINUX_MIRROR}}' ./scripts/build-agent-compose-guest.sh
 
   lint:
     desc: Lint/format code
@@ -407,7 +402,7 @@ tasks:
     status:
       - TARGETARCH={{.GOARCH}} AGENT_COMPOSE_ARTIFACT_STATUS_ONLY=1 ./scripts/export-runtime-dev-artifact.sh boxlite ./build/boxlite
     cmds:
-      - TARGETARCH={{.GOARCH}} HTTP_PROXY={{.BUILD_HTTP_PROXY}} HTTPS_PROXY={{.BUILD_HTTPS_PROXY}} ALL_PROXY={{.BUILD_ALL_PROXY}} REGISTRY_MIRROR={{.BUILD_REGISTRY_MIRROR}} ./scripts/export-runtime-dev-artifact.sh boxlite ./build/boxlite
+      - TARGETARCH='{{.GOARCH}}' HTTP_PROXY='{{default "" .HTTP_PROXY}}' HTTPS_PROXY='{{default "" .HTTPS_PROXY}}' ALL_PROXY='{{default "" .ALL_PROXY}}' NO_PROXY='{{default "" .NO_PROXY}}' REGISTRY_MIRROR='{{default "" .REGISTRY_MIRROR}}' GITHUB_MIRROR='{{default "" .GITHUB_MIRROR}}' ./scripts/export-runtime-dev-artifact.sh boxlite ./build/boxlite
 
   prepare:microsandbox-dev:
     internal: true
@@ -426,7 +421,7 @@ tasks:
     status:
       - TARGETARCH={{.GOARCH}} AGENT_COMPOSE_ARTIFACT_STATUS_ONLY=1 ./scripts/export-runtime-dev-artifact.sh microsandbox ./build/microsandbox
     cmds:
-      - TARGETARCH={{.GOARCH}} HTTP_PROXY={{.BUILD_HTTP_PROXY}} HTTPS_PROXY={{.BUILD_HTTPS_PROXY}} ALL_PROXY={{.BUILD_ALL_PROXY}} REGISTRY_MIRROR={{.BUILD_REGISTRY_MIRROR}} ./scripts/export-runtime-dev-artifact.sh microsandbox ./build/microsandbox
+      - TARGETARCH='{{.GOARCH}}' HTTP_PROXY='{{default "" .HTTP_PROXY}}' HTTPS_PROXY='{{default "" .HTTPS_PROXY}}' ALL_PROXY='{{default "" .ALL_PROXY}}' NO_PROXY='{{default "" .NO_PROXY}}' REGISTRY_MIRROR='{{default "" .REGISTRY_MIRROR}}' GITHUB_MIRROR='{{default "" .GITHUB_MIRROR}}' ./scripts/export-runtime-dev-artifact.sh microsandbox ./build/microsandbox
 
   build:agent-compose:
     desc: Build the host agent-compose binary using the platform profile
@@ -491,4 +486,4 @@ tasks:
     dir: '{{.TASKFILE_DIR}}'
     deps: ['prepare:boxlite-dev', 'prepare:microsandbox-dev']
     cmds:
-      - IMAGE_NAME={{default "agent-compose:latest" .IMAGE_NAME}} DOCKERFILE=Dockerfile.agent-compose-local BUILD_CONTEXT={{.TASKFILE_DIR}} VERSION={{.VERSION}} HTTP_PROXY={{.BUILD_HTTP_PROXY}} HTTPS_PROXY={{.BUILD_HTTPS_PROXY}} ALL_PROXY={{.BUILD_ALL_PROXY}} REGISTRY_MIRROR={{.BUILD_REGISTRY_MIRROR}} GOPROXY={{.BUILD_GOPROXY}} ./scripts/build-agent-compose.sh
+      - IMAGE_NAME='{{default "agent-compose:latest" .IMAGE_NAME}}' DOCKERFILE=Dockerfile.agent-compose-local BUILD_CONTEXT='{{.TASKFILE_DIR}}' BUILD_PLATFORM='linux/{{.GOARCH}}' VERSION='{{.VERSION}}' HTTP_PROXY='{{default "" .HTTP_PROXY}}' HTTPS_PROXY='{{default "" .HTTPS_PROXY}}' ALL_PROXY='{{default "" .ALL_PROXY}}' NO_PROXY='{{default "" .NO_PROXY}}' REGISTRY_MIRROR='{{default "" .REGISTRY_MIRROR}}' GOPROXY='{{default "" .GOPROXY}}' ./scripts/build-agent-compose.sh

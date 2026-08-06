@@ -73,8 +73,11 @@ require_regex "$(<"$ARCHLINUX_GUEST_DOCKERFILE")" \
   'upstream mirrorlist default in Arch Linux guest Dockerfile'
 for guest_dockerfile in "$GUEST_DOCKERFILE" "$ARCHLINUX_GUEST_DOCKERFILE"; do
   require_regex "$(<"$guest_dockerfile")" \
-    'npm[[:space:]]+config[[:space:]]+set[[:space:]]+registry[[:space:]]+https://registry\.npmjs\.org' \
-    "official npm registry in $(basename "$guest_dockerfile")"
+    '^ARG[[:space:]]+NPM_CONFIG_REGISTRY=https://registry\.npmjs\.org$' \
+    "official npm registry default in $(basename "$guest_dockerfile")"
+  require_regex "$(<"$guest_dockerfile")" \
+    'npm[[:space:]]+config[[:space:]]+set[[:space:]]+registry[[:space:]]+"\$\{NPM_CONFIG_REGISTRY\}"' \
+    "standard npm registry variable in $(basename "$guest_dockerfile")"
   require_regex "$(<"$guest_dockerfile")" \
     '^ARG[[:space:]]+PYPI_TRUSTED_HOST[[:space:]]*$' \
     "empty trusted PyPI host default in $(basename "$guest_dockerfile")"
@@ -442,6 +445,8 @@ fi
 [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]] || fail 'Arch Linux guest Dockerfile'
 if [[ -f $TASKFILE ]]; then
   taskfile_source=$(<"$TASKFILE")
+  forbid_regex "$taskfile_source" 'BUILD_(HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|REGISTRY_MIRROR|GOPROXY)' \
+    'Task-only aliases for standard build variables'
   require_regex "$taskfile_source" 'image:agent-compose-guest-archlinux:' \
     'Arch Linux guest image task'
   require_regex "$taskfile_source" 'GUEST_IMAGE_DOCKERFILE=.*Dockerfile\.agent-compose-guest-archlinux' \
@@ -450,6 +455,12 @@ if [[ -f $TASKFILE ]]; then
     'Arch Linux guest default local tag'
   require_regex "$taskfile_source" 'BUILD_PLATFORM=.*linux/amd64' \
     'Arch Linux guest amd64 build platform'
+  require_regex "$taskfile_source" "BUILD_PLATFORM='linux/\{\{\.GOARCH\}\}'" \
+    'daemon Docker platform derived from GOARCH'
+  for standard_variable in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR GOPROXY; do
+    require_regex "$taskfile_source" "$standard_variable='\{\{default \"\" \.$standard_variable\}\}'" \
+      "same-name Task forwarding for $standard_variable"
+  done
 fi
 if [[ -f $DAEMON_BUILDER ]]; then
   daemon_builder_source=$(<"$DAEMON_BUILDER")
@@ -624,8 +635,9 @@ run_daemon_builder() { # remaining arguments are environment overrides
     DOCKERFILE=Dockerfile \
     BUILD_CONTEXT="$ROOT_DIR" \
     VERSION=contract \
+    BUILD_PLATFORM= \
     HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= NO_PROXY= no_proxy= \
-    REGISTRY_MIRROR= GOPROXY= \
+    REGISTRY_MIRROR= GOPROXY= GITHUB_MIRROR= \
     "$@" \
     "$DAEMON_BUILDER" >/dev/null
 }
@@ -638,9 +650,11 @@ run_guest_builder() { # remaining arguments are environment overrides
     GUEST_IMAGE_DOCKERFILE="$ROOT_DIR/guest-images/Dockerfile.agent-compose-guest" \
     IMAGE_TAG=agent-compose-guest:contract \
     BUILD_PLATFORM= \
-    REGISTRY_MIRROR= GOPROXY= GO_VERSION= GRPCURL_VERSION= \
+    HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= NO_PROXY= no_proxy= \
+    REGISTRY_MIRROR= GOPROXY= GO_VERSION= GRPCURL_VERSION= NPM_CONFIG_REGISTRY= \
     PYPI_INDEX_URL= PYPI_TRUSTED_HOST= ARCHLINUX_TAG= ARCHLINUX_MIRROR= \
     CODEX_VERSION= CLAUDE_CODE_VERSION= GEMINI_CLI_VERSION= OPENCODE_VERSION= \
+    PI_AGENT_VERSION= PI_MCP_ADAPTER_VERSION= \
     "$@" \
     "$GUEST_BUILDER" >/dev/null
 }
@@ -649,9 +663,17 @@ if ! run_daemon_builder; then
   fail 'daemon image helper default build invocation'
 else
   require_regex "$(<"$FAKE_DOCKER_LOG")" '^VERSION=contract$' 'daemon VERSION build argument'
-  for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR GOPROXY; do
+  for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR GOPROXY GITHUB_MIRROR; do
     forbid_regex "$(<"$FAKE_DOCKER_LOG")" "^$omitted=" "empty daemon $omitted build argument"
   done
+fi
+
+if ! run_daemon_builder BUILD_PLATFORM=linux/arm64; then
+  fail 'daemon image helper platform override invocation'
+else
+  daemon_log=$(<"$FAKE_DOCKER_LOG")
+  require_regex "$daemon_log" '^--platform$' 'daemon build platform flag'
+  require_regex "$daemon_log" '^linux/arm64$' 'daemon build platform value'
 fi
 
 if ! run_daemon_builder \
@@ -660,7 +682,8 @@ if ! run_daemon_builder \
   ALL_PROXY=socks5://all-proxy.invalid:1080 \
   NO_PROXY=localhost,.example.invalid \
   REGISTRY_MIRROR=registry.example.invalid \
-  GOPROXY=https://go-proxy.example.invalid,direct; then
+  GOPROXY=https://go-proxy.example.invalid,direct \
+  GITHUB_MIRROR=https://github.example.invalid; then
   fail 'daemon image helper override build invocation'
 else
   daemon_log=$(<"$FAKE_DOCKER_LOG")
@@ -670,7 +693,8 @@ else
     'ALL_PROXY=socks5://all-proxy.invalid:1080' \
     'NO_PROXY=localhost,.example.invalid' \
     'REGISTRY_MIRROR=registry.example.invalid' \
-    'GOPROXY=https://go-proxy.example.invalid,direct'; do
+    'GOPROXY=https://go-proxy.example.invalid,direct' \
+    'GITHUB_MIRROR=https://github.example.invalid'; do
     require_regex "$daemon_log" "^$forwarded$" "daemon $forwarded build argument"
   done
 fi
@@ -679,7 +703,8 @@ if ! run_guest_builder; then
   fail 'guest image helper default build invocation'
 else
   guest_log=$(<"$FAKE_DOCKER_LOG")
-  for omitted in REGISTRY_MIRROR GOPROXY GO_VERSION GRPCURL_VERSION PYPI_INDEX_URL PYPI_TRUSTED_HOST \
+  for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR GOPROXY GO_VERSION GRPCURL_VERSION \
+    NPM_CONFIG_REGISTRY PYPI_INDEX_URL PYPI_TRUSTED_HOST \
     ARCHLINUX_TAG ARCHLINUX_MIRROR CODEX_VERSION CLAUDE_CODE_VERSION GEMINI_CLI_VERSION OPENCODE_VERSION \
     PI_AGENT_VERSION PI_MCP_ADAPTER_VERSION; do
     forbid_regex "$guest_log" "^$omitted=" "empty guest $omitted build argument"
@@ -695,10 +720,15 @@ else
 fi
 
 if ! run_guest_builder \
+  HTTP_PROXY=http://http-proxy.invalid:8080 \
+  HTTPS_PROXY=http://https-proxy.invalid:8443 \
+  ALL_PROXY=socks5://all-proxy.invalid:1080 \
+  NO_PROXY=localhost,.example.invalid \
   REGISTRY_MIRROR=registry.example.invalid \
   GOPROXY=https://go-proxy.example.invalid,direct \
   GO_VERSION=1.99.0 \
   GRPCURL_VERSION=v9.9.1 \
+  NPM_CONFIG_REGISTRY=https://npm.example.invalid \
   PYPI_INDEX_URL=https://python.example.invalid/simple \
   PYPI_TRUSTED_HOST=python.example.invalid \
   ARCHLINUX_TAG=base-test \
@@ -713,10 +743,15 @@ if ! run_guest_builder \
 else
   guest_log=$(<"$FAKE_DOCKER_LOG")
   for forwarded in \
+    'HTTP_PROXY=http://http-proxy.invalid:8080' \
+    'HTTPS_PROXY=http://https-proxy.invalid:8443' \
+    'ALL_PROXY=socks5://all-proxy.invalid:1080' \
+    'NO_PROXY=localhost,.example.invalid' \
     'REGISTRY_MIRROR=registry.example.invalid' \
     'GOPROXY=https://go-proxy.example.invalid,direct' \
     'GO_VERSION=1.99.0' \
     'GRPCURL_VERSION=v9.9.1' \
+    'NPM_CONFIG_REGISTRY=https://npm.example.invalid' \
     'PYPI_INDEX_URL=https://python.example.invalid/simple' \
     'PYPI_TRUSTED_HOST=python.example.invalid' \
     'ARCHLINUX_TAG=base-test' \

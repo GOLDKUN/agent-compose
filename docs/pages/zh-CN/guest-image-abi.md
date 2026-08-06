@@ -249,6 +249,33 @@ task image:agent-compose-guest-archlinux
 
 镜像 CI 会在 pull request 中构建该变体，并在推送到 `main` 或任意 Git tag 时将其发布到 Docker Hub 的 `chaitin/agent-compose-guest`。它的分支、Git tag 和 SHA tag 使用 `-archlinux` 后缀，`v*` release tag 还会更新稳定 tag `archlinux`。例如，release `vX.Y.Z` 会同时发布 `vX.Y.Z-archlinux` 和 `archlinux`。manifest 仅包含 `linux/amd64`。默认构建使用的上游 `library/archlinux` 镜像仅支持 x86_64；如果团队为其他架构提供了兼容的 Arch Linux base，必须单独构建并验证该变体。Arch Linux guest 不是部署默认镜像，使用时需要在 agent spec 中显式选择，并在投入使用前执行第 10 节中的验证。
 
+### 6.2 仓库镜像构建参数
+
+仓库镜像任务按标准生态变量的原名传递参数。Taskfile 只负责编排，不定义 `BUILD_*` 别名；变量为空时不会传给 Docker，从而保留 Dockerfile 中面向公网环境的默认值。
+
+| 变量 | 作用范围 | 适用任务 |
+| --- | --- | --- |
+| `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` | Docker 构建网络访问 | daemon、两种 guest、native runtime artifact 导出 |
+| `REGISTRY_MIRROR` | 仅 Docker 基础镜像地址 | daemon、两种 guest、native runtime artifact 导出 |
+| `GOPROXY` | Go module 下载 | daemon 和两种 guest |
+| `GITHUB_MIRROR` | BoxLite、Microsandbox 的 GitHub Release 下载 | daemon native runtime artifact 导出 |
+| `NPM_CONFIG_REGISTRY` | npm 包下载 | 两种 guest |
+| `PIP_INDEX_URL`、`PIP_TRUSTED_HOST` | Python 包下载 | 两种 guest |
+| `ARCHLINUX_MIRROR` | pacman 包下载 | 仅 Arch Linux guest |
+
+例如：
+
+```bash
+task image:agent-compose-guest \
+  HTTPS_PROXY=http://proxy.example.com:8080 \
+  REGISTRY_MIRROR=mirror.example.com \
+  GOPROXY=https://goproxy.example.com,direct \
+  NPM_CONFIG_REGISTRY=https://npm.example.com \
+  PIP_INDEX_URL=https://pypi.example.com/simple
+```
+
+写在 task 名称后的参数与导出同名环境变量效果一致。不要把凭据写入提交文件或构建日志。daemon 镜像任务从 `GOARCH` 推导 Docker `--platform`，保证 binary 与 BoxLite/Microsandbox artifact 使用同一架构。
+
 ## 7. 推荐构建方式：继承官方 Guest
 
 这种方式维护面最小，并保留所有受支持能力：

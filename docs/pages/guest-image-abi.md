@@ -360,6 +360,39 @@ validate that variant independently. The Arch Linux guest is not the deployment
 default, so select it explicitly in the agent spec and run the validation in
 Section 10 before using it.
 
+### 6.2 Repository Image Build Inputs
+
+Repository image tasks pass standard ecosystem variables under their original
+names. Taskfile only orchestrates the build; it does not define `BUILD_*`
+aliases. Empty inputs are omitted so Dockerfiles retain their public upstream
+defaults.
+
+| Variable | Scope | Tasks |
+| --- | --- | --- |
+| `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` | Docker build network access | daemon, both guest variants, native runtime artifact export |
+| `REGISTRY_MIRROR` | Docker base-image references only | daemon, both guest variants, native runtime artifact export |
+| `GOPROXY` | Go module downloads | daemon and both guest variants |
+| `GITHUB_MIRROR` | BoxLite and Microsandbox GitHub release downloads | daemon native runtime artifact export |
+| `NPM_CONFIG_REGISTRY` | npm package downloads | both guest variants |
+| `PIP_INDEX_URL`, `PIP_TRUSTED_HOST` | Python package downloads | both guest variants |
+| `ARCHLINUX_MIRROR` | pacman packages | Arch Linux guest only |
+
+For example:
+
+```bash
+task image:agent-compose-guest \
+  HTTPS_PROXY=http://proxy.example.com:8080 \
+  REGISTRY_MIRROR=mirror.example.com \
+  GOPROXY=https://goproxy.example.com,direct \
+  NPM_CONFIG_REGISTRY=https://npm.example.com \
+  PIP_INDEX_URL=https://pypi.example.com/simple
+```
+
+Passing variables after the task name and exporting the same environment
+variables are equivalent. Do not put credentials in committed files or build
+logs. The daemon image task derives Docker `--platform` from `GOARCH`, keeping
+the binary and BoxLite/Microsandbox artifacts on the same architecture.
+
 ## 7. Recommended Build: Extend the Published Guest
 
 This is the smallest maintenance surface and preserves all supported

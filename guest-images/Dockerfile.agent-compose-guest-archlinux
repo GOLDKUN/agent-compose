@@ -6,6 +6,7 @@ ARG ARCHLINUX_TAG=latest
 ARG ARCHLINUX_MIRROR
 ARG PYPI_INDEX_URL=https://pypi.org/simple
 ARG PYPI_TRUSTED_HOST
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org
 ARG CODEX_VERSION=0.146.0
 ARG CLAUDE_CODE_VERSION=2.1.220
 ARG GEMINI_CLI_VERSION=0.53.0
@@ -26,6 +27,7 @@ FROM ${REGISTRY_MIRROR}/library/archlinux:${ARCHLINUX_TAG}
 ARG ARCHLINUX_MIRROR
 ARG PYPI_INDEX_URL
 ARG PYPI_TRUSTED_HOST
+ARG NPM_CONFIG_REGISTRY
 ARG CODEX_VERSION
 ARG CLAUDE_CODE_VERSION
 ARG GEMINI_CLI_VERSION
@@ -59,7 +61,7 @@ RUN if [ -n "${BUILDPLATFORM}" ] && [ "${BUILDPLATFORM}" != "${TARGETPLATFORM}" 
       protobuf \
       python \
       python-pip && \
-    npm config set registry https://registry.npmjs.org --global && \
+    npm config set registry "${NPM_CONFIG_REGISTRY}" --global && \
     npm config set fund false --global && \
     npm config set update-notifier false --global && \
     pacman -Scc --noconfirm && \

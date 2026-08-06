@@ -183,6 +183,7 @@ append_build_arg HTTPS_PROXY "${HTTPS_PROXY:-}"
 append_build_arg ALL_PROXY "${ALL_PROXY:-}"
 append_build_arg NO_PROXY "${NO_PROXY:-${no_proxy:-}}"
 append_build_arg REGISTRY_MIRROR "${REGISTRY_MIRROR:-}"
+append_build_arg GITHUB_MIRROR "${GITHUB_MIRROR:-}"
 
 docker build "${build_args[@]}" "$ROOT_DIR"
 

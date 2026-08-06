@@ -637,6 +637,7 @@ run_exporter() {
     NO_PROXY="${EXPORT_NO_PROXY:-}" \
     no_proxy= \
     REGISTRY_MIRROR="${EXPORT_REGISTRY_MIRROR:-}" \
+    GITHUB_MIRROR="${EXPORT_GITHUB_MIRROR:-}" \
     "$TEST_ROOT/scripts/export-runtime-dev-artifact.sh" "$driver" "$output" \
     >"$RUN_STDOUT" 2>"$RUN_STDERR"
   RUN_STATUS=$?
@@ -649,11 +650,12 @@ EXPORT_HTTPS_PROXY=
 EXPORT_ALL_PROXY=
 EXPORT_NO_PROXY=
 EXPORT_REGISTRY_MIRROR=
+EXPORT_GITHUB_MIRROR=
 run_exporter boxlite "$TEST_ROOT/export-defaults"
 assert_success
 assert_contains "$FAKE_DOCKER_STATE" 'boxlite-build'
 assert_contains "$FAKE_DOCKER_LOG" 'ARG=TARGETARCH=amd64'
-for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR; do
+for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR GITHUB_MIRROR; do
   assert_not_contains "$FAKE_DOCKER_LOG" "ARG=$omitted="
 done
 
@@ -662,6 +664,7 @@ EXPORT_HTTPS_PROXY='http://https-proxy.invalid:8443'
 EXPORT_ALL_PROXY='socks5://all-proxy.invalid:1080'
 EXPORT_NO_PROXY='localhost,.example.invalid'
 EXPORT_REGISTRY_MIRROR='registry.example.invalid'
+EXPORT_GITHUB_MIRROR='https://github.example.invalid'
 run_exporter microsandbox "$TEST_ROOT/export-overrides"
 assert_success
 assert_contains "$FAKE_DOCKER_STATE" 'microsandbox-fetch'
@@ -670,7 +673,8 @@ for forwarded in \
   'HTTPS_PROXY=http://https-proxy.invalid:8443' \
   'ALL_PROXY=socks5://all-proxy.invalid:1080' \
   'NO_PROXY=localhost,.example.invalid' \
-  'REGISTRY_MIRROR=registry.example.invalid'; do
+  'REGISTRY_MIRROR=registry.example.invalid' \
+  'GITHUB_MIRROR=https://github.example.invalid'; do
   assert_contains "$FAKE_DOCKER_LOG" "ARG=$forwarded"
 done
 
