@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -223,14 +222,6 @@ type StreamSink struct {
 
 type RunAttachReceiver func() (*agentcomposev2.AttachAgentRunRequest, error)
 type RunAttachSender func(*agentcomposev2.AttachAgentRunResponse) error
-
-func PrepareStreamingHeaders(headers http.Header) {
-	if headers == nil {
-		return
-	}
-	headers.Set("Cache-Control", "no-cache, no-transform")
-	headers.Set("X-Accel-Buffering", "no")
-}
 
 type StartedProjectRun struct {
 	Run      domain.ProjectRunRecord

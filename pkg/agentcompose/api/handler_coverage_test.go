@@ -51,6 +51,7 @@ func TestTranscriptEventFromExecChunkMapsStdioStream(t *testing.T) {
 }
 
 func TestPrepareStreamingHeadersPreservesNoTransform(t *testing.T) {
+	PrepareStreamingHeaders(nil)
 	headers := http.Header{}
 	PrepareStreamingHeaders(headers)
 	if got, want := headers.Get("Cache-Control"), "no-cache, no-transform"; got != want {

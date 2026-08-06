@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -2300,13 +2299,6 @@ func TestRunsProjectRunLogAppendChunk(t *testing.T) {
 }
 
 func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
-	PrepareStreamingHeaders(nil)
-	headers := http.Header{}
-	PrepareStreamingHeaders(headers)
-	if headers.Get("Cache-Control") != "no-cache, no-transform" || headers.Get("X-Accel-Buffering") != "no" {
-		t.Fatalf("stream headers = %#v", headers)
-	}
-
 	baseJupyter := sandboxstore.CreateSandboxOptions{JupyterGuestPort: 8888}
 	if options, err := resolveRunJupyterOptions(baseJupyter, nil); err != nil ||
 		options.JupyterEnabled != baseJupyter.JupyterEnabled ||

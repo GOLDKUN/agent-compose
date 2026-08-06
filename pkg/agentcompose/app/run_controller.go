@@ -125,7 +125,7 @@ func (d runControllerDelegate) StartAgentRun(ctx context.Context, req *connect.R
 }
 
 func (d runControllerDelegate) StreamAgentRun(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest], stream *connect.ServerStream[agentcomposev2.StreamAgentRunResponse]) error {
-	runs.PrepareStreamingHeaders(stream.ResponseHeader())
+	api.PrepareStreamingHeaders(stream.ResponseHeader())
 	sink := runs.StreamSink{
 		SendStarted: func(run domain.ProjectRunRecord, createdAt time.Time) error {
 			return sendRunAgentStreamStarted(stream, run, createdAt)
