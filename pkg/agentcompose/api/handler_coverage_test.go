@@ -1176,7 +1176,7 @@ type apiExecPromptRunAttachDelegate struct {
 	human *agentcomposev2.AttachHumanMessage
 }
 
-func (d *apiExecPromptRunAttachDelegate) RunProjectCommandAttach(_ context.Context, receive runs.RunAttachReceiver, send runs.RunAttachSender) error {
+func (d *apiExecPromptRunAttachDelegate) RunProjectCommandAttach(_ context.Context, receive func() (*agentcomposev2.AttachAgentRunRequest, error), send runs.RunAttachSender) error {
 	first, err := receive()
 	if err != nil {
 		return err

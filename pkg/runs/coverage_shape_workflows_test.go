@@ -983,23 +983,22 @@ func TestRunsControllerRunProjectPromptAttachGatesQueuedTurnsAndOrdersTranscript
 	interaction := newScriptedRunAttachInteraction()
 	runtime.interactionOverride = interaction
 
-	requests := make(chan *agentcomposev2.AttachAgentRunRequest, 4)
-	requests <- &agentcomposev2.AttachAgentRunRequest{Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
-		Request: &agentcomposev2.RunAgentRequest{ProjectId: "project-1", AgentName: "worker", Prompt: "human-1"},
-		Mode:    agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT,
-	}}}
+	requests := make(chan RunAttachInput, 4)
+	requests <- RunAttachInput{Kind: RunAttachInputStart, Mode: RunAttachModePrompt, Request: RunAgentRequest{
+		ProjectID: "project-1", AgentName: "worker", Prompt: "human-1",
+	}}
 	requests <- humanMessageAttachRequest("human-2")
 	requests <- humanMessageAttachRequest("human-3")
-	requests <- &agentcomposev2.AttachAgentRunRequest{Frame: &agentcomposev2.AttachAgentRunRequest_StdinEof{StdinEof: &agentcomposev2.AttachStdinEOF{}}}
+	requests <- RunAttachInput{Kind: RunAttachInputStdinEOF}
 	close(requests)
 
 	var responses []*agentcomposev2.AttachAgentRunResponse
 	done := make(chan error, 1)
 	go func() {
-		done <- controller.RunProjectCommandAttach(ctx, func() (*agentcomposev2.AttachAgentRunRequest, error) {
+		done <- controller.RunProjectCommandAttach(ctx, func() (RunAttachInput, error) {
 			req, ok := <-requests
 			if !ok {
-				return nil, io.EOF
+				return RunAttachInput{}, io.EOF
 			}
 			return req, nil
 		}, func(resp *agentcomposev2.AttachAgentRunResponse) error {
@@ -2960,14 +2959,53 @@ func (i *fakeRunAttachInteraction) Wait() (driverpkg.RuntimeResult, error) {
 
 func recvAttachAgentRunRequests(requests []*agentcomposev2.AttachAgentRunRequest) RunAttachReceiver {
 	index := 0
-	return func() (*agentcomposev2.AttachAgentRunRequest, error) {
+	return func() (RunAttachInput, error) {
 		if index >= len(requests) {
-			return nil, io.EOF
+			return RunAttachInput{}, io.EOF
 		}
 		req := requests[index]
 		index++
-		return req, nil
+		return runAttachInputFromTestProto(req), nil
 	}
+}
+
+func runAttachInputFromTestProto(request *agentcomposev2.AttachAgentRunRequest) RunAttachInput {
+	input := RunAttachInput{ClientFrameID: request.GetClientFrameId()}
+	switch frame := request.GetFrame().(type) {
+	case *agentcomposev2.AttachAgentRunRequest_Start:
+		start := frame.Start
+		input.Kind = RunAttachInputStart
+		input.Request = runAgentRequestFromAttachStart(start)
+		input.AttachStdin = start.GetAttachStdin()
+		input.TTY = start.GetTty()
+		input.Rows = start.GetTerminalSize().GetRows()
+		input.Cols = start.GetTerminalSize().GetCols()
+		switch start.GetMode() {
+		case agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND:
+			input.Mode = RunAttachModeCommand
+		case agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT:
+			input.Mode = RunAttachModePrompt
+		}
+	case *agentcomposev2.AttachAgentRunRequest_Stdin:
+		input.Kind = RunAttachInputStdin
+		input.Data = frame.Stdin.GetData()
+	case *agentcomposev2.AttachAgentRunRequest_StdinEof:
+		input.Kind = RunAttachInputStdinEOF
+	case *agentcomposev2.AttachAgentRunRequest_Resize:
+		input.Kind = RunAttachInputResize
+		input.Rows = frame.Resize.GetTerminalSize().GetRows()
+		input.Cols = frame.Resize.GetTerminalSize().GetCols()
+	case *agentcomposev2.AttachAgentRunRequest_Signal:
+		input.Kind = RunAttachInputSignal
+		input.Signal = frame.Signal.GetSignal()
+	case *agentcomposev2.AttachAgentRunRequest_Cancel:
+		input.Kind = RunAttachInputCancel
+		input.Reason = frame.Cancel.GetReason()
+	case *agentcomposev2.AttachAgentRunRequest_HumanMessage:
+		input.Kind = RunAttachInputHumanMessage
+		input.Text = frame.HumanMessage.GetText()
+	}
+	return input
 }
 
 type fakeControllerImages struct{}

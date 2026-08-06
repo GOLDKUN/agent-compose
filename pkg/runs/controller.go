@@ -220,7 +220,6 @@ type StreamSink struct {
 	SendChunk   func(runID string, chunk domain.ExecChunk, createdAt time.Time) error
 }
 
-type RunAttachReceiver func() (*agentcomposev2.AttachAgentRunRequest, error)
 type RunAttachSender func(*agentcomposev2.AttachAgentRunResponse) error
 
 type StartedProjectRun struct {
@@ -303,26 +302,25 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		}
 		return err
 	}
-	start := first.GetStart()
-	if start == nil {
+	if first.Kind != RunAttachInputStart {
 		return fmt.Errorf("%w: first run attach frame must be start", ErrInvalidRequest)
 	}
-	mode := start.GetMode()
-	req := runAgentRequestFromAttachStart(start)
+	mode := first.Mode
+	req := first.Request
 	commandText := strings.TrimSpace(req.Command)
-	if mode == agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_UNSPECIFIED && commandText != "" {
-		mode = agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND
+	if mode == RunAttachModeUnspecified && commandText != "" {
+		mode = RunAttachModeCommand
 	}
-	if mode == agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_UNSPECIFIED && strings.TrimSpace(req.Prompt) != "" {
-		mode = agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT
+	if mode == RunAttachModeUnspecified && strings.TrimSpace(req.Prompt) != "" {
+		mode = RunAttachModePrompt
 	}
-	if mode != agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND && mode != agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT {
+	if mode != RunAttachModeCommand && mode != RunAttachModePrompt {
 		return fmt.Errorf("%w: run attach command mode is required", ErrInvalidRequest)
 	}
-	if mode == agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND && commandText == "" {
+	if mode == RunAttachModeCommand && commandText == "" {
 		return fmt.Errorf("%w: run attach command is required", ErrInvalidRequest)
 	}
-	if mode == agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT && strings.TrimSpace(req.Prompt) == "" {
+	if mode == RunAttachModePrompt && strings.TrimSpace(req.Prompt) == "" {
 		return fmt.Errorf("%w: run attach prompt is required", ErrInvalidRequest)
 	}
 	started, err := c.StartProjectRun(ctx, req)
@@ -332,7 +330,7 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	if onStarted != nil {
 		onStarted(started.Run.RunID)
 	}
-	run, execErr, err := c.executeStartedProjectRunAttach(ctx, started.Run, req, started.Warnings, start, mode, receive, send)
+	run, execErr, err := c.executeStartedProjectRunAttach(ctx, started.Run, req, started.Warnings, first, mode, receive, send)
 	if err != nil {
 		return err
 	}
@@ -685,7 +683,7 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.Pr
 	return transition, nil
 }
 
-func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run domain.ProjectRunRecord, req RunAgentRequest, warnings []string, start *agentcomposev2.AttachAgentRunStart, mode agentcomposev2.AttachRunMode, receive RunAttachReceiver, send RunAttachSender) (domain.ProjectRunRecord, error, error) {
+func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run domain.ProjectRunRecord, req RunAgentRequest, warnings []string, start RunAttachInput, mode RunAttachMode, receive RunAttachReceiver, send RunAttachSender) (domain.ProjectRunRecord, error, error) {
 	coordinator := NewCoordinator(c.configDB, domain.StableProjectRunID)
 	commandText := strings.TrimSpace(req.Command)
 	transitionCtx := context.WithoutCancel(ctx)
@@ -718,7 +716,7 @@ func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run dom
 	var transition TransitionRequest
 	var execErr error
 	switch mode {
-	case agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT:
+	case RunAttachModePrompt:
 		transition, execErr = c.runPromptInteraction(ctx, coordinator, run, sandboxResult.Sandbox, req, start, receive, send)
 	default:
 		transition, execErr = c.runCommandInteraction(ctx, coordinator, run, sandboxResult.Sandbox, req, commandText, start, receive, send)
@@ -744,7 +742,7 @@ func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run dom
 	return run, nil, nil
 }
 
-func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandbox *domain.Sandbox, req RunAgentRequest, commandText string, start *agentcomposev2.AttachAgentRunStart, receive RunAttachReceiver, send RunAttachSender) (TransitionRequest, error) {
+func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandbox *domain.Sandbox, req RunAgentRequest, commandText string, start RunAttachInput, receive RunAttachReceiver, send RunAttachSender) (TransitionRequest, error) {
 	artifactsDir := projectRunCommandArtifactsDir(run, sandbox)
 	logsPath := filepath.Join(artifactsDir, "transcript.txt")
 	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath}
@@ -785,7 +783,6 @@ func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coo
 		transition.Error = fmt.Sprintf("command execution failed: %v", err)
 		return transition, err
 	}
-	size := start.GetTerminalSize()
 	spec := driverpkg.RuntimeStartSpec{
 		OperationID: run.RunID,
 		Kind:        driverpkg.RuntimeOperationCommand,
@@ -798,10 +795,10 @@ func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coo
 		},
 		Cwd:         c.config.GuestWorkspacePath,
 		Env:         execEnvMap(req.Env),
-		AttachStdin: start.GetAttachStdin(),
-		TTY:         start.GetTty(),
-		Rows:        size.GetRows(),
-		Cols:        size.GetCols(),
+		AttachStdin: start.AttachStdin,
+		TTY:         start.TTY,
+		Rows:        start.Rows,
+		Cols:        start.Cols,
 	}
 	interaction, err := interactionRuntime.OpenInteraction(ctx, sandbox, vmState, spec)
 	if err != nil {
@@ -848,7 +845,7 @@ func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coo
 				return transition, err
 			}
 			c.publishRunLogChunk(run.RunID, chunk, offset)
-			if err := send(runAttachOutputResponse(frame.Data, stream, start.GetTty())); err != nil {
+			if err := send(runAttachOutputResponse(frame.Data, stream, start.TTY)); err != nil {
 				transition.ExitCode = 1
 				transition.Error = fmt.Sprintf("command execution failed: %v", err)
 				return transition, err
@@ -887,7 +884,7 @@ func markProjectRunInteractionArtifacts(ctx context.Context, coordinator *Coordi
 	})
 }
 
-func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandbox *domain.Sandbox, req RunAgentRequest, start *agentcomposev2.AttachAgentRunStart, receive RunAttachReceiver, send RunAttachSender) (transitionResult TransitionRequest, returnErr error) {
+func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandbox *domain.Sandbox, req RunAgentRequest, _ RunAttachInput, receive RunAttachReceiver, send RunAttachSender) (transitionResult TransitionRequest, returnErr error) {
 	artifactsDir := projectRunCommandArtifactsDir(run, sandbox)
 	logsPath := filepath.Join(artifactsDir, "transcript.txt")
 	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath}
@@ -1375,19 +1372,18 @@ func pumpRunAttachInput(receive RunAttachReceiver, interaction driverpkg.Runtime
 	}
 }
 
-func runtimeInputFrameFromRunAttach(req *agentcomposev2.AttachAgentRunRequest) (driverpkg.RuntimeInputFrame, bool) {
-	switch frame := req.GetFrame().(type) {
-	case *agentcomposev2.AttachAgentRunRequest_Stdin:
-		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputStdin, Data: frame.Stdin.GetData()}, true
-	case *agentcomposev2.AttachAgentRunRequest_StdinEof:
+func runtimeInputFrameFromRunAttach(req RunAttachInput) (driverpkg.RuntimeInputFrame, bool) {
+	switch req.Kind {
+	case RunAttachInputStdin:
+		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputStdin, Data: req.Data}, true
+	case RunAttachInputStdinEOF:
 		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputStdinEOF}, true
-	case *agentcomposev2.AttachAgentRunRequest_Resize:
-		size := frame.Resize.GetTerminalSize()
-		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputResize, Rows: size.GetRows(), Cols: size.GetCols()}, true
-	case *agentcomposev2.AttachAgentRunRequest_Signal:
-		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputSignal, Signal: driverpkg.RuntimeSignal(strings.TrimSpace(frame.Signal.GetSignal()))}, true
-	case *agentcomposev2.AttachAgentRunRequest_Cancel:
-		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputCancel, Message: frame.Cancel.GetReason()}, true
+	case RunAttachInputResize:
+		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputResize, Rows: req.Rows, Cols: req.Cols}, true
+	case RunAttachInputSignal:
+		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputSignal, Signal: driverpkg.RuntimeSignal(strings.TrimSpace(req.Signal))}, true
+	case RunAttachInputCancel:
+		return driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputCancel, Message: req.Reason}, true
 	default:
 		return driverpkg.RuntimeInputFrame{}, false
 	}
@@ -1457,22 +1453,20 @@ func pumpRunPromptAttachInput(ctx context.Context, receive RunAttachReceiver, in
 			_ = input.EOF()
 			return
 		}
-		switch frame := req.GetFrame().(type) {
-		case *agentcomposev2.AttachAgentRunRequest_HumanMessage:
-			text := frame.HumanMessage.GetText()
-			if !forwardPromptHumanMessage(ctx, input, turnReady, text, req.GetClientFrameId(), onHumanMessage) {
+		switch req.Kind {
+		case RunAttachInputHumanMessage:
+			if !forwardPromptHumanMessage(ctx, input, turnReady, req.Text, req.ClientFrameID, onHumanMessage) {
 				return
 			}
-		case *agentcomposev2.AttachAgentRunRequest_Stdin:
-			text := string(frame.Stdin.GetData())
-			if !forwardPromptHumanMessage(ctx, input, turnReady, text, req.GetClientFrameId(), onHumanMessage) {
+		case RunAttachInputStdin:
+			if !forwardPromptHumanMessage(ctx, input, turnReady, string(req.Data), req.ClientFrameID, onHumanMessage) {
 				return
 			}
-		case *agentcomposev2.AttachAgentRunRequest_StdinEof:
+		case RunAttachInputStdinEOF:
 			_ = input.EOF()
 			return
-		case *agentcomposev2.AttachAgentRunRequest_Cancel:
-			_ = input.Cancel(frame.Cancel.GetReason())
+		case RunAttachInputCancel:
+			_ = input.Cancel(req.Reason)
 			return
 		default:
 			_ = input.Cancel("invalid run prompt attach frame")

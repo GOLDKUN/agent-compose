@@ -88,11 +88,11 @@ type runControllerDelegate struct {
 	supervisor *RunSupervisor
 }
 
-func (d runControllerDelegate) RunProjectCommandAttach(ctx context.Context, receive runs.RunAttachReceiver, send runs.RunAttachSender) error {
+func (d runControllerDelegate) RunProjectCommandAttach(ctx context.Context, receive func() (*agentcomposev2.AttachAgentRunRequest, error), send runs.RunAttachSender) error {
 	if d.supervisor == nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("run supervisor is required"))
 	}
-	return runConnectError(d.supervisor.Attach(ctx, receive, send))
+	return runConnectError(d.supervisor.Attach(ctx, receiveRunAttachInput(receive), send))
 }
 
 func (d runControllerDelegate) RunAgent(ctx context.Context, req *connect.Request[agentcomposev2.RunAgentRequest]) (*connect.Response[agentcomposev2.RunAgentResponse], error) {
@@ -199,7 +199,7 @@ func (d runControllerDelegate) AttachAgentRun(ctx context.Context, stream *conne
 	if d.controller == nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("run controller is required"))
 	}
-	if err := d.controller.RunProjectCommandAttach(ctx, stream.Receive, stream.Send); err != nil {
+	if err := d.controller.RunProjectCommandAttach(ctx, receiveRunAttachInput(stream.Receive), stream.Send); err != nil {
 		var connectErr *connect.Error
 		if errors.As(err, &connectErr) {
 			return connectErr
@@ -207,6 +207,55 @@ func (d runControllerDelegate) AttachAgentRun(ctx context.Context, stream *conne
 		return runConnectError(err)
 	}
 	return nil
+}
+
+func receiveRunAttachInput(receive func() (*agentcomposev2.AttachAgentRunRequest, error)) runs.RunAttachReceiver {
+	return func() (runs.RunAttachInput, error) {
+		request, err := receive()
+		if err != nil {
+			return runs.RunAttachInput{}, err
+		}
+		return runAttachInputFromProto(request), nil
+	}
+}
+
+func runAttachInputFromProto(request *agentcomposev2.AttachAgentRunRequest) runs.RunAttachInput {
+	input := runs.RunAttachInput{ClientFrameID: request.GetClientFrameId()}
+	switch frame := request.GetFrame().(type) {
+	case *agentcomposev2.AttachAgentRunRequest_Start:
+		start := frame.Start
+		input.Kind = runs.RunAttachInputStart
+		input.Request = runAgentRequestFromProto(start.GetRequest())
+		input.AttachStdin = start.GetAttachStdin()
+		input.TTY = start.GetTty()
+		input.Rows = start.GetTerminalSize().GetRows()
+		input.Cols = start.GetTerminalSize().GetCols()
+		switch start.GetMode() {
+		case agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_COMMAND:
+			input.Mode = runs.RunAttachModeCommand
+		case agentcomposev2.AttachRunMode_ATTACH_RUN_MODE_PROMPT:
+			input.Mode = runs.RunAttachModePrompt
+		}
+	case *agentcomposev2.AttachAgentRunRequest_Stdin:
+		input.Kind = runs.RunAttachInputStdin
+		input.Data = append([]byte(nil), frame.Stdin.GetData()...)
+	case *agentcomposev2.AttachAgentRunRequest_StdinEof:
+		input.Kind = runs.RunAttachInputStdinEOF
+	case *agentcomposev2.AttachAgentRunRequest_Resize:
+		input.Kind = runs.RunAttachInputResize
+		input.Rows = frame.Resize.GetTerminalSize().GetRows()
+		input.Cols = frame.Resize.GetTerminalSize().GetCols()
+	case *agentcomposev2.AttachAgentRunRequest_Signal:
+		input.Kind = runs.RunAttachInputSignal
+		input.Signal = frame.Signal.GetSignal()
+	case *agentcomposev2.AttachAgentRunRequest_Cancel:
+		input.Kind = runs.RunAttachInputCancel
+		input.Reason = frame.Cancel.GetReason()
+	case *agentcomposev2.AttachAgentRunRequest_HumanMessage:
+		input.Kind = runs.RunAttachInputHumanMessage
+		input.Text = frame.HumanMessage.GetText()
+	}
+	return input
 }
 
 func runAgentRequestFromProto(msg *agentcomposev2.RunAgentRequest) runs.RunAgentRequest {
