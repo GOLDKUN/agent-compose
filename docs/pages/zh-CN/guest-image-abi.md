@@ -249,6 +249,46 @@ task image:agent-compose-guest-archlinux
 
 镜像 CI 会在 pull request 中构建该变体，并在推送到 `main` 或任意 Git tag 时将其发布到 Docker Hub 的 `chaitin/agent-compose-guest`。它的分支、Git tag 和 SHA tag 使用 `-archlinux` 后缀，`v*` release tag 还会更新稳定 tag `archlinux`。例如，release `vX.Y.Z` 会同时发布 `vX.Y.Z-archlinux` 和 `archlinux`。manifest 仅包含 `linux/amd64`。默认构建使用的上游 `library/archlinux` 镜像仅支持 x86_64；如果团队为其他架构提供了兼容的 Arch Linux base，必须单独构建并验证该变体。Arch Linux guest 不是部署默认镜像，使用时需要在 agent spec 中显式选择，并在投入使用前执行第 10 节中的验证。
 
+### 6.2 仓库镜像构建参数
+
+仓库镜像任务按标准生态变量的原名传递参数。Taskfile 只负责编排，不定义 `BUILD_*` 别名；变量为空时不会传给 Docker，从而保留 Dockerfile 中面向公网环境的默认值。
+
+| 变量 | 作用范围 | 适用任务 |
+| --- | --- | --- |
+| `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` | Docker 构建网络访问 | daemon、两种 guest、native runtime artifact 导出 |
+| `REGISTRY_MIRROR` | 仅 Docker 基础镜像地址 | daemon、两种 guest、native runtime artifact 导出 |
+| `GOPROXY` | Go module 下载 | daemon 和两种 guest |
+| `GITHUB_MIRROR` | BoxLite、Microsandbox 的 GitHub Release 下载 | daemon native runtime artifact 导出 |
+| `NPM_CONFIG_REGISTRY` | npm 包下载 | 两种 guest |
+| `PIP_INDEX_URL`、`PIP_TRUSTED_HOST` | Python 包下载 | 两种 guest |
+| `ARCHLINUX_MIRROR` | pacman 包下载 | 仅 Arch Linux guest |
+
+同时接受小写的 `http_proxy`、`https_proxy`、`all_proxy` 和 `no_proxy`，并将其规范化为对应的 Docker 代理构建参数。其余构建控制变量如下：
+
+| 变量 | 作用范围 |
+| --- | --- |
+| `DOCKER_DEFAULT_PLATFORM` | Docker 目标平台；daemon task 从 `GOARCH` 推导，Arch Linux guest 默认为 `linux/amd64` |
+| `IMAGE_NAME`、`IMAGE_TAG` | 本地 daemon 与 guest 镜像 tag |
+| `NO_CACHE=1` | 传递 Docker `--no-cache` 参数 |
+| `GO_VERSION`、`GRPCURL_VERSION`、`NODE_MAJOR` | 默认 guest 工具链参数；`NODE_MAJOR` 仅适用于 Debian guest |
+| `ARCHLINUX_TAG` | Arch Linux guest 基础镜像 tag |
+| `CODEX_VERSION`、`CLAUDE_CODE_VERSION`、`GEMINI_CLI_VERSION`、`OPENCODE_VERSION`、`PI_AGENT_VERSION`、`PI_MCP_ADAPTER_VERSION` | guest provider 包版本 |
+
+`REGISTRY_MIRROR`、`GITHUB_MIRROR` 和 `ARCHLINUX_MIRROR` 没有跨工具通用的标准环境变量，因此保留为作用域明确的项目参数。`REGISTRY_MIRROR` 不是 dockerd mirror 配置，只负责改写仓库 Dockerfile 中的基础镜像地址。
+
+例如：
+
+```bash
+task image:agent-compose-guest \
+  HTTPS_PROXY=http://proxy.example.com:8080 \
+  REGISTRY_MIRROR=mirror.example.com \
+  GOPROXY=https://goproxy.example.com,direct \
+  NPM_CONFIG_REGISTRY=https://npm.example.com \
+  PIP_INDEX_URL=https://pypi.example.com/simple
+```
+
+写在 task 名称后的参数与导出同名环境变量效果一致。不要把凭据写入提交文件或构建日志。daemon 镜像任务从 `GOARCH` 推导 `DOCKER_DEFAULT_PLATFORM`，保证 binary 与 BoxLite/Microsandbox artifact 使用同一架构。
+
 ## 7. 推荐构建方式：继承官方 Guest
 
 这种方式维护面最小，并保留所有受支持能力：

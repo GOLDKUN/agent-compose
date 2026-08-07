@@ -325,6 +325,20 @@ task test          # 或：task test:unit / task test:integration / task test:e2
 
 用 `task image:agent-compose-guest` 和 `task image:agent-compose` 构建 guest 和 daemon 镜像。`task build:agent-compose` 按当前宿主选择原生 profile：Darwin 构建仅支持 Docker 的二进制，Linux 构建同时支持 Docker、BoxLite 和 Microsandbox；Linux full 构建会通过 Docker 准备两种 native runtime artifact。也可通过 `task build:agent-compose:darwin` 或 `task build:agent-compose:linux` 显式选择。旧任务 `build:agent-compose:boxlite` 已废弃，仅作为 Linux full profile 的兼容 alias。JavaScript runtime 组件在 `runtime/` 下。
 
+镜像构建直接使用标准生态变量；不覆盖时使用公网默认值。受限网络可以把同名变量写在 `task` 命令后，或提前导出到环境中，例如：
+
+```bash
+task image:agent-compose-guest \
+  HTTPS_PROXY=http://proxy.example.com:8080 \
+  NO_PROXY=localhost,127.0.0.1 \
+  REGISTRY_MIRROR=mirror.example.com \
+  GOPROXY=https://goproxy.example.com,direct \
+  NPM_CONFIG_REGISTRY=https://npm.example.com \
+  PIP_INDEX_URL=https://pypi.example.com/simple
+```
+
+`REGISTRY_MIRROR` 只改变 Docker 基础镜像地址；`GOPROXY`、`GITHUB_MIRROR`、`NPM_CONFIG_REGISTRY`、`PIP_INDEX_URL` 和 `ARCHLINUX_MIRROR` 分别控制对应的依赖生态。构建系统不为这些变量提供 `BUILD_*` 别名。完整作用域和任务矩阵见 [Guest Image ABI](docs/pages/zh-CN/guest-image-abi.md#62-仓库镜像构建参数)。
+
 macOS/Linux daemon 原生二进制只用于本地开发和 CI 验证。独立的 Go installer 以 Linux amd64/arm64 二进制发布在固定的 `installer-latest` prerelease，并读取普通应用 Release 中的部署 bundle；正式部署载体仍是 Docker Hub 中的 multi-arch daemon/guest 镜像加该 installer。
 
 ## 文档

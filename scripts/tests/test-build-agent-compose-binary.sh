@@ -632,11 +632,17 @@ run_exporter() {
     FAKE_DOCKER_STATE="$FAKE_DOCKER_STATE" \
     TARGETARCH="${EXPORT_TARGETARCH:-amd64}" \
     HTTP_PROXY="${EXPORT_HTTP_PROXY:-}" \
+    http_proxy= \
     HTTPS_PROXY="${EXPORT_HTTPS_PROXY:-}" \
+    https_proxy= \
     ALL_PROXY="${EXPORT_ALL_PROXY:-}" \
+    all_proxy= \
     NO_PROXY="${EXPORT_NO_PROXY:-}" \
     no_proxy= \
     REGISTRY_MIRROR="${EXPORT_REGISTRY_MIRROR:-}" \
+    GITHUB_MIRROR="${EXPORT_GITHUB_MIRROR:-}" \
+    BOXLITE_VERSION="${EXPORT_BOXLITE_VERSION:-}" \
+    MICROSANDBOX_VERSION="${EXPORT_MICROSANDBOX_VERSION:-}" \
     "$TEST_ROOT/scripts/export-runtime-dev-artifact.sh" "$driver" "$output" \
     >"$RUN_STDOUT" 2>"$RUN_STDERR"
   RUN_STATUS=$?
@@ -649,11 +655,14 @@ EXPORT_HTTPS_PROXY=
 EXPORT_ALL_PROXY=
 EXPORT_NO_PROXY=
 EXPORT_REGISTRY_MIRROR=
+EXPORT_GITHUB_MIRROR=
+EXPORT_BOXLITE_VERSION=
+EXPORT_MICROSANDBOX_VERSION=
 run_exporter boxlite "$TEST_ROOT/export-defaults"
 assert_success
 assert_contains "$FAKE_DOCKER_STATE" 'boxlite-build'
 assert_contains "$FAKE_DOCKER_LOG" 'ARG=TARGETARCH=amd64'
-for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR; do
+for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR GITHUB_MIRROR BOXLITE_VERSION MICROSANDBOX_VERSION; do
   assert_not_contains "$FAKE_DOCKER_LOG" "ARG=$omitted="
 done
 
@@ -662,6 +671,8 @@ EXPORT_HTTPS_PROXY='http://https-proxy.invalid:8443'
 EXPORT_ALL_PROXY='socks5://all-proxy.invalid:1080'
 EXPORT_NO_PROXY='localhost,.example.invalid'
 EXPORT_REGISTRY_MIRROR='registry.example.invalid'
+EXPORT_GITHUB_MIRROR='https://github.example.invalid'
+EXPORT_MICROSANDBOX_VERSION='v9.9.9'
 run_exporter microsandbox "$TEST_ROOT/export-overrides"
 assert_success
 assert_contains "$FAKE_DOCKER_STATE" 'microsandbox-fetch'
@@ -670,9 +681,21 @@ for forwarded in \
   'HTTPS_PROXY=http://https-proxy.invalid:8443' \
   'ALL_PROXY=socks5://all-proxy.invalid:1080' \
   'NO_PROXY=localhost,.example.invalid' \
-  'REGISTRY_MIRROR=registry.example.invalid'; do
+  'REGISTRY_MIRROR=registry.example.invalid' \
+  'GITHUB_MIRROR=https://github.example.invalid' \
+  'MICROSANDBOX_VERSION=v9.9.9'; do
   assert_contains "$FAKE_DOCKER_LOG" "ARG=$forwarded"
 done
+assert_not_contains "$FAKE_DOCKER_LOG" 'ARG=BOXLITE_VERSION='
+
+EXPORT_TARGETARCH=amd64
+EXPORT_BOXLITE_VERSION='v8.8.8'
+EXPORT_MICROSANDBOX_VERSION=
+run_exporter boxlite "$TEST_ROOT/export-defaults"
+assert_success
+assert_contains "$FAKE_DOCKER_LOG" 'ARG=BOXLITE_VERSION=v8.8.8'
+assert_contains "$TEST_ROOT/export-defaults/.agent-compose-artifact-source" \
+  'runtime_version_override=v8.8.8'
 
 run_exporter future "$TEST_ROOT/export-unknown"
 assert_status 2

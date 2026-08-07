@@ -390,6 +390,27 @@ profile on Linux. Use `task build:agent-compose:darwin` or
 profile. It is not a separate BoxLite-only build. `compiled_drivers` can verify
 the resulting build capability, but not runtime availability.
 
+Image builds use standard ecosystem variables directly. With no overrides they
+use the public upstream defaults. Restricted networks can pass the same names
+after `task` or export them in the environment, for example:
+
+```bash
+task image:agent-compose-guest \
+  HTTPS_PROXY=http://proxy.example.com:8080 \
+  NO_PROXY=localhost,127.0.0.1 \
+  REGISTRY_MIRROR=mirror.example.com \
+  GOPROXY=https://goproxy.example.com,direct \
+  NPM_CONFIG_REGISTRY=https://npm.example.com \
+  PIP_INDEX_URL=https://pypi.example.com/simple
+```
+
+`REGISTRY_MIRROR` changes Docker base-image references only. `GOPROXY`,
+`GITHUB_MIRROR`, `NPM_CONFIG_REGISTRY`, `PIP_INDEX_URL`, and
+`ARCHLINUX_MIRROR` control their corresponding dependency ecosystems. There
+are no `BUILD_*` aliases for these variables. See the
+[guest image ABI](docs/pages/guest-image-abi.md#62-repository-image-build-inputs)
+for the complete scope and task matrix.
+
 Stable deployment and full-image Docker smoke entry points are:
 
 ```bash
