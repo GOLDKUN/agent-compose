@@ -185,7 +185,7 @@ describe("workflow runtime", () => {
       const runtime = await createRuntime(root, "run_repeated_nested", source, runPrompt as never);
 
       await expect(runtime.execute()).resolves.toEqual(["one", "two"]);
-      expect(runtime.agents.map((agent) => agent.invocationKey)).toEqual([
+      expect(runtime.agents.map((agent) => agent.invocationKey).sort()).toEqual([
         "root/parallel:0/workflow:0:child/nested:child/agent:0",
         "root/parallel:1/workflow:0:child/nested:child/agent:0",
       ]);
