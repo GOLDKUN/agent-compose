@@ -54,6 +54,23 @@ describe("workflow runtime", () => {
     });
   });
 
+  it("derives default labels from stable context-local identities", async () => {
+    await withTempSession(async (root) => {
+      const runPrompt = vi.fn(async ({ promptText }: { promptText?: string }): Promise<AgentResult> => agentResult(promptText ?? ""));
+      const runtime = await createRuntime(root, "run_stable_labels", `export const meta = { name: "stable-labels", description: "test" }
+        return await parallel([
+          async () => { await Promise.resolve(); return agent("first") },
+          () => agent("second", { key: "named" }),
+        ])`, runPrompt as never);
+
+      await runtime.execute();
+      expect(Object.fromEntries(runtime.agents.map((agent) => [agent.invocationKey, agent.label]))).toEqual({
+        "root/parallel:0/agent:0": "agent 1",
+        "root/parallel:1/key:named": "agent named",
+      });
+    });
+  });
+
   it("settles parallel branch failures but direct agent failures reject", async () => {
     await withTempSession(async (root) => {
       const fail = vi.fn(async ({ promptText }: { promptText?: string }): Promise<AgentResult> => {

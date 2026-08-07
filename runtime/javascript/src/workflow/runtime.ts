@@ -146,6 +146,7 @@ export class WorkflowRuntime {
 
     const context = this.context();
     const options = normalizeAgentOptions(rawOptions, this.options.provider, this.options.model);
+    const defaultLabelIdentity = options.key ?? String(context.ordinals.agent + 1);
     const invocationKey = this.invocationKey(context, options.key);
     if (this.invocationKeys.has(invocationKey)) {
       throw new Error(`duplicate workflow invocationKey: ${invocationKey}`);
@@ -153,7 +154,7 @@ export class WorkflowRuntime {
     this.invocationKeys.add(invocationKey);
     const agentId = `a${this.invocationCount}`;
     const phase = options.phase ?? context.phase;
-    const label = options.label ?? `${phase ? `${phase} ` : ""}agent ${this.invocationCount}`;
+    const label = options.label ?? `${phase ? `${phase} ` : ""}agent ${defaultLabelIdentity}`;
     const inputHash = sha256(canonicalJSON({
       scriptHash: context.scriptHash,
       invocationKey,

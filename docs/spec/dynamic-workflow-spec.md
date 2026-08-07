@@ -428,7 +428,9 @@ type WorkflowRef = {
 
 ### Agent option 语义
 
-`label` 用于进度、日志和 record。未设置时生成 `${phase} agent ${index}` 或 `agent ${index}`。
+`label` 用于进度、日志和 record。未设置时根据稳定的调用身份生成：显式 `key` 使用
+`${phase} agent ${key}` 或 `agent ${key}`，否则使用上下文内的 agent 序号。并发分支的到达顺序不得改变默认
+label，避免相同 `invocationKey` 在 replay 时产生不同的 system context 和 `inputHash`。
 
 `key` 是当前结构上下文内可选的稳定逻辑名称，用于派生 `invocationKey`。它必须匹配 `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`，同一上下文内重复时报错。未设置时使用当前 parallel/pipeline/nested workflow 结构路径加局部递增序号；该序号在每个异步上下文内独立分配，不依赖并发任务的实际启动顺序。
 
