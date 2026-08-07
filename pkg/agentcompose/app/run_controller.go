@@ -228,6 +228,9 @@ func runAttachInputFromProto(request *agentcomposev2.AttachAgentRunRequest) runs
 		start := frame.Start
 		input.Kind = runs.RunAttachInputStart
 		input.Request = runAgentRequestFromProto(start.GetRequest())
+		// AttachAgentRun historically ignored request-scoped volume mounts. Keep
+		// that compatibility behavior while other run transports map volumes.
+		input.Request.Volumes = nil
 		input.AttachStdin = start.GetAttachStdin()
 		input.TTY = start.GetTty()
 		input.Rows = start.GetTerminalSize().GetRows()
