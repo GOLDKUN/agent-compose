@@ -94,7 +94,11 @@ export function childAbortController(
 ): { controller: AbortController; dispose(): void } {
   const controller = new AbortController();
   const abort = () => controller.abort();
-  parent.addEventListener("abort", abort, { once: true });
+  if (parent.aborted) {
+    abort();
+  } else {
+    parent.addEventListener("abort", abort, { once: true });
+  }
   const timeout = timeoutMs === undefined ? undefined : setTimeout(abort, timeoutMs);
   timeout?.unref();
   return {

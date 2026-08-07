@@ -36,8 +36,10 @@ import {
 interface ExecutionContext {
   phase: string;
   path: string[];
-  nextAgentOrdinal: number;
-  nextWorkflowOrdinal: number;
+  ordinals: {
+    agent: number;
+    workflow: number;
+  };
   usedKeys: Set<string>;
   nestedDepth: number;
   scriptHash: string;
@@ -90,8 +92,7 @@ export class WorkflowRuntime {
     const rootContext: ExecutionContext = {
       phase: "",
       path: nestedDepth === 0 ? ["root"] : [...this.context().path, `nested:${parsed.meta.name}`],
-      nextAgentOrdinal: 0,
-      nextWorkflowOrdinal: 0,
+      ordinals: { agent: 0, workflow: 0 },
       usedKeys: new Set(),
       nestedDepth,
       scriptHash: parsed.scriptHash,
@@ -181,6 +182,7 @@ export class WorkflowRuntime {
         result: structuredClone(cached.result),
         providerSessionId: cached.providerSessionId,
         worktreePath: cached.worktreePath,
+        worktreeHead: cached.worktreeHead,
         gitStatus: cached.gitStatus,
         completedAt: new Date().toISOString(),
         durationMs: 0,
@@ -356,7 +358,7 @@ export class WorkflowRuntime {
     }
     const resolved = await resolveNestedWorkflow(reference, currentScriptFile, this.options.workspace, this.options.stateRoot);
     const parsed = parseWorkflowScript(resolved.source);
-    const nestedPath = [...context.path, `workflow:${context.nextWorkflowOrdinal++}:${parsed.meta.name}`];
+    const nestedPath = [...context.path, `workflow:${context.ordinals.workflow++}:${parsed.meta.name}`];
     const nestedId = `n${++this.nestedCount}`;
     const started = Date.now();
     const snapshot: NestedWorkflowSnapshot = {
@@ -415,7 +417,7 @@ export class WorkflowRuntime {
       context.usedKeys.add(key);
       suffix = `key:${key}`;
     } else {
-      suffix = `agent:${context.nextAgentOrdinal++}`;
+      suffix = `agent:${context.ordinals.agent++}`;
     }
     return [...context.path, suffix].join("/");
   }
@@ -459,8 +461,7 @@ function childContext(parent: ExecutionContext, segment: string): ExecutionConte
   return {
     phase: parent.phase,
     path: [...parent.path, segment],
-    nextAgentOrdinal: 0,
-    nextWorkflowOrdinal: 0,
+    ordinals: { agent: 0, workflow: 0 },
     usedKeys: new Set(),
     nestedDepth: parent.nestedDepth,
     scriptHash: parent.scriptHash,

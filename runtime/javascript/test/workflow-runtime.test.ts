@@ -3,12 +3,22 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentResult } from "../src/types.js";
 import { WorkflowEventWriter } from "../src/workflow/events.js";
+import { childAbortController } from "../src/workflow/agent-invocation.js";
 import { parseWorkflowScript } from "../src/workflow/parser.js";
 import { WorkflowRuntime } from "../src/workflow/runtime.js";
 import { WorkflowStateStore } from "../src/workflow/state.js";
 import { withTempSession } from "./helpers.js";
 
 describe("workflow runtime", () => {
+  it("inherits cancellation when the parent signal is already aborted", () => {
+    const parent = new AbortController();
+    parent.abort();
+
+    const child = childAbortController(parent.signal);
+    expect(child.controller.signal.aborted).toBe(true);
+    child.dispose();
+  });
+
   it("runs parallel agents with stable invocation paths and scoped phases", async () => {
     await withTempSession(async (root) => {
       const runPrompt = vi.fn(async ({ promptText }: { promptText?: string }): Promise<AgentResult> => agentResult(promptText ?? ""));
@@ -24,6 +34,23 @@ describe("workflow runtime", () => {
         ["root/parallel:1/key:scan", "Frontend"],
       ]);
       expect(runPrompt).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("keeps agent ordinals unique across sequential scoped phases", async () => {
+    await withTempSession(async (root) => {
+      const runPrompt = vi.fn(async ({ promptText }: { promptText?: string }): Promise<AgentResult> => agentResult(promptText ?? ""));
+      const runtime = await createRuntime(root, "run_phases", `export const meta = { name: "phases", description: "test" }
+        await phase("First", () => agent("first"))
+        await phase("Second", () => agent("second"))
+        return await agent("third")`, runPrompt as never);
+
+      await expect(runtime.execute()).resolves.toBe("third");
+      expect(runtime.agents.map((agent) => agent.invocationKey)).toEqual([
+        "root/agent:0",
+        "root/agent:1",
+        "root/agent:2",
+      ]);
     });
   });
 

@@ -58,6 +58,58 @@ describe("workflow worktree integration", () => {
     });
   });
 
+  it("reuses an isolated agent across consecutive resume generations", async () => {
+    await withTempSession(async (root) => {
+      const workspace = path.join(root, "repository");
+      await fs.mkdir(workspace);
+      await git(workspace, ["init"]);
+      await git(workspace, ["config", "user.email", "workflow@example.test"]);
+      await git(workspace, ["config", "user.name", "Workflow Test"]);
+      await fs.writeFile(path.join(workspace, "README.md"), "base\n");
+      await git(workspace, ["add", "README.md"]);
+      await git(workspace, ["commit", "-m", "initial"]);
+
+      const source = `export const meta = { name: "resume-worktree", description: "test" }
+        return await agent("modify", { isolation: "worktree", key: "edit" })`;
+      const stateRoot = path.join(root, "state");
+      const runPrompt = vi.fn(async ({ workspace: agentWorkspace }: { workspace?: string }): Promise<AgentResult> => {
+        await fs.writeFile(path.join(agentWorkspace as string, "change.txt"), "changed\n");
+        return agentResult("modified");
+      });
+      const createRuntime = async (runId: string, resumeAgents: WorkflowRuntime["agents"] = []) => {
+        const store = await WorkflowStateStore.create(stateRoot, runId);
+        return new WorkflowRuntime({
+          runId,
+          parsed: parseWorkflowScript(source),
+          args: null,
+          scriptFile: path.join(root, "workflow.js"),
+          stateRoot,
+          workspace,
+          home: path.join(root, "home"),
+          provider: "codex",
+          abortController: new AbortController(),
+          store,
+          events: new WorkflowEventWriter(store.eventsPath, { write: () => true } as never),
+          resumeAgents,
+          runPrompt: runPrompt as never,
+        });
+      };
+
+      const first = await createRuntime("run_first");
+      await expect(first.execute()).resolves.toBe("modified");
+      const second = await createRuntime("run_second", first.agents);
+      await expect(second.execute()).resolves.toBe("modified");
+      const third = await createRuntime("run_third", second.agents);
+      await expect(third.execute()).resolves.toBe("modified");
+
+      expect(runPrompt).toHaveBeenCalledTimes(1);
+      expect([first.agents[0].status, second.agents[0].status, third.agents[0].status]).toEqual([
+        "done", "cached", "cached",
+      ]);
+      expect(second.agents[0].worktreeHead).toBe(first.agents[0].worktreeHead);
+    });
+  });
+
   it("distinguishes a registered linked worktree from an ordinary repository at the managed path", async () => {
     await withTempSession(async (root) => {
       const workspace = path.join(root, "repository");
