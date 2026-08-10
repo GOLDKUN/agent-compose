@@ -254,3 +254,244 @@ func TestEventTraceReportsDescendantTruncation(t *testing.T) {
 		t.Fatalf("truncated trace = %#v", trace)
 	}
 }
+
+func TestEventTraceIncludesCorrelationSiblingsWithoutParentLink(t *testing.T) {
+	ctx := context.Background()
+	store := FromDB(newMemoryDB(t))
+	if err := store.initSchema(ctx); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+	scheduler, err := upsertNativeTestScheduler(ctx, store, domain.Scheduler{
+		Summary: domain.SchedulerSummary{
+			ID: "scheduler-sibling", ProjectID: "project-sibling", AgentName: "worker", Name: "Sibling Automation", Enabled: true,
+		},
+		Triggers: []domain.SchedulerTrigger{{ID: "trigger-sibling", Kind: domain.SchedulerTriggerKindEvent, Topic: "webhook.forwarded.topic", Enabled: true}},
+	})
+	if err != nil {
+		t.Fatalf("upsert scheduler: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE project_scheduler SET spec_json = ? WHERE id = ?`, `{"display_name":"Sibling Automation"}`, scheduler.Summary.ID); err != nil {
+		t.Fatalf("update scheduler presentation: %v", err)
+	}
+
+	root, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-root", Topic: "webhook.github.push", Source: domain.TopicEventSourceWebhook,
+		CorrelationID: "corr-sibling", PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	})
+	if err != nil {
+		t.Fatalf("create root event: %v", err)
+	}
+
+	// A forwarded webhook event: same correlation, no parent_event_id.
+	forwarded, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-forwarded", Topic: "webhook.forwarded.topic", Source: domain.TopicEventSourceWebhook,
+		CorrelationID: root.CorrelationID, ParentEventID: "", PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	})
+	if err != nil {
+		t.Fatalf("create forwarded event: %v", err)
+	}
+
+	// A scheduler event with explicit parent link (already covered by CTE).
+	child, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-child", Topic: "runtime.completed", Source: domain.TopicEventSourceScheduler,
+		CorrelationID: root.CorrelationID, ParentEventID: root.ID, PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	})
+	if err != nil {
+		t.Fatalf("create child event: %v", err)
+	}
+
+	now := time.Now().UTC().Round(0)
+	run := domain.SchedulerRunSummary{
+		ID: "run-sibling", SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-sibling",
+		TriggerKind: domain.SchedulerTriggerKindEvent, Status: domain.SchedulerRunStatusSucceeded,
+		StartedAt: now, CompletedAt: now.Add(time.Second), DurationMs: 1000,
+	}
+	if err := store.CreateSchedulerRun(ctx, run); err != nil {
+		t.Fatalf("create scheduler run: %v", err)
+	}
+
+	// Delivery and sandbox link on the forwarded event (no parent_event_id).
+	if err := store.UpsertEventDelivery(ctx, domain.EventDelivery{
+		EventID: forwarded.ID, SchedulerID: scheduler.Summary.ID, TriggerID: run.TriggerID,
+		RunID: run.ID, Status: domain.EventDeliveryStatusRunSucceeded, CreatedAt: now, UpdatedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("upsert delivery for forwarded: %v", err)
+	}
+	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{
+		ID: "scheduler-event-sibling", SchedulerID: scheduler.Summary.ID, RunID: run.ID, TriggerID: run.TriggerID,
+		Type: "scheduler.command.completed", Level: "info", Message: "command completed", CreatedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("add scheduler event: %v", err)
+	}
+	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{
+		EventID: forwarded.ID, SandboxID: "sandbox-forwarded", Relation: "created",
+		SchedulerID: scheduler.Summary.ID, RunID: run.ID, TriggerID: run.TriggerID, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("add sandbox link: %v", err)
+	}
+
+	trace, err := store.GetEventTrace(ctx, root.ID, 1000)
+	if err != nil {
+		t.Fatalf("get event trace: %v", err)
+	}
+	if trace.Event.ID != root.ID || trace.DescendantsTruncated {
+		t.Fatalf("trace root = %#v", trace)
+	}
+
+	// The root should now see the forwarded event's run and sandbox link even
+	// though evt-forwarded has no parent_event_id.
+	if len(trace.Runs) != 1 || len(trace.SandboxLinks) != 1 {
+		t.Fatalf("trace runs=%d sandboxLinks=%d, want exactly one of each (from correlation sibling)", len(trace.Runs), len(trace.SandboxLinks))
+	}
+	if trace.Runs[0].Delivery.EventID != forwarded.ID || trace.Runs[0].Run.ID != run.ID {
+		t.Fatalf("trace run = %#v", trace.Runs[0])
+	}
+	if trace.SandboxLinks[0].SandboxID != "sandbox-forwarded" {
+		t.Fatalf("trace sandbox link = %#v", trace.SandboxLinks[0])
+	}
+
+	// The parent-linked child is also present (via CTE).
+	eventIDs := make(map[string]bool)
+	for _, run := range trace.Runs {
+		eventIDs[run.Delivery.EventID] = true
+	}
+	if !eventIDs[child.ID] && !eventIDs[forwarded.ID] {
+		t.Fatalf("trace should include both CTE child and correlation sibling")
+	}
+}
+
+func TestEventTraceIncludesCorrelationSiblingWhenRootUsesDefaultCorrelation(t *testing.T) {
+	ctx := context.Background()
+	store := FromDB(newMemoryDB(t))
+	if err := store.initSchema(ctx); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+	root, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-default-correlation-root", Topic: "webhook.github.push", Source: domain.TopicEventSourceWebhook,
+		PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	})
+	if err != nil {
+		t.Fatalf("create root event: %v", err)
+	}
+	if root.CorrelationID != root.ID {
+		t.Fatalf("root correlation ID = %q, want root ID %q", root.CorrelationID, root.ID)
+	}
+	forwarded, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-default-correlation-forwarded", Topic: "webhook.forwarded.topic", Source: domain.TopicEventSourceWebhook,
+		CorrelationID: root.CorrelationID, PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	})
+	if err != nil {
+		t.Fatalf("create forwarded event: %v", err)
+	}
+	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{
+		EventID: forwarded.ID, SandboxID: "sandbox-default-correlation", Relation: "created", CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("add sandbox link: %v", err)
+	}
+
+	trace, err := store.GetEventTrace(ctx, root.ID, 1000)
+	if err != nil {
+		t.Fatalf("get event trace: %v", err)
+	}
+	if len(trace.SandboxLinks) != 1 || trace.SandboxLinks[0].EventID != forwarded.ID {
+		t.Fatalf("sandbox links = %#v, want link from default-correlation sibling", trace.SandboxLinks)
+	}
+}
+
+func TestEventTraceReportsCorrelationSiblingTruncation(t *testing.T) {
+	ctx := context.Background()
+	store := FromDB(newMemoryDB(t))
+	if err := store.initSchema(ctx); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+	root, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-correlation-truncated-root", Topic: "webhook.github.push", Source: domain.TopicEventSourceWebhook,
+		CorrelationID: "corr-sibling-truncated", PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	})
+	if err != nil {
+		t.Fatalf("create root event: %v", err)
+	}
+	if _, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-correlation-truncated-child", Topic: "runtime.completed", Source: domain.TopicEventSourceScheduler,
+		CorrelationID: root.CorrelationID, ParentEventID: root.ID, PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	}); err != nil {
+		t.Fatalf("create child event: %v", err)
+	}
+
+	for _, siblingRecord := range []struct {
+		eventID   string
+		sandboxID string
+	}{
+		{eventID: "evt-correlation-sibling-1", sandboxID: "sandbox-correlation-sibling-1"},
+		{eventID: "evt-correlation-sibling-2", sandboxID: "sandbox-correlation-sibling-2"},
+	} {
+		sibling, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+			ID: siblingRecord.eventID, Topic: "webhook.forwarded.topic", Source: domain.TopicEventSourceWebhook,
+			CorrelationID: root.CorrelationID, PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+		})
+		if err != nil {
+			t.Fatalf("create correlation sibling %s: %v", siblingRecord.eventID, err)
+		}
+		if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{
+			EventID: sibling.ID, SandboxID: siblingRecord.sandboxID,
+			Relation: "created", CreatedAt: time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("add sandbox link for correlation sibling %s: %v", siblingRecord.eventID, err)
+		}
+	}
+
+	trace, err := store.GetEventTrace(ctx, root.ID, 3)
+	if err != nil {
+		t.Fatalf("get event trace: %v", err)
+	}
+	if !trace.DescendantsTruncated {
+		t.Fatalf("trace should report correlation sibling truncation: %#v", trace)
+	}
+	if len(trace.SandboxLinks) != 1 || trace.SandboxLinks[0].EventID != "evt-correlation-sibling-1" {
+		t.Fatalf("sandbox links = %#v, want only first correlation sibling", trace.SandboxLinks)
+	}
+}
+
+func TestEventTraceCorrelationSiblingDoesNotLoseLimitToParentChild(t *testing.T) {
+	ctx := context.Background()
+	store := FromDB(newMemoryDB(t))
+	if err := store.initSchema(ctx); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+	root, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-limited-root", Topic: "webhook.github.push", Source: domain.TopicEventSourceWebhook,
+		CorrelationID: "corr-limited", PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	})
+	if err != nil {
+		t.Fatalf("create root event: %v", err)
+	}
+	if _, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-limited-child", Topic: "runtime.completed", Source: domain.TopicEventSourceScheduler,
+		CorrelationID: root.CorrelationID, ParentEventID: root.ID, PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	}); err != nil {
+		t.Fatalf("create child event: %v", err)
+	}
+	forwarded, err := store.CreateEvent(ctx, domain.TopicEventRecord{
+		ID: "evt-limited-forwarded", Topic: "webhook.forwarded.topic", Source: domain.TopicEventSourceWebhook,
+		CorrelationID: root.CorrelationID, PayloadJSON: `{}`, DispatchStatus: domain.TopicEventDispatchPublishedToBus,
+	})
+	if err != nil {
+		t.Fatalf("create forwarded event: %v", err)
+	}
+	if err := store.AddEventSandboxLink(ctx, domain.EventSandboxLink{
+		EventID: forwarded.ID, SandboxID: "sandbox-limited", Relation: "created", CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("add sandbox link: %v", err)
+	}
+
+	trace, err := store.GetEventTrace(ctx, root.ID, 3)
+	if err != nil {
+		t.Fatalf("get event trace: %v", err)
+	}
+	if trace.DescendantsTruncated {
+		t.Fatalf("trace unexpectedly truncated: %#v", trace)
+	}
+	if len(trace.SandboxLinks) != 1 || trace.SandboxLinks[0].EventID != forwarded.ID {
+		t.Fatalf("sandbox links = %#v, want correlation sibling after parent child", trace.SandboxLinks)
+	}
+}
