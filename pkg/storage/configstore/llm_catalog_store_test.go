@@ -9,7 +9,7 @@ import (
 	"agent-compose/pkg/llms"
 )
 
-func TestApplyModelCatalogResolvesLiteralModelsDefaultsAndBehavior(t *testing.T) {
+func TestIntegrationApplyModelCatalogResolvesLiteralModelsDefaultsAndBehavior(t *testing.T) {
 	clearLLMTestEnvironment(t)
 	ctx := context.Background()
 	store := FromDB(newMemoryDB(t))
@@ -51,7 +51,7 @@ func TestApplyModelCatalogResolvesLiteralModelsDefaultsAndBehavior(t *testing.T)
 	}
 }
 
-func TestDaemonEnvironmentDefaultWinsButExplicitCatalogProviderRemainsPinned(t *testing.T) {
+func TestIntegrationDaemonEnvironmentDefaultWinsButExplicitCatalogProviderRemainsPinned(t *testing.T) {
 	clearLLMTestEnvironment(t)
 	ctx := context.Background()
 	store := FromDB(newMemoryDB(t))
@@ -81,7 +81,7 @@ func TestDaemonEnvironmentDefaultWinsButExplicitCatalogProviderRemainsPinned(t *
 	}
 }
 
-func TestExplicitUnavailableCatalogProviderDoesNotFallBack(t *testing.T) {
+func TestIntegrationExplicitUnavailableCatalogProviderDoesNotFallBack(t *testing.T) {
 	clearLLMTestEnvironment(t)
 	ctx := context.Background()
 	store := FromDB(newMemoryDB(t))
