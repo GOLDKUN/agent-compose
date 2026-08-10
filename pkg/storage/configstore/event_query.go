@@ -211,6 +211,15 @@ func (s *eventStore) GetEventTrace(ctx context.Context, eventID string, descenda
 	if err != nil {
 		return domain.EventTrace{}, err
 	}
+	// Webhook forwarders that POST into a separate topic do not set
+	// parent_event_id, so the CTE traversal above does not discover them.
+	// Collect events that share the same correlation_id but are outside the
+	// parent chain so that sandbox links and run traces are still visible.
+	eventIDs, correlationTruncated, err := s.mergeCorrelationEventIDs(ctx, root, eventIDs, descendantLimit)
+	if err != nil {
+		return domain.EventTrace{}, err
+	}
+	truncated = truncated || correlationTruncated
 	runs, err := s.listEventRunTraces(ctx, eventIDs)
 	if err != nil {
 		return domain.EventTrace{}, err
@@ -225,6 +234,48 @@ func (s *eventStore) GetEventTrace(ctx context.Context, eventID string, descenda
 		SandboxLinks:         links,
 		DescendantsTruncated: truncated,
 	}, nil
+}
+
+func (s *eventStore) mergeCorrelationEventIDs(ctx context.Context, root domain.EventSummary, descendants []string, limit int) ([]string, bool, error) {
+	correlationID := strings.TrimSpace(root.CorrelationID)
+	if correlationID == "" {
+		return descendants, false, nil
+	}
+	remaining := limit - len(descendants)
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	args := make([]any, 0, len(descendants)+2)
+	args = append(args, correlationID)
+	for _, id := range descendants {
+		args = append(args, id)
+	}
+	args = append(args, remaining+1)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id FROM event WHERE correlation_id = ? AND id NOT IN (`+placeholders(len(descendants))+`) ORDER BY sequence ASC LIMIT ?`,
+		args...)
+	if err != nil {
+		return nil, false, fmt.Errorf("query correlation events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	correlationIDs := make([]string, 0, remaining+1)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, false, fmt.Errorf("scan correlation event: %w", err)
+		}
+		correlationIDs = append(correlationIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("iterate correlation events: %w", err)
+	}
+	truncated := len(correlationIDs) > remaining
+	if truncated {
+		correlationIDs = correlationIDs[:remaining]
+	}
+	return append(descendants, correlationIDs...), truncated, nil
 }
 
 func (s *eventStore) listEventDescendantIDs(ctx context.Context, eventID string, limit int) ([]string, bool, error) {
