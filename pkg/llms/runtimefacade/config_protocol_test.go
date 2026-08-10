@@ -14,7 +14,7 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func TestEnsureSessionOpenCodeKeepsResponsesIngressForChatUpstream(t *testing.T) {
+func TestIntegrationEnsureSessionOpenCodeKeepsResponsesIngressForChatUpstream(t *testing.T) {
 	isolateLLMEnv(t)
 
 	ctx := context.Background()
@@ -71,7 +71,7 @@ func TestEnsureSessionOpenCodeKeepsResponsesIngressForChatUpstream(t *testing.T)
 	}
 }
 
-func TestEnsureSessionOpenCodeKeepsConfiguredProviderInMixedEnvironment(t *testing.T) {
+func TestIntegrationEnsureSessionOpenCodeKeepsConfiguredProviderInMixedEnvironment(t *testing.T) {
 	isolateLLMEnv(t)
 
 	ctx := context.Background()
