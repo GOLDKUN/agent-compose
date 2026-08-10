@@ -96,20 +96,6 @@ func sessionLLMEnvProviderLookup(envItems []domain.SandboxEnvVar) EnvProviderLoo
 	}
 }
 
-// layeredLLMEnvProviderLookup resolves the sandbox-owned layer before the
-// default Global Env/process/config layers. Candidate aliases are exhausted
-// within a layer before falling through, preserving source-major precedence.
-func layeredLLMEnvProviderLookup(ctx context.Context, config *appconfig.Config, store LLMResolverStore, envItems []domain.SandboxEnvVar) EnvProviderLookup {
-	sessionLookup := sessionLLMEnvProviderLookup(envItems)
-	defaultLookup := defaultLLMEnvProviderLookup(ctx, config, store)
-	return func(keys ...string) string {
-		if value := sessionLookup(keys...); strings.TrimSpace(value) != "" {
-			return value
-		}
-		return defaultLookup(keys...)
-	}
-}
-
 func configLLMEnvValue(config *appconfig.Config, key string) string {
 	if config == nil {
 		return ""
