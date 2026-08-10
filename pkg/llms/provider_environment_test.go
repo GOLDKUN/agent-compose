@@ -216,7 +216,7 @@ func TestRestoreSandboxTransientFieldsPreservesPendingProviderProvenance(t *test
 	}
 }
 
-func TestRuntimeTargetUsesLayeredProviderEnvironmentForRequestedFamily(t *testing.T) {
+func TestRuntimeTargetDoesNotMixIncompleteSessionProviderWithDaemonEnvironment(t *testing.T) {
 	isolateLLMEnv(t)
 	store := newResolverCoverageStore()
 	store.global = []domain.SandboxEnvVar{
@@ -235,8 +235,8 @@ func TestRuntimeTargetUsesLayeredProviderEnvironmentForRequestedFamily(t *testin
 	if err != nil {
 		t.Fatalf("resolve layered OpenAI target: %v", err)
 	}
-	if target.Provider.ID != SessionEnvProviderID("sandbox-layered", ProviderFamilyOpenAI) || target.Provider.APIKey != "sandbox-key" || target.Provider.BaseURL != "https://global.example/v1" || target.Model.ID != "global-model" {
-		t.Fatalf("layered OpenAI target = %#v", target)
+	if target.Provider.ID != ProviderIDDefaultOpenAI || target.Provider.APIKey != "global-key" || target.Provider.BaseURL != "https://global.example/v1" || target.Model.ID != "global-model" {
+		t.Fatalf("atomic OpenAI target = %#v", target)
 	}
 	for _, provider := range store.providers {
 		if provider.ProviderType == ProviderFamilyAnthropic {
@@ -273,34 +273,33 @@ func TestRuntimeTargetKeepsAnthropicCredentialFromWinningLayer(t *testing.T) {
 		wantKey          string
 		wantHeader       string
 		wantScheme       string
+		wantErr          bool
 	}{
 		{
-			name:         "sandbox auth token beats Global Env api key",
+			name:         "incomplete sandbox auth token does not borrow Global Env model",
 			sandboxItems: []domain.SandboxEnvVar{{Name: "ANTHROPIC_AUTH_TOKEN", Value: "sandbox-auth-token"}},
 			globalItems:  []domain.SandboxEnvVar{{Name: "ANTHROPIC_API_KEY", Value: "global-api-key"}},
-			wantKey:      "sandbox-auth-token",
-			wantHeader:   "Authorization",
-			wantScheme:   "Bearer",
+			wantKey:      "global-api-key",
+			wantHeader:   "x-api-key",
 		},
 		{
-			name: "sandbox generic Messages key beats Global Env auth token",
+			name: "incomplete sandbox generic key does not borrow Global Env model",
 			sandboxItems: []domain.SandboxEnvVar{
 				{Name: "LLM_API_PROTOCOL", Value: APIProtocolMessages},
 				{Name: "LLM_API_KEY", Value: "sandbox-generic-key"},
 			},
 			globalItems: []domain.SandboxEnvVar{{Name: "ANTHROPIC_AUTH_TOKEN", Value: "global-auth-token"}},
-			wantKey:     "sandbox-generic-key",
-			wantHeader:  "x-api-key",
+			wantKey:     "global-auth-token",
+			wantHeader:  "Authorization",
+			wantScheme:  "Bearer",
 		},
 		{
-			name: "family-specific token beats generic key within sandbox",
+			name: "incomplete sandbox provider fails without a complete fallback",
 			sandboxItems: []domain.SandboxEnvVar{
 				{Name: "LLM_API_KEY", Value: "sandbox-generic-key"},
 				{Name: "ANTHROPIC_AUTH_TOKEN", Value: "sandbox-auth-token"},
 			},
-			wantKey:    "sandbox-auth-token",
-			wantHeader: "Authorization",
-			wantScheme: "Bearer",
+			wantErr: true,
 		},
 		{
 			name:             "Global Env generic key beats process auth token",
@@ -343,6 +342,12 @@ func TestRuntimeTargetKeepsAnthropicCredentialFromWinningLayer(t *testing.T) {
 				{Name: "ANTHROPIC_MODEL", Value: "global-claude"},
 			}, tt.globalItems...)
 			target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), &appconfig.Config{LLMAPIKey: tt.configKey}, store, "sandbox-anthropic-auth", ProviderFamilyAnthropic, "", "", tt.sandboxItems)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected incomplete provider error")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("resolve layered Anthropic target: %v", err)
 			}

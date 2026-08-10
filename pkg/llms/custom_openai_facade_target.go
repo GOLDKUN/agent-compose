@@ -17,9 +17,6 @@ func resolveCustomOpenAIFacadeTarget(ctx context.Context, config *appconfig.Conf
 	if sandbox != nil {
 		sandboxID = sandbox.Summary.ID
 	}
-	if HasEnabledLLMProviderID(ctx, store, providerID) {
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, providerID, envItems)
-	}
 	if sandboxID != "" && HasOpenAIEnvProviderInput(envItems) {
 		sessionProviderID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, config, store, sandboxID, model, envItems)
 		if err != nil {
@@ -28,6 +25,9 @@ func resolveCustomOpenAIFacadeTarget(ctx context.Context, config *appconfig.Conf
 		if strings.TrimSpace(sessionProviderID) != "" {
 			return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, sessionProviderID, envItems)
 		}
+	}
+	if HasEnabledLLMProviderID(ctx, store, providerID) {
+		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, providerID, envItems)
 	}
 	if _, err := EnsureOpenAIEnvProvider(ctx, store, DefaultLLMEnvProviderLookup(ctx, config, store), providerID, providerID, ProviderScopeEnvDefault, model, false); err != nil {
 		return ResolvedTarget{}, err

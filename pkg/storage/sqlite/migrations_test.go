@@ -35,7 +35,7 @@ func TestMigrationBaseline(t *testing.T) {
 
 	tables := []string{
 		"schema_migrations", "global_env", "workspace_config",
-		"llm_provider", "llm_model", "llm_provider_model", "llm_facade_token",
+		"llm_provider", "llm_model", "llm_provider_model", "llm_facade_token", "llm_catalog_default",
 		"capability_gateway", "volumes", "project_volumes", "scheduler_trigger",
 		"scheduler_run", "scheduler_event", "scheduler_state", "scheduler_sandbox_binding", "project",
 		"project_revision", "project_agent", "project_scheduler", "project_run",

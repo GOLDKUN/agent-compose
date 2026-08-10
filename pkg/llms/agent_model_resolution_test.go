@@ -72,7 +72,7 @@ func TestResolveAgentModelPrecedence(t *testing.T) {
 	}{
 		{name: "project", agent: domain.AgentDefinition{Provider: "codex", Model: "project-model", EnvItems: []domain.SandboxEnvVar{{Name: "LLM_MODEL", Value: "agent-model"}}}, want: AgentModelResolution{Model: "project-model", Source: AgentModelSourceProject}},
 		{name: "agent env", agent: domain.AgentDefinition{Provider: "codex", EnvItems: []domain.SandboxEnvVar{{Name: "CODEX_MODEL", Value: "agent-model"}}}, want: AgentModelResolution{Model: "agent-model", Source: AgentModelSourceAgentEnv}},
-		{name: "configured daemon", agent: domain.AgentDefinition{Provider: "codex"}, want: AgentModelResolution{Model: "daemon-model", Source: AgentModelSourceDaemonDefault}},
+		{name: "configured daemon", agent: domain.AgentDefinition{Provider: "codex"}, want: AgentModelResolution{Model: "global-model", Source: AgentModelSourceDaemonDefault}},
 		{name: "provider default", agent: domain.AgentDefinition{Provider: "gemini"}, want: AgentModelResolution{Source: AgentModelSourceProviderDefault}},
 		{name: "required model unresolved", agent: domain.AgentDefinition{Provider: "pi"}, want: AgentModelResolution{Source: AgentModelSourceUnresolved}},
 	}
@@ -124,8 +124,8 @@ func TestResolveAgentModelsCachesSharedConfigurationQueries(t *testing.T) {
 	if len(resolutions) != 2 || resolutions[0].Model != "daemon-model" || resolutions[1].Model != "daemon-model" {
 		t.Fatalf("resolutions = %#v", resolutions)
 	}
-	if calls.providers != 1 || calls.models != 1 || calls.wireAPIs != 1 || calls.globalEnv != 0 {
-		t.Fatalf("store calls = %#v, want providers/models/wire once and no global env", calls)
+	if calls.providers != 1 || calls.models != 1 || calls.wireAPIs != 1 || calls.globalEnv != 1 {
+		t.Fatalf("store calls = %#v, want providers/models/global env/wire once", calls)
 	}
 
 	envCalls := &agentModelResolutionStoreCalls{}
@@ -139,8 +139,8 @@ func TestResolveAgentModelsCachesSharedConfigurationQueries(t *testing.T) {
 	if len(resolutions) != 2 || resolutions[0].Model != "global-model" || resolutions[1].Model != "global-model" {
 		t.Fatalf("global env resolutions = %#v", resolutions)
 	}
-	if envCalls.providers != 1 || envCalls.models != 1 || envCalls.globalEnv != 1 || envCalls.wireAPIs != 0 {
-		t.Fatalf("global env store calls = %#v, want providers/models/global env once and no wire lookup", envCalls)
+	if envCalls.providers != 0 || envCalls.models != 0 || envCalls.globalEnv != 1 || envCalls.wireAPIs != 0 {
+		t.Fatalf("global env store calls = %#v, want only one global env lookup", envCalls)
 	}
 }
 

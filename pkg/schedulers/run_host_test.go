@@ -120,6 +120,39 @@ func TestRuntimeHostAgentCommandLLMAndSessionRPC(t *testing.T) {
 	}
 }
 
+func TestRuntimeHostLLMModelPriorityAndEnvironmentPropagation(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		requestModel   string
+		envModel       string
+		schedulerModel string
+		agentModel     string
+		want           string
+	}{
+		{name: "request", requestModel: "request-model", envModel: "env-model", schedulerModel: "scheduler-model", agentModel: "agent-model", want: "request-model"},
+		{name: "environment", envModel: "env-model", schedulerModel: "scheduler-model", agentModel: "agent-model", want: "env-model"},
+		{name: "scheduler", schedulerModel: "scheduler-model", agentModel: "agent-model", want: "scheduler-model"},
+		{name: "agent", agentModel: "agent-model", want: "agent-model"},
+		{name: "daemon default", want: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runner := &hostLLMFake{}
+			env := []domain.SandboxEnvVar{{Name: "LLM_API_KEY", Value: "secret", Secret: true}}
+			if test.envModel != "" {
+				env = append(env, domain.SandboxEnvVar{Name: "LLM_MODEL", Value: test.envModel})
+			}
+			scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-priority"}, Model: test.schedulerModel, AgentModel: test.agentModel, EnvItems: env}
+			host := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{LLM: runner}, scheduler, schedulers.RuntimeExecutionContext{}, schedulers.TriggerEventMetadata{})
+			if _, err := host.LLM(context.Background(), "prompt", domain.SchedulerLLMRequest{Model: test.requestModel}); err != nil {
+				t.Fatal(err)
+			}
+			if runner.request.Model != test.want || runner.request.SchedulerID != scheduler.Summary.ID || len(runner.request.EnvItems) != len(env) {
+				t.Fatalf("request = %#v, want model %q", runner.request, test.want)
+			}
+		})
+	}
+}
+
 func TestRuntimeHostProjectAgentPath(t *testing.T) {
 	ctx := context.Background()
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
@@ -566,13 +599,15 @@ func (r *hostProjectAgentRunnerFake) RunProjectAgent(_ context.Context, request 
 }
 
 type hostLLMFake struct {
-	prompt string
-	result domain.SchedulerLLMResult
-	err    error
+	prompt  string
+	request schedulers.HostLLMGenerateRequest
+	result  domain.SchedulerLLMResult
+	err     error
 }
 
-func (l *hostLLMFake) Generate(_ context.Context, prompt, _, _ string) (domain.SchedulerLLMResult, error) {
-	l.prompt = prompt
+func (l *hostLLMFake) Generate(_ context.Context, request schedulers.HostLLMGenerateRequest) (domain.SchedulerLLMResult, error) {
+	l.prompt = request.Prompt
+	l.request = request
 	return l.result, l.err
 }
 

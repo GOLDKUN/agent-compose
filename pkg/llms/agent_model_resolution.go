@@ -77,20 +77,20 @@ func ResolveAgentModel(ctx context.Context, config *appconfig.Config, store Agen
 		return AgentModelResolution{Source: source}, nil
 	}
 
-	providers, models, err := enabledLLMConfiguration(ctx, store)
-	if err != nil {
-		return AgentModelResolution{}, err
-	}
-	if hasConfiguredProviderForFamily(providers, providerFamily) {
-		return selectConfiguredDefaultModel(ctx, store, providers, models, providerFamily)
-	}
-
 	model, err := daemonEnvironmentModel(ctx, config, store, providerFamily)
 	if err != nil {
 		return AgentModelResolution{}, err
 	}
 	if model != "" {
 		return AgentModelResolution{Model: model, Source: AgentModelSourceDaemonDefault}, nil
+	}
+
+	providers, models, err := enabledLLMConfiguration(ctx, store)
+	if err != nil {
+		return AgentModelResolution{}, err
+	}
+	if hasConfiguredProviderForFamily(providers, providerFamily) {
+		return selectConfiguredDefaultModel(ctx, store, providers, models, providerFamily)
 	}
 
 	resolution, ok, err := selectStoredDefaultModel(ctx, store, providers, models, providerFamily)

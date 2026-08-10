@@ -563,6 +563,7 @@ func SchedulerSpecToProto(scheduler *compose.NormalizedSchedulerSpec) *agentcomp
 		SandboxPolicy:     schedulerSandboxPolicyToProto(scheduler.SandboxPolicy),
 		DisplayName:       scheduler.DisplayName,
 		Description:       scheduler.Description,
+		Model:             scheduler.Model,
 		ConcurrencyPolicy: schedulerConcurrencyPolicyToProto(scheduler.ConcurrencyPolicy),
 	}
 }
@@ -985,6 +986,9 @@ func SchedulerYAMLShape(scheduler *agentcomposev2.SchedulerSpec) map[string]any 
 	}
 	if strings.TrimSpace(scheduler.GetDescription()) != "" {
 		raw["description"] = scheduler.GetDescription()
+	}
+	if strings.TrimSpace(scheduler.GetModel()) != "" {
+		raw["model"] = scheduler.GetModel()
 	}
 	if policy := schedulerSandboxPolicyText(scheduler.GetSandboxPolicy()); policy != "" {
 		raw["sandbox_policy"] = policy

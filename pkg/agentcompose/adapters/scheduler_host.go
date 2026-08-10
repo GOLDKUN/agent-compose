@@ -64,11 +64,11 @@ type SchedulerHostLLMRunner struct {
 	Client *LLMClient
 }
 
-func (r SchedulerHostLLMRunner) Generate(ctx context.Context, prompt, model, outputSchema string) (domain.SchedulerLLMResult, error) {
+func (r SchedulerHostLLMRunner) Generate(ctx context.Context, request schedulers.HostLLMGenerateRequest) (domain.SchedulerLLMResult, error) {
 	if r.Client == nil {
 		return domain.SchedulerLLMResult{}, fmt.Errorf("llm client is unavailable")
 	}
-	result, err := r.Client.Generate(ctx, prompt, model, outputSchema)
+	result, err := r.Client.GenerateWithEnv(ctx, request.Prompt, request.Model, request.OutputSchema, "scheduler:"+request.SchedulerID, request.EnvItems)
 	if err != nil {
 		return domain.SchedulerLLMResult{}, err
 	}

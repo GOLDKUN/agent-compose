@@ -132,7 +132,7 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 			raw, status := inboundAdapter.EncodeError(err)
 			return WriteRuntimeLLMEncodedError(c, raw, status)
 		}
-		upstreamBody = injectMaxOutputTokens(upstreamBody, upstreamProtocol, h.opts.MaxOutputTokens)
+		upstreamBody = injectMaxOutputTokens(upstreamBody, upstreamProtocol, effectiveMaxOutputTokens(target, h.opts.MaxOutputTokens))
 		return h.proxyTransparent(c, upstreamEndpoint, upstreamBody, target, upstreamProtocol)
 	}
 	upstreamBody, err := llms.EncodeRuntimeUpstreamRequest(inboundProtocol, upstreamProtocol, target, llmReq)
@@ -140,7 +140,7 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 		raw, status := inboundAdapter.EncodeError(err)
 		return WriteRuntimeLLMEncodedError(c, raw, status)
 	}
-	upstreamBody = injectMaxOutputTokens(upstreamBody, upstreamProtocol, h.opts.MaxOutputTokens)
+	upstreamBody = injectMaxOutputTokens(upstreamBody, upstreamProtocol, effectiveMaxOutputTokens(target, h.opts.MaxOutputTokens))
 	upstreamReq, err := http.NewRequestWithContext(c.Request().Context(), http.MethodPost, upstreamEndpoint, bytes.NewReader(upstreamBody))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "create upstream llm request failed"})
@@ -178,6 +178,13 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 	c.Response().WriteHeader(resp.StatusCode)
 	_, err = c.Response().Writer.Write(clientBody)
 	return err
+}
+
+func effectiveMaxOutputTokens(target llms.ResolvedTarget, fallback int) int {
+	if target.MaxOutputTokens > 0 {
+		return target.MaxOutputTokens
+	}
+	return fallback
 }
 
 // injectMaxOutputTokens adds the configured output-token limit to a proxied

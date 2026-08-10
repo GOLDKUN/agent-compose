@@ -148,6 +148,7 @@ type SchedulerSpec struct {
 	ConcurrencyPolicy *string       `yaml:"concurrency_policy,omitempty" json:"concurrency_policy,omitempty"`
 	DisplayName       string        `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 	Description       string        `yaml:"description,omitempty" json:"description,omitempty"`
+	Model             string        `yaml:"model,omitempty" json:"model,omitempty"`
 	Triggers          []TriggerSpec `yaml:"triggers,omitempty" json:"triggers,omitempty"`
 	Script            ScriptSource  `yaml:"script,omitempty" json:"script,omitempty"`
 }
@@ -703,6 +704,7 @@ func validateScheduler(node *yaml.Node, path string) error {
 		"concurrency_policy": validateScalar,
 		"display_name":       validateScalar,
 		"description":        validateScalar,
+		"model":              validateScalar,
 		"triggers":           validateTriggerList,
 		"script":             validateScriptSource,
 	})

@@ -30,7 +30,8 @@ const (
 )
 
 type AgentRuntimeConfig struct {
-	Env map[string]string
+	Env   map[string]string
+	Model string
 }
 
 func EnsureSessionLLMFacadeConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, agent, model, source, runID string) (map[string]string, error) {
@@ -54,7 +55,7 @@ func EnsureSessionAgentRuntimeConfig(ctx context.Context, config *appconfig.Conf
 		return AgentRuntimeConfig{Env: env}, err
 	case "opencode":
 		env, err := ensureSessionOpenCodeConfig(ctx, config, store, session, model, source, runID)
-		return AgentRuntimeConfig{Env: env}, err
+		return AgentRuntimeConfig{Env: env, Model: strings.TrimSpace(env["OPENCODE_MODEL"])}, err
 	case "pi":
 		env, err := llms.EnsurePiFacadeConfig(ctx, config, store, session, model, source, runID)
 		return AgentRuntimeConfig{Env: env}, err

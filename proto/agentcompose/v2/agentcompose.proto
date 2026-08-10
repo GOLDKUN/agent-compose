@@ -979,6 +979,7 @@ message SchedulerSpec {
   string display_name = 5;
   string description = 6;
   SchedulerConcurrencyPolicy concurrency_policy = 7;
+  string model = 8;
 }
 
 message TriggerSpec {

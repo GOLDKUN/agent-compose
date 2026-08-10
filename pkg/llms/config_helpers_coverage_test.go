@@ -279,13 +279,13 @@ func TestClientConfigAndSelectionWorkflows(t *testing.T) {
 	models := []Model{{ID: "m1", Name: "gpt-1"}, {ID: "m2", Name: "gpt-2", DefaultModel: true}}
 	providers := []Provider{{ID: "p2", ProviderType: ProviderFamilyOpenAI, Scope: ProviderScopeEnvDefault, Weight: 10}, {ID: "p1", ProviderType: ProviderFamilyOpenAI, Weight: 1}}
 	selected, provider, wireAPI, ok, err := SelectModelAndProvider(ctx, llmCoverageWireStore{ok: true, wireAPI: APIProtocolResponses}, models, providers, "", ProviderFamilyOpenAI, "")
-	if err != nil || !ok || selected.ID != "m2" || provider.ID != "p1" || wireAPI != APIProtocolResponses {
+	if err != nil || !ok || selected.ID != "m2" || provider.ID != "p2" || wireAPI != APIProtocolResponses {
 		t.Fatalf("selected=%#v provider=%#v wire=%q ok=%v err=%v", selected, provider, wireAPI, ok, err)
 	}
 	if _, _, _, ok, err := SelectModelAndProvider(ctx, llmCoverageWireStore{}, models, providers, "missing", "", ""); err != nil || ok {
 		t.Fatalf("expected missing model ok=false err=%v", err)
 	}
-	if priority := ProviderSelectionPriority(ProviderScopeSessionEnv); priority != 2 {
+	if priority := ProviderSelectionPriority(ProviderScopeSessionEnv); priority != 0 {
 		t.Fatalf("session env priority = %d", priority)
 	}
 }

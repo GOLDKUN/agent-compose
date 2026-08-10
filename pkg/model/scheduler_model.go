@@ -61,11 +61,13 @@ type SchedulerSummary struct {
 }
 
 type Scheduler struct {
-	Summary  SchedulerSummary   `json:"summary"`
-	Script   string             `json:"script"`
-	Triggers []SchedulerTrigger `json:"triggers,omitempty"`
-	EnvItems []SandboxEnvVar    `json:"env_items,omitempty"`
-	Volumes  []VolumeMountSpec  `json:"volumes,omitempty"`
+	Summary    SchedulerSummary   `json:"summary"`
+	Script     string             `json:"script"`
+	Model      string             `json:"model,omitempty"`
+	AgentModel string             `json:"agent_model,omitempty"`
+	Triggers   []SchedulerTrigger `json:"triggers,omitempty"`
+	EnvItems   []SandboxEnvVar    `json:"env_items,omitempty"`
+	Volumes    []VolumeMountSpec  `json:"volumes,omitempty"`
 }
 
 type SchedulerTrigger struct {

@@ -1,0 +1,286 @@
+# Daemon 多 Provider 模型目录设计
+
+## 状态与范围
+
+本文定义 daemon 全局 `models.json` 的产品行为：支持多个上游 Provider、literal 模型路由、Scheduler 集成，并兼容已有的 `LLM_*` 环境变量配置。
+
+本设计只包含 API Key 认证。账号登录、OAuth、订阅账号凭据、Token 刷新、登出和账号选择 API 不在本文范围内。
+
+## 目标
+
+- 一个 daemon 同时配置多个上游 LLM Provider。
+- 使用 `provider/model` 选择 Provider 和上游 literal 模型名。
+- 保持依赖 daemon 或项目 `LLM_*` 环境变量的旧项目继续工作。
+- 允许模型条目定制行为，但不把模型目录变成白名单。
+- 上游凭据只保留在 daemon，sandbox 只能拿到受限的 facade token。
+- Coding Agent 与 `scheduler.llm` 使用一致的路由语义。
+
+## 全局配置文件
+
+daemon 在启动后台组件前加载：
+
+```text
+<DATA_ROOT>/models.json
+```
+
+文件不存在是合法状态，此时 catalog 为空。daemon 不安装 OpenAI、Anthropic 或其他 Provider 模板；已有的 `LLM_*` 环境变量兼容路径仍可独立工作。
+
+以下情况会导致 daemon 启动失败，不允许部分应用配置：
+
+- JSON 格式错误或存在未知字段；
+- Provider ID 非法；
+- Protocol 不受支持；
+- 同一个 Provider 重复声明模型 ID；
+- Token 上限非法；
+- 环境变量引用无法解析。
+
+示例：
+
+```json
+{
+  "default": "baizhi/deepseek-v4-flash",
+  "providers": {
+    "baizhi": {
+      "baseUrl": "https://gateway.example.com/api/openai",
+      "protocol": "chat_completions",
+      "apiKey": "${BAIZHI_API_KEY}",
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "maxOutputTokens": 99999
+        }
+      ]
+    },
+    "anthropic": {
+      "baseUrl": "https://my-proxy.example.com/v1",
+      "protocol": "anthropic_messages"
+    },
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1",
+      "protocol": "responses",
+      "apiKey": "$OPENAI_API_KEY"
+    }
+  }
+}
+```
+
+## 配置结构
+
+顶层对象包含：
+
+- `default`：可选的 `provider/model` 引用。
+- `providers`：以稳定 Provider ID 为 key 的 Provider 定义。
+
+Provider 支持以下字段：
+
+- `name`：可选显示名称。
+- `baseUrl`：上游 API Base URL。
+- `protocol`：`responses`、`chat_completions` 或 `anthropic_messages`。
+- `apiKey`：明文 Secret，或完整的 `$ENV`／`${ENV}` 引用。
+- `headers`：可选的 daemon 侧上游 Header；值同样支持完整环境变量引用。
+- `models`：可选的模型行为定义。
+
+每个 Provider 都必须显式提供非空的 `baseUrl` 和受支持的 `protocol`。`apiKey` 可以省略，使 Provider 保持已定义但不可用，后续请求不会自动从其他 Provider 或 daemon 环境借用凭据。
+
+模型条目支持：
+
+- `id`：上游 literal 模型 ID。
+- `name`：可选显示名称。
+- `baseUrl`：可选的模型级 endpoint 覆盖。
+- `protocol`：可选的模型级 Protocol 覆盖。
+- `headers`：可选的模型级上游 Header。
+- `maxOutputTokens`：可选的正整数输出 Token 上限。
+
+`maxOutputTokens` 是唯一支持的配置字段。上游协议使用的
+`max_output_tokens`、`max_completion_tokens` 或 `max_tokens` 由 daemon 在转发时转换，不属于 `models.json` schema。
+
+Provider ID 不触发 catalog 模板继承。即使 ID 是 `openai` 或 `anthropic`，也必须在文件中完整声明 Base URL 和 Protocol。订阅账号 Provider 不在本设计范围内。
+
+## `models` 是元数据，不是白名单
+
+`models` 数组可以省略。它只用于给已知模型 ID 附加行为。
+
+假设 `baizhi` 已配置且可用，以下两个选择都合法：
+
+```text
+baizhi/deepseek-v4-flash
+baizhi/a-new-model-not-listed-in-models-json
+```
+
+第一个模型会应用匹配的模型级覆盖；第二个模型使用 Provider 默认配置，并把 `a-new-model-not-listed-in-models-json` 原样发送给上游。模型是否合法由上游 Provider 判断。
+
+显式指定未知或不可用 Provider 是另一种情况：daemon 必须在本地失败，不能把请求悄悄转发给默认 Provider。
+
+## Provider 可用性
+
+catalog Provider 只有在最终定义包含非空 API Key 时才可用。
+
+没有 API Key 的 Provider 仍是“已定义”状态，因此可以校验其 default 和模型元数据，但不能接收请求。
+
+环境变量引用只在 daemon 启动时解析一次。解析后的 Secret 投影到 daemon 配置数据库中，不会出现在公开模型元数据中，也不会复制进 sandbox 环境。
+
+## 选择优先级与兼容规则
+
+连接 Provider 的优先级为：
+
+```text
+完整的 run/session LLM 环境 Provider
+> 显式的非 legacy provider/model
+> 完整的 daemon LLM 环境 Provider
+> models.json default
+```
+
+具体规则：
+
+1. 完整的 run/session 环境 Provider 优先。它的 endpoint、protocol、key 和选定模型属于同一个来源层；缺失值不能从 catalog 或 daemon 环境借用。
+2. `baizhi/model` 这样的显式自定义引用固定选择 `baizhi`，即使 daemon 已存在完整的默认 `.env` Provider。
+3. Legacy 引用 `openai/model` 和 `anthropic/model` 可以继续使用兼容且完整的 run/session 或 daemon 环境 Provider，但发给上游的模型名只取右侧的 `model`。
+4. 没有显式模型时，完整的 daemon 环境 Provider 仍是全局默认值。
+5. daemon 环境不完整时，使用 `models.json.default`。
+6. 所有来源都无法得到可用 Provider 和模型时，以配置前置条件错误失败。
+
+继续兼容的环境变量包括：
+
+```text
+LLM_API_ENDPOINT
+LLM_API_PROTOCOL
+LLM_API_KEY
+LLM_MODEL
+OPENAI_API_KEY
+ANTHROPIC_BASE_URL
+ANTHROPIC_API_KEY
+ANTHROPIC_AUTH_TOKEN
+ANTHROPIC_MODEL
+CLAUDE_MODEL
+```
+
+项目的 `env_file` 用于插值项目 YAML，不会替代 daemon 全局环境来源。Agent 的 `env` 作为 run/session 兼容层参与解析。
+
+## Coding Agent 写法
+
+Agent 继续使用已有的 `model` 字段：
+
+```yaml
+agents:
+  baizhi-coder:
+    provider: opencode
+    model: baizhi/deepseek-v4-flash
+    image: chaitin/agent-compose-guest:latest
+
+  review:
+    provider: codex
+    model: openai/gpt-5.6-sol
+    image: chaitin/agent-compose-guest:latest
+```
+
+Pi 的旧配置继续有效：
+
+```yaml
+agents:
+  reviewer:
+    provider: pi
+    model: openai/gpt-5.4
+    env:
+      LLM_API_ENDPOINT: ${PI_API_ENDPOINT}
+      LLM_API_PROTOCOL: responses
+      LLM_API_KEY:
+        value: ${PI_API_KEY}
+        secret: true
+```
+
+如果接口只支持 Chat Completions，则设置：
+
+```yaml
+LLM_API_PROTOCOL: chat_completions
+```
+
+## Scheduler 写法与优先级
+
+Scheduler 可以定义自己的默认模型：
+
+```yaml
+agents:
+  reviewer:
+    provider: pi
+    model: openai/gpt-5.4
+    scheduler:
+      model: baizhi/deepseek-v4-flash
+      script: |
+        // scheduler.llm(...) 可以在单次调用中覆盖该模型。
+```
+
+Scheduler 模型优先级为：
+
+```text
+scheduler.llm options.model
+> scheduler/agent LLM_MODEL
+> scheduler.model
+> agent.model
+> daemon LLM_MODEL
+> models.json default
+```
+
+Scheduler 会把环境变量条目和稳定的 Scheduler scope 传给与 runtime facade 相同的 daemon resolver。`scheduler.llm` 支持 Responses、Chat Completions 和 Anthropic Messages。
+
+## Runtime 与安全边界
+
+上游 API Key 始终留在 daemon：
+
+```text
+models.json / daemon environment
+        -> daemon provider store
+        -> runtime LLM facade
+        -> upstream provider
+```
+
+sandbox 只能收到 facade URL 和受限 facade token，不会收到 `models.json` 中的上游 `apiKey` 或 Secret Header。
+
+facade token 与 sandbox 和 Provider 绑定。daemon 校验 token 后，才在向上游发起请求时重新构造认证 Header。
+
+模型级输出 Token 上限在 daemon 边界应用：
+
+- Responses：`max_output_tokens`
+- Chat Completions：`max_completion_tokens`
+- Anthropic Messages：`max_tokens`
+
+模型级限制优先于 daemon 全局的 `LLM_MAX_OUTPUT_TOKENS` fallback。
+
+## 持久化与迁移
+
+SQLite migration v13 为 Provider/Model 绑定增加：
+
+```text
+llm_provider_model.base_url
+llm_provider_model.headers_json
+llm_provider_model.max_output_tokens
+```
+
+同时增加单行表 `llm_catalog_default`，保存精确的默认 Provider 和模型，避免只依赖全局共享的模型行。
+
+每次 daemon 启动时，文件中的有效 catalog 会被事务化投影：
+
+1. 禁用已失效的 catalog-owned Provider；
+2. 替换当前 Provider 定义与模型绑定；
+3. 原子更新 catalog default；
+4. 完整的环境 Provider 在 resolver 使用时按兼容规则物化。
+
+## 失败行为
+
+- `models.json` 不存在：继续启动，catalog 为空，环境变量兼容路径保持可用。
+- 文件非法或 Secret 环境变量无法解析：启动失败。
+- 显式 Provider 未知：失败，不使用默认 Provider。
+- 显式 Provider 没有 API Key：以不可用失败。
+- 可用的显式 Provider 下模型未知：原样转发 literal 模型 ID。
+- run/session 环境 Provider 不完整：不能与低优先级来源拼接。
+- 没有可用默认值：以配置前置条件错误失败。
+
+## 非目标与后续扩展
+
+后续可以增加账号登录、OAuth Connector、订阅账号凭据、Token 刷新、登出、账号选择和 Provider 状态 API。
+
+这些能力应当把凭据绑定到既有逻辑 Provider 上，同时保持以下契约不变：
+
+- `provider/model` 选择语义；
+- 模型元数据不是白名单；
+- 配置优先级；
+- sandbox 不接触上游 Secret 的安全边界。

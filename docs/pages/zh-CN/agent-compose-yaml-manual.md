@@ -458,7 +458,41 @@ agents:
     model: openai/gpt-5.4
 ```
 
-第一个 `/` 前的部分是 agent-compose 中配置的 LLM provider ID，后面的部分是该 provider 的模型名。Pi 的模型流量通过 sandbox runtime LLM facade 转发，上游凭据仍只保留在 daemon 中。
+第一个 `/` 前的部分是 agent-compose 中配置的 LLM Provider ID，后面的全部内容是发送给上游的字面量 Model ID，Model ID 本身还可以包含 `/`。Pi 的模型流量通过 sandbox runtime LLM facade 转发，上游凭据仍只保留在 daemon 中。
+
+### Daemon `models.json`
+
+daemon 在启动时加载一次 `$DATA_ROOT/models.json`。文件不存在是合法状态，已有环境变量配置路径保持不变。修改文件后需要重启 daemon。
+
+```json
+{
+  "default": "gateway/deepseek-v4-flash",
+  "providers": {
+    "gateway": {
+      "baseUrl": "https://gateway.example.com/api/openai",
+      "protocol": "chat_completions",
+      "apiKey": "${GATEWAY_API_KEY}",
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "maxOutputTokens": 8192
+        }
+      ]
+    },
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1",
+      "protocol": "responses",
+      "apiKey": "$OPENAI_API_KEY"
+    }
+  }
+}
+```
+
+`default` 是可选的 `provider/model` 引用。每个 Provider 都必须提供 `baseUrl`，并选择 `responses`、`chat_completions` 或 `anthropic_messages`。`apiKey` 和 Header 值可以是字面量，也可以是完整的 `$NAME` / `${NAME}` 引用；daemon 在启动时从自身环境解析。JSON 非法、未知字段、Protocol 不受支持、Token 上限非法或环境变量引用无法解析都会使 daemon 启动失败。
+
+可选的 `models` 数组只补充模型级元数据和行为，包括 `id`、`name`、`baseUrl`、`protocol`、`headers` 和正整数 `maxOutputTokens`；它不是白名单。只要 `gateway` Provider 已配置，`gateway/a-model-not-listed-here` 仍会使用 Provider 默认配置，把右侧 Model ID 原样发送给上游。
+
+所有兼容的 Coding Agent 和 `scheduler.llm` 共用这份目录。Agent 中完整配置的 `LLM_API_ENDPOINT`、`LLM_API_PROTOCOL` 和 `LLM_API_KEY` 仍是更高优先级的兼容路径；daemon 自身完整的 `LLM_*` 配置也继续作为默认值，并优先于 `models.json.default`。
 
 ### `image`
 
@@ -774,6 +808,7 @@ Scheduler 可以使用声明式 `triggers`，也可以使用 JavaScript `script`
 | `enabled` | bool | `true` | 是否启用该 Agent 的 Scheduler。禁用 Agent 也会使其 Scheduler 无效。 |
 | `sandbox_policy` | string | `new` | Scheduler 默认 sandbox 策略：`new` 或 `sticky`。 |
 | `concurrency_policy` | string | `skip` | 整个 Agent Scheduler 的重叠运行策略：`skip` 或 `parallel`。 |
+| `model` | string | Agent 的模型 | `scheduler.llm` 默认使用的 `provider/model`；调用参数中的 `model` 或 `LLM_MODEL` 优先。 |
 | `triggers` | list | 空 | 声明式触发器。 |
 | `script` | string/object | 空 | 内联 JavaScript，或扁平的 `file`/`http`/`git` 来源配置。不能和 `triggers` 同时使用。 |
 

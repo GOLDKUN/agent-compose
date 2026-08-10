@@ -91,11 +91,16 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandb
 	if err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
-	spec := BuildAgentExecSpec(r.config, session, agent, effectiveModel, promptPath, schemaPath, skillNames)
-	managedEnv, err := runtimefacade.EnsureSessionLLMFacadeConfig(ctx, r.config, facadeStoreFor(r.configDB), session, agent, effectiveModel, runtimefacade.TokenSourceAgent, runID)
+	runtimeConfig, err := runtimefacade.EnsureSessionAgentRuntimeConfig(ctx, r.config, facadeStoreFor(r.configDB), session, agent, effectiveModel, runtimefacade.TokenSourceAgent, runID)
 	if err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
+	runtimeModel := effectiveModel
+	if strings.TrimSpace(runtimeConfig.Model) != "" {
+		runtimeModel = strings.TrimSpace(runtimeConfig.Model)
+	}
+	spec := BuildAgentExecSpec(r.config, session, agent, runtimeModel, promptPath, schemaPath, skillNames)
+	managedEnv := runtimeConfig.Env
 	retainFacadeToken := false
 	if len(managedEnv) > 0 {
 		spec.Env = llms.MergeManagedExecEnv(spec.Env, managedEnv)

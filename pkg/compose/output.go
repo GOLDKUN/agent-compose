@@ -493,6 +493,7 @@ func cloneNormalizedSchedulerSpec(value *NormalizedSchedulerSpec) *NormalizedSch
 		ConcurrencyPolicy: value.ConcurrencyPolicy,
 		DisplayName:       value.DisplayName,
 		Description:       value.Description,
+		Model:             value.Model,
 		Script:            value.Script,
 		scriptSource:      cloneSourcePointer(value.scriptSource),
 	}

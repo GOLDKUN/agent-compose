@@ -126,7 +126,7 @@ func NormalizeWireAPI(value string) string {
 		return APIProtocolResponses
 	case "chat", "chat_completion", APIProtocolChatCompletions:
 		return APIProtocolChatCompletions
-	case "message", APIProtocolMessages:
+	case "message", "messages", APIProtocolMessages:
 		return APIProtocolMessages
 	default:
 		return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "-", "_")
@@ -244,11 +244,30 @@ func EndpointForProvider(provider Provider, wireAPI string) string {
 		parsed.Path = pathpkg.Join(parsed.Path, "messages")
 		return parsed.String()
 	}
+	if endpointAlreadyMatchesProtocol(provider.BaseURL, wireAPI) {
+		return strings.TrimRight(strings.TrimSpace(provider.BaseURL), "/")
+	}
 	baseURL := NormalizeAPIBaseURL(provider.BaseURL, wireAPI)
 	if !ProviderScopeIsConfigured(provider.Scope) {
 		return NormalizeAPIEndpointForProtocol(baseURL, wireAPI)
 	}
 	return AppendAPIEndpointToBaseURL(baseURL, wireAPI)
+}
+
+func endpointAlreadyMatchesProtocol(raw, wireAPI string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	path := strings.TrimRight(parsed.Path, "/")
+	switch NormalizeWireAPI(wireAPI) {
+	case APIProtocolChatCompletions:
+		return strings.HasSuffix(path, "/chat/completions")
+	case APIProtocolResponses:
+		return strings.HasSuffix(path, "/responses")
+	default:
+		return false
+	}
 }
 
 func ProviderScopeIsConfigured(scope string) bool {

@@ -143,6 +143,7 @@ type NormalizedSchedulerSpec struct {
 	ConcurrencyPolicy string                  `yaml:"concurrency_policy" json:"concurrency_policy"`
 	DisplayName       string                  `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 	Description       string                  `yaml:"description,omitempty" json:"description,omitempty"`
+	Model             string                  `yaml:"model,omitempty" json:"model,omitempty"`
 	Script            string                  `yaml:"script,omitempty" json:"script,omitempty"`
 	Triggers          []NormalizedTriggerSpec `yaml:"triggers,omitempty" json:"triggers,omitempty"`
 
@@ -1124,6 +1125,7 @@ func normalizeSchedulerSpec(path string, scheduler *SchedulerSpec, options Norma
 		ConcurrencyPolicy: concurrencyPolicy,
 		DisplayName:       strings.TrimSpace(scheduler.DisplayName),
 		Description:       strings.TrimSpace(scheduler.Description),
+		Model:             strings.TrimSpace(scheduler.Model),
 		Script:            script,
 	}
 	if scriptSource.HasContent() {

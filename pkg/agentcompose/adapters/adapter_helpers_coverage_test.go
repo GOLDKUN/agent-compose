@@ -28,7 +28,7 @@ func TestAdapterHelperCoverage(t *testing.T) {
 		if _, err := (SchedulerHostCommandExecutor{}).ExecuteSchedulerCommand(context.Background(), nil, domain.SchedulerCommandRequest{}); err == nil {
 			t.Fatalf("SchedulerHostCommandExecutor.ExecuteSchedulerCommand returned nil error")
 		}
-		if _, err := (SchedulerHostLLMRunner{}).Generate(context.Background(), "prompt", "model", ""); err == nil {
+		if _, err := (SchedulerHostLLMRunner{}).Generate(context.Background(), schedulers.HostLLMGenerateRequest{Prompt: "prompt", Model: "model"}); err == nil {
 			t.Fatalf("SchedulerHostLLMRunner.Generate returned nil error")
 		}
 	})
