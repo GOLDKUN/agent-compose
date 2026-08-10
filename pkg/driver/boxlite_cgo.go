@@ -502,11 +502,18 @@ func (r *cgoSandboxRuntime) ExecStream(ctx context.Context, sandbox *Sandbox, vm
 }
 
 func (r *cgoSandboxRuntime) InteractionCapabilities() RuntimeInteractionCapabilities {
-	return RuntimeInteractionCapabilities{}
+	return RuntimeInteractionCapabilities{
+		NativeExec: true,
+		Stdin:      true,
+		StdinEOF:   true,
+		TTY:        true,
+		Resize:     true,
+		Signal:     true,
+	}
 }
 
 func (r *cgoSandboxRuntime) OpenInteraction(ctx context.Context, sandbox *Sandbox, vmState VMState, spec RuntimeStartSpec) (RuntimeInteraction, error) {
-	return UnsupportedRuntimeInteraction(RuntimeDriverBoxlite, r.InteractionCapabilities(), spec)
+	return r.openBoxliteInteraction(ctx, sandbox, vmState, spec)
 }
 
 func (r *cgoSandboxRuntime) Stats(_ context.Context, sandbox *Sandbox, vmState VMState) (SandboxStats, error) {
