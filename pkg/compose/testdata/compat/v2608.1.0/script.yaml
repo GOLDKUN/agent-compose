@@ -1,0 +1,7 @@
+name: stable-script
+agents:
+  reviewer:
+    provider: codex
+    scheduler:
+      script: |
+        scheduler.main(function () { return "ok"; });

@@ -1,0 +1,111 @@
+name: stable-full
+env_file:
+  - .env
+variables:
+  API_TOKEN:
+    value: ${API_TOKEN}
+    secret: true
+workspaces:
+  repository:
+    provider: git
+    url: https://example.test/repository.git
+    ref: main
+    target: repository
+mcp_servers:
+  local-tools:
+    type: local
+    command: local-tools
+    args: [serve]
+    env:
+      MODE: review
+  remote-tools:
+    type: remote
+    transport: http
+    url: https://example.test/mcp
+    headers:
+      Authorization:
+        value: Bearer ${API_TOKEN}
+        secret: true
+octobus_servers:
+  internal:
+    url: https://octobus.example.test
+    token: ${API_TOKEN}
+volumes:
+  cache:
+    name: stable-cache
+    driver: local
+    labels:
+      purpose: compatibility
+    options:
+      type: tmpfs
+agents:
+  reviewer:
+    enabled: false
+    display_name: Stable Reviewer
+    description: Stable v2608.1.0 fixture
+    provider: codex
+    model: ${MODEL_NAME}
+    system_prompt: Review carefully.
+    image: example.test/agent:stable
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        MODE: review
+      platforms: [linux/amd64]
+      tags: [example.test/agent:stable]
+      no_cache: false
+      pull: true
+    driver:
+      docker:
+        host: unix:///var/run/docker.sock
+    env:
+      API_TOKEN:
+        value: ${API_TOKEN}
+        secret: true
+    mcp_servers:
+      - local-tools
+      - name: inline-tools
+        type: local
+        command: inline-tools
+        args: [serve]
+    capset_ids:
+      - internal/review
+    skills:
+      - name: review-skill
+        provider: file
+        path: ./skills/review
+    volumes:
+      - type: volume
+        source: cache
+        target: /cache
+        read_only: false
+    workspace:
+      name: repository
+    sandbox:
+      stopped_runtime_policy: retain
+    scheduler:
+      enabled: true
+      sandbox_policy: sticky
+      concurrency_policy: parallel
+      display_name: Stable Schedule
+      description: Stable schedule fixture
+      triggers:
+        - name: periodic
+          interval: 5m
+          prompt: Review periodically.
+        - name: one-shot
+          timeout: 1m
+          prompt: Review once.
+        - name: daily
+          cron: "0 9 * * *"
+          timezone: UTC
+          sandbox_policy: new
+        - name: pushed
+          event:
+            topic: git.push
+          prompt: Review the push.
+    jupyter:
+      enabled: true
+      guest_port: 8888

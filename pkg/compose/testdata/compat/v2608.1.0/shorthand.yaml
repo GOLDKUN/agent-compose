@@ -1,0 +1,17 @@
+name: stable-shorthand
+env_file: .env
+mcp_servers:
+  local-tools:
+    type: local
+    command: local-tools
+volumes:
+  cache: {}
+agents:
+  reviewer:
+    provider: codex
+    build: .
+    env:
+      MODE: review
+    mcp_servers: local-tools
+    volumes:
+      - cache:/workspace/cache:ro
