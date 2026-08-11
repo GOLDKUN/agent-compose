@@ -30,7 +30,7 @@ This design upgrades the lower execution boundary to an interactive runtime stre
 
 ## Non-Goals
 
-1. Do not implement BoxLite stdin/TTY/resize until its runtime API exposes the required controls. Microsandbox command attach was added later through its native streaming exec API.
+1. Do not emulate interactive controls in a driver that lacks native support. Docker, Microsandbox, and BoxLite now expose the stdin, TTY, resize, and signal controls required by command attach.
 2. Do not merge workspace files, artifact bodies, or the LLM facade HTTP/SSE protocol into the runtime stream.
 3. Do not implement `run --prompt -it` by making users call `agent-compose exec <sandbox> -it codex` or `run --command "codex" -it`.
 4. Do not remove compatibility artifacts such as `command-request.json`, `command-result.json`, `stdout.txt`, `stderr.txt`, `output.txt`, or `transcript.txt`.
@@ -74,7 +74,7 @@ The implementation should gradually converge:
 external API handlers
   -> daemon AttachEngine
   -> RuntimeInteraction
-  -> Docker native attach or runtime wrapper framed stream
+  -> Docker, Microsandbox, or BoxLite native attach
 ```
 
 To reduce risk in the first phase, only `-it` paths need to use the `AttachExec` / `AttachAgentRun` kernel. Existing unary and server-stream paths may keep their current implementation. In later migrations, handlers should call the same internal Go `AttachEngine` instead of making RPC calls to their own `AttachExec` / `AttachAgentRun` endpoints. This avoids protocol recursion and complicated connection lifecycles.
@@ -83,13 +83,13 @@ To reduce risk in the first phase, only `-it` paths need to use the `AttachExec`
 
 ## Driver Capability Matrix
 
-The first phase required full interactive support for Docker. Drivers without the required controls must report an explicit unsupported capability and must not silently fall back to the regular `StreamExec` RPC. Microsandbox now satisfies the command-interaction contract through native streaming exec.
+Drivers without the required controls must report an explicit unsupported capability and must not silently fall back to the regular `StreamExec` RPC. Docker, Microsandbox, and BoxLite now satisfy the command-interaction contract through their native streaming exec APIs.
 
 | driver | stdin | stdout/stderr | TTY | resize | current strategy |
 |---|---:|---:|---:|---:|---|
 | Docker | supported | existing basis | supported | supported | full implementation |
 | Microsandbox | supported | streaming exec events | supported | supported | native streaming exec |
-| BoxLite | current Go/FFI layer does not expose stdin | existing stdout/stderr callback | FFI has a `tty` field but it is not wired | not exposed | return unsupported |
+| BoxLite | supported | stdout/stderr callbacks | supported | supported | native C FFI execution handle |
 
 Suggested driver extension interface:
 
