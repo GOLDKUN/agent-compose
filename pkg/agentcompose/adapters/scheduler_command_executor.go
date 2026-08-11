@@ -72,15 +72,18 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 		CreatedAt: startedAt,
 		Running:   true,
 	}
-	execSession, facadeToken, err := e.prepareSchedulerCommandLLMFacadeEnv(ctx, session, request, cellID)
+	execSession, facadeTokenHashes, err := e.prepareSchedulerCommandLLMFacadeEnv(ctx, session, request, cellID)
 	if err != nil {
 		return domain.SchedulerCommandResult{}, err
 	}
-	retainFacadeToken := false
-	if e.ConfigDB != nil && facadeToken != "" {
+	retainFacadeTokens := false
+	if e.ConfigDB != nil && len(facadeTokenHashes) > 0 {
 		defer func() {
-			if !retainFacadeToken {
-				_ = e.ConfigDB.DeleteLLMFacadeToken(context.WithoutCancel(ctx), facadeToken)
+			if !retainFacadeTokens {
+				cleanupCtx := context.WithoutCancel(ctx)
+				for _, tokenHash := range facadeTokenHashes {
+					_ = e.ConfigDB.DeleteLLMFacadeTokenHash(cleanupCtx, tokenHash)
+				}
 			}
 		}()
 	}
@@ -161,6 +164,9 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 		return buildSchedulerCommandResult(recovered), finalErr
 	}
 
+	// request.Env is an explicit command option and the guest runtime applies it
+	// last to the workload child process. Preserve it unchanged; the freshly
+	// rebuilt managed facade values live only in execSession.RuntimeEnvItems.
 	runtimeRequest := execution.RuntimeCommandRequestPayload(e.Config, request, guestCellDir)
 	hostRequestPath := filepath.Join(hostCellDir, "command-request.json")
 	if err := execution.WriteJSONArtifact(hostRequestPath, runtimeRequest); err != nil {
@@ -191,7 +197,7 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 	}
 	commandHome := e.Config.GuestHomePath
 	execResult, err := runtime.ExecStream(execCtx, execSession, vmState, execution.BuildSchedulerCommandExecSpec(e.Config, execSession, filepath.Join(guestCellDir, "command-request.json"), commandHome), streamWriter)
-	retainFacadeToken = errors.Is(err, domain.ErrExecTerminationUnconfirmed)
+	retainFacadeTokens = errors.Is(err, domain.ErrExecTerminationUnconfirmed)
 	streamErrMu.Lock()
 	deferredStreamErr := streamErr
 	streamErrMu.Unlock()
@@ -253,13 +259,13 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 	}, nil
 }
 
-func (e *SchedulerCommandExecutor) prepareSchedulerCommandLLMFacadeEnv(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest, runID string) (*domain.Sandbox, string, error) {
+func (e *SchedulerCommandExecutor) prepareSchedulerCommandLLMFacadeEnv(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest, runID string) (*domain.Sandbox, []string, error) {
 	if e == nil || e.Config == nil || e.ConfigDB == nil || session == nil {
-		return session, "", nil
+		return session, nil, nil
 	}
 	agent, model := llms.SchedulerCommandFacadeAgentModel(request.Env)
 	if agent == "" {
-		return session, "", nil
+		return session, nil, nil
 	}
 
 	execSession := *session
@@ -273,12 +279,19 @@ func (e *SchedulerCommandExecutor) prepareSchedulerCommandLLMFacadeEnv(ctx conte
 	}
 	execSession.ProviderEnvItems = domain.MergeEnvItems(execSession.ProviderEnvItems, domain.SchedulerCommandSandboxEnv(request))
 
-	managedEnv, err := runtimefacade.EnsureSessionLLMFacadeConfig(ctx, e.Config, facadeStoreFor(e.ConfigDB), &execSession, agent, model, runtimefacade.TokenSourceSchedulerCommand, runID)
+	managedConfig, err := runtimefacade.EnsureSessionCommandFacadeConfig(ctx, e.Config, commandFacadeStoreFor(e.ConfigDB), &execSession, agent, model, runtimefacade.TokenSourceSchedulerCommand, runID)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
-	if len(managedEnv) > 0 {
-		execSession.RuntimeEnvItems = domain.MergeEnvItems(execSession.RuntimeEnvItems, llms.EnvItemsFromMap(managedEnv, false))
+	if len(managedConfig.Env) > 0 {
+		execSession.RuntimeEnvItems = domain.MergeEnvItems(execSession.RuntimeEnvItems, llms.EnvItemsFromMap(managedConfig.Env, true))
 	}
-	return &execSession, managedEnv["AGENT_COMPOSE_SANDBOX_TOKEN"], nil
+	return &execSession, managedConfig.TokenHashes, nil
+}
+
+func commandFacadeStoreFor(configDB *configstore.ConfigStore) runtimefacade.CommandFacadeStore {
+	if configDB == nil {
+		return nil
+	}
+	return configDB
 }

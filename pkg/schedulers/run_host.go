@@ -289,6 +289,9 @@ func (h *RuntimeHost) Command(ctx context.Context, request domain.SchedulerComma
 		_ = h.addLinkedSchedulerEvent(ctx, eventType, "info", "scheduler command sandbox ready", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
 	}
 	h.trackCommandSession(session.Summary.ID, cleanupSession)
+	if err := h.persistCommandSandboxLink(ctx, request, session.Summary.ID); err != nil {
+		return domain.SchedulerCommandResult{}, err
+	}
 
 	result, err := h.deps.CommandExecutor.ExecuteSchedulerCommand(ctx, session, request)
 	if err != nil {
@@ -301,6 +304,31 @@ func (h *RuntimeHost) Command(ctx context.Context, request domain.SchedulerComma
 	}
 	_ = h.addLinkedSchedulerEvent(ctx, "scheduler.command.completed", level, firstHostNonEmpty(result.Output, result.Stdout, result.Stderr, "scheduler command completed"), CommandEventPayload(request, result), result.SandboxID, result.CellID, "")
 	return result, nil
+}
+
+func (h *RuntimeHost) persistCommandSandboxLink(ctx context.Context, request domain.SchedulerCommandRequest, sandboxID string) error {
+	if h.execution.Kind != ExecutionKindTrigger || h.deps.Events == nil {
+		return nil
+	}
+	if err := h.addLinkedSchedulerEvent(ctx, "scheduler.command.started", "info", "scheduler command started", map[string]any{"sandboxId": sandboxID}, sandboxID, "", ""); err != nil {
+		persistErr := fmt.Errorf("persist scheduler command sandbox link: %w", err)
+		failedEventErr := h.addLinkedSchedulerEvent(
+			ctx,
+			"scheduler.command.failed",
+			"error",
+			persistErr.Error(),
+			CommandEventPayload(request, domain.SchedulerCommandResult{SandboxID: sandboxID}),
+			sandboxID,
+			"",
+			"",
+		)
+		if failedEventErr != nil {
+			slog.Error("failed to persist scheduler command failure event", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", failedEventErr)
+		}
+		slog.Error("scheduler command sandbox link persistence failed", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", persistErr)
+		return persistErr
+	}
+	return nil
 }
 
 func (h *RuntimeHost) LLM(ctx context.Context, prompt string, request domain.SchedulerLLMRequest) (domain.SchedulerLLMResult, error) {
@@ -385,7 +413,7 @@ func (h *RuntimeHost) addLinkedSchedulerEvent(ctx context.Context, eventType, le
 }
 
 func (h *RuntimeHost) addEventSandboxLink(ctx context.Context, event domain.SchedulerEvent, sandboxID, relation string) {
-	if h.deps.Store == nil || strings.TrimSpace(sandboxID) == "" || h.triggerEvent.EventID == "" {
+	if h.deps.Store == nil || strings.TrimSpace(sandboxID) == "" || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(relation) == "" || h.triggerEvent.EventID == "" {
 		return
 	}
 	if err := h.deps.Store.AddEventSandboxLink(ctx, domain.EventSandboxLink{

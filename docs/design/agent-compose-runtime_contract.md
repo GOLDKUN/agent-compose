@@ -461,6 +461,7 @@ Scheduler command host parsing flow:
 ```text
 RuntimeHost.Command
   -> ensure scheduler sandbox
+  -> persist scheduler.command.started with linked sandbox id
   -> SchedulerCommandExecutor.ExecuteSchedulerCommand
   -> Store.AddCell(running SHELL)
   -> write command-request.json
@@ -470,6 +471,34 @@ RuntimeHost.Command
   -> Store.AddCell(completed SHELL)
   -> scheduler.command.completed / scheduler.command.failed
 ```
+
+For trigger runs with an event recorder, the linked `scheduler.command.started`
+event is committed before the command executor starts. That event is the durable
+SchedulerRun-to-sandbox association returned by
+`ListSchedulerRuns.runs[].sandboxIds`; if an available recorder cannot persist
+it, the command is not started. A trigger host without an event recorder keeps
+the legacy best-effort behavior and executes the command without this event
+association. Direct scheduler invocations have no SchedulerRun record and
+therefore do not write this association.
+
+Every command reconstructs its transient LLM facade environment on an in-memory
+Sandbox clone instead of relying on fields that are intentionally absent from
+the persisted Sandbox record. Startup Anthropic and OpenAI family facades are
+created first; the selected provider facade is merged last so its exact provider
+variables win. The managed values are passed through the outer runtime process
+environment. An explicit `scheduler.shell`/`scheduler.exec` request environment
+is preserved unchanged in `command-request.json` and, per the guest runtime
+contract, overrides same-name outer values only for that workload child; raw
+managed facade tokens are therefore not copied into the request artifact.
+Commands for which no supported facade agent is selected do not perform facade
+reconstruction, so that command path is not coupled to LLM provider
+configuration health.
+The executor tracks every token hash persisted by this command. Partial setup
+failure and confirmed command termination delete all of them; an
+`ErrExecTerminationUnconfirmed` result retains them for later Sandbox lifecycle
+revocation because the guest process may still be running. This command-scoped
+path must not rerun full Sandbox agent preparation, which would revoke tokens and
+rewrite configuration used by other work in a reusable Sandbox.
 
 After parsing succeeds, the guest runtime has already written
 `command-result.json` in the shared cell directory. The host does not rewrite
