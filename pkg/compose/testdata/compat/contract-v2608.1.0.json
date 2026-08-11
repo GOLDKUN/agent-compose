@@ -1,0 +1,656 @@
+{
+  "baseline": "v2608.1.0",
+  "source_commit": "243274c1dd3e3c502b548c261be16bcea51fd11e",
+  "fields": [
+    {
+      "path": "agents",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.AgentSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build",
+      "go_type": "optional\u003cmapping\u003ccompose.BuildSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build.args",
+      "go_type": "mapping\u003cstring,string\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build.context",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build.dockerfile",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build.no_cache",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build.platforms",
+      "go_type": "sequence\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build.pull",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build.tags",
+      "go_type": "sequence\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.build.target",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.capset_ids",
+      "go_type": "sequence\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.description",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.display_name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver",
+      "go_type": "optional\u003cmapping\u003ccompose.DriverSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.boxlite",
+      "go_type": "optional\u003cmapping\u003ccompose.BoxliteDriverSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.boxlite.kernel",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.boxlite.rootfs",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.docker",
+      "go_type": "optional\u003cmapping\u003ccompose.DockerDriverSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.docker.host",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.firecracker",
+      "go_type": "optional\u003cmapping\u003ccompose.FirecrackerDriverSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.firecracker.kernel",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.firecracker.rootfs",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.microsandbox",
+      "go_type": "optional\u003cmapping\u003ccompose.MicrosandboxDriverSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.microsandbox.profile",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.enabled",
+      "go_type": "optional\u003cbool\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.env",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.EnvVarSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.env.*.secret",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "agents.*.env.*.value",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.image",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.jupyter",
+      "go_type": "optional\u003cmapping\u003ccompose.JupyterSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.jupyter.enabled",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "agents.*.jupyter.guest_port",
+      "go_type": "int",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers",
+      "go_type": "sequence\u003cmapping\u003ccompose.AgentMCPEntrySpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].args",
+      "go_type": "sequence\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].command",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].env",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.EnvVarSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].env.*.secret",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].env.*.value",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].headers",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.EnvVarSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].headers.*.secret",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].headers.*.value",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].transport",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].type",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.mcp_servers[].url",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.model",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.provider",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.sandbox",
+      "go_type": "optional\u003cmapping\u003ccompose.SandboxSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.sandbox.stopped_runtime_policy",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler",
+      "go_type": "optional\u003cmapping\u003ccompose.SchedulerSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.concurrency_policy",
+      "go_type": "optional\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.description",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.display_name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.enabled",
+      "go_type": "optional\u003cbool\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.sandbox_policy",
+      "go_type": "optional\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.script",
+      "go_type": "mapping\u003ccompose.ScriptSource\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers",
+      "go_type": "sequence\u003cmapping\u003ccompose.TriggerSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].cron",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].event",
+      "go_type": "optional\u003cmapping\u003ccompose.EventTriggerSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].event.topic",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].interval",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].prompt",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].sandbox_policy",
+      "go_type": "optional\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].timeout",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.scheduler.triggers[].timezone",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills",
+      "go_type": "sequence\u003cmapping\u003ccompose.SkillSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].format",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].password",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].path",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].provider",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].ref",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].token",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].url",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.skills[].username",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.system_prompt",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.volumes",
+      "go_type": "sequence\u003cmapping\u003ccompose.VolumeMountSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.volumes[].read_only",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "agents.*.volumes[].source",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.volumes[].target",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.volumes[].type",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace",
+      "go_type": "optional\u003cmapping\u003ccompose.WorkspaceSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.format",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.password",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.path",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.provider",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.ref",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.target",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.token",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.url",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.workspace.username",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "env_file",
+      "go_type": "sequence\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.MCPServerSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.args",
+      "go_type": "sequence\u003cstring\u003e",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.command",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.env",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.EnvVarSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.env.*.secret",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.env.*.value",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.headers",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.EnvVarSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.headers.*.secret",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.headers.*.value",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.transport",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.type",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "mcp_servers.*.url",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "octobus_servers",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.OctoBusServerSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "octobus_servers.*.token",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "octobus_servers.*.url",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "variables",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.EnvVarSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "variables.*.secret",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "variables.*.value",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "volumes",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.VolumeSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "volumes.*.driver",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "volumes.*.external",
+      "go_type": "bool",
+      "optional": true
+    },
+    {
+      "path": "volumes.*.labels",
+      "go_type": "mapping\u003cstring,string\u003e",
+      "optional": true
+    },
+    {
+      "path": "volumes.*.name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "volumes.*.options",
+      "go_type": "mapping\u003cstring,string\u003e",
+      "optional": true
+    },
+    {
+      "path": "workspaces",
+      "go_type": "mapping\u003cstring,mapping\u003ccompose.WorkspaceSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.format",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.name",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.password",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.path",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.provider",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.ref",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.target",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.token",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.url",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "workspaces.*.username",
+      "go_type": "string",
+      "optional": true
+    }
+  ]
+}

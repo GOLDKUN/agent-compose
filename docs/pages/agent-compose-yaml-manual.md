@@ -13,6 +13,14 @@ agent-compose -f ./path/to/agent-compose.yml config
 
 The first command validates without printing the normalized document. The second prints the normalized configuration and redacts values marked as secret. By default, the CLI looks for `agent-compose.yml` and then `agent-compose.yaml` in the current directory. Use `-f/--file` when both exist or when the file is elsewhere.
 
+## Compatibility policy
+
+The public authoring schema has been stable since `v2608.1.0`. A configuration accepted by that release or a later stable release remains valid in subsequent stable releases. This is a backward-compatibility promise: a newer release may add optional fields that an older strict parser does not recognize.
+
+Stable field removal or renaming, incompatible type changes, and making an optional field required are breaking changes. Changes to accepted shorthand forms, validation constraints, defaults, interpolation, or normalization semantics also require compatibility review. A security fix may intentionally reject an unsafe historical value, but must document the impact and migration.
+
+The repository enforces this policy with a machine-readable `v2608.1.0` field contract and cumulative parse-and-normalize fixtures. `agent-compose config --quiet` remains the user-facing way to validate a project with the installed version; cross-version contract comparison is a repository CI responsibility and does not add a separate CLI command.
+
 ## Complete structure at a glance
 
 This example shows where the available fields belong. Real projects should keep only the sections they need.
