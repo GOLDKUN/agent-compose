@@ -60,7 +60,15 @@ func (s *llmStore) UpsertDefaultLLMConfig(ctx context.Context, provider llms.Pro
 }
 
 func (s *llmStore) ListEnabledLLMProviders(ctx context.Context) ([]llms.Provider, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, provider_type, default_wire_api, base_url, api_key, auth_header, auth_scheme, headers_json, use_generic_responses_text_parts, weight, enabled, scope, created_at, updated_at FROM llm_provider WHERE enabled != 0 ORDER BY weight ASC, id ASC`)
+	return s.listLLMProviders(ctx, ` WHERE enabled != 0`)
+}
+
+func (s *llmStore) ListLLMProviders(ctx context.Context) ([]llms.Provider, error) {
+	return s.listLLMProviders(ctx, "")
+}
+
+func (s *llmStore) listLLMProviders(ctx context.Context, filter string) ([]llms.Provider, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, provider_type, default_wire_api, base_url, api_key, auth_header, auth_scheme, headers_json, use_generic_responses_text_parts, weight, enabled, scope, created_at, updated_at FROM llm_provider`+filter+` ORDER BY weight ASC, id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query llm providers: %w", err)
 	}

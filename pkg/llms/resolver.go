@@ -27,6 +27,14 @@ type catalogDefaultStore interface {
 	DefaultLLMModelReference(ctx context.Context) (providerID, modelID string, ok bool, err error)
 }
 
+// configuredProviderStore exposes provider identities regardless of whether
+// their credentials currently make them enabled. Explicit provider/model
+// references must be able to distinguish an unavailable provider from an
+// unqualified literal model name.
+type configuredProviderStore interface {
+	ListLLMProviders(ctx context.Context) ([]Provider, error)
+}
+
 // firstNonEmptyTrimmed returns the first value that is non-empty after trimming,
 // returning the trimmed form. It is intentionally distinct from firstNonEmpty
 // (which returns the raw value) to preserve the exact trimming behavior the LLM
@@ -157,6 +165,7 @@ func resolveRuntimeLLMTargetWithEnv(ctx context.Context, config *appconfig.Confi
 	preferredProviderFamily = NormalizeOptionalProviderType(preferredProviderFamily)
 	requestedModel = strings.TrimSpace(requestedModel)
 	providerID = strings.TrimSpace(providerID)
+	explicitProvider := providerID != ""
 	sessionRequestedModel := requestedModel
 	if _, modelID, ok := SplitProviderModelReference(sessionRequestedModel); ok {
 		sessionRequestedModel = modelID
@@ -176,8 +185,9 @@ func resolveRuntimeLLMTargetWithEnv(ctx context.Context, config *appconfig.Confi
 			switch {
 			case legacyReferenceUsesDefaultEnv(selectedProvider, defaultLookup):
 				requestedModel = selectedModel
-			case hasEnabledLLMProviderID(ctx, store, selectedProvider):
+			case hasEnabledLLMProviderID(ctx, store, selectedProvider) || hasConfiguredProviderID(ctx, store, selectedProvider):
 				providerID, requestedModel = selectedProvider, selectedModel
+				explicitProvider = true
 			}
 		}
 	}
@@ -203,7 +213,7 @@ func resolveRuntimeLLMTargetWithEnv(ctx context.Context, config *appconfig.Confi
 	// provider that exists. The facade hot path always passes a concrete
 	// provider id from the token scope, so this avoids a redundant pair of
 	// idempotent provider upserts on every LLM request.
-	bootstrapProviders := (providerID == "" || !IsSessionEnvProviderID(providerID)) && !hasEnabledLLMProviderID(ctx, store, providerID)
+	bootstrapProviders := !explicitProvider && (providerID == "" || !IsSessionEnvProviderID(providerID)) && !hasEnabledLLMProviderID(ctx, store, providerID)
 	bootstrapOpenAI := preferredProviderFamily == "" ||
 		preferredProviderFamily == ProviderFamilyOpenAI ||
 		genericSessionProviderFamily == ProviderFamilyOpenAI
@@ -239,6 +249,9 @@ func resolveRuntimeLLMTargetWithEnv(ctx context.Context, config *appconfig.Confi
 				return ResolvedTarget{}, err
 			}
 		}
+	}
+	if explicitProvider && !hasEnabledLLMProviderID(ctx, store, providerID) {
+		return ResolvedTarget{}, domain.ClassifyError(domain.ErrFailedPrecondition, fmt.Sprintf("llm provider %q is not configured", providerID), nil)
 	}
 	providerID = firstNonEmptyTrimmed(providerID, sessionProviderID)
 	if providerID == "" && !hasSessionEnvProvider {
@@ -397,6 +410,23 @@ func EnsureSessionAnthropicEnvProvider(ctx context.Context, store LLMResolverSto
 
 func hasEnabledLLMProviderID(ctx context.Context, store LLMResolverStore, providerID string) bool {
 	return HasEnabledProviderID(ctx, store, providerID)
+}
+
+func hasConfiguredProviderID(ctx context.Context, store LLMResolverStore, providerID string) bool {
+	configured, ok := store.(configuredProviderStore)
+	if !ok || strings.TrimSpace(providerID) == "" {
+		return false
+	}
+	providers, err := configured.ListLLMProviders(ctx)
+	if err != nil {
+		return false
+	}
+	for _, provider := range providers {
+		if provider.ID == strings.TrimSpace(providerID) {
+			return true
+		}
+	}
+	return false
 }
 
 func HasEnabledLLMProviderID(ctx context.Context, store LLMResolverStore, providerID string) bool {
