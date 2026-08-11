@@ -198,8 +198,15 @@ func validateCatalogProvider(id string, provider CatalogProvider) error {
 			return fmt.Errorf("provider %q declares model %q more than once", id, modelID)
 		}
 		seen[modelID] = struct{}{}
-		if model.Protocol != nil && !supportedCatalogProtocol(*model.Protocol) {
-			return fmt.Errorf("provider %q model %q has an unsupported protocol", id, modelID)
+		if model.Protocol != nil {
+			modelFamily := catalogProtocolFamily(*model.Protocol)
+			if modelFamily == "" {
+				return fmt.Errorf("provider %q model %q has an unsupported protocol", id, modelID)
+			}
+			providerFamily := catalogProtocolFamily(*provider.Protocol)
+			if modelFamily != providerFamily {
+				return fmt.Errorf("provider %q model %q protocol %q is incompatible with provider family %q", id, modelID, *model.Protocol, providerFamily)
+			}
 		}
 		if model.MaxOutputTokens != nil && *model.MaxOutputTokens <= 0 {
 			return fmt.Errorf("provider %q model %q maxOutputTokens must be positive", id, modelID)
@@ -221,11 +228,17 @@ func validateDeclaredCatalogModels(providerID string, models []CatalogModel) err
 }
 
 func supportedCatalogProtocol(value string) bool {
+	return catalogProtocolFamily(value) != ""
+}
+
+func catalogProtocolFamily(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case APIProtocolResponses, APIProtocolChatCompletions, APIProtocolMessages:
-		return true
+	case APIProtocolResponses, APIProtocolChatCompletions:
+		return ProviderFamilyOpenAI
+	case APIProtocolMessages:
+		return ProviderFamilyAnthropic
 	default:
-		return false
+		return ""
 	}
 }
 

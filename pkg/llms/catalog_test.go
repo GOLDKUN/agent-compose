@@ -88,6 +88,8 @@ func TestLoadModelCatalogRejectsIncompleteProvidersAndInvalidModels(t *testing.T
 		{name: "noncanonical messages protocol", data: `{"providers":{"anthropic":{"baseUrl":"https://example.test","protocol":"messages"}}}`, want: "supported protocol"},
 		{name: "noncanonical token field", data: `{"providers":{"custom":{"baseUrl":"https://example.test","protocol":"responses","models":[{"id":"model","max_output_tokens":1}]}}}`, want: "unknown field"},
 		{name: "duplicate model", data: `{"providers":{"custom":{"baseUrl":"https://example.test","protocol":"responses","models":[{"id":"same"},{"id":"same"}]}}}`, want: "more than once"},
+		{name: "anthropic model protocol on openai provider", data: `{"providers":{"gateway":{"baseUrl":"https://example.test/v1","protocol":"responses","models":[{"id":"model","protocol":"anthropic_messages"}]}}}`, want: `protocol "anthropic_messages" is incompatible with provider family "openai"`},
+		{name: "openai model protocol on anthropic provider", data: `{"providers":{"gateway":{"baseUrl":"https://example.test/v1","protocol":"anthropic_messages","models":[{"id":"model","protocol":"chat_completions"}]}}}`, want: `protocol "chat_completions" is incompatible with provider family "anthropic"`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), ModelsCatalogFilename)
@@ -99,6 +101,18 @@ func TestLoadModelCatalogRejectsIncompleteProvidersAndInvalidModels(t *testing.T
 				t.Fatalf("LoadModelCatalog error = %v", err)
 			}
 		})
+	}
+}
+
+func TestLoadModelCatalogAcceptsCompatibleModelProtocolOverrides(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ModelsCatalogFilename)
+	data := `{"providers":{"openai":{"baseUrl":"https://openai.example/v1","protocol":"responses","models":[{"id":"chat-model","protocol":"chat_completions"}]},"anthropic":{"baseUrl":"https://anthropic.example/v1","protocol":"anthropic_messages","models":[{"id":"messages-model","protocol":"anthropic_messages"}]}}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := LoadModelCatalog(path, nil); err != nil {
+		t.Fatalf("LoadModelCatalog: %v", err)
 	}
 }
 

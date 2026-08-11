@@ -94,6 +94,8 @@ Provider 支持以下字段：
 - `headers`：可选的模型级上游 Header。
 - `maxOutputTokens`：可选的正整数输出 Token 上限。
 
+模型级 `protocol` 必须与 Provider 的协议族兼容：OpenAI Provider（`responses` 或 `chat_completions`）只允许模型覆盖为 `responses` 或 `chat_completions`，Anthropic Provider（`anthropic_messages`）只允许 `anthropic_messages`。
+
 模型 `id` 是全局身份；`name`、模型级 Base URL、Protocol、Header 和输出限制属于具体的 `(provider, model)` 部署。两个 Provider 可以声明相同模型 ID，并分别保存这些部署属性，不能相互覆盖，也不能覆盖同名 system/env 模型的全局默认状态。
 
 `maxOutputTokens` 是唯一支持的配置字段。上游协议使用的
