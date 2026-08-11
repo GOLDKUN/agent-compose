@@ -374,7 +374,7 @@ func TestRuntimeHostCommandDoesNotExecuteWhenRunSandboxLinkFails(t *testing.T) {
 	}
 }
 
-func TestRuntimeHostTriggerCommandRequiresSchedulerEventRecorder(t *testing.T) {
+func TestRuntimeHostTriggerCommandWithoutSchedulerEventRecorderStillExecutes(t *testing.T) {
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-link-missing-recorder"}}
 	run := &domain.SchedulerRunSummary{ID: "run-link-missing-recorder", SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-link-missing-recorder"}
 	executor := &hostCommandExecutorFake{}
@@ -385,11 +385,11 @@ func TestRuntimeHostTriggerCommandRequiresSchedulerEventRecorder(t *testing.T) {
 		CommandExecutor: executor,
 	}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{EventID: "trigger-event-link-missing-recorder"})
 
-	if _, err := host.Command(context.Background(), domain.SchedulerCommandRequest{Mode: "shell", Command: "must not run"}); err == nil || !strings.Contains(err.Error(), "scheduler event recorder is unavailable") {
-		t.Fatalf("Command error = %v, want missing event recorder", err)
+	if _, err := host.Command(context.Background(), domain.SchedulerCommandRequest{Mode: "shell", Command: "run without events"}); err != nil {
+		t.Fatalf("Command returned error: %v", err)
 	}
-	if executor.calls != 0 {
-		t.Fatalf("command executor calls = %d, want 0", executor.calls)
+	if executor.calls != 1 {
+		t.Fatalf("command executor calls = %d, want 1", executor.calls)
 	}
 	if len(store.links) != 0 {
 		t.Fatalf("event sandbox links = %#v, want none when event recorder is unavailable", store.links)

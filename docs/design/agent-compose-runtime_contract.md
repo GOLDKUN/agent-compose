@@ -472,11 +472,14 @@ RuntimeHost.Command
   -> scheduler.command.completed / scheduler.command.failed
 ```
 
-For trigger runs, the linked `scheduler.command.started` event is committed before
-the command executor starts. That event is the durable SchedulerRun-to-sandbox
-association returned by `ListSchedulerRuns.runs[].sandboxIds`; if it cannot be
-persisted, the command is not started. Direct scheduler invocations have no
-SchedulerRun record and therefore do not write this association.
+For trigger runs with an event recorder, the linked `scheduler.command.started`
+event is committed before the command executor starts. That event is the durable
+SchedulerRun-to-sandbox association returned by
+`ListSchedulerRuns.runs[].sandboxIds`; if an available recorder cannot persist
+it, the command is not started. A trigger host without an event recorder keeps
+the legacy best-effort behavior and executes the command without this event
+association. Direct scheduler invocations have no SchedulerRun record and
+therefore do not write this association.
 
 Every command reconstructs its transient LLM facade environment on an in-memory
 Sandbox clone instead of relying on fields that are intentionally absent from

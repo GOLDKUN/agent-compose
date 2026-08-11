@@ -307,13 +307,8 @@ func (h *RuntimeHost) Command(ctx context.Context, request domain.SchedulerComma
 }
 
 func (h *RuntimeHost) persistCommandSandboxLink(ctx context.Context, request domain.SchedulerCommandRequest, sandboxID string) error {
-	if h.execution.Kind != ExecutionKindTrigger {
+	if h.execution.Kind != ExecutionKindTrigger || h.deps.Events == nil {
 		return nil
-	}
-	if h.deps.Events == nil {
-		persistErr := fmt.Errorf("persist scheduler command sandbox link: scheduler event recorder is unavailable")
-		slog.Error("scheduler command sandbox link persistence failed", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", persistErr)
-		return persistErr
 	}
 	if err := h.addLinkedSchedulerEvent(ctx, "scheduler.command.started", "info", "scheduler command started", map[string]any{"sandboxId": sandboxID}, sandboxID, "", ""); err != nil {
 		persistErr := fmt.Errorf("persist scheduler command sandbox link: %w", err)
