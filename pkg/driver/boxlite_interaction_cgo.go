@@ -94,15 +94,19 @@ type boxliteCommandInteraction struct {
 	awaiter       *boxliteExecAwaiter
 	awaiterHandle uintptr
 
-	ctx         context.Context
-	cancel      context.CancelFunc
-	operationID string
-	tty         bool
-	attachStdin bool
-	startedAt   time.Time
-	collector   *cgoExecCollector
-	output      chan RuntimeOutputFrame
-	done        chan struct{}
+	ctx           context.Context
+	cancel        context.CancelFunc
+	operationID   string
+	tty           bool
+	attachStdin   bool
+	startedAt     time.Time
+	collector     *cgoExecCollector
+	output        chan RuntimeOutputFrame
+	done          chan struct{}
+	outputMu      sync.Mutex
+	outputStarted bool
+	startupOutput []RuntimeOutputFrame
+	startupDone   chan struct{}
 
 	inputMu       sync.Mutex
 	stdinClosed   bool
@@ -177,8 +181,9 @@ func (r *cgoSandboxRuntime) openBoxliteInteraction(ctx context.Context, sandbox 
 		startedAt:     time.Now(),
 		output:        make(chan RuntimeOutputFrame, 64),
 		done:          make(chan struct{}),
+		startupDone:   make(chan struct{}),
 	}
-	interaction.collector = &cgoExecCollector{stream: interaction.emitChunk}
+	interaction.collector = &cgoExecCollector{stream: interaction.emitChunk, streamOnly: true}
 	interaction.awaiter = &boxliteExecAwaiter{
 		collector: interaction.collector,
 		waitCh:    make(chan boxliteExecWaitResult, 1),
@@ -196,7 +201,7 @@ func (r *cgoSandboxRuntime) openBoxliteInteraction(ctx context.Context, sandbox 
 			return nil, err
 		}
 	}
-	interaction.emit(RuntimeOutputFrame{Type: RuntimeOutputStarted, StartedAt: interaction.startedAt})
+	interaction.startOutput()
 	go interaction.run()
 	return interaction, nil
 }
@@ -311,7 +316,7 @@ func (i *boxliteCommandInteraction) writeStdin(data []byte) error {
 	if i.stdinClosed {
 		return io.ErrClosedPipe
 	}
-	if err := i.ctx.Err(); err != nil {
+	if err := i.inputStateErrorLocked(); err != nil {
 		return err
 	}
 	var ffiErr C.CBoxliteError
@@ -335,6 +340,9 @@ func (i *boxliteCommandInteraction) CloseSend() error {
 func (i *boxliteCommandInteraction) resize(rows, cols uint32) error {
 	i.inputMu.Lock()
 	defer i.inputMu.Unlock()
+	if err := i.inputStateErrorLocked(); err != nil {
+		return err
+	}
 	if err := validateBoxliteTerminalSize(rows, cols); err != nil {
 		return err
 	}
@@ -352,6 +360,9 @@ func (i *boxliteCommandInteraction) resize(rows, cols uint32) error {
 func (i *boxliteCommandInteraction) signal(signal RuntimeSignal) error {
 	i.inputMu.Lock()
 	defer i.inputMu.Unlock()
+	if err := i.inputStateErrorLocked(); err != nil {
+		return err
+	}
 	sig, err := boxliteRuntimeSignal(signal)
 	if err != nil {
 		return err
@@ -362,6 +373,13 @@ func (i *boxliteCommandInteraction) signal(signal RuntimeSignal) error {
 	return i.runVoidOperation("signal boxlite interaction", func(handle C.uintptr_t, ffiErr *C.CBoxliteError) C.enum_BoxliteErrorCode {
 		return C.agentcompose_boxlite_interaction_signal(i.execution, C.int(sig), handle, ffiErr)
 	})
+}
+
+func (i *boxliteCommandInteraction) inputStateErrorLocked() error {
+	if i.execution == nil {
+		return io.ErrClosedPipe
+	}
+	return i.ctx.Err()
 }
 
 func (i *boxliteCommandInteraction) runVoidOperation(action string, start func(C.uintptr_t, *C.CBoxliteError) C.enum_BoxliteErrorCode) error {
@@ -425,10 +443,49 @@ func (i *boxliteCommandInteraction) finish(exitCode int, err error) {
 }
 
 func (i *boxliteCommandInteraction) emit(frame RuntimeOutputFrame) {
+	i.outputMu.Lock()
+	if !i.outputStarted {
+		i.startupOutput = append(i.startupOutput, frame)
+		i.outputMu.Unlock()
+		return
+	}
+	startupDone := i.startupDone
+	i.outputMu.Unlock()
+
+	select {
+	case <-startupDone:
+	case <-i.ctx.Done():
+		return
+	}
 	select {
 	case i.output <- frame:
 	case <-i.ctx.Done():
 	}
+}
+
+// startOutput establishes the interaction framing boundary before OpenInteraction
+// returns. BoxLite starts the guest before its callbacks can be registered, so
+// callbacks observed during registration or the initial resize are staged. The
+// asynchronous flush lets callers begin receiving before a noisy guest can fill
+// the bounded output channel.
+func (i *boxliteCommandInteraction) startOutput() {
+	i.outputMu.Lock()
+	pending := i.startupOutput
+	i.startupOutput = nil
+	i.outputStarted = true
+	i.output <- RuntimeOutputFrame{Type: RuntimeOutputStarted, StartedAt: i.startedAt}
+	i.outputMu.Unlock()
+
+	go func() {
+		defer close(i.startupDone)
+		for _, frame := range pending {
+			select {
+			case i.output <- frame:
+			case <-i.ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 func (i *boxliteCommandInteraction) cleanupStart() {
@@ -447,7 +504,9 @@ func (i *boxliteCommandInteraction) cleanup() {
 		i.inputMu.Lock()
 		defer i.inputMu.Unlock()
 		globalBoxliteAwaiters.delete(i.awaiterHandle)
-		C.boxlite_execution_free(i.execution)
+		execution := i.execution
+		i.execution = nil
+		C.boxlite_execution_free(execution)
 		i.box.free()
 		i.cancel()
 	})

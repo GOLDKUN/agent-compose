@@ -177,6 +177,7 @@ type cgoBoxInfo struct {
 type cgoExecCollector struct {
 	stream        ExecStreamWriter
 	filter        *execOutputFilter
+	streamOnly    bool
 	stdoutDecoder utf8StreamDecoder
 	stderrDecoder utf8StreamDecoder
 	stdout        bytes.Buffer
@@ -303,10 +304,13 @@ func (c *cgoExecCollector) writeBytes(data []byte, stream StdioStream) {
 }
 
 func (c *cgoExecCollector) appendChunk(chunk ExecChunk) {
-	c.output.WriteString(chunk.Text)
 	if c.stream != nil {
 		c.stream(chunk)
 	}
+	if c.streamOnly {
+		return
+	}
+	c.output.WriteString(chunk.Text)
 	if NormalizeStdioStream(chunk.Stream) == StdioStderr {
 		c.stderr.WriteString(chunk.Text)
 		return
