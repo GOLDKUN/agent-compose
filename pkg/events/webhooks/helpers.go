@@ -146,6 +146,23 @@ func SanitizeHeaders(headers http.Header) map[string]string {
 	return out
 }
 
+func webhookPayloadHeaders(r *http.Request) map[string]string {
+	out := SanitizeHeaders(r.Header)
+	for _, header := range domain.TrustedHeadersFromContext(r.Context()) {
+		name := strings.ToLower(strings.TrimSpace(header.Name))
+		if !strings.HasPrefix(name, "x-mpi-") {
+			continue
+		}
+		value := strings.TrimSpace(header.Value)
+		if existing := out[name]; existing != "" {
+			out[name] = existing + "," + value
+			continue
+		}
+		out[name] = value
+	}
+	return out
+}
+
 func BuildPayload(r *http.Request, eventID string, sequence int64, topic, correlationID, idempotencyKey string, source domain.WebhookSource, body map[string]any) map[string]any {
 	payload := map[string]any{
 		"eventId":        eventID,
@@ -160,7 +177,7 @@ func BuildPayload(r *http.Request, eventID string, sequence int64, topic, correl
 		"idempotencyKey": idempotencyKey,
 		"deliveryId":     ExtractDeliveryID(r),
 		"remoteAddr":     r.RemoteAddr,
-		"headers":        SanitizeHeaders(r.Header),
+		"headers":        webhookPayloadHeaders(r),
 		"query":          QueryValuesToMap(r),
 		"body":           body,
 	}
