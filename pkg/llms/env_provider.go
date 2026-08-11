@@ -38,13 +38,13 @@ func EnvHasProviderKeyForFamily(envItems []domain.SandboxEnvVar, providerFamily 
 }
 
 func HasOpenAIEnvProviderInput(envItems []domain.SandboxEnvVar) bool {
-	return hasOpenAIEnvProviderInput(envItems) ||
-		hasGenericLLMEnvProviderInput(envItems) && genericLLMEnvProviderFamily(envItems) == ProviderFamilyOpenAI
+	return EnvHasProviderKeyForFamily(envItems, ProviderFamilyOpenAI) && (hasOpenAIEnvProviderInput(envItems) ||
+		hasGenericLLMEnvProviderInput(envItems) && genericLLMEnvProviderFamily(envItems) == ProviderFamilyOpenAI)
 }
 
 func HasAnthropicEnvProviderInput(envItems []domain.SandboxEnvVar) bool {
-	return hasAnthropicEnvProviderInput(envItems) ||
-		hasGenericLLMEnvProviderInput(envItems) && genericLLMEnvProviderFamily(envItems) == ProviderFamilyAnthropic
+	return EnvHasProviderKeyForFamily(envItems, ProviderFamilyAnthropic) && (hasAnthropicEnvProviderInput(envItems) ||
+		hasGenericLLMEnvProviderInput(envItems) && genericLLMEnvProviderFamily(envItems) == ProviderFamilyAnthropic)
 }
 
 func hasOpenAIEnvProviderInput(envItems []domain.SandboxEnvVar) bool {

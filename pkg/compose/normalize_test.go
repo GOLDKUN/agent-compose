@@ -665,6 +665,25 @@ agents:
 	}
 }
 
+func TestNormalizeSchedulerModel(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: scheduler-model
+agents:
+  reviewer:
+    model: openai/agent-model
+    scheduler:
+      model: baizhi/scheduler-model
+      script: scheduler.timeout("once", 1, async () => {});
+`)
+	normalized, err := Normalize(spec, NormalizeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Agents[0].Scheduler.Model; got != "baizhi/scheduler-model" {
+		t.Fatalf("scheduler model = %q", got)
+	}
+}
+
 func TestNormalizeRequiresAgentModelEnvironmentReference(t *testing.T) {
 	spec := mustParseCompose(t, `
 name: model-env

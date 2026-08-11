@@ -95,6 +95,7 @@ func TestEnsurePromptAttachLLMFacadeEnvClaudeUsesControllerStore(t *testing.T) {
 }
 
 func TestEnsurePromptAttachLLMFacadeEnvRejectsManagedCodexWithoutReachableFacade(t *testing.T) {
+	isolatePromptAttachLLMEnv(t)
 	store := &promptAttachFacadeStore{
 		providers: []llms.Provider{{
 			ID:             "openai-test",
@@ -153,6 +154,7 @@ func TestEnsurePromptAttachClaudeLLMFacadeEnvPreservesRequestedModelWithoutConfi
 }
 
 func TestEnsurePromptAttachLLMFacadeEnvOpenCodeUsesSharedRuntimeConfig(t *testing.T) {
+	isolatePromptAttachLLMEnv(t)
 	root := t.TempDir()
 	config := &appconfig.Config{
 		RuntimeBaseURL: "http://agent-compose.test:7410",
@@ -185,7 +187,10 @@ func TestEnsurePromptAttachLLMFacadeEnvOpenCodeUsesSharedRuntimeConfig(t *testin
 	if err != nil {
 		t.Fatalf("ensurePromptAttachLLMFacadeEnv returned error: %v", err)
 	}
-	if env["LLM_API_PROTOCOL"] != llms.APIProtocolResponses || env["OPENCODE_CONFIG"] != "/root/.config/opencode/opencode.json" {
+	if env["LLM_API_PROTOCOL"] != llms.APIProtocolResponses ||
+		env["OPENCODE_CONFIG"] != "/root/.config/opencode/opencode.json" ||
+		env["LLM_MODEL"] != "agent-compose/gpt-test" ||
+		env["OPENCODE_MODEL"] != "agent-compose/gpt-test" {
 		t.Fatalf("OpenCode facade env = %#v", env)
 	}
 	if env["AGENT_COMPOSE_SANDBOX_TOKEN"] == "" || len(store.tokens) != 1 {
@@ -200,8 +205,29 @@ func TestEnsurePromptAttachLLMFacadeEnvOpenCodeUsesSharedRuntimeConfig(t *testin
 	if err != nil {
 		t.Fatalf("read OpenCode runtime config: %v", err)
 	}
-	if !strings.Contains(string(data), `"gpt-test"`) || !strings.Contains(string(data), `"openai"`) {
+	if !strings.Contains(string(data), `"gpt-test"`) ||
+		!strings.Contains(string(data), `"agent-compose"`) ||
+		strings.Contains(string(data), `"agent-compose agent-compose"`) {
 		t.Fatalf("OpenCode runtime config = %s", data)
+	}
+}
+
+func isolatePromptAttachLLMEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		"LLM_API_ENDPOINT",
+		"LLM_API_PROTOCOL",
+		"LLM_API_KEY",
+		"OPENAI_API_KEY",
+		"LLM_MODEL",
+		"ANTHROPIC_BASE_URL",
+		"ANTHROPIC_API_ENDPOINT",
+		"ANTHROPIC_API_KEY",
+		"ANTHROPIC_AUTH_TOKEN",
+		"ANTHROPIC_MODEL",
+		"CLAUDE_MODEL",
+	} {
+		t.Setenv(key, "")
 	}
 }
 

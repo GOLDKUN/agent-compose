@@ -368,6 +368,68 @@ func TestAgentRunnerExecuteAgentRunFallsBackToDefinitionModel(t *testing.T) {
 	}
 }
 
+func TestAgentRunnerExecuteAgentRunUsesResolvedOpenCodeFacadeModel(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	config := &appconfig.Config{
+		DataRoot:             root,
+		DbAddr:               filepath.Join(root, "data.db"),
+		SandboxRoot:          filepath.Join(root, "sandboxes"),
+		RuntimeDriver:        driverpkg.RuntimeDriverBoxlite,
+		DefaultImage:         "guest:latest",
+		GuestWorkspacePath:   "/workspace",
+		GuestStateRoot:       "/data/state",
+		GuestHomePath:        "/root",
+		RuntimeBaseURL:       "http://agent-compose.test:7410",
+		JupyterProxyBasePath: "/agent-compose/session",
+		SandboxStartTimeout:  2 * time.Second,
+	}
+	configDB, store, err := testutil.OpenStores(t, config)
+	if err != nil {
+		t.Fatalf("OpenStores returned error: %v", err)
+	}
+	baseURL := "https://gateway.example.test/api/openai"
+	protocol := llms.APIProtocolChatCompletions
+	apiKey := "catalog-key"
+	if err := configDB.ApplyModelCatalog(ctx, llms.ModelCatalog{
+		Default: "baizhi/deepseek-v4-flash",
+		Providers: map[string]llms.CatalogProvider{
+			"baizhi": {
+				BaseURL:  &baseURL,
+				Protocol: &protocol,
+				APIKey:   &apiKey,
+				Models:   []llms.CatalogModel{{ID: "deepseek-v4-flash"}},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("ApplyModelCatalog returned error: %v", err)
+	}
+	session, err := store.CreateSandbox(ctx, "agent session", "", driverpkg.RuntimeDriverBoxlite, "guest:latest", "", domain.SandboxTypeManual, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	session.Summary.VMStatus = domain.VMStatusRunning
+	if err := store.UpdateSandbox(ctx, session); err != nil {
+		t.Fatalf("UpdateSandbox returned error: %v", err)
+	}
+	runtime := &fakeAgentRuntime{}
+	runner := NewAgentRunner(config, store, configDB, nil, fakeRuntimeProvider{runtime: runtime})
+
+	if _, _, err := runner.ExecuteAgentRun(ctx, session, "opencode", "", "baizhi/deepseek-v4-flash", "run-1", "hello", "", nil); err != nil {
+		t.Fatalf("ExecuteAgentRun returned error: %v", err)
+	}
+	if len(runtime.specs) != 1 {
+		t.Fatalf("runtime specs = %#v", runtime.specs)
+	}
+	command := runtime.specs[0].Args[1]
+	if !strings.Contains(command, " --model 'agent-compose/deepseek-v4-flash'") {
+		t.Fatalf("runtime command missing resolved facade model: %s", command)
+	}
+	if strings.Contains(command, " --model 'baizhi/deepseek-v4-flash'") {
+		t.Fatalf("runtime command contains unresolved catalog model: %s", command)
+	}
+}
+
 func TestAgentRunnerExecuteAgentRunContinuesWhenDefinitionLookupFails(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()

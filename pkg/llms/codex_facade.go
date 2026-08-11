@@ -31,6 +31,9 @@ func EnsureCodexFacadeConfig(ctx context.Context, config *appconfig.Config, stor
 		}
 		return nil, err
 	}
+	if NormalizeProviderType(target.Provider.ProviderType) != ProviderFamilyOpenAI {
+		return nil, domain.ClassifyError(domain.ErrFailedPrecondition, "codex requires an OpenAI-compatible model", nil)
+	}
 	baseURL, err := RequireGuestRuntimeBaseURL(config, sandbox)
 	if err != nil {
 		return nil, err
@@ -52,6 +55,8 @@ func EnsureCodexFacadeConfig(ctx context.Context, config *appconfig.Config, stor
 		"LLM_API_ENDPOINT":            openAIBaseURL,
 		"LLM_API_KEY":                 tokenValue,
 		"LLM_API_PROTOCOL":            APIProtocolResponses,
+		"LLM_MODEL":                   target.Model.Name,
+		"CODEX_MODEL":                 target.Model.Name,
 		"OPENAI_API_KEY":              tokenValue,
 		"OPENAI_BASE_URL":             openAIBaseURL,
 	}, nil

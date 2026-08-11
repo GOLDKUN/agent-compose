@@ -55,7 +55,15 @@ type HostCommandExecutor interface {
 }
 
 type HostLLMRunner interface {
-	Generate(ctx context.Context, prompt, model, outputSchema string) (domain.SchedulerLLMResult, error)
+	Generate(ctx context.Context, request HostLLMGenerateRequest) (domain.SchedulerLLMResult, error)
+}
+
+type HostLLMGenerateRequest struct {
+	Prompt       string
+	Model        string
+	OutputSchema string
+	SchedulerID  string
+	EnvItems     []domain.SandboxEnvVar
 }
 
 type HostSandboxRPC interface {
@@ -335,13 +343,31 @@ func (h *RuntimeHost) LLM(ctx context.Context, prompt string, request domain.Sch
 	if h.deps.LLM == nil {
 		return domain.SchedulerLLMResult{}, fmt.Errorf("llm client is unavailable")
 	}
-	result, err := h.deps.LLM.Generate(ctx, prompt, request.Model, request.OutputSchema)
+	model := firstHostNonEmpty(
+		strings.TrimSpace(request.Model),
+		schedulerEnvValue(h.scheduler.EnvItems, "LLM_MODEL"),
+		strings.TrimSpace(h.scheduler.Model),
+		strings.TrimSpace(h.scheduler.AgentModel),
+	)
+	result, err := h.deps.LLM.Generate(ctx, HostLLMGenerateRequest{
+		Prompt: prompt, Model: model, OutputSchema: request.OutputSchema,
+		SchedulerID: h.scheduler.Summary.ID, EnvItems: h.scheduler.EnvItems,
+	})
 	if err != nil {
 		_ = h.addSchedulerEvent(ctx, "scheduler.llm.failed", "error", err.Error(), map[string]any{"model": strings.TrimSpace(request.Model)}, "", "", "")
 		return domain.SchedulerLLMResult{}, err
 	}
 	_ = h.addSchedulerEvent(ctx, "scheduler.llm.completed", "info", firstHostNonEmpty(result.Text, "llm completed"), result, "", "", "")
 	return result, nil
+}
+
+func schedulerEnvValue(items []domain.SandboxEnvVar, name string) string {
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item.Name), name) {
+			return strings.TrimSpace(item.Value)
+		}
+	}
+	return ""
 }
 
 func (h *RuntimeHost) CleanupCommandSessions(ctx context.Context) {

@@ -113,6 +113,7 @@ func TestProjectSpecToProtoIncludesSchedulerScript(t *testing.T) {
 				ConcurrencyPolicy: "parallel",
 				DisplayName:       "Hourly review",
 				Description:       "Reviews pending changes every hour",
+				Model:             "baizhi/deepseek-review",
 				Script:            script,
 			},
 		}},
@@ -136,7 +137,10 @@ func TestProjectSpecToProtoIncludesSchedulerScript(t *testing.T) {
 		t.Fatalf("scheduler presentation = %#v", scheduler)
 	}
 	shape := SchedulerYAMLShape(scheduler)
-	if shape["sandbox_policy"] != "sticky" || shape["concurrency_policy"] != "parallel" || shape["display_name"] != "Hourly review" || shape["description"] != "Reviews pending changes every hour" {
+	if scheduler.GetModel() != "baizhi/deepseek-review" {
+		t.Fatalf("scheduler model = %q", scheduler.GetModel())
+	}
+	if shape["sandbox_policy"] != "sticky" || shape["concurrency_policy"] != "parallel" || shape["display_name"] != "Hourly review" || shape["description"] != "Reviews pending changes every hour" || shape["model"] != "baizhi/deepseek-review" {
 		t.Fatalf("scheduler YAML shape = %#v", shape)
 	}
 	if got := len(scheduler.GetTriggers()); got != 0 {

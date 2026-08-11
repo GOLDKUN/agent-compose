@@ -8,6 +8,7 @@ import (
 
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/llms"
+	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/storage/configstore"
 )
 
@@ -30,10 +31,14 @@ func NewLLMClient(config *appconfig.Config, store *configstore.ConfigStore) *LLM
 }
 
 func (c *LLMClient) Generate(ctx context.Context, prompt, model, outputSchemaJSON string) (llms.GenerateResult, error) {
+	return c.GenerateWithEnv(ctx, prompt, model, outputSchemaJSON, "", nil)
+}
+
+func (c *LLMClient) GenerateWithEnv(ctx context.Context, prompt, model, outputSchemaJSON, scopeID string, envItems []domain.SandboxEnvVar) (llms.GenerateResult, error) {
 	if c == nil {
 		return llms.GenerateResult{}, fmt.Errorf("llm client is unavailable")
 	}
-	target, err := llms.ResolveLLMTarget(ctx, c.config, c.store, model)
+	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, c.config, c.store, scopeID, "", model, "", envItems)
 	if err != nil {
 		return llms.GenerateResult{}, err
 	}
@@ -41,10 +46,27 @@ func (c *LLMClient) Generate(ctx context.Context, prompt, model, outputSchemaJSO
 		Endpoint:         target.Endpoint,
 		Protocol:         target.WireAPI,
 		Prompt:           prompt,
-		Model:            firstNonEmpty(model, target.Model.Name, target.Model.ID),
+		Model:            firstNonEmpty(target.Model.ID, target.Model.Name),
 		OutputSchemaJSON: outputSchemaJSON,
 		Headers:          target.Headers,
+		MaxOutputTokens:  firstPositive(target.MaxOutputTokens, configuredMaxOutputTokens(c.config)),
 	})
+}
+
+func configuredMaxOutputTokens(config *appconfig.Config) int {
+	if config == nil {
+		return 0
+	}
+	return config.LLMMaxOutputTokens
+}
+
+func firstPositive(values ...int) int {
+	for _, value := range values {
+		if value > 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 func firstNonEmpty(values ...string) string {

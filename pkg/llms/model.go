@@ -10,6 +10,7 @@ const (
 	ProviderFamilyAnthropic = "anthropic"
 
 	ProviderScopeSystem     = "system"
+	ProviderScopeCatalog    = "catalog"
 	ProviderScopeEnvDefault = "env_default"
 	ProviderScopeSessionEnv = "session_env"
 
@@ -18,7 +19,7 @@ const (
 
 	APIProtocolResponses       = "responses"
 	APIProtocolChatCompletions = "chat_completions"
-	APIProtocolMessages        = "messages"
+	APIProtocolMessages        = "anthropic_messages"
 )
 
 type Provider struct {
@@ -51,11 +52,12 @@ type Model struct {
 }
 
 type ResolvedTarget struct {
-	Provider Provider
-	Model    Model
-	WireAPI  string
-	Endpoint string
-	Headers  http.Header
+	Provider        Provider
+	Model           Model
+	WireAPI         string
+	Endpoint        string
+	Headers         http.Header
+	MaxOutputTokens int
 }
 
 type FacadeToken struct {

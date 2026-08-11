@@ -49,15 +49,9 @@ func resolveRuntimeLLMProviderTarget(ctx context.Context, store runtimeLLMProvid
 		}
 	}
 
-	headers, err := ProviderForwardHeaders(provider)
+	target, err := BuildResolvedTarget(ctx, store, provider, Model{ID: requestedModel, Name: requestedModel, Enabled: true}, wireAPI)
 	if err != nil {
 		return ResolvedTarget{}, false, err
 	}
-	return ResolvedTarget{
-		Provider: provider,
-		Model:    Model{ID: requestedModel, Name: requestedModel, Enabled: true},
-		WireAPI:  wireAPI,
-		Endpoint: EndpointForProvider(provider, wireAPI),
-		Headers:  headers,
-	}, true, nil
+	return target, true, nil
 }

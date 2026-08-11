@@ -244,6 +244,9 @@ func StartBackground(di do.Injector) error {
 	// create a sandbox, so the initial cleanup pass cannot race registration.
 	runner := do.MustInvoke[*cleanup.Runner](di)
 	ctx := do.MustInvoke[context.Context](di)
+	if err := loadModelCatalog(ctx, do.MustInvoke[*appconfig.Config](di), do.MustInvoke[*configstore.ConfigStore](di)); err != nil {
+		return fmt.Errorf("load model catalog: %w", err)
+	}
 	for _, warning := range do.MustInvoke[*adapters.SandboxRPCBridge](di).RecoverStoppedRuntimeReleases(ctx) {
 		slog.Warn("failed to recover stopped runtime release", "warning", warning)
 	}

@@ -229,10 +229,12 @@ func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.Proje
 			AgentName:          agent.Name,
 			ProjectSchedulerID: scheduler.SchedulerID,
 		},
-		Script:   script,
-		Triggers: triggers,
-		EnvItems: SandboxEnvItemsFromCompose(agent.Env),
-		Volumes:  VolumeMountSpecsFromCompose(agent.Volumes),
+		Script:     script,
+		Model:      strings.TrimSpace(agent.Scheduler.Model),
+		AgentModel: strings.TrimSpace(agent.Model),
+		Triggers:   triggers,
+		EnvItems:   SandboxEnvItemsFromCompose(agent.Env),
+		Volumes:    VolumeMountSpecsFromCompose(agent.Volumes),
 	}, nil
 }
 

@@ -96,6 +96,70 @@ func TestResolverBootstrapAndRuntimeTargetWorkflows(t *testing.T) {
 	}
 }
 
+func TestResolveRuntimeLLMTargetTreatsUnknownSlashPrefixAsLiteralModel(t *testing.T) {
+	isolateLLMEnv(t)
+
+	ctx := context.Background()
+	store := newResolverCoverageStore()
+	config := &appconfig.Config{
+		LLMAPIEndpoint: "https://api.openai.test",
+		LLMAPIProtocol: APIProtocolResponses,
+		LLMAPIKey:      "openai-key",
+		LLMModel:       "feature/gpt-5.6-sol",
+	}
+	target, err := ResolveRuntimeLLMTargetWithEnv(
+		ctx,
+		config,
+		store,
+		"session-1",
+		ProviderFamilyOpenAI,
+		config.LLMModel,
+		"",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ResolveRuntimeLLMTargetWithEnv returned error: %v", err)
+	}
+	if target.Provider.ID != ProviderIDDefaultOpenAI || target.Model.ID != config.LLMModel {
+		t.Fatalf("target = %#v, want provider %q and literal model %q", target, ProviderIDDefaultOpenAI, config.LLMModel)
+	}
+}
+
+func TestResolveRuntimeLLMTargetUsesConfiguredSlashPrefixAsProvider(t *testing.T) {
+	isolateLLMEnv(t)
+
+	ctx := context.Background()
+	store := newResolverCoverageStore()
+	store.providers = []Provider{{
+		ID:             "feature",
+		ProviderType:   ProviderFamilyOpenAI,
+		DefaultWireAPI: APIProtocolResponses,
+		BaseURL:        "https://feature.openai.test",
+		APIKey:         "feature-key",
+		Enabled:        true,
+		Scope:          ProviderScopeSystem,
+	}}
+	store.models = []Model{{ID: "gpt-5.6-sol", Name: "gpt-5.6-sol", Enabled: true, Scope: ProviderScopeSystem}}
+	store.wire["feature\x00gpt-5.6-sol"] = APIProtocolResponses
+
+	target, err := ResolveRuntimeLLMTargetWithEnv(
+		ctx,
+		&appconfig.Config{},
+		store,
+		"session-1",
+		ProviderFamilyOpenAI,
+		"feature/gpt-5.6-sol",
+		"",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ResolveRuntimeLLMTargetWithEnv returned error: %v", err)
+	}
+	if target.Provider.ID != "feature" || target.Model.ID != "gpt-5.6-sol" {
+		t.Fatalf("target = %#v, want configured feature provider and unqualified model", target)
+	}
+}
+
 func isolateLLMEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{

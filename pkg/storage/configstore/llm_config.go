@@ -24,6 +24,14 @@ func (s *llmStore) HasLLMProviders(ctx context.Context) (bool, error) {
 	return count > 0, nil
 }
 
+func (s *llmStore) HasLLMProvider(ctx context.Context, providerID string) (bool, error) {
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM llm_provider WHERE id = ?)`, strings.TrimSpace(providerID)).Scan(&exists); err != nil {
+		return false, fmt.Errorf("query llm provider %q: %w", providerID, err)
+	}
+	return exists, nil
+}
+
 func (s *llmStore) UpsertDefaultLLMConfig(ctx context.Context, provider llms.Provider, model llms.Model) error {
 	now := time.Now().UTC().Unix()
 	var ok bool

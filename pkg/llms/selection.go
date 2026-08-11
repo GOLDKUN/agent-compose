@@ -104,10 +104,10 @@ func SelectProviderForModel(ctx context.Context, store ProviderModelWireAPIStore
 func ProviderSelectionPriority(scope string) int {
 	switch strings.TrimSpace(scope) {
 	case ProviderScopeSessionEnv:
-		return 2
+		return 0
 	case ProviderScopeEnvDefault:
 		return 1
 	default:
-		return 0
+		return 2
 	}
 }

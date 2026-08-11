@@ -36,6 +36,7 @@ type AgentModelResolutionStore interface {
 	ProviderListStore
 	ProviderModelWireAPIStore
 	GlobalEnvStore
+	DefaultLLMModelReference(ctx context.Context) (providerID, modelID string, ok bool, err error)
 	ListEnabledLLMModels(context.Context) ([]Model, error)
 }
 
@@ -77,14 +78,6 @@ func ResolveAgentModel(ctx context.Context, config *appconfig.Config, store Agen
 		return AgentModelResolution{Source: source}, nil
 	}
 
-	providers, models, err := enabledLLMConfiguration(ctx, store)
-	if err != nil {
-		return AgentModelResolution{}, err
-	}
-	if hasConfiguredProviderForFamily(providers, providerFamily) {
-		return selectConfiguredDefaultModel(ctx, store, providers, models, providerFamily)
-	}
-
 	model, err := daemonEnvironmentModel(ctx, config, store, providerFamily)
 	if err != nil {
 		return AgentModelResolution{}, err
@@ -93,7 +86,22 @@ func ResolveAgentModel(ctx context.Context, config *appconfig.Config, store Agen
 		return AgentModelResolution{Model: model, Source: AgentModelSourceDaemonDefault}, nil
 	}
 
-	resolution, ok, err := selectStoredDefaultModel(ctx, store, providers, models, providerFamily)
+	providers, models, err := enabledLLMConfiguration(ctx, store)
+	if err != nil {
+		return AgentModelResolution{}, err
+	}
+	resolution, ok, err := selectCatalogDefaultModel(ctx, store, providers, providerFamily)
+	if err != nil {
+		return AgentModelResolution{}, err
+	}
+	if ok {
+		return resolution, nil
+	}
+	if hasConfiguredProviderForFamily(providers, providerFamily) {
+		return selectConfiguredDefaultModel(ctx, store, providers, models, providerFamily)
+	}
+
+	resolution, ok, err = selectStoredDefaultModel(ctx, store, providers, models, providerFamily)
 	if err != nil {
 		return AgentModelResolution{}, err
 	}
@@ -162,6 +170,25 @@ func selectConfiguredDefaultModel(ctx context.Context, store AgentModelResolutio
 	return resolution, nil
 }
 
+func selectCatalogDefaultModel(ctx context.Context, store AgentModelResolutionStore, providers []Provider, providerFamily string) (AgentModelResolution, bool, error) {
+	if store == nil {
+		return AgentModelResolution{}, false, nil
+	}
+	providerID, modelID, ok, err := store.DefaultLLMModelReference(ctx)
+	if err != nil {
+		return AgentModelResolution{}, false, fmt.Errorf("resolve model catalog default for agent model preview: %w", err)
+	}
+	if !ok {
+		return AgentModelResolution{}, false, nil
+	}
+	for _, provider := range providers {
+		if provider.ID == providerID && NormalizeProviderType(provider.ProviderType) == providerFamily {
+			return AgentModelResolution{Model: modelID, Source: AgentModelSourceDaemonDefault}, true, nil
+		}
+	}
+	return AgentModelResolution{}, false, nil
+}
+
 func selectStoredDefaultModel(ctx context.Context, store AgentModelResolutionStore, providers []Provider, models []Model, providerFamily string) (AgentModelResolution, bool, error) {
 	if store == nil || len(providers) == 0 || len(models) == 0 {
 		return AgentModelResolution{}, false, nil
@@ -185,41 +212,54 @@ func daemonEnvironmentModel(ctx context.Context, config *appconfig.Config, store
 		}
 		global = items
 	}
-	keys := []string{"LLM_MODEL"}
+	lookup := func(keys ...string) string {
+		for _, key := range keys {
+			if value := strings.TrimSpace(EnvItemValue(global, key)); value != "" {
+				return value
+			}
+		}
+		for _, key := range keys {
+			if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+				return value
+			}
+		}
+		for _, key := range keys {
+			if value := strings.TrimSpace(configLLMEnvValue(config, key)); value != "" {
+				return value
+			}
+		}
+		return ""
+	}
 	if providerFamily == ProviderFamilyAnthropic {
-		keys = []string{"ANTHROPIC_MODEL", "CLAUDE_MODEL", "LLM_MODEL"}
-	}
-	for _, key := range keys {
-		if value := EnvItemValue(global, key); value != "" {
-			return value, nil
+		if !hasCompleteDefaultAnthropicProvider(lookup) {
+			return "", nil
 		}
+		return lookup("ANTHROPIC_MODEL", "CLAUDE_MODEL", "LLM_MODEL"), nil
 	}
-	for _, key := range keys {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value, nil
-		}
+	if !hasCompleteDefaultOpenAIProvider(lookup) {
+		return "", nil
 	}
-	for _, key := range keys {
-		if value := strings.TrimSpace(configLLMEnvValue(config, key)); value != "" {
-			return value, nil
-		}
-	}
-	return "", nil
+	return lookup("LLM_MODEL"), nil
 }
 
 type agentModelResolutionStoreCache struct {
 	store AgentModelResolutionStore
 
-	providersLoaded bool
-	providers       []Provider
-	providersErr    error
-	modelsLoaded    bool
-	models          []Model
-	modelsErr       error
-	globalEnvLoaded bool
-	globalEnv       []domain.SandboxEnvVar
-	globalEnvErr    error
-	wireAPIs        map[string]agentModelWireAPIResult
+	providersLoaded          bool
+	providers                []Provider
+	providersErr             error
+	modelsLoaded             bool
+	models                   []Model
+	modelsErr                error
+	globalEnvLoaded          bool
+	globalEnv                []domain.SandboxEnvVar
+	globalEnvErr             error
+	catalogDefaultLoaded     bool
+	catalogDefaultProviderID string
+	catalogDefaultModelID    string
+	catalogDefaultOK         bool
+	catalogDefaultErr        error
+	wireAPIs                 map[string]agentModelWireAPIResult
 }
 
 type agentModelWireAPIResult struct {
@@ -260,6 +300,16 @@ func (s *agentModelResolutionStoreCache) ListGlobalEnv(ctx context.Context) ([]d
 		}
 	}
 	return s.globalEnv, s.globalEnvErr
+}
+
+func (s *agentModelResolutionStoreCache) DefaultLLMModelReference(ctx context.Context) (providerID, modelID string, ok bool, err error) {
+	if !s.catalogDefaultLoaded {
+		s.catalogDefaultLoaded = true
+		if s.store != nil {
+			s.catalogDefaultProviderID, s.catalogDefaultModelID, s.catalogDefaultOK, s.catalogDefaultErr = s.store.DefaultLLMModelReference(ctx)
+		}
+	}
+	return s.catalogDefaultProviderID, s.catalogDefaultModelID, s.catalogDefaultOK, s.catalogDefaultErr
 }
 
 func (s *agentModelResolutionStoreCache) LLMProviderModelWireAPI(ctx context.Context, providerID, modelID string) (string, bool, error) {

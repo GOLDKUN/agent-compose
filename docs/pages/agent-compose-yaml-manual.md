@@ -465,7 +465,41 @@ agents:
     model: openai/gpt-5.4
 ```
 
-The part before the first slash is an LLM provider ID configured in agent-compose; the remainder is that provider's model name. Pi model traffic is routed through the sandbox runtime LLM facade, so upstream credentials remain on the daemon.
+The part before the first slash is an LLM provider ID configured in agent-compose; the entire remainder is the literal upstream model ID and may contain additional slashes. Pi model traffic is routed through the sandbox runtime LLM facade, so upstream credentials remain on the daemon.
+
+### Daemon `models.json`
+
+The daemon loads `$DATA_ROOT/models.json` once during startup. A missing file is valid: catalog-owned entries are treated as absent while existing system and environment Provider defaults remain unchanged. Restart the daemon after editing the file.
+
+```json
+{
+  "default": "gateway/deepseek-v4-flash",
+  "providers": {
+    "gateway": {
+      "baseUrl": "https://gateway.example.com/api/openai",
+      "protocol": "chat_completions",
+      "apiKey": "${GATEWAY_API_KEY}",
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "maxOutputTokens": 8192
+        }
+      ]
+    },
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1",
+      "protocol": "responses",
+      "apiKey": "$OPENAI_API_KEY"
+    }
+  }
+}
+```
+
+`default` is an optional `provider/model` reference. Each Provider requires `baseUrl` and one of `responses`, `chat_completions`, or `anthropic_messages`. `apiKey` and header values may be literals or complete `$NAME` / `${NAME}` references resolved from the daemon environment at startup. Invalid JSON, unknown fields, unsupported protocols, invalid limits, and unresolved references fail daemon startup.
+
+The optional `models` array adds per-model metadata and behavior: `id`, `name`, `baseUrl`, `protocol`, `headers`, and the positive integer `maxOutputTokens`. A model-level `protocol` must remain in the Provider's protocol family: OpenAI Providers (`responses` or `chat_completions`) allow `responses` and `chat_completions`, while Anthropic Providers (`anthropic_messages`) allow only `anthropic_messages`. These attributes belong to the specific Provider/model deployment, so Providers that share a model ID do not overwrite one another. The array is not an allowlist. For a configured `gateway` Provider, `gateway/a-model-not-listed-here` is still forwarded as the literal upstream model ID using Provider defaults.
+
+All compatible coding agents and `scheduler.llm` use this catalog for agent-compose Provider routing and model selection; it does not replace an agent's native model-capability catalog. A complete Agent-level `LLM_API_ENDPOINT`, `LLM_API_PROTOCOL`, and `LLM_API_KEY` configuration remains the higher-priority compatibility path. The daemon's complete `LLM_*` configuration remains the default ahead of `models.json.default`. A catalog Provider ID that conflicts with an existing non-catalog Provider causes startup to fail without overwriting the existing configuration.
 
 ### `image`
 
@@ -777,6 +811,7 @@ A scheduler uses either declarative `triggers` or JavaScript `script`; the two f
 | `enabled` | bool | `true` | Enables this agent's scheduler. Disabling the Agent also prevents its scheduler from being enabled. |
 | `sandbox_policy` | string | `new` | Scheduler default sandbox policy: `new` or `sticky`. |
 | `concurrency_policy` | string | `skip` | Overlapping run policy for the entire agent scheduler: `skip` or `parallel`. |
+| `model` | string | Agent model | Default `provider/model` used by `scheduler.llm`; a call-level `model` or `LLM_MODEL` takes precedence. |
 | `triggers` | list | Empty | Declarative triggers. |
 | `script` | string/object | Empty | Inline JavaScript or a flat `file`/`http`/`git` source mapping. Cannot coexist with `triggers`. |
 

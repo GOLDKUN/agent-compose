@@ -207,6 +207,10 @@ func WriteOpenCodeRuntimeConfig(session *domain.Sandbox, providerID, model, base
 	if providerID == "openai" {
 		providerPackage = "@ai-sdk/openai"
 	}
+	providerName := "agent-compose " + providerID
+	if providerID == "agent-compose" {
+		providerName = providerID
+	}
 	path := filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create opencode config dir: %w", err)
@@ -216,7 +220,7 @@ func WriteOpenCodeRuntimeConfig(session *domain.Sandbox, providerID, model, base
 		"provider": map[string]any{
 			providerID: map[string]any{
 				"npm":  providerPackage,
-				"name": "agent-compose " + providerID,
+				"name": providerName,
 				"options": map[string]any{
 					"baseURL": baseURL,
 					"apiKey":  "{env:AGENT_COMPOSE_SANDBOX_TOKEN}",

@@ -75,29 +75,63 @@ func EnsurePiFacadeConfig(ctx context.Context, config *appconfig.Config, store P
 
 func resolvePiFacadeTarget(ctx context.Context, config *appconfig.Config, store PiFacadeStore, sandbox *domain.Sandbox, providerID, model string) (ResolvedTarget, error) {
 	sandboxID := sandbox.Summary.ID
+	envItems, err := SandboxProviderEnvItems(ctx, store, sandbox, "")
+	if err != nil {
+		return ResolvedTarget{}, err
+	}
+	if HasSessionEnvProviderInput(envItems) {
+		return resolvePiEnvFacadeTarget(ctx, config, store, sandboxID, providerID, model, envItems)
+	}
 	if HasEnabledLLMProviderID(ctx, store, providerID) {
-		envItems, err := SandboxProviderEnvItems(ctx, store, sandbox, "")
-		if err != nil {
-			return ResolvedTarget{}, err
-		}
 		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, "", model, providerID, envItems)
 	}
 	switch providerID {
 	case ProviderFamilyAnthropic:
-		envItems, err := SandboxProviderEnvItems(ctx, store, sandbox, ProviderFamilyAnthropic)
-		if err != nil {
-			return ResolvedTarget{}, err
-		}
 		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyAnthropic, model, "", envItems)
 	case ProviderFamilyOpenAI, ProviderIDDefaultOpenAI:
-		envItems, err := SandboxProviderEnvItems(ctx, store, sandbox, ProviderFamilyOpenAI)
-		if err != nil {
-			return ResolvedTarget{}, err
-		}
 		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, "", envItems)
 	default:
 		return resolveCustomOpenAIFacadeTarget(ctx, config, store, sandbox, providerID, model)
 	}
+}
+
+func resolvePiEnvFacadeTarget(ctx context.Context, config *appconfig.Config, store PiFacadeStore, sandboxID, requestedProviderID, model string, envItems []domain.SandboxEnvVar) (ResolvedTarget, error) {
+	family := piEnvProviderFamily(ctx, store, requestedProviderID, envItems)
+	if family == ProviderFamilyAnthropic {
+		providerID, err := ensureSessionAnthropicEnvProviderWithConfig(ctx, config, store, sandboxID, model, envItems)
+		if err != nil {
+			return ResolvedTarget{}, err
+		}
+		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, family, model, providerID, envItems)
+	}
+	providerID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, config, store, sandboxID, model, envItems)
+	if err != nil {
+		return ResolvedTarget{}, err
+	}
+	return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, providerID, envItems)
+}
+
+func piEnvProviderFamily(ctx context.Context, store ProviderListStore, requestedProviderID string, envItems []domain.SandboxEnvVar) string {
+	switch strings.TrimSpace(requestedProviderID) {
+	case ProviderFamilyAnthropic:
+		return ProviderFamilyAnthropic
+	case ProviderFamilyOpenAI, ProviderIDDefaultOpenAI:
+		return ProviderFamilyOpenAI
+	}
+	if store != nil {
+		providers, err := store.ListEnabledLLMProviders(ctx)
+		if err == nil {
+			for _, provider := range providers {
+				if provider.ID == strings.TrimSpace(requestedProviderID) {
+					return NormalizeProviderType(provider.ProviderType)
+				}
+			}
+		}
+	}
+	if hasGenericLLMEnvProviderInput(envItems) && NormalizeWireAPI(EnvItemValue(envItems, "LLM_API_PROTOCOL")) != APIProtocolMessages {
+		return ProviderFamilyOpenAI
+	}
+	return genericLLMEnvProviderFamily(envItems)
 }
 
 func piFacadeProtocol(target ResolvedTarget, runtimeBaseURL, sandboxID string) (piAPI, facadeProtocol, facadeBaseURL string, err error) {

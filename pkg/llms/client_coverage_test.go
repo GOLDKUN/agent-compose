@@ -94,6 +94,30 @@ func TestGenerateResponsesAndChatCompletionsWorkflows(t *testing.T) {
 			t.Fatalf("expected invalid json response error, got %v", err)
 		}
 	})
+
+	t.Run("anthropic messages success", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var req messagesRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if req.Model != "claude" || req.MaxTokens != 8192 || req.System == "" || len(req.Messages) != 1 {
+				t.Fatalf("request = %#v", req)
+			}
+			_, _ = w.Write([]byte(`{"id":"msg-1","model":"claude","stop_reason":"end_turn","content":[{"type":"text","text":"{\"ok\":true}"}]}`))
+		}))
+		defer server.Close()
+		result, err := Generate(context.Background(), server.Client(), GenerateRequest{
+			Endpoint: server.URL, Protocol: APIProtocolMessages, Prompt: "hello", Model: "claude",
+			OutputSchemaJSON: `{"type":"object"}`, MaxOutputTokens: 8192,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Text != `{"ok":true}` || result.ResponseID != "msg-1" || result.FinishReason != "end_turn" {
+			t.Fatalf("messages result = %#v", result)
+		}
+	})
 }
 
 func TestE2EGenerateResponsesAndChatCompletionsWorkflows(t *testing.T) {

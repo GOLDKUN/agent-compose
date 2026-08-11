@@ -35,7 +35,12 @@ func TestProjectAgentModelResolverUsesCurrentRevisionAndDaemonDefault(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver := newProjectAgentModelResolver(&appconfig.Config{LLMModel: "dev/gpt-5.5"}, store)
+	resolver := newProjectAgentModelResolver(&appconfig.Config{
+		LLMAPIEndpoint: "https://daemon.example.test/v1",
+		LLMAPIProtocol: "responses",
+		LLMAPIKey:      "daemon-key",
+		LLMModel:       "dev/gpt-5.5",
+	}, store)
 	resolutions, err := resolver.ResolveProjectAgentModels(ctx, project)
 	if err != nil {
 		t.Fatal(err)

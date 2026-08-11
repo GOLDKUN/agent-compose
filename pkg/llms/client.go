@@ -17,6 +17,7 @@ type GenerateRequest struct {
 	Model            string
 	OutputSchemaJSON string
 	Headers          http.Header
+	MaxOutputTokens  int
 }
 
 type GenerateResult struct {
@@ -27,9 +28,10 @@ type GenerateResult struct {
 }
 
 type apiRequest struct {
-	Model string          `json:"model"`
-	Input string          `json:"input"`
-	Text  *apiTextOptions `json:"text,omitempty"`
+	Model           string          `json:"model"`
+	Input           string          `json:"input"`
+	Text            *apiTextOptions `json:"text,omitempty"`
+	MaxOutputTokens int             `json:"max_output_tokens,omitempty"`
 }
 
 type apiTextOptions struct {
@@ -76,9 +78,10 @@ type incompleteReason struct {
 }
 
 type chatCompletionsRequest struct {
-	Model          string                     `json:"model"`
-	Messages       []chatCompletionsMessage   `json:"messages"`
-	ResponseFormat *chatCompletionsJSONFormat `json:"response_format,omitempty"`
+	Model               string                     `json:"model"`
+	Messages            []chatCompletionsMessage   `json:"messages"`
+	ResponseFormat      *chatCompletionsJSONFormat `json:"response_format,omitempty"`
+	MaxCompletionTokens int                        `json:"max_completion_tokens,omitempty"`
 }
 
 type chatCompletionsMessage struct {
@@ -102,6 +105,29 @@ type chatCompletionsChoice struct {
 	FinishReason string                 `json:"finish_reason"`
 }
 
+type messagesRequest struct {
+	Model     string                   `json:"model"`
+	Messages  []messagesRequestMessage `json:"messages"`
+	System    string                   `json:"system,omitempty"`
+	MaxTokens int                      `json:"max_tokens"`
+}
+
+type messagesRequestMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+type messagesResponse struct {
+	ID         string                    `json:"id"`
+	Model      string                    `json:"model"`
+	StopReason string                    `json:"stop_reason"`
+	Content    []messagesResponseContent `json:"content"`
+	Error      *apiError                 `json:"error"`
+}
+type messagesResponseContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
 func Generate(ctx context.Context, client *http.Client, req GenerateRequest) (GenerateResult, error) {
 	prompt := strings.TrimSpace(req.Prompt)
 	if prompt == "" {
@@ -120,16 +146,77 @@ func Generate(ctx context.Context, client *http.Client, req GenerateRequest) (Ge
 	}
 	switch NormalizeWireAPI(req.Protocol) {
 	case APIProtocolChatCompletions:
-		return generateChatCompletions(ctx, client, endpoint, prompt, model, req.OutputSchemaJSON, req.Headers)
+		return generateChatCompletions(ctx, client, endpoint, prompt, model, req.OutputSchemaJSON, req.Headers, req.MaxOutputTokens)
 	case APIProtocolResponses:
-		return generateResponses(ctx, client, endpoint, prompt, model, req.OutputSchemaJSON, req.Headers)
+		return generateResponses(ctx, client, endpoint, prompt, model, req.OutputSchemaJSON, req.Headers, req.MaxOutputTokens)
+	case APIProtocolMessages:
+		return generateMessages(ctx, client, endpoint, prompt, model, req.OutputSchemaJSON, req.Headers, req.MaxOutputTokens)
 	default:
 		return GenerateResult{}, fmt.Errorf("unsupported llm api protocol %q", NormalizeWireAPI(req.Protocol))
 	}
 }
 
-func generateResponses(ctx context.Context, client *http.Client, endpoint, prompt, model, outputSchemaJSON string, headers http.Header) (GenerateResult, error) {
-	request := apiRequest{Model: model, Input: prompt}
+func generateMessages(ctx context.Context, client *http.Client, endpoint, prompt, model, outputSchemaJSON string, headers http.Header, maxOutputTokens int) (GenerateResult, error) {
+	if maxOutputTokens <= 0 {
+		maxOutputTokens = 4096
+	}
+	request := messagesRequest{Model: model, Messages: []messagesRequestMessage{{Role: "user", Content: prompt}}, MaxTokens: maxOutputTokens}
+	if schema := strings.TrimSpace(outputSchemaJSON); schema != "" {
+		if !json.Valid([]byte(schema)) {
+			return GenerateResult{}, fmt.Errorf("llm outputSchema must be valid JSON")
+		}
+		request.System = "Respond with a single JSON object that conforms to this JSON Schema:\n" + schema
+	}
+	requestBody, err := json.Marshal(request)
+	if err != nil {
+		return GenerateResult{}, fmt.Errorf("encode llm messages request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(requestBody))
+	if err != nil {
+		return GenerateResult{}, fmt.Errorf("create llm messages request: %w", err)
+	}
+	ApplyForwardHeaders(httpReq.Header, headers)
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return GenerateResult{}, fmt.Errorf("call llm messages endpoint: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return GenerateResult{}, fmt.Errorf("read llm messages response: %w", err)
+	}
+	var parsed messagesResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return GenerateResult{}, fmt.Errorf("llm messages endpoint returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+		}
+		return GenerateResult{}, fmt.Errorf("decode llm messages response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		message := strings.TrimSpace(string(body))
+		if parsed.Error != nil && strings.TrimSpace(parsed.Error.Message) != "" {
+			message = strings.TrimSpace(parsed.Error.Message)
+		}
+		return GenerateResult{}, fmt.Errorf("llm messages endpoint returned %s: %s", resp.Status, message)
+	}
+	parts := make([]string, 0, len(parsed.Content))
+	for _, content := range parsed.Content {
+		if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
+			parts = append(parts, strings.TrimSpace(content.Text))
+		}
+	}
+	text := strings.TrimSpace(strings.Join(parts, "\n"))
+	if text == "" {
+		return GenerateResult{}, fmt.Errorf("llm messages response did not contain text output")
+	}
+	if strings.TrimSpace(outputSchemaJSON) != "" && !json.Valid([]byte(text)) {
+		return GenerateResult{}, fmt.Errorf("llm messages response did not contain valid JSON")
+	}
+	return GenerateResult{Text: text, Model: firstNonEmpty(strings.TrimSpace(parsed.Model), model), ResponseID: strings.TrimSpace(parsed.ID), FinishReason: strings.TrimSpace(parsed.StopReason)}, nil
+}
+
+func generateResponses(ctx context.Context, client *http.Client, endpoint, prompt, model, outputSchemaJSON string, headers http.Header, maxOutputTokens int) (GenerateResult, error) {
+	request := apiRequest{Model: model, Input: prompt, MaxOutputTokens: maxOutputTokens}
 	if schema := strings.TrimSpace(outputSchemaJSON); schema != "" {
 		if !json.Valid([]byte(schema)) {
 			return GenerateResult{}, fmt.Errorf("llm outputSchema must be valid JSON")
@@ -190,9 +277,9 @@ func generateResponses(ctx context.Context, client *http.Client, endpoint, promp
 
 // generateChatCompletions calls an OpenAI-compatible Chat Completions backend
 // for unary prompt-to-response text generation.
-func generateChatCompletions(ctx context.Context, client *http.Client, endpoint, prompt, model, outputSchemaJSON string, headers http.Header) (GenerateResult, error) {
+func generateChatCompletions(ctx context.Context, client *http.Client, endpoint, prompt, model, outputSchemaJSON string, headers http.Header, maxOutputTokens int) (GenerateResult, error) {
 	messages := []chatCompletionsMessage{{Role: "user", Content: prompt}}
-	request := chatCompletionsRequest{Model: model, Messages: messages}
+	request := chatCompletionsRequest{Model: model, Messages: messages, MaxCompletionTokens: maxOutputTokens}
 	if schema := strings.TrimSpace(outputSchemaJSON); schema != "" {
 		if !json.Valid([]byte(schema)) {
 			return GenerateResult{}, fmt.Errorf("llm outputSchema must be valid JSON")
