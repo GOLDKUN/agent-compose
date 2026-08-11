@@ -1,0 +1,14 @@
+name: stable-defaults
+workspaces:
+  source:
+    provider: file
+    path: .
+agents:
+  reviewer:
+    provider: codex
+    workspace:
+      name: source
+    scheduler:
+      triggers:
+        - interval: 5m
+          prompt: Review the workspace.
