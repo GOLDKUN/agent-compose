@@ -312,10 +312,6 @@ func (h *RuntimeHost) persistCommandSandboxLink(ctx context.Context, request dom
 	}
 	if h.deps.Events == nil {
 		persistErr := fmt.Errorf("persist scheduler command sandbox link: scheduler event recorder is unavailable")
-		failedEventErr := h.addLinkedSchedulerEvent(ctx, "scheduler.command.failed", "error", persistErr.Error(), CommandEventPayload(request, domain.SchedulerCommandResult{SandboxID: sandboxID}), sandboxID, "", "")
-		if failedEventErr != nil {
-			slog.Error("failed to persist scheduler command failure event", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", failedEventErr)
-		}
 		slog.Error("scheduler command sandbox link persistence failed", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", persistErr)
 		return persistErr
 	}
@@ -422,7 +418,7 @@ func (h *RuntimeHost) addLinkedSchedulerEvent(ctx context.Context, eventType, le
 }
 
 func (h *RuntimeHost) addEventSandboxLink(ctx context.Context, event domain.SchedulerEvent, sandboxID, relation string) {
-	if h.deps.Store == nil || strings.TrimSpace(sandboxID) == "" || h.triggerEvent.EventID == "" {
+	if h.deps.Store == nil || strings.TrimSpace(sandboxID) == "" || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(relation) == "" || h.triggerEvent.EventID == "" {
 		return
 	}
 	if err := h.deps.Store.AddEventSandboxLink(ctx, domain.EventSandboxLink{
