@@ -113,3 +113,44 @@ func TestE2EModelCatalogConfiguresOpenCodeFacadeTarget(t *testing.T) {
 		t.Fatalf("OpenCode config leaked upstream configuration: %s", guestConfig)
 	}
 }
+
+func TestE2ELoadMissingModelCatalogPreservesExistingDefault(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	config := &appconfig.Config{
+		DataRoot:    root,
+		DbAddr:      filepath.Join(root, "data.db"),
+		SandboxRoot: filepath.Join(root, "sandboxes"),
+	}
+	store, _, err := testutil.OpenStores(t, config)
+	if err != nil {
+		t.Fatalf("open stores: %v", err)
+	}
+	provider := llms.Provider{
+		ID: "existing", Name: "existing", ProviderType: llms.ProviderFamilyOpenAI,
+		BaseURL: "https://existing.example.test/v1", APIKey: "existing-key", Scope: llms.ProviderScopeSystem,
+	}
+	model := llms.Model{ID: "existing-model", Name: "existing-model", DefaultModel: true, Scope: llms.ProviderScopeSystem}
+	if err := store.UpsertDefaultLLMConfig(ctx, provider, model); err != nil {
+		t.Fatalf("store existing default: %v", err)
+	}
+
+	if err := loadModelCatalog(ctx, config, store); err != nil {
+		t.Fatalf("load missing models.json: %v", err)
+	}
+
+	providers, err := store.ListEnabledLLMProviders(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(providers) != 1 || providers[0].ID != provider.ID || providers[0].BaseURL != provider.BaseURL || providers[0].APIKey != provider.APIKey {
+		t.Fatalf("providers after startup = %#v", providers)
+	}
+	models, err := store.ListEnabledLLMModels(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 || models[0].ID != model.ID || !models[0].DefaultModel || models[0].Scope != llms.ProviderScopeSystem {
+		t.Fatalf("models after startup = %#v", models)
+	}
+}

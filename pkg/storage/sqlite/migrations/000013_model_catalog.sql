@@ -1,6 +1,7 @@
 ALTER TABLE llm_provider_model ADD COLUMN base_url TEXT NOT NULL DEFAULT '';
 ALTER TABLE llm_provider_model ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}';
 ALTER TABLE llm_provider_model ADD COLUMN max_output_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE llm_provider_model ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE llm_catalog_default (
     singleton INTEGER PRIMARY KEY CHECK(singleton = 1),

@@ -462,7 +462,7 @@ agents:
 
 ### Daemon `models.json`
 
-daemon 在启动时加载一次 `$DATA_ROOT/models.json`。文件不存在是合法状态，已有环境变量配置路径保持不变。修改文件后需要重启 daemon。
+daemon 在启动时加载一次 `$DATA_ROOT/models.json`。文件不存在是合法状态：catalog-owned 条目按不存在处理，已有 system 和环境 Provider 的默认值保持不变。修改文件后需要重启 daemon。
 
 ```json
 {
@@ -490,9 +490,9 @@ daemon 在启动时加载一次 `$DATA_ROOT/models.json`。文件不存在是合
 
 `default` 是可选的 `provider/model` 引用。每个 Provider 都必须提供 `baseUrl`，并选择 `responses`、`chat_completions` 或 `anthropic_messages`。`apiKey` 和 Header 值可以是字面量，也可以是完整的 `$NAME` / `${NAME}` 引用；daemon 在启动时从自身环境解析。JSON 非法、未知字段、Protocol 不受支持、Token 上限非法或环境变量引用无法解析都会使 daemon 启动失败。
 
-可选的 `models` 数组只补充模型级元数据和行为，包括 `id`、`name`、`baseUrl`、`protocol`、`headers` 和正整数 `maxOutputTokens`；它不是白名单。只要 `gateway` Provider 已配置，`gateway/a-model-not-listed-here` 仍会使用 Provider 默认配置，把右侧 Model ID 原样发送给上游。
+可选的 `models` 数组只补充模型级元数据和行为，包括 `id`、`name`、`baseUrl`、`protocol`、`headers` 和正整数 `maxOutputTokens`。这些属性属于具体的 Provider/Model 部署，共享同一 Model ID 的 Provider 不会相互覆盖；该数组也不是白名单。只要 `gateway` Provider 已配置，`gateway/a-model-not-listed-here` 仍会使用 Provider 默认配置，把右侧 Model ID 原样发送给上游。
 
-所有兼容的 Coding Agent 和 `scheduler.llm` 共用这份目录。Agent 中完整配置的 `LLM_API_ENDPOINT`、`LLM_API_PROTOCOL` 和 `LLM_API_KEY` 仍是更高优先级的兼容路径；daemon 自身完整的 `LLM_*` 配置也继续作为默认值，并优先于 `models.json.default`。
+所有兼容的 Coding Agent 和 `scheduler.llm` 使用这份目录完成 agent-compose 的 Provider 路由和模型选择；它不替代 Agent 自身的模型能力目录。Agent 中完整配置的 `LLM_API_ENDPOINT`、`LLM_API_PROTOCOL` 和 `LLM_API_KEY` 仍是更高优先级的兼容路径；daemon 自身完整的 `LLM_*` 配置也继续作为默认值，并优先于 `models.json.default`。Catalog Provider ID 如果与已有非 catalog Provider 冲突，daemon 会在不覆盖原配置的前提下启动失败。
 
 ### `image`
 

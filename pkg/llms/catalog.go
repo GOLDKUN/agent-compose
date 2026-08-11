@@ -48,6 +48,7 @@ type ProviderModelConfig struct {
 	BaseURL         string
 	HeadersJSON     string
 	MaxOutputTokens int
+	DisplayName     string
 }
 
 // LoadModelCatalog loads DATA_ROOT/models.json. A missing file returns an empty

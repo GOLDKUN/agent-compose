@@ -461,7 +461,7 @@ The part before the first slash is an LLM provider ID configured in agent-compos
 
 ### Daemon `models.json`
 
-The daemon loads `$DATA_ROOT/models.json` once during startup. A missing file is valid and leaves the existing environment-variable configuration path unchanged. Restart the daemon after editing the file.
+The daemon loads `$DATA_ROOT/models.json` once during startup. A missing file is valid: catalog-owned entries are treated as absent while existing system and environment Provider defaults remain unchanged. Restart the daemon after editing the file.
 
 ```json
 {
@@ -489,9 +489,9 @@ The daemon loads `$DATA_ROOT/models.json` once during startup. A missing file is
 
 `default` is an optional `provider/model` reference. Each Provider requires `baseUrl` and one of `responses`, `chat_completions`, or `anthropic_messages`. `apiKey` and header values may be literals or complete `$NAME` / `${NAME}` references resolved from the daemon environment at startup. Invalid JSON, unknown fields, unsupported protocols, invalid limits, and unresolved references fail daemon startup.
 
-The optional `models` array adds per-model metadata and behavior: `id`, `name`, `baseUrl`, `protocol`, `headers`, and the positive integer `maxOutputTokens`. It is not an allowlist. For a configured `gateway` Provider, `gateway/a-model-not-listed-here` is still forwarded as the literal upstream model ID using Provider defaults.
+The optional `models` array adds per-model metadata and behavior: `id`, `name`, `baseUrl`, `protocol`, `headers`, and the positive integer `maxOutputTokens`. These attributes belong to the specific Provider/model deployment, so Providers that share a model ID do not overwrite one another. The array is not an allowlist. For a configured `gateway` Provider, `gateway/a-model-not-listed-here` is still forwarded as the literal upstream model ID using Provider defaults.
 
-All compatible coding agents and `scheduler.llm` use this catalog. A complete Agent-level `LLM_API_ENDPOINT`, `LLM_API_PROTOCOL`, and `LLM_API_KEY` configuration remains the higher-priority compatibility path. The daemon's complete `LLM_*` configuration remains the default ahead of `models.json.default`.
+All compatible coding agents and `scheduler.llm` use this catalog for agent-compose Provider routing and model selection; it does not replace an agent's native model-capability catalog. A complete Agent-level `LLM_API_ENDPOINT`, `LLM_API_PROTOCOL`, and `LLM_API_KEY` configuration remains the higher-priority compatibility path. The daemon's complete `LLM_*` configuration remains the default ahead of `models.json.default`. A catalog Provider ID that conflicts with an existing non-catalog Provider causes startup to fail without overwriting the existing configuration.
 
 ### `image`
 

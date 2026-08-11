@@ -4,6 +4,8 @@
 
 本文定义 daemon 全局 `models.json` 的产品行为：支持多个上游 Provider、literal 模型路由、Scheduler 集成，并兼容已有的 `LLM_*` 环境变量配置。
 
+这里的 catalog 只负责 agent-compose 的 Provider 路由、模型选择和 daemon 侧请求行为，不替代 Codex、Claude Code、OpenCode 或 Pi 自身维护的模型能力目录。
+
 本设计只包含 API Key 认证。账号登录、OAuth、订阅账号凭据、Token 刷新、登出和账号选择 API 不在本文范围内。
 
 ## 目标
@@ -31,6 +33,7 @@ daemon 在启动后台组件前加载：
 - Provider ID 非法；
 - Protocol 不受支持；
 - 同一个 Provider 重复声明模型 ID；
+- Provider ID 与已有非 catalog Provider 冲突；
 - Token 上限非法；
 - 环境变量引用无法解析。
 
@@ -90,6 +93,8 @@ Provider 支持以下字段：
 - `protocol`：可选的模型级 Protocol 覆盖。
 - `headers`：可选的模型级上游 Header。
 - `maxOutputTokens`：可选的正整数输出 Token 上限。
+
+模型 `id` 是全局身份；`name`、模型级 Base URL、Protocol、Header 和输出限制属于具体的 `(provider, model)` 部署。两个 Provider 可以声明相同模型 ID，并分别保存这些部署属性，不能相互覆盖，也不能覆盖同名 system/env 模型的全局默认状态。
 
 `maxOutputTokens` 是唯一支持的配置字段。上游协议使用的
 `max_output_tokens`、`max_completion_tokens` 或 `max_tokens` 由 daemon 在转发时转换，不属于 `models.json` schema。
@@ -253,21 +258,25 @@ SQLite migration v13 为 Provider/Model 绑定增加：
 llm_provider_model.base_url
 llm_provider_model.headers_json
 llm_provider_model.max_output_tokens
+llm_provider_model.display_name
 ```
 
-同时增加单行表 `llm_catalog_default`，保存精确的默认 Provider 和模型，避免只依赖全局共享的模型行。
+同时增加单行表 `llm_catalog_default`，保存精确的默认 Provider 和模型。Catalog default 不写入或清除全局 `llm_model.default_model`；该字段继续归已有 system/env 配置所有。
 
 每次 daemon 启动时，文件中的有效 catalog 会被事务化投影：
 
-1. 禁用已失效的 catalog-owned Provider；
+1. 禁用已失效的 catalog-owned Provider 和模型；
 2. 替换当前 Provider 定义与模型绑定；
 3. 原子更新 catalog default；
 4. 完整的环境 Provider 在 resolver 使用时按兼容规则物化。
 
+所有更新只允许修改 catalog-owned 行。与非 catalog Provider 同 ID 时整个事务失败并回滚。文件不存在或显式为空都会清除 catalog-owned 的有效状态，但不能修改 system/env Provider、模型或默认选择。
+
 ## 失败行为
 
-- `models.json` 不存在：继续启动，catalog 为空，环境变量兼容路径保持可用。
+- `models.json` 不存在：继续启动，catalog-owned 状态为空，system/env 配置和默认模型保持不变。
 - 文件非法或 Secret 环境变量无法解析：启动失败。
+- Provider ID 与已有非 catalog Provider 冲突：启动失败，原配置保持不变。
 - 显式 Provider 未知：失败，不使用默认 Provider。
 - 显式 Provider 没有 API Key：以不可用失败。
 - 可用的显式 Provider 下模型未知：原样转发 literal 模型 ID。

@@ -26,6 +26,9 @@ func (s *llmStore) ApplyModelCatalog(ctx context.Context, catalog llms.ModelCata
 	if _, err := tx.ExecContext(ctx, `UPDATE llm_provider SET enabled = 0, updated_at = ? WHERE scope = ?`, now, llms.ProviderScopeCatalog); err != nil {
 		return fmt.Errorf("disable stale model catalog providers: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE llm_model SET enabled = 0, updated_at = ? WHERE scope = ?`, now, llms.ProviderScopeCatalog); err != nil {
+		return fmt.Errorf("disable stale model catalog models: %w", err)
+	}
 	providerIDs := make([]string, 0, len(catalog.Providers))
 	for id := range catalog.Providers {
 		providerIDs = append(providerIDs, id)
@@ -58,7 +61,7 @@ func applyCatalogProvider(ctx context.Context, tx *sql.Tx, providerID string, de
 		return fmt.Errorf("encode provider %q headers: %w", providerID, err)
 	}
 	enabled := apiKey != ""
-	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_provider(
+	result, err := tx.ExecContext(ctx, `INSERT INTO llm_provider(
 		id, name, provider_type, default_wire_api, base_url, api_key, auth_header, auth_scheme, headers_json,
 		use_generic_responses_text_parts, weight, enabled, scope, created_at, updated_at)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 10, ?, ?, ?, ?)
@@ -66,10 +69,19 @@ func applyCatalogProvider(ctx context.Context, tx *sql.Tx, providerID string, de
 		name = excluded.name, provider_type = excluded.provider_type, default_wire_api = excluded.default_wire_api,
 		base_url = excluded.base_url, api_key = excluded.api_key, auth_header = excluded.auth_header,
 		auth_scheme = excluded.auth_scheme, headers_json = excluded.headers_json, enabled = excluded.enabled,
-		scope = excluded.scope, updated_at = excluded.updated_at`,
+		scope = excluded.scope, updated_at = excluded.updated_at
+		WHERE llm_provider.scope = ?`,
 		providerID, name, providerType, protocol, strings.TrimSpace(pointerString(definition.BaseURL)), apiKey,
-		authHeader, authScheme, headersJSON, BoolToInt(enabled), llms.ProviderScopeCatalog, now, now); err != nil {
+		authHeader, authScheme, headersJSON, BoolToInt(enabled), llms.ProviderScopeCatalog, now, now, llms.ProviderScopeCatalog)
+	if err != nil {
 		return fmt.Errorf("upsert model catalog provider %q: %w", providerID, err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("inspect model catalog provider %q upsert: %w", providerID, err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("model catalog provider %q conflicts with an existing non-catalog provider", providerID)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM llm_provider_model WHERE provider_id = ?`, providerID); err != nil {
 		return fmt.Errorf("replace provider %q model catalog: %w", providerID, err)
@@ -84,11 +96,7 @@ func applyCatalogProvider(ctx context.Context, tx *sql.Tx, providerID string, de
 
 func applyCatalogModel(ctx context.Context, tx *sql.Tx, providerID, providerProtocol string, definition llms.CatalogModel, now int64) error {
 	modelID := strings.TrimSpace(definition.ID)
-	name := firstNonEmptyString(pointerString(definition.Name), modelID)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_model(id, name, description, default_model, enabled, scope, created_at, updated_at)
-		VALUES(?, ?, '', 0, 1, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET name = excluded.name, enabled = 1, updated_at = excluded.updated_at`,
-		modelID, name, llms.ProviderScopeCatalog, now, now); err != nil {
+	if err := ensureCatalogModelIdentity(ctx, tx, modelID, now); err != nil {
 		return fmt.Errorf("upsert provider %q model %q: %w", providerID, modelID, err)
 	}
 	protocol := providerProtocol
@@ -103,19 +111,25 @@ func applyCatalogModel(ctx context.Context, tx *sql.Tx, providerID, providerProt
 	if definition.MaxOutputTokens != nil {
 		maxOutputTokens = *definition.MaxOutputTokens
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_provider_model(provider_id, model_id, wire_api, weight, base_url, headers_json, max_output_tokens)
-		VALUES(?, ?, ?, 10, ?, ?, ?)`, providerID, modelID, protocol, strings.TrimSpace(pointerString(definition.BaseURL)), headersJSON, maxOutputTokens); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_provider_model(
+		provider_id, model_id, wire_api, weight, base_url, headers_json, max_output_tokens, display_name)
+		VALUES(?, ?, ?, 10, ?, ?, ?, ?)`, providerID, modelID, protocol, strings.TrimSpace(pointerString(definition.BaseURL)), headersJSON, maxOutputTokens, pointerString(definition.Name)); err != nil {
 		return fmt.Errorf("bind provider %q model %q: %w", providerID, modelID, err)
 	}
 	return nil
 }
 
+func ensureCatalogModelIdentity(ctx context.Context, tx *sql.Tx, modelID string, now int64) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO llm_model(id, name, description, default_model, enabled, scope, created_at, updated_at)
+		VALUES(?, ?, '', 0, 1, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET enabled = 1, updated_at = excluded.updated_at
+		WHERE llm_model.scope = ?`, modelID, modelID, llms.ProviderScopeCatalog, now, now, llms.ProviderScopeCatalog)
+	return err
+}
+
 func applyCatalogDefault(ctx context.Context, tx *sql.Tx, reference string, now int64) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM llm_catalog_default`); err != nil {
 		return fmt.Errorf("clear model catalog default: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE llm_model SET default_model = 0 WHERE default_model != 0`); err != nil {
-		return fmt.Errorf("reset model catalog default: %w", err)
 	}
 	providerID, modelID, ok := llms.SplitProviderModelReference(reference)
 	if !ok {
@@ -125,17 +139,12 @@ func applyCatalogDefault(ctx context.Context, tx *sql.Tx, reference string, now 
 	if err := tx.QueryRowContext(ctx, `SELECT default_wire_api FROM llm_provider WHERE id = ?`, providerID).Scan(&protocol); err != nil {
 		return fmt.Errorf("resolve model catalog default provider %q: %w", providerID, err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_model(id, name, description, default_model, enabled, scope, created_at, updated_at)
-		VALUES(?, ?, '', 1, 1, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET default_model = 1, enabled = 1, updated_at = excluded.updated_at`,
-		modelID, modelID, llms.ProviderScopeCatalog, now, now); err != nil {
+	if err := ensureCatalogModelIdentity(ctx, tx, modelID, now); err != nil {
 		return fmt.Errorf("upsert model catalog default model: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE llm_model SET default_model = CASE WHEN id = ? THEN 1 ELSE 0 END`, modelID); err != nil {
-		return fmt.Errorf("select model catalog default model: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_provider_model(provider_id, model_id, wire_api, weight, base_url, headers_json, max_output_tokens)
-		VALUES(?, ?, ?, 10, '', '{}', 0)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_provider_model(
+		provider_id, model_id, wire_api, weight, base_url, headers_json, max_output_tokens, display_name)
+		VALUES(?, ?, ?, 10, '', '{}', 0, '')
 		ON CONFLICT(provider_id, model_id) DO NOTHING`, providerID, modelID, protocol); err != nil {
 		return fmt.Errorf("bind model catalog default: %w", err)
 	}
@@ -185,9 +194,9 @@ func (s *llmStore) DefaultLLMModelReference(ctx context.Context) (providerID, mo
 // LLMProviderModelConfig returns all effective model-binding overrides.
 func (s *llmStore) LLMProviderModelConfig(ctx context.Context, providerID, modelID string) (llms.ProviderModelConfig, bool, error) {
 	var config llms.ProviderModelConfig
-	err := s.db.QueryRowContext(ctx, `SELECT wire_api, base_url, headers_json, max_output_tokens
+	err := s.db.QueryRowContext(ctx, `SELECT wire_api, base_url, headers_json, max_output_tokens, display_name
 		FROM llm_provider_model WHERE provider_id = ? AND model_id = ?`, strings.TrimSpace(providerID), strings.TrimSpace(modelID)).
-		Scan(&config.WireAPI, &config.BaseURL, &config.HeadersJSON, &config.MaxOutputTokens)
+		Scan(&config.WireAPI, &config.BaseURL, &config.HeadersJSON, &config.MaxOutputTokens, &config.DisplayName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return llms.ProviderModelConfig{}, false, nil
 	}
