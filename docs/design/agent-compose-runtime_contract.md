@@ -482,8 +482,14 @@ Every command reconstructs its transient LLM facade environment on an in-memory
 Sandbox clone instead of relying on fields that are intentionally absent from
 the persisted Sandbox record. Startup Anthropic and OpenAI family facades are
 created first; the selected provider facade is merged last so its exact provider
-variables win. Those managed values also override same-name values in the guest
-child request environment, while unrelated request environment remains intact.
+variables win. The managed values are passed through the outer runtime process
+environment. An explicit `scheduler.shell`/`scheduler.exec` request environment
+is preserved unchanged in `command-request.json` and, per the guest runtime
+contract, overrides same-name outer values only for that workload child; raw
+managed facade tokens are therefore not copied into the request artifact.
+Commands for which no supported facade agent is selected do not perform facade
+reconstruction, so that command path is not coupled to LLM provider
+configuration health.
 The executor tracks every token hash persisted by this command. Partial setup
 failure and confirmed command termination delete all of them; an
 `ErrExecTerminationUnconfirmed` result retains them for later Sandbox lifecycle

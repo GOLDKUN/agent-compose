@@ -289,7 +289,7 @@ func (h *RuntimeHost) Command(ctx context.Context, request domain.SchedulerComma
 		_ = h.addLinkedSchedulerEvent(ctx, eventType, "info", "scheduler command sandbox ready", map[string]any{"sandboxId": session.Summary.ID}, session.Summary.ID, "", "")
 	}
 	h.trackCommandSession(session.Summary.ID, cleanupSession)
-	if err := h.persistCommandSandboxLink(ctx, session.Summary.ID); err != nil {
+	if err := h.persistCommandSandboxLink(ctx, request, session.Summary.ID); err != nil {
 		return domain.SchedulerCommandResult{}, err
 	}
 
@@ -306,15 +306,36 @@ func (h *RuntimeHost) Command(ctx context.Context, request domain.SchedulerComma
 	return result, nil
 }
 
-func (h *RuntimeHost) persistCommandSandboxLink(ctx context.Context, sandboxID string) error {
+func (h *RuntimeHost) persistCommandSandboxLink(ctx context.Context, request domain.SchedulerCommandRequest, sandboxID string) error {
 	if h.execution.Kind != ExecutionKindTrigger {
 		return nil
 	}
 	if h.deps.Events == nil {
-		return fmt.Errorf("persist scheduler command sandbox link: scheduler event recorder is unavailable")
+		persistErr := fmt.Errorf("persist scheduler command sandbox link: scheduler event recorder is unavailable")
+		failedEventErr := h.addLinkedSchedulerEvent(ctx, "scheduler.command.failed", "error", persistErr.Error(), CommandEventPayload(request, domain.SchedulerCommandResult{SandboxID: sandboxID}), sandboxID, "", "")
+		if failedEventErr != nil {
+			slog.Error("failed to persist scheduler command failure event", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", failedEventErr)
+		}
+		slog.Error("scheduler command sandbox link persistence failed", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", persistErr)
+		return persistErr
 	}
 	if err := h.addLinkedSchedulerEvent(ctx, "scheduler.command.started", "info", "scheduler command started", map[string]any{"sandboxId": sandboxID}, sandboxID, "", ""); err != nil {
-		return fmt.Errorf("persist scheduler command sandbox link: %w", err)
+		persistErr := fmt.Errorf("persist scheduler command sandbox link: %w", err)
+		failedEventErr := h.addLinkedSchedulerEvent(
+			ctx,
+			"scheduler.command.failed",
+			"error",
+			persistErr.Error(),
+			CommandEventPayload(request, domain.SchedulerCommandResult{SandboxID: sandboxID}),
+			sandboxID,
+			"",
+			"",
+		)
+		if failedEventErr != nil {
+			slog.Error("failed to persist scheduler command failure event", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", failedEventErr)
+		}
+		slog.Error("scheduler command sandbox link persistence failed", "scheduler_id", h.scheduler.Summary.ID, "run_id", h.execution.ID, "sandbox_id", sandboxID, "error", persistErr)
+		return persistErr
 	}
 	return nil
 }

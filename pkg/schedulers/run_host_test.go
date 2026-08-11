@@ -369,6 +369,9 @@ func TestRuntimeHostCommandDoesNotExecuteWhenRunSandboxLinkFails(t *testing.T) {
 	if executor.calls != 0 {
 		t.Fatalf("command executor calls = %d, want 0", executor.calls)
 	}
+	if !events.contains("scheduler.command.failed") {
+		t.Fatalf("events after sandbox link failure = %#v, want scheduler.command.failed", events.types())
+	}
 }
 
 func TestRuntimeHostTriggerCommandRequiresSchedulerEventRecorder(t *testing.T) {

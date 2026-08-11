@@ -244,10 +244,10 @@ func TestSchedulerCommandExecutorRebuildsAndOwnsCommandFacadeTokens(t *testing.T
 			if err := json.Unmarshal(requestBytes, &runtimeRequest); err != nil {
 				t.Fatalf("decode runtime command request: %v", err)
 			}
-			if runtimeRequest.Env["ANTHROPIC_API_KEY"] != env["ANTHROPIC_API_KEY"] || runtimeRequest.Env["ANTHROPIC_BASE_URL"] != env["ANTHROPIC_BASE_URL"] || runtimeRequest.Env["OPENAI_API_KEY"] != env["OPENAI_API_KEY"] {
-				t.Fatalf("runtime child request did not preserve managed facade precedence: request=%#v managed=%#v", runtimeRequest.Env, env)
+			if runtimeRequest.Env["ANTHROPIC_API_KEY"] != "request-upstream-anthropic-key" || runtimeRequest.Env["ANTHROPIC_BASE_URL"] != "https://anthropic.request.test" || runtimeRequest.Env["OPENAI_API_KEY"] != "request-upstream-openai-key" {
+				t.Fatalf("runtime child request did not preserve explicit request environment: %#v", runtimeRequest.Env)
 			}
-			if runtimeRequest.Env["AGENT_COMPOSE_SANDBOX_TOKEN"] != env["AGENT_COMPOSE_SANDBOX_TOKEN"] || runtimeRequest.Env["CUSTOM_REQUEST_ENV"] != "preserved" || runtimeRequest.Env["GOOGLE_API_KEY"] != "preserved-google-key" {
+			if runtimeRequest.Env["AGENT_COMPOSE_SANDBOX_TOKEN"] != "stale-request-facade-token" || runtimeRequest.Env["CUSTOM_REQUEST_ENV"] != "preserved" || runtimeRequest.Env["GOOGLE_API_KEY"] != "preserved-google-key" {
 				t.Fatalf("runtime child request token/custom environment = %#v", runtimeRequest.Env)
 			}
 			if got := countSchedulerCommandFacadeTokens(t, ctx, configDB); got != tt.wantTokenCount {
@@ -256,6 +256,27 @@ func TestSchedulerCommandExecutorRebuildsAndOwnsCommandFacadeTokens(t *testing.T
 			assertSchedulerCommandTokenState(t, ctx, configDB, env["ANTHROPIC_API_KEY"], tt.wantTokenExists)
 			assertSchedulerCommandTokenState(t, ctx, configDB, env["AGENT_COMPOSE_SANDBOX_TOKEN"], tt.wantTokenExists)
 		})
+	}
+}
+
+func TestSchedulerCommandExecutorSkipsFacadeReconstructionWithoutSupportedAgentOverride(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	root := t.TempDir()
+	config := schedulerCommandFacadeTestConfig(root)
+	configDB, _, err := testutil.OpenStores(t, config)
+	if err != nil {
+		t.Fatalf("OpenStores returned error: %v", err)
+	}
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-shell-only"}}
+	got, tokenHashes, err := (&SchedulerCommandExecutor{Config: config, ConfigDB: configDB}).prepareSchedulerCommandLLMFacadeEnv(ctx, session, domain.SchedulerCommandRequest{
+		Mode: "shell", Script: "echo shell", Env: map[string]string{"AGENT_PROVIDER": "opencode"},
+	}, "cell-shell-only")
+	if err != nil {
+		t.Fatalf("prepareSchedulerCommandLLMFacadeEnv returned error: %v", err)
+	}
+	if got != session || len(tokenHashes) != 0 {
+		t.Fatalf("shell-only facade preparation = session %p/%p, token hashes %#v; want original session and no tokens", got, session, tokenHashes)
 	}
 }
 
