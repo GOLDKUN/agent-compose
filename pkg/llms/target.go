@@ -40,7 +40,10 @@ func BuildResolvedTarget(ctx context.Context, store ProviderModelWireAPIStore, p
 			return ResolvedTarget{}, fmt.Errorf("decode provider %q model %q headers: %w", provider.ID, model.ID, err)
 		}
 		for key, value := range values {
-			headers.Set(key, value)
+			if ForbiddenProviderHeader(key, effectiveProvider.AuthHeader) {
+				continue
+			}
+			headers.Set(strings.TrimSpace(key), value)
 		}
 	}
 	wireAPI = NormalizeWireAPI(wireAPI)
