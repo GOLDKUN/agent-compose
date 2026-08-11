@@ -173,9 +173,10 @@ func resolveRuntimeLLMTargetWithEnv(ctx context.Context, config *appconfig.Confi
 		}
 	} else if providerID == "" {
 		if selectedProvider, selectedModel, ok := SplitProviderModelReference(requestedModel); ok {
-			if legacyReferenceUsesDefaultEnv(selectedProvider, defaultLookup) {
+			switch {
+			case legacyReferenceUsesDefaultEnv(selectedProvider, defaultLookup):
 				requestedModel = selectedModel
-			} else {
+			case hasEnabledLLMProviderID(ctx, store, selectedProvider):
 				providerID, requestedModel = selectedProvider, selectedModel
 			}
 		}
