@@ -2,12 +2,56 @@ package configstore
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/llms"
 )
+
+func TestIntegrationLoadApplyAndResolveModelCatalogProtocolOverrides(t *testing.T) {
+	clearLLMTestEnvironment(t)
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), llms.ModelsCatalogFilename)
+	data := `{"providers":{"gateway":{"baseUrl":"https://gateway.example/v1","protocol":"responses","apiKey":"catalog-key","models":[{"id":"chat-model","protocol":"chat_completions"}]}}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	catalog, err := llms.LoadModelCatalog(path, nil)
+	if err != nil {
+		t.Fatalf("LoadModelCatalog: %v", err)
+	}
+	store := FromDB(newMemoryDB(t))
+	if err := store.InitSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ApplyModelCatalog(ctx, catalog); err != nil {
+		t.Fatalf("ApplyModelCatalog: %v", err)
+	}
+
+	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, nil, store, "", "", "gateway/chat-model", "", nil)
+	if err != nil {
+		t.Fatalf("ResolveRuntimeLLMTargetWithEnv: %v", err)
+	}
+	if target.Provider.ID != "gateway" || target.Model.ID != "chat-model" || target.WireAPI != llms.APIProtocolChatCompletions {
+		t.Fatalf("resolved target = %#v", target)
+	}
+	if target.Endpoint != "https://gateway.example/v1/chat/completions" || target.Headers.Get("Authorization") != "Bearer catalog-key" {
+		t.Fatalf("resolved transport = endpoint %q headers %#v", target.Endpoint, target.Headers)
+	}
+
+	invalidPath := filepath.Join(t.TempDir(), llms.ModelsCatalogFilename)
+	invalidData := `{"providers":{"gateway":{"baseUrl":"https://gateway.example/v1","protocol":"responses","models":[{"id":"anthropic-model","protocol":"anthropic_messages"}]}}}`
+	if err := os.WriteFile(invalidPath, []byte(invalidData), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := llms.LoadModelCatalog(invalidPath, nil); err == nil || !strings.Contains(err.Error(), "incompatible with provider family") {
+		t.Fatalf("LoadModelCatalog cross-family error = %v", err)
+	}
+}
 
 func TestIntegrationApplyModelCatalogResolvesLiteralModelsDefaultsAndBehavior(t *testing.T) {
 	clearLLMTestEnvironment(t)

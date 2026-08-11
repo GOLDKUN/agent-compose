@@ -41,3 +41,20 @@ func TestLoadModelCatalogUsesDataRootAndFailsUnresolvedSecrets(t *testing.T) {
 		t.Fatalf("loadModelCatalog error = %v", err)
 	}
 }
+
+func TestIntegrationLoadModelCatalogRejectsCrossFamilyModelProtocol(t *testing.T) {
+	dataRoot := t.TempDir()
+	data := `{"providers":{"gateway":{"baseUrl":"https://gateway.example/v1","protocol":"responses","models":[{"id":"model","protocol":"anthropic_messages"}]}}}`
+	if err := os.WriteFile(filepath.Join(dataRoot, llms.ModelsCatalogFilename), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &modelCatalogStoreFake{}
+	err := loadModelCatalog(context.Background(), &appconfig.Config{DataRoot: dataRoot}, store)
+	if err == nil || !strings.Contains(err.Error(), `incompatible with provider family "openai"`) {
+		t.Fatalf("loadModelCatalog error = %v", err)
+	}
+	if store.catalog.Default != "" || len(store.catalog.Providers) != 0 {
+		t.Fatalf("store received catalog after validation failure: %#v", store.catalog)
+	}
+}
