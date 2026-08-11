@@ -32,7 +32,7 @@ type catalogDefaultStore interface {
 // references must be able to distinguish an unavailable provider from an
 // unqualified literal model name.
 type configuredProviderStore interface {
-	ListLLMProviders(ctx context.Context) ([]Provider, error)
+	HasLLMProvider(ctx context.Context, providerID string) (bool, error)
 }
 
 // firstNonEmptyTrimmed returns the first value that is non-empty after trimming,
@@ -414,19 +414,11 @@ func hasEnabledLLMProviderID(ctx context.Context, store LLMResolverStore, provid
 
 func hasConfiguredProviderID(ctx context.Context, store LLMResolverStore, providerID string) bool {
 	configured, ok := store.(configuredProviderStore)
-	if !ok || strings.TrimSpace(providerID) == "" {
+	if !ok {
 		return false
 	}
-	providers, err := configured.ListLLMProviders(ctx)
-	if err != nil {
-		return false
-	}
-	for _, provider := range providers {
-		if provider.ID == strings.TrimSpace(providerID) {
-			return true
-		}
-	}
-	return false
+	found, err := configured.HasLLMProvider(ctx, strings.TrimSpace(providerID))
+	return err == nil && found
 }
 
 func HasEnabledLLMProviderID(ctx context.Context, store LLMResolverStore, providerID string) bool {
