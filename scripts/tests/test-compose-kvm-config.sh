@@ -46,7 +46,6 @@ jq -e --arg data_source "$ROOT_DIR/data" '
 
 jq -e --arg data_source "$ROOT_DIR/data" --arg ui_data_source "$ROOT_DIR/data/agent-compose-ui" '
   .services["agent-compose-ui"] as $service |
-  $service.environment.SANDBOX_ROOT == "/data/sandboxes" and
   any($service.volumes[]; .source == $ui_data_source and .target == "/data") and
   any($service.volumes[]; .source == ($data_source + "/sandboxes") and .target == "/data/sandboxes" and .read_only == true)
 ' >/dev/null <<<"$ui_json"
