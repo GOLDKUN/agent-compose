@@ -26,6 +26,7 @@ services:
       - ./.env
     volumes:
       - ${AGENT_COMPOSE_UI_DATA_DIR:-./data/agent-compose-ui}:/data
+      - ${AGENT_COMPOSE_DATA_DIR:-./data}/sandboxes:/data/sandboxes:ro
     environment:
       JUPYTER_PROXY_BASE: ${JUPYTER_PROXY_BASE:-/jupyter}
       NGINX_JUPYTER_PROXY_BASE: ${JUPYTER_PROXY_BASE:-/jupyter}
