@@ -65,6 +65,12 @@ func TestE2EDockerComposeSandboxEnvContract(t *testing.T) {
 	if !stringSliceContains(frontend.Volumes, "${AGENT_COMPOSE_UI_DATA_DIR:-./data/agent-compose-ui}:/data") {
 		t.Fatalf("agent-compose-ui volumes = %#v, want persistent UI data mount", frontend.Volumes)
 	}
+	if !stringSliceContains(frontend.Volumes, "${AGENT_COMPOSE_DATA_DIR:-./data}/sandboxes:/data/sandboxes:ro") {
+		t.Fatalf("agent-compose-ui volumes = %#v, want read-only daemon sandbox mount", frontend.Volumes)
+	}
+	if frontend.Environment["SANDBOX_ROOT"] != "/data/sandboxes" {
+		t.Fatalf("agent-compose-ui SANDBOX_ROOT = %q, want /data/sandboxes", frontend.Environment["SANDBOX_ROOT"])
+	}
 
 	for _, want := range []string{
 		"AGENT_COMPOSE_DATA_DIR=./data",
