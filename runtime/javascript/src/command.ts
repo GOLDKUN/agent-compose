@@ -285,7 +285,11 @@ async function runProcess(
       stdout: finalizeCapture(stdoutCapture),
       stderr: finalizeCapture(stderrCapture),
       output: finalizeCapture(outputCapture),
-      exitCode,
+      // A child that catches SIGTERM and exits 0 (or that finishes right as
+      // the timer fires) would otherwise report exitCode 0 alongside a
+      // "command timed out" stderr message - force a non-zero exit code so
+      // `success` (computed from exitCode alone) stays consistent with it.
+      exitCode: timedOut && exitCode === 0 ? 124 : exitCode,
       cancelled,
     };
   } finally {
