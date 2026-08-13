@@ -43,9 +43,13 @@ func TestListProjectRunsByOptionsFiltersInclusiveStartRange(t *testing.T) {
 		"after":  base.Add(2*time.Hour + time.Millisecond),
 	}
 	for runID, startedAt := range starts {
+		schedulerRunID := ""
+		if runID == "from" {
+			schedulerRunID = "scheduler-run-1"
+		}
 		_, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{
 			RunID: runID, ProjectID: project.ID, ProjectName: project.Name, ProjectRevision: revision.Revision,
-			AgentName: agent.AgentName, AgentID: agent.ID, Source: domain.ProjectRunSourceAPI,
+			AgentName: agent.AgentName, AgentID: agent.ID, SchedulerRunID: schedulerRunID, Source: domain.ProjectRunSourceAPI,
 			Status: domain.ProjectRunStatusPending, ResultJSON: `{}`, StartedAt: startedAt,
 		})
 		if err != nil {
@@ -83,6 +87,22 @@ func TestListProjectRunsByOptionsFiltersInclusiveStartRange(t *testing.T) {
 				t.Fatalf("count = %d, want %d (err=%v)", total, len(tt.want), err)
 			}
 		})
+	}
+
+	filteredOptions := domain.ProjectRunListOptions{SchedulerRunID: " scheduler-run-1 ", Limit: 50}
+	filteredRuns, err := store.ListProjectRunsByOptions(ctx, filteredOptions)
+	if err != nil {
+		t.Fatalf("list runs by scheduler run: %v", err)
+	}
+	if len(filteredRuns) != 1 || filteredRuns[0].RunID != "from" {
+		t.Fatalf("scheduler run filter = %#v, want run from", filteredRuns)
+	}
+	filteredTotal, err := store.CountProjectRuns(ctx, filteredOptions)
+	if err != nil {
+		t.Fatalf("count runs by scheduler run: %v", err)
+	}
+	if filteredTotal != len(filteredRuns) {
+		t.Fatalf("scheduler run count = %d, list length = %d", filteredTotal, len(filteredRuns))
 	}
 }
 
