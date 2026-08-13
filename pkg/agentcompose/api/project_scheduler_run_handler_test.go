@@ -118,12 +118,13 @@ func TestProjectHandlerSchedulerRunLifecycle(t *testing.T) {
 
 	getRun := domain.SchedulerRunSummary{ID: "run-get", SchedulerID: store.scheduler.ID, TriggerID: "trigger-1", Status: domain.SchedulerRunStatusCanceled, Error: "user stop", StartedAt: startedAt}
 	store.runs = []domain.SchedulerRunSummary{getRun}
+	store.sandboxIDs = map[schedulers.SchedulerRunKey][]string{{SchedulerID: getRun.SchedulerID, RunID: getRun.ID}: {"sandbox-get"}}
 	runtime.getResult = getRun
 	got, err := handler.GetSchedulerRun(context.Background(), connect.NewRequest(&agentcomposev2.GetSchedulerRunRequest{
 		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
 		RunId:   getRun.ID,
 	}))
-	if err != nil || got.Msg.GetRun().GetStatus() != agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_CANCELED || got.Msg.GetRun().GetError() != "user stop" {
+	if err != nil || got.Msg.GetRun().GetStatus() != agentcomposev2.SchedulerRunStatus_SCHEDULER_RUN_STATUS_CANCELED || got.Msg.GetRun().GetError() != "user stop" || len(got.Msg.GetRun().GetSandboxIds()) != 1 || got.Msg.GetRun().GetSandboxIds()[0] != "sandbox-get" {
 		t.Fatalf("GetSchedulerRun response=%#v err=%v", got, err)
 	}
 

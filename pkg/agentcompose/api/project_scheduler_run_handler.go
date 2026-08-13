@@ -120,7 +120,15 @@ func (h *ProjectHandler) GetSchedulerRun(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	return connect.NewResponse(&agentcomposev2.GetSchedulerRunResponse{Run: schedulerRunToProto(run, scheduler)}), nil
+	item := schedulerRunToProto(run, scheduler)
+	if sandboxStore, ok := h.store.(ProjectSchedulerRunSandboxStore); ok {
+		sandboxIDs, err := sandboxStore.ListSchedulerRunSandboxIDs(ctx, []schedulers.SchedulerRunKey{{SchedulerID: run.SchedulerID, RunID: run.ID}})
+		if err != nil {
+			return nil, ConnectErrorForDomain(err)
+		}
+		item.SandboxIds = sandboxIDs[schedulers.SchedulerRunKey{SchedulerID: run.SchedulerID, RunID: run.ID}]
+	}
+	return connect.NewResponse(&agentcomposev2.GetSchedulerRunResponse{Run: item}), nil
 }
 
 func (h *ProjectHandler) ListSchedulerRuns(ctx context.Context, req *connect.Request[agentcomposev2.ListSchedulerRunsRequest]) (*connect.Response[agentcomposev2.ListSchedulerRunsResponse], error) {

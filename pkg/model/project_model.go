@@ -158,16 +158,17 @@ type ProjectListOptions struct {
 }
 
 type ProjectRunListOptions struct {
-	ProjectID   string
-	AgentName   string
-	SandboxID   string
-	SchedulerID string
-	Status      string
-	Source      string
-	StartedFrom *time.Time
-	StartedTo   *time.Time
-	Offset      int
-	Limit       int
+	ProjectID      string
+	AgentName      string
+	SandboxID      string
+	SchedulerID    string
+	SchedulerRunID string
+	Status         string
+	Source         string
+	StartedFrom    *time.Time
+	StartedTo      *time.Time
+	Offset         int
+	Limit          int
 }
 
 type ProjectAgentRunState struct {
