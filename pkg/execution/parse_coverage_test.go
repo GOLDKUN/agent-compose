@@ -54,6 +54,25 @@ func TestParseAgentAndCommandExecResultWorkflows(t *testing.T) {
 	}
 }
 
+// TestParseCommandExecResultIgnoresPrefixQuotedInsidePayload guards against a
+// regression where the command's own captured output legitimately quotes
+// CommandResultPrefix (e.g. a GitHub issue body describing this protocol).
+// The genuine marker is always the leftmost occurrence on the line, because
+// the wrapper prints its own prefix before embedding the captured output;
+// picking the rightmost occurrence (as a naive strings.LastIndex scan would)
+// lands inside the quoted text instead of the real JSON payload.
+func TestParseCommandExecResultIgnoresPrefixQuotedInsidePayload(t *testing.T) {
+	quotedOutput := "docs mention " + CommandResultPrefix + " twice, " + CommandResultPrefix + " here too"
+	payload := CommandResultPrefix + `{"stdout":"` + quotedOutput + `","stderr":"","output":"","exitCode":0,"success":true}`
+	command, err := ParseCommandExecResult(domain.ExecResult{Stdout: "prep\n" + payload})
+	if err != nil {
+		t.Fatalf("ParseCommandExecResult returned error: %v", err)
+	}
+	if !command.Success || command.ExitCode != 0 || command.Stdout != quotedOutput {
+		t.Fatalf("command result = %#v", command)
+	}
+}
+
 func TestParseAgentExecResultClassifiesFinalTextFallback(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -196,4 +215,12 @@ func TestIntegrationParseAgentAndCommandExecResultWorkflows(t *testing.T) {
 
 func TestE2EParseAgentAndCommandExecResultWorkflows(t *testing.T) {
 	TestParseAgentAndCommandExecResultWorkflows(t)
+}
+
+func TestIntegrationParseCommandExecResultIgnoresPrefixQuotedInsidePayload(t *testing.T) {
+	TestParseCommandExecResultIgnoresPrefixQuotedInsidePayload(t)
+}
+
+func TestE2EParseCommandExecResultIgnoresPrefixQuotedInsidePayload(t *testing.T) {
+	TestParseCommandExecResultIgnoresPrefixQuotedInsidePayload(t)
 }

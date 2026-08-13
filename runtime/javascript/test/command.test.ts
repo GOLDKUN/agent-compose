@@ -246,7 +246,7 @@ describe("runtime command execution", () => {
     });
   });
 
-  it("terminates commands that exceed timeout", async () => {
+  it("terminates commands that exceed timeout and reports a structured failure", async () => {
     await withTempSession(async (root) => {
       const requestFile = await writeRequest(root, {
         mode: "exec",
@@ -256,7 +256,54 @@ describe("runtime command execution", () => {
         artifactDir: path.join(root, "artifacts"),
       });
 
-      await expect(runExecCommand({ requestFile, workspace: root })).rejects.toThrow("command timed out");
+      // Callers (e.g. the exec CLI action) only get a decodable result when
+      // this resolves instead of rejecting - see runtime/javascript/src/cli.ts.
+      const result = await runExecCommand({ requestFile, workspace: root });
+      expect(result.success).toBe(false);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("command timed out after 25ms");
+      const savedResult = JSON.parse(await fs.readFile(result.artifacts.result, "utf8"));
+      expect(savedResult).toMatchObject({ success: false });
+      expect(savedResult.stderr).toContain("command timed out after 25ms");
+    });
+  });
+
+  it("still reports failure when a timed-out child catches SIGTERM and exits 0", async () => {
+    await withTempSession(async (root) => {
+      const requestFile = await writeRequest(root, {
+        mode: "exec",
+        command: "node",
+        args: ["-e", "process.on('SIGTERM', () => process.exit(0)); setTimeout(() => {}, 10000)"],
+        timeoutMs: 25,
+        artifactDir: path.join(root, "artifacts"),
+      });
+
+      const result = await runExecCommand({ requestFile, workspace: root });
+      // exitCode 0 alongside a "timed out" stderr message would be a
+      // self-contradictory result - success must stay false regardless of
+      // what exit code the child reported once it was killed for timeout.
+      expect(result.exitCode).not.toBe(0);
+      expect(result.success).toBe(false);
+      expect(result.stderr).toContain("command timed out after 25ms");
+    });
+  });
+
+  it("reports spawn failures as a structured result instead of throwing", async () => {
+    await withTempSession(async (root) => {
+      const requestFile = await writeRequest(root, {
+        mode: "exec",
+        command: "agent-compose-runtime-test-missing-binary-xyz",
+        args: [],
+        artifactDir: path.join(root, "artifacts"),
+      });
+
+      const result = await runExecCommand({ requestFile, workspace: root });
+      expect(result.success).toBe(false);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("spawn failed");
+      const savedResult = JSON.parse(await fs.readFile(result.artifacts.result, "utf8"));
+      expect(savedResult).toMatchObject({ success: false });
+      expect(savedResult.stderr).toContain("spawn failed");
     });
   });
 
