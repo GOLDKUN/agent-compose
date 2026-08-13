@@ -727,7 +727,7 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 			{AgentName: "worker-2", LatestRunID: "run-2", LatestStatus: domain.ProjectRunStatusSucceeded, LatestSource: domain.ProjectRunSourceScheduler, LatestAt: time.Unix(10, 0)},
 		},
 		runs: map[string]domain.ProjectRunRecord{
-			"run-1": {RunID: "run-1", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", SandboxID: strings.Repeat("a", 64), Status: domain.ProjectRunStatusRunning, Source: domain.ProjectRunSourceAPI, ResultJSON: "{}"},
+			"run-1": {RunID: "run-1", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", SchedulerRunID: "scheduler-run-1", SandboxID: strings.Repeat("a", 64), Status: domain.ProjectRunStatusRunning, Source: domain.ProjectRunSourceAPI, ResultJSON: "{}"},
 		},
 		runEvents: []domain.ProjectRunEventRecord{{ID: "event-1", RunID: "run-1", Sequence: 1, Kind: domain.ProjectRunEventKindUserMessage, Text: "hello", CreatedAt: time.Unix(1, 0)}},
 	}
@@ -798,9 +798,12 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	if err != nil || runResp.Msg.GetRun().GetSummary().GetRunId() != "run-1" {
 		t.Fatalf("GetRun resp=%#v err=%v", runResp, err)
 	}
-	listRuns, err := runHandler.ListRuns(ctx, connect.NewRequest(&agentcomposev2.ListRunsRequest{ProjectId: "project-1", Limit: 10}))
-	if err != nil || len(listRuns.Msg.GetRuns()) != 1 {
+	listRuns, err := runHandler.ListRuns(ctx, connect.NewRequest(&agentcomposev2.ListRunsRequest{ProjectId: "project-1", SchedulerRunId: "scheduler-run-1", Limit: 10}))
+	if err != nil || len(listRuns.Msg.GetRuns()) != 1 || listRuns.Msg.GetRuns()[0].GetSchedulerRunId() != "scheduler-run-1" {
 		t.Fatalf("ListRuns resp=%#v err=%v", listRuns, err)
+	}
+	if store.lastRunListOptions.SchedulerRunID != "scheduler-run-1" {
+		t.Fatalf("ListRuns scheduler run filter = %#v", store.lastRunListOptions)
 	}
 	runEvents, err := runHandler.ListRunEvents(ctx, connect.NewRequest(&agentcomposev2.ListRunEventsRequest{RunId: "run-1", Limit: 10}))
 	if err != nil || !runEvents.Msg.GetHistoryAvailable() || len(runEvents.Msg.GetEvents()) != 1 {
@@ -1289,6 +1292,7 @@ type apiProjectRunStore struct {
 	agentRunStates       []domain.ProjectAgentRunState
 	agentRunStateCalls   int
 	runs                 map[string]domain.ProjectRunRecord
+	lastRunListOptions   domain.ProjectRunListOptions
 	runEvents            []domain.ProjectRunEventRecord
 	schedulerDefinitions map[string]domain.Scheduler
 }
@@ -1426,9 +1430,10 @@ func (s *apiProjectRunStore) UpdateProjectRunWithEvents(ctx context.Context, run
 	return updated, nil
 }
 
-func (s *apiProjectRunStore) ListProjectRunsByOptions(_ context.Context, _ domain.ProjectRunListOptions) ([]domain.ProjectRunRecord, error) {
+func (s *apiProjectRunStore) ListProjectRunsByOptions(_ context.Context, options domain.ProjectRunListOptions) ([]domain.ProjectRunRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.lastRunListOptions = options
 	items := make([]domain.ProjectRunRecord, 0, len(s.runs))
 	for _, run := range s.runs {
 		items = append(items, run)

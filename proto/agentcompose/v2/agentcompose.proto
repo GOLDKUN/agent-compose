@@ -1141,6 +1141,8 @@ message ListRunsRequest {
   // Maximum resources to return. Zero uses the server default; values above 500 are rejected.
   uint32 limit = 9;
   string sandbox_id = 10;
+  // Optional exact scheduler run association for automation-originated Agent Runs.
+  string scheduler_run_id = 11;
 }
 
 message ListRunsResponse {
@@ -1397,6 +1399,8 @@ message RunSummary {
   string sandbox_id = 19;
   string run_short_id = 20;
   string sandbox_short_id = 21;
+  // Present when this Agent Run was created by a SchedulerRun.
+  string scheduler_run_id = 22;
 }
 
 message RunDetail {

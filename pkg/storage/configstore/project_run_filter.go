@@ -27,6 +27,10 @@ func projectRunFilter(options model.ProjectRunListOptions) ([]string, []any) {
 		where = append(where, "scheduler_id = ?")
 		args = append(args, schedulerID)
 	}
+	if schedulerRunID := strings.TrimSpace(options.SchedulerRunID); schedulerRunID != "" {
+		where = append(where, "scheduler_run_id = ?")
+		args = append(args, schedulerRunID)
+	}
 	if status := strings.TrimSpace(options.Status); status != "" {
 		where = append(where, "status = ?")
 		args = append(args, projects.NormalizeRunStatus(status))

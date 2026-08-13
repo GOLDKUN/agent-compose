@@ -38,6 +38,7 @@ func ProjectRunSummaryToProto(run domain.ProjectRunRecord) *agentcomposev2.RunSu
 		AgentName:       run.AgentName,
 		Source:          ProjectRunSourceToProto(run.Source),
 		SchedulerId:     run.SchedulerID,
+		SchedulerRunId:  run.SchedulerRunID,
 		TriggerId:       run.TriggerID,
 		Status:          ProjectRunStatusToProto(run.Status),
 		SandboxId:       sandboxID,

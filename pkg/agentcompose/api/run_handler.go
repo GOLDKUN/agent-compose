@@ -224,16 +224,17 @@ func (h *RunHandler) ListRuns(ctx context.Context, req *connect.Request[agentcom
 		return nil, err
 	}
 	options := domain.ProjectRunListOptions{
-		ProjectID:   req.Msg.GetProjectId(),
-		AgentName:   req.Msg.GetAgentName(),
-		SandboxID:   req.Msg.GetSandboxId(),
-		SchedulerID: req.Msg.GetSchedulerId(),
-		Status:      ProjectRunStatusFromProto(req.Msg.GetStatus()),
-		Source:      ProjectRunSourceFilterFromProto(req.Msg.GetSource()),
-		StartedFrom: startedFrom,
-		StartedTo:   startedTo,
-		Offset:      offset,
-		Limit:       limit,
+		ProjectID:      req.Msg.GetProjectId(),
+		AgentName:      req.Msg.GetAgentName(),
+		SandboxID:      req.Msg.GetSandboxId(),
+		SchedulerID:    req.Msg.GetSchedulerId(),
+		SchedulerRunID: req.Msg.GetSchedulerRunId(),
+		Status:         ProjectRunStatusFromProto(req.Msg.GetStatus()),
+		Source:         ProjectRunSourceFilterFromProto(req.Msg.GetSource()),
+		StartedFrom:    startedFrom,
+		StartedTo:      startedTo,
+		Offset:         offset,
+		Limit:          limit,
 	}
 	runs, err := h.store.ListProjectRunsByOptions(ctx, options)
 	if err != nil {
