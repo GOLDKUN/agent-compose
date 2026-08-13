@@ -259,15 +259,26 @@ async function runProcess(
     appendCapture(outputCapture, chunk);
   });
 
+  // Surface spawn/timeout failures as regular stderr output instead of
+  // throwing, so the caller always gets a decodable RuntimeCommandResult
+  // (see runtime/javascript/src/cli.ts, which only prints the
+  // COMMAND_RESULT_PREFIX marker when this function returns normally).
+  const recordFailureMessage = (message: string) => {
+    const chunk = Buffer.from(message);
+    options.stderr?.write(chunk);
+    stderrFile.write(chunk);
+    outputFile.write(chunk);
+    appendCapture(stderrCapture, chunk);
+    appendCapture(outputCapture, chunk);
+  };
+
   try {
     const { exitCode, spawnError } = await processExit;
     if (spawnError && !options.signal?.aborted) {
-      throw spawnError;
-    }
-    if (timedOut) {
-      throw new Error(`command timed out after ${request.timeoutMs}ms`);
-    }
-    if (exitCode !== 0) {
+      recordFailureMessage(`spawn failed: ${spawnError.message}\n`);
+    } else if (timedOut) {
+      recordFailureMessage(`command timed out after ${request.timeoutMs}ms\n`);
+    } else if (exitCode !== 0) {
       options.stderr?.write(`command exited with code ${exitCode}\n`);
     }
     return {

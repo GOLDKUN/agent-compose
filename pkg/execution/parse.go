@@ -185,12 +185,38 @@ func findCommandExecPayload(raw string) (domain.RuntimeCommandResult, bool) {
 		if line == "" {
 			continue
 		}
-		if idx := strings.LastIndex(line, CommandResultPrefix); idx >= 0 {
-			line = strings.TrimSpace(line[idx+len(CommandResultPrefix):])
+		if payload, ok := parseCommandExecLine(line); ok {
+			return payload, true
 		}
-		if !strings.HasPrefix(line, "{") {
-			continue
+	}
+	return domain.RuntimeCommandResult{}, false
+}
+
+// parseCommandExecLine locates CommandResultPrefix within a single line and
+// decodes the JSON that follows it. The prefix can legitimately appear more
+// than once on a line: the command's own output may quote the prefix, and
+// that occurrence sits to the right of the real one once the wrapper embeds
+// the captured output inside the result JSON. Trying every occurrence (and
+// requiring the remainder to actually decode) avoids latching onto a quoted
+// occurrence instead of the genuine marker.
+func parseCommandExecLine(line string) (domain.RuntimeCommandResult, bool) {
+	searchFrom := 0
+	for {
+		idx := strings.Index(line[searchFrom:], CommandResultPrefix)
+		if idx < 0 {
+			break
 		}
+		idx += searchFrom
+		candidate := strings.TrimSpace(line[idx+len(CommandResultPrefix):])
+		if strings.HasPrefix(candidate, "{") {
+			var payload domain.RuntimeCommandResult
+			if json.Unmarshal([]byte(candidate), &payload) == nil {
+				return payload, true
+			}
+		}
+		searchFrom = idx + len(CommandResultPrefix)
+	}
+	if strings.HasPrefix(line, "{") {
 		var payload domain.RuntimeCommandResult
 		if json.Unmarshal([]byte(line), &payload) == nil {
 			return payload, true
