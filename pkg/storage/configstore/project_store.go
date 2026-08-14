@@ -361,18 +361,25 @@ func (s *projectStore) ListProjectSchedulersPage(ctx context.Context, query stri
 	query = strings.ToLower(strings.TrimSpace(query))
 	likeQuery := "%" + query + "%"
 	rows, err := s.db.QueryContext(ctx, `WITH page AS (
-		SELECT s.id, s.short_id, s.project_id, s.id, s.agent_name, s.revision, s.enabled, s.trigger_count, s.spec_json, s.created_at, s.updated_at
+		SELECT s.id, s.short_id, s.project_id, s.id, s.agent_name, s.revision, s.enabled, s.trigger_count, s.spec_json, s.created_at, s.updated_at, s.last_error
 		FROM project_scheduler s JOIN project p ON p.id = s.project_id
 		WHERE p.removed_at = 0
 		AND s.revision = p.current_revision
 		AND (? = '' OR lower(p.id) LIKE ? OR lower(p.name) LIKE ? OR lower(p.source_path) LIKE ?)
 		ORDER BY s.project_id ASC, s.agent_name ASC, s.id ASC LIMIT ? OFFSET ?
+	), run_stats AS (
+		SELECT sr.scheduler_id AS id, COUNT(*) AS run_count, MAX(sr.started_at) AS latest_run_at
+		FROM scheduler_run sr
+		JOIN page ON page.id = sr.scheduler_id
+		WHERE sr.trigger_id <> ''
+		GROUP BY sr.scheduler_id
 	)
 	SELECT page.id, page.short_id, page.project_id, page.id, page.agent_name, page.revision, page.enabled, page.trigger_count, page.spec_json, page.created_at, page.updated_at,
-		(SELECT COUNT(*) FROM scheduler_run sr WHERE sr.scheduler_id = page.id AND sr.trigger_id <> ''),
-		(SELECT MAX(started_at) FROM scheduler_run sr WHERE sr.scheduler_id = page.id AND sr.trigger_id <> ''),
-		COALESCE((SELECT last_error FROM project_scheduler WHERE id = page.id), '')
+		COALESCE(run_stats.run_count, 0),
+		run_stats.latest_run_at,
+		COALESCE(page.last_error, '')
 	FROM page
+	LEFT JOIN run_stats ON run_stats.id = page.id
 	ORDER BY page.project_id ASC, page.agent_name ASC, page.id ASC`, query, likeQuery, likeQuery, likeQuery, limit, max(offset, 0))
 	if err != nil {
 		return nil, fmt.Errorf("query project scheduler page: %w", err)

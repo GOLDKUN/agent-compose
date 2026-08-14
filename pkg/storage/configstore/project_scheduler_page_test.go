@@ -79,3 +79,62 @@ func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {
 		t.Fatalf("filtered page = %#v, err = %v", filtered, err)
 	}
 }
+
+func TestProjectSchedulerPageScalesWithRunHistory(t *testing.T) {
+	ctx := context.Background()
+	store := FromDB(newMemoryDB(t))
+	if err := store.initSchema(ctx); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+	const (
+		projectID      = "project-scale"
+		schedulerCount = 120
+	)
+	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: projectID, Name: "scale"}); err != nil {
+		t.Fatalf("upsert project: %v", err)
+	}
+	for index := range schedulerCount {
+		agentName := fmt.Sprintf("agent-%03d", index)
+		schedulerID := fmt.Sprintf("scheduler-%03d", index)
+		agentID, err := domain.StableProjectAgentID(projectID, agentName)
+		if err != nil {
+			t.Fatalf("derive agent id %s: %v", agentName, err)
+		}
+		if _, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{ID: agentID, ProjectID: projectID, AgentName: agentName}); err != nil {
+			t.Fatalf("upsert agent %s: %v", agentName, err)
+		}
+		if _, err := store.UpsertProjectScheduler(ctx, domain.ProjectSchedulerRecord{
+			ProjectID: projectID,
+			AgentName: agentName,
+			ID:        schedulerID,
+			Enabled:   index%2 == 0,
+		}); err != nil {
+			t.Fatalf("upsert scheduler %s: %v", schedulerID, err)
+		}
+		for runIndex := range 3 {
+			startedAt := int64(1700000000 + index*10 + runIndex)
+			if _, err := store.db.ExecContext(ctx, `INSERT INTO scheduler_run(scheduler_id, run_id, trigger_id, started_at) VALUES(?, ?, ?, ?)`, schedulerID, fmt.Sprintf("run-%03d-%d", index, runIndex), "trigger-1", startedAt); err != nil {
+				t.Fatalf("insert scheduler run %s/%d: %v", schedulerID, runIndex, err)
+			}
+		}
+		if _, err := store.db.ExecContext(ctx, `INSERT INTO scheduler_run(scheduler_id, run_id, started_at) VALUES(?, ?, ?)`, schedulerID, fmt.Sprintf("legacy-%03d", index), int64(1800000000+index)); err != nil {
+			t.Fatalf("insert legacy scheduler invocation %s: %v", schedulerID, err)
+		}
+	}
+
+	first, err := store.ListProjectSchedulersPage(ctx, "scale", 0, 100)
+	if err != nil || len(first) != 100 {
+		t.Fatalf("first page length = %d, err = %v", len(first), err)
+	}
+	second, err := store.ListProjectSchedulersPage(ctx, "scale", 100, 100)
+	if err != nil || len(second) != 20 {
+		t.Fatalf("second page length = %d, err = %v", len(second), err)
+	}
+	for index, scheduler := range append(first, second...) {
+		wantID := fmt.Sprintf("scheduler-%03d", index)
+		wantLatest := time.Unix(int64(1700000000+index*10+2), 0).UTC()
+		if scheduler.ID != wantID || scheduler.Enabled != (index%2 == 0) || scheduler.RunCount != 3 || !scheduler.LatestRunAt.Equal(wantLatest) {
+			t.Fatalf("scheduler %d = %#v, want id=%s enabled=%v run_count=3 latest=%s", index, scheduler, wantID, index%2 == 0, wantLatest)
+		}
+	}
+}
