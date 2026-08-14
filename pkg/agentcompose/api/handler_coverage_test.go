@@ -767,21 +767,32 @@ func TestProjectAndRunHandlersStoreBackedWorkflows(t *testing.T) {
 	if err != nil || scheduler.Msg.GetScheduler().GetSchedulerId() != "scheduler-1" || scheduler.Msg.GetScheduler().GetDisplayName() != "每日巡检" || scheduler.Msg.GetSpec().GetScript() != "run()" || scheduler.Msg.GetSpec().GetDescription() != "每天汇总巡检结果" {
 		t.Fatalf("GetScheduler resp=%#v err=%v", scheduler, err)
 	}
+	// GetScheduler hydrates scheduler-1 as disabled, diverging from the
+	// project_scheduler page row (Enabled: true), so the calls below can
+	// prove ListSchedulers treats the page row as authoritative instead of
+	// re-hydrating each item via GetScheduler.
+	getSchedulerCallsBeforeList := store.getSchedulerCalls
 	firstSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 1}))
 	if err != nil || len(firstSchedulers.Msg.GetSchedulers()) != 1 || firstSchedulers.Msg.GetTotal() != 2 {
 		t.Fatalf("ListSchedulers first page=%#v err=%v", firstSchedulers, err)
 	}
-	if summary := firstSchedulers.Msg.GetSchedulers()[0]; summary.GetEnabled() || summary.GetRunCount() != 3 || !summary.GetLatestRunAt().AsTime().Equal(time.Unix(10, 0)) || summary.GetLastError() != "failed" || summary.GetDisplayName() != "每日巡检" || summary.GetDescription() != "每天汇总巡检结果" {
+	if summary := firstSchedulers.Msg.GetSchedulers()[0]; !summary.GetEnabled() || summary.GetRunCount() != 3 || !summary.GetLatestRunAt().AsTime().Equal(time.Unix(10, 0)) || summary.GetLastError() != "failed" || summary.GetDisplayName() != "每日巡检" || summary.GetDescription() != "每天汇总巡检结果" {
 		t.Fatalf("ListSchedulers summary=%#v", summary)
 	}
 	secondSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 1, Offset: 1}))
 	if err != nil || len(secondSchedulers.Msg.GetSchedulers()) != 1 || secondSchedulers.Msg.GetSchedulers()[0].GetSchedulerId() != "scheduler-2" {
 		t.Fatalf("ListSchedulers second page=%#v err=%v", secondSchedulers, err)
 	}
+	if store.getSchedulerCalls != getSchedulerCallsBeforeList {
+		t.Fatalf("ListSchedulers must not call GetScheduler per item, calls before=%d after=%d", getSchedulerCallsBeforeList, store.getSchedulerCalls)
+	}
 	delete(store.schedulerDefinitions, "scheduler-2")
 	missingSchedulerSchedulers, err := projectHandler.ListSchedulers(ctx, connect.NewRequest(&agentcomposev2.ListSchedulersRequest{Limit: 10}))
 	if err != nil || len(missingSchedulerSchedulers.Msg.GetSchedulers()) != 2 || !missingSchedulerSchedulers.Msg.GetSchedulers()[1].GetEnabled() {
 		t.Fatalf("ListSchedulers missing scheduler fallback=%#v err=%v", missingSchedulerSchedulers, err)
+	}
+	if store.getSchedulerCalls != getSchedulerCallsBeforeList {
+		t.Fatalf("ListSchedulers must not call GetScheduler even when scheduler definitions are missing, calls before=%d after=%d", getSchedulerCallsBeforeList, store.getSchedulerCalls)
 	}
 	store.schedulerDefinitions["scheduler-2"] = domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-2", Enabled: true}}
 	store.projects = append(store.projects, domain.ProjectRecord{ID: "project-2", Name: "Project"})
@@ -1295,6 +1306,7 @@ type apiProjectRunStore struct {
 	lastRunListOptions   domain.ProjectRunListOptions
 	runEvents            []domain.ProjectRunEventRecord
 	schedulerDefinitions map[string]domain.Scheduler
+	getSchedulerCalls    int
 }
 
 func (s *apiProjectRunStore) GetProject(_ context.Context, projectID string) (domain.ProjectRecord, error) {
@@ -1359,6 +1371,7 @@ func (s *apiProjectRunStore) GetManagedAgentDefinition(context.Context, string) 
 }
 
 func (s *apiProjectRunStore) GetScheduler(_ context.Context, schedulerID string) (domain.Scheduler, error) {
+	s.getSchedulerCalls++
 	scheduler, ok := s.schedulerDefinitions[schedulerID]
 	if !ok {
 		return domain.Scheduler{}, sql.ErrNoRows
