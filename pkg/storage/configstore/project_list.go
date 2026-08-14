@@ -47,17 +47,34 @@ func (s *projectStore) ListProjects(ctx context.Context, options ProjectListOpti
 	}
 
 	pageArgs := append(append([]any(nil), args...), limit, offset)
-	rows, err := tx.QueryContext(ctx, `SELECT
-		p.id, p.name, p.short_id, p.source_path, p.source_json,
-		p.current_revision, p.spec_hash, p.created_at, p.updated_at, p.removed_at,
-		(SELECT COUNT(*) FROM project_agent a
-			WHERE a.project_id = p.id AND (p.current_revision <= 0 OR a.revision = p.current_revision)),
-		(SELECT COUNT(*) FROM project_scheduler s
-			WHERE s.project_id = p.id AND (p.current_revision <= 0 OR s.revision = p.current_revision))
+	rows, err := tx.QueryContext(ctx, `WITH page AS (
+		SELECT p.id, p.name, p.short_id, p.source_path, p.source_json,
+			p.current_revision, p.spec_hash, p.created_at, p.updated_at, p.removed_at
 		FROM project p
 		WHERE `+where+`
 		ORDER BY p.updated_at DESC, p.created_at DESC, p.id ASC
-		LIMIT ? OFFSET ?`, pageArgs...)
+		LIMIT ? OFFSET ?
+	), agent_counts AS (
+		SELECT a.project_id AS id, COUNT(*) AS agent_count
+		FROM project_agent a
+		JOIN page ON page.id = a.project_id
+		WHERE page.current_revision <= 0 OR a.revision = page.current_revision
+		GROUP BY a.project_id
+	), scheduler_counts AS (
+		SELECT s.project_id AS id, COUNT(*) AS scheduler_count
+		FROM project_scheduler s
+		JOIN page ON page.id = s.project_id
+		WHERE page.current_revision <= 0 OR s.revision = page.current_revision
+		GROUP BY s.project_id
+	)
+	SELECT page.id, page.name, page.short_id, page.source_path, page.source_json,
+		page.current_revision, page.spec_hash, page.created_at, page.updated_at, page.removed_at,
+		COALESCE(agent_counts.agent_count, 0),
+		COALESCE(scheduler_counts.scheduler_count, 0)
+	FROM page
+	LEFT JOIN agent_counts ON agent_counts.id = page.id
+	LEFT JOIN scheduler_counts ON scheduler_counts.id = page.id
+	ORDER BY page.updated_at DESC, page.created_at DESC, page.id ASC`, pageArgs...)
 	if err != nil {
 		return ProjectListResult{}, fmt.Errorf("query project page: %w", err)
 	}

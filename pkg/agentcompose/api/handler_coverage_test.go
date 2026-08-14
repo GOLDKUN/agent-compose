@@ -1051,6 +1051,18 @@ func (s *apiExecSandboxStore) GetVMState(string) (domain.VMState, error) {
 	return s.vm, nil
 }
 
+func (s *apiExecSandboxStore) ListSandboxSummaries(_ context.Context, ids []string) (map[string]domain.SandboxSummary, error) {
+	summaries := make(map[string]domain.SandboxSummary, len(ids))
+	if s.sandbox != nil {
+		for _, id := range ids {
+			if id == s.sandbox.Summary.ID {
+				summaries[id] = s.sandbox.Summary
+			}
+		}
+	}
+	return summaries, nil
+}
+
 type apiExecProjectStore struct {
 	err error
 }
@@ -1086,6 +1098,16 @@ func (s *apiExecWorkflowSandboxStore) GetSandbox(_ context.Context, id string) (
 
 func (s *apiExecWorkflowSandboxStore) GetVMState(string) (domain.VMState, error) {
 	return s.vm, nil
+}
+
+func (s *apiExecWorkflowSandboxStore) ListSandboxSummaries(_ context.Context, ids []string) (map[string]domain.SandboxSummary, error) {
+	summaries := make(map[string]domain.SandboxSummary, len(ids))
+	for _, id := range ids {
+		if sandbox, ok := s.sandboxes[id]; ok {
+			summaries[id] = sandbox.Summary
+		}
+	}
+	return summaries, nil
 }
 
 type apiExecWorkflowProjectStore struct {
