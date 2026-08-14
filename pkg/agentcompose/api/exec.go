@@ -751,6 +751,9 @@ func (h *ExecHandler) resolveExecTargetSandbox(ctx context.Context, req *agentco
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf("sandbox %s not found: %w", candidates[0].sandboxID, err))
 	}
+	if sandbox.Summary.VMStatus != domain.VMStatusRunning {
+		return nil, "", connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("sandbox %s is not running", candidates[0].sandboxID))
+	}
 	return sandbox, candidates[0].run.RunID, nil
 }
 

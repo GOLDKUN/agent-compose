@@ -486,6 +486,39 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 	}
 }
 
+// TestExecHandlerSelectorRechecksVMStatusAfterSummaryFilter guards against a
+// TOCTOU regression: candidate filtering uses a (possibly stale/cached)
+// summary, but the sandbox actually returned comes from a later GetSandbox
+// disk read. If that reload disagrees with the summary, the stale reading
+// must not be trusted as the exec target.
+func TestExecHandlerSelectorRechecksVMStatusAfterSummaryFilter(t *testing.T) {
+	ctx := context.Background()
+	stopped := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-stale", VMStatus: domain.VMStatusStopped}}
+	store := &apiExecWorkflowSandboxStore{
+		sandboxes: map[string]*domain.Sandbox{"sandbox-stale": stopped},
+		summaries: map[string]domain.SandboxSummary{
+			"sandbox-stale": {ID: "sandbox-stale", VMStatus: domain.VMStatusRunning},
+		},
+		vm: domain.VMState{Driver: "docker"},
+	}
+	projects := &apiExecWorkflowProjectStore{
+		projects: []domain.ProjectRecord{{ID: "project-1", Name: "Project", SourcePath: "/repo/one"}},
+		runs: []domain.ProjectRunRecord{
+			{RunID: "run-stale", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", SandboxID: "sandbox-stale"},
+		},
+	}
+	handler := NewExecHandler(&appconfig.Config{}, store, projects, func(*domain.Sandbox) (ExecRuntime, error) {
+		return &apiExecRuntime{}, nil
+	})
+	_, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
+		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{Project: &agentcomposev2.ExecSandboxSelector_ProjectId{ProjectId: "project-1"}, AgentName: "worker"}},
+		Command: &agentcomposev2.ExecCommand{Command: "echo"},
+	}, "exec-stale", nil)
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("expected stale summary to be rejected with FailedPrecondition, got %v", err)
+	}
+}
+
 func TestExecHandlerSelectorErrors(t *testing.T) {
 	handler := NewExecHandler(&appconfig.Config{}, &apiExecSandboxStore{}, apiExecProjectStore{err: sql.ErrNoRows}, func(*domain.Sandbox) (ExecRuntime, error) {
 		return &apiExecRuntime{}, nil
@@ -1085,6 +1118,10 @@ func (s apiExecProjectStore) ListProjectSandboxRuns(context.Context, domain.Proj
 
 type apiExecWorkflowSandboxStore struct {
 	sandboxes map[string]*domain.Sandbox
+	// summaries overrides ListSandboxSummaries results for the given IDs,
+	// letting tests simulate a stale/cached summary diverging from what
+	// GetSandbox subsequently reloads from disk.
+	summaries map[string]domain.SandboxSummary
 	vm        domain.VMState
 }
 
@@ -1103,6 +1140,10 @@ func (s *apiExecWorkflowSandboxStore) GetVMState(string) (domain.VMState, error)
 func (s *apiExecWorkflowSandboxStore) ListSandboxSummaries(_ context.Context, ids []string) (map[string]domain.SandboxSummary, error) {
 	summaries := make(map[string]domain.SandboxSummary, len(ids))
 	for _, id := range ids {
+		if override, ok := s.summaries[id]; ok {
+			summaries[id] = override
+			continue
+		}
 		if sandbox, ok := s.sandboxes[id]; ok {
 			summaries[id] = sandbox.Summary
 		}
