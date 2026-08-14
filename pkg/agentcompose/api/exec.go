@@ -28,6 +28,7 @@ import (
 type ExecSandboxStore interface {
 	GetSandbox(context.Context, string) (*domain.Sandbox, error)
 	GetVMState(string) (domain.VMState, error)
+	ListSandboxSummaries(context.Context, []string) (map[string]domain.SandboxSummary, error)
 }
 
 type ExecProjectStore interface {
@@ -695,7 +696,7 @@ func (h *ExecHandler) resolveExecTargetSandbox(ctx context.Context, req *agentco
 		}
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}
-	statuses, err := runs.ListProjectSandboxStatuses(ctx, h.projects, h.store, domain.ProjectSandboxRelationFilter{
+	projectRuns, err := h.projects.ListProjectSandboxRuns(ctx, domain.ProjectSandboxRelationFilter{
 		ProjectID: project.ID,
 		AgentName: selector.GetAgentName(),
 	})
@@ -703,15 +704,32 @@ func (h *ExecHandler) resolveExecTargetSandbox(ctx context.Context, req *agentco
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}
 	type candidate struct {
-		sandbox *domain.Sandbox
-		run     domain.ProjectRunRecord
+		sandboxID string
+		run       domain.ProjectRunRecord
 	}
-	var candidates []candidate
-	for _, status := range statuses {
-		if status.Sandbox == nil || status.Sandbox.Summary.VMStatus != domain.VMStatusRunning {
+	runBySandbox := make(map[string]domain.ProjectRunRecord, len(projectRuns))
+	sandboxIDs := make([]string, 0, len(projectRuns))
+	for _, run := range projectRuns {
+		sandboxID := strings.TrimSpace(run.SandboxID)
+		if sandboxID == "" {
 			continue
 		}
-		candidates = append(candidates, candidate{sandbox: status.Sandbox, run: status.Run})
+		if _, seen := runBySandbox[sandboxID]; seen {
+			continue
+		}
+		runBySandbox[sandboxID] = run
+		sandboxIDs = append(sandboxIDs, sandboxID)
+	}
+	summaries, err := h.store.ListSandboxSummaries(ctx, sandboxIDs)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInternal, err)
+	}
+	var candidates []candidate
+	for _, sandboxID := range sandboxIDs {
+		if summaries[sandboxID].VMStatus != domain.VMStatusRunning {
+			continue
+		}
+		candidates = append(candidates, candidate{sandboxID: sandboxID, run: runBySandbox[sandboxID]})
 	}
 	contextParts := []string{fmt.Sprintf("project %s", project.Name)}
 	if agentName := strings.TrimSpace(selector.GetAgentName()); agentName != "" {
@@ -724,12 +742,19 @@ func (h *ExecHandler) resolveExecTargetSandbox(ctx context.Context, req *agentco
 	if len(candidates) > 1 {
 		ids := make([]string, 0, len(candidates))
 		for _, item := range candidates {
-			ids = append(ids, item.sandbox.Summary.ID)
+			ids = append(ids, item.sandboxID)
 		}
 		slices.Sort(ids)
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("multiple runningsandboxs found for %s: %s", contextText, strings.Join(ids, ", ")))
 	}
-	return candidates[0].sandbox, candidates[0].run.RunID, nil
+	sandbox, err := h.store.GetSandbox(ctx, candidates[0].sandboxID)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf("sandbox %s not found: %w", candidates[0].sandboxID, err))
+	}
+	if sandbox.Summary.VMStatus != domain.VMStatusRunning {
+		return nil, "", connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("sandbox %s is not running", candidates[0].sandboxID))
+	}
+	return sandbox, candidates[0].run.RunID, nil
 }
 
 func (h *ExecHandler) sandboxForProjectRun(ctx context.Context, run domain.ProjectRunRecord) (*domain.Sandbox, error) {
