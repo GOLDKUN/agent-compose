@@ -394,11 +394,18 @@ func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecyc
 		changes = append(changes, schedulerChanges...)
 		agents, listAgentsErr := c.store.ListProjectAgents(ctx, project.ID)
 		if listAgentsErr != nil {
-			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project agents after reconcile failure: %w", normalized.Spec.Name, err, listAgentsErr)
+			// The listing failure is reported for diagnosis only and is formatted
+			// with %v on purpose. projectConnectError classifies this error with an
+			// ordered switch, so wrapping a second, unrelated cause would let the
+			// follow-up failure decide the status code instead of the reconcile
+			// failure that actually broke the apply.
+			//nolint:errorlint // secondary cause is diagnostic; see comment above
+			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project agents after reconcile failure: %v", normalized.Spec.Name, err, listAgentsErr)
 		}
 		schedulers, listSchedulersErr := c.store.ListProjectSchedulers(ctx, project.ID)
 		if listSchedulersErr != nil {
-			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project schedulers after reconcile failure: %w", normalized.Spec.Name, err, listSchedulersErr)
+			//nolint:errorlint // secondary cause is diagnostic; see comment above
+			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project schedulers after reconcile failure: %v", normalized.Spec.Name, err, listSchedulersErr)
 		}
 		return ApplyResult{
 			Project:      project,
