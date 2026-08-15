@@ -94,53 +94,53 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 	}
 
 	for _, runtime := range []string{"", domain.SchedulerRuntimeScheduler} {
-		if got, err := domain.NormalizeSchedulerRuntime(runtime); err != nil || got != domain.SchedulerRuntimeScheduler {
+		if got, err := schedulers.NormalizeRuntime(runtime); err != nil || got != domain.SchedulerRuntimeScheduler {
 			t.Fatalf("NormalizeSchedulerRuntime(%q) = %q/%v", runtime, got, err)
 		}
 	}
 	for _, runtime := range []string{"qjs", "quickjs", "bad"} {
-		if _, err := domain.NormalizeSchedulerRuntime(runtime); err == nil {
+		if _, err := schedulers.NormalizeRuntime(runtime); err == nil {
 			t.Fatalf("NormalizeSchedulerRuntime(%q) returned nil error", runtime)
 		}
 	}
 	for _, kind := range []string{domain.SchedulerTriggerKindInterval, domain.SchedulerTriggerKindEvent, domain.SchedulerTriggerKindTimeout, domain.SchedulerTriggerKindCron} {
-		if got, err := domain.NormalizeSchedulerTriggerKind(kind); err != nil || got != kind {
+		if got, err := schedulers.NormalizeTriggerKind(kind); err != nil || got != kind {
 			t.Fatalf("NormalizeSchedulerTriggerKind(%q) = %q/%v", kind, got, err)
 		}
 	}
-	if _, err := domain.NormalizeSchedulerTriggerKind("bad"); err == nil {
+	if _, err := schedulers.NormalizeTriggerKind("bad"); err == nil {
 		t.Fatalf("NormalizeSchedulerTriggerKind bad returned nil error")
 	}
-	if domain.NormalizeSchedulerSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || domain.NormalizeSchedulerSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
+	if schedulers.NormalizeSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || schedulers.NormalizeSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
 		t.Fatalf("NormalizeSchedulerSandboxPolicy returned unexpected values")
 	}
-	if domain.NormalizeSchedulerConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || domain.NormalizeSchedulerConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
+	if schedulers.NormalizeConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || schedulers.NormalizeConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
 		t.Fatalf("NormalizeSchedulerConcurrencyPolicy returned unexpected values")
 	}
 	for _, status := range []string{domain.SchedulerRunStatusRunning, domain.SchedulerRunStatusSucceeded, domain.SchedulerRunStatusFailed, domain.SchedulerRunStatusCanceled, domain.SchedulerRunStatusSkipped} {
-		if domain.NormalizeSchedulerRunStatus(status) != status {
+		if schedulers.NormalizeRunStatus(status) != status {
 			t.Fatalf("NormalizeSchedulerRunStatus(%q) changed", status)
 		}
 	}
-	if domain.NormalizeSchedulerRunStatus("bad") != domain.SchedulerRunStatusRunning {
+	if schedulers.NormalizeRunStatus("bad") != domain.SchedulerRunStatusRunning {
 		t.Fatalf("NormalizeSchedulerRunStatus bad did not default")
 	}
-	if !domain.SchedulerTriggerTopicMatches("agent-compose.session.*", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("", "agent-compose.session.created") || domain.SchedulerTriggerTopicMatches("agent-compose.scheduler", "") {
+	if !events.TriggerTopicMatches("agent-compose.session.*", "agent-compose.session.created") || events.TriggerTopicMatches("", "agent-compose.session.created") || events.TriggerTopicMatches("agent-compose.scheduler", "") {
 		t.Fatalf("SchedulerTriggerTopicMatches returned unexpected values")
 	}
-	if domain.SchedulerTriggerTopicMatches("adp.session.*", "agent-compose.session.created") {
+	if events.TriggerTopicMatches("adp.session.*", "agent-compose.session.created") {
 		t.Fatalf("legacy session wildcard matched agent-compose lifecycle topic")
 	}
-	if !domain.SchedulerTriggerUsesSchedule(domain.SchedulerTriggerKindCron) || domain.SchedulerTriggerUsesSchedule(domain.SchedulerTriggerKindEvent) {
+	if !schedulers.TriggerUsesSchedule(domain.SchedulerTriggerKindCron) || schedulers.TriggerUsesSchedule(domain.SchedulerTriggerKindEvent) {
 		t.Fatalf("SchedulerTriggerUsesSchedule returned unexpected values")
 	}
 	if !domain.TimeIsSet(now) || domain.TimeIsSet(time.Time{}) || domain.NonZeroTimeUnixMilli(time.Time{}) != 0 || domain.NonZeroTimeUnixMilli(now) == 0 {
 		t.Fatalf("time helper returned unexpected values")
 	}
-	if !domain.SchedulerTriggerScheduledAt(now, 10).After(now) || !domain.SchedulerTriggerScheduledAt(now, 0).IsZero() {
+	if !schedulers.TriggerScheduledAt(now, 10).After(now) || !schedulers.TriggerScheduledAt(now, 0).IsZero() {
 		t.Fatalf("SchedulerTriggerScheduledAt returned unexpected values")
 	}
-	if domain.DefaultSchedulerName(now) == "" || !strings.Contains(domain.DefaultSchedulerScript(), "scheduler.interval") || domain.SchedulerSourceSHA("script") == "" || domain.SchedulerTriggerStableID("kind", "topic", 1, "cb", 0) == "" {
+	if schedulers.DefaultName(now) == "" || !strings.Contains(schedulers.DefaultScript(), "scheduler.interval") || schedulers.SourceSHA("script") == "" || schedulers.TriggerStableID("kind", "topic", 1, "cb", 0) == "" {
 		t.Fatalf("scheduler default/hash helpers returned empty values")
 	}
 	if err := events.ValidateTopicName("runtime.topic-1"); err != nil {

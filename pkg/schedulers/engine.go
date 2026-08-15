@@ -86,7 +86,7 @@ func (e *QJSSchedulerEngine) Execute(ctx context.Context, request SchedulerExecu
 }
 
 func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request SchedulerExecutionRequest, host SchedulerHost, validateOnly bool) (SchedulerExecutionResult, error) {
-	runtimeName, err := domain.NormalizeSchedulerRuntime(request.Runtime)
+	runtimeName, err := NormalizeRuntime(request.Runtime)
 	if err != nil {
 		return SchedulerExecutionResult{}, err
 	}
@@ -250,7 +250,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 			return nil, err
 		}
 		if id == "" {
-			id = domain.SchedulerTriggerStableID(kind, "", delayMs, callback.String(), len(state.registrations))
+			id = TriggerStableID(kind, "", delayMs, callback.String(), len(state.registrations))
 			autoID = true
 		}
 		trigger := domain.SchedulerTrigger{
@@ -305,7 +305,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 			return nil, err
 		}
 		if id == "" {
-			id = domain.SchedulerTriggerStableID(domain.SchedulerTriggerKindEvent, topic, 0, callback.String(), len(state.registrations))
+			id = TriggerStableID(domain.SchedulerTriggerKindEvent, topic, 0, callback.String(), len(state.registrations))
 			autoID = true
 		}
 		trigger := domain.SchedulerTrigger{
@@ -330,7 +330,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 			return nil, err
 		}
 		if id == "" {
-			id = domain.SchedulerTriggerStableID(domain.SchedulerTriggerKindCron, expr, 0, callback.String(), len(state.registrations))
+			id = TriggerStableID(domain.SchedulerTriggerKindCron, expr, 0, callback.String(), len(state.registrations))
 			autoID = true
 		}
 		trigger := domain.SchedulerTrigger{

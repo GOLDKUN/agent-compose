@@ -204,7 +204,7 @@ func schedulerRequestSandboxConfigHash(baseHash string, request domain.Scheduler
 		SchedulerConfigHash: baseHash,
 		Agent:               domain.NormalizeAgentKind(request.Agent),
 		AgentDefinition:     agentConfig,
-		SandboxPolicy:       strings.TrimSpace(domain.SchedulerAgentSandboxPolicy(request)),
+		SandboxPolicy:       strings.TrimSpace(schedulers.AgentSandboxPolicy(request)),
 		PullPolicy:          strings.TrimSpace(request.PullPolicy),
 		JupyterEnabled:      request.JupyterEnabled,
 		ProviderEnvItems:    domain.NormalizeEnvItems(providerEnvItems),

@@ -32,9 +32,9 @@ func CommandCellSource(request domain.SchedulerCommandRequest) string {
 }
 
 func CommandRequestRequiresCleanup(scheduler domain.Scheduler, request domain.SchedulerCommandRequest) bool {
-	effectivePolicy := domain.NormalizeSchedulerSandboxPolicy(scheduler.Summary.SandboxPolicy)
-	if strings.TrimSpace(domain.SchedulerCommandSandboxPolicy(request)) != "" {
-		effectivePolicy = domain.NormalizeSchedulerSandboxPolicy(domain.SchedulerCommandSandboxPolicy(request))
+	effectivePolicy := NormalizeSandboxPolicy(scheduler.Summary.SandboxPolicy)
+	if strings.TrimSpace(CommandSandboxPolicy(request)) != "" {
+		effectivePolicy = NormalizeSandboxPolicy(CommandSandboxPolicy(request))
 	}
 	return effectivePolicy == domain.SchedulerSandboxPolicyNew || CommandRequestOverridesSandbox(request)
 }
@@ -43,6 +43,6 @@ func CommandRequestOverridesSandbox(request domain.SchedulerCommandRequest) bool
 	return strings.TrimSpace(request.Driver) != "" ||
 		strings.TrimSpace(request.GuestImage) != "" ||
 		strings.TrimSpace(request.WorkspaceID) != "" ||
-		len(domain.NormalizeEnvItems(domain.SchedulerCommandSandboxEnv(request))) > 0 ||
+		len(domain.NormalizeEnvItems(CommandSandboxEnv(request))) > 0 ||
 		len(request.Volumes) > 0
 }

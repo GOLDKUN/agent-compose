@@ -5,6 +5,7 @@ import (
 	"agent-compose/pkg/compose"
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -222,7 +223,7 @@ func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.Proje
 			WorkspaceID:        workspaceID,
 			DefaultAgent:       agent.Provider,
 			SandboxPolicy:      agent.Scheduler.SandboxPolicy,
-			ConcurrencyPolicy:  domain.NormalizeSchedulerConcurrencyPolicy(agent.Scheduler.ConcurrencyPolicy),
+			ConcurrencyPolicy:  schedulers.NormalizeConcurrencyPolicy(agent.Scheduler.ConcurrencyPolicy),
 			CapsetIDs:          capabilities.NormalizeCapsetIDs(agent.CapsetIDs),
 			ProjectID:          project.ID,
 			ProjectRevision:    scheduler.Revision,

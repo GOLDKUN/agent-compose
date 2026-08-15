@@ -201,7 +201,7 @@ func (s *schedulerRunSupervisor) runTimeout(override time.Duration) time.Duratio
 }
 
 func SchedulerRunStatusIsTerminal(status string) bool {
-	switch domain.NormalizeSchedulerRunStatus(status) {
+	switch NormalizeRunStatus(status) {
 	case domain.SchedulerRunStatusSucceeded, domain.SchedulerRunStatusFailed, domain.SchedulerRunStatusCanceled, domain.SchedulerRunStatusSkipped:
 		return true
 	default:

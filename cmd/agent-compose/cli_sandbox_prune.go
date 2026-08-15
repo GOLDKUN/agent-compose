@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -193,7 +194,7 @@ func sandboxPruneStatusFilter(value string) (map[string]bool, error) {
 		if status == "" {
 			continue
 		}
-		canonical, err := domain.NormalizeSandboxVMStatus(status)
+		canonical, err := sandboxes.NormalizeVMStatus(status)
 		if err != nil {
 			return nil, fmt.Errorf("invalid --status %q: expected stopped or failed", status)
 		}

@@ -169,7 +169,7 @@ func (q *RunQueue) Match(event domain.SchedulerTopicEvent) (string, int) {
 }
 
 func (r queueRule) matches(event domain.SchedulerTopicEvent) bool {
-	if r.Match.Topic != "" && !domain.SchedulerTriggerTopicMatches(r.Match.Topic, event.Topic) {
+	if r.Match.Topic != "" && !events.TriggerTopicMatches(r.Match.Topic, event.Topic) {
 		return false
 	}
 	if r.Match.Provider != "" && r.Match.Provider != event.Provider {

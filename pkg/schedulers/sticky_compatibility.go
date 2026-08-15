@@ -102,7 +102,7 @@ func SchedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {
 		Driver:             driver,
 		GuestImage:         strings.TrimSpace(scheduler.Summary.GuestImage),
 		DefaultAgent:       defaultAgent,
-		SandboxPolicy:      domain.NormalizeSchedulerSandboxPolicy(scheduler.Summary.SandboxPolicy),
+		SandboxPolicy:      NormalizeSandboxPolicy(scheduler.Summary.SandboxPolicy),
 		CapsetIDs:          capsetIDs,
 		EnvItems:           domain.NormalizeEnvItems(scheduler.EnvItems),
 		Volumes:            volumes,

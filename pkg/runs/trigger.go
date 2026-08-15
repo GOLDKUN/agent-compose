@@ -53,13 +53,13 @@ func (c *Controller) resolveTriggerForManualRun(ctx context.Context, req RunAgen
 	if strings.TrimSpace(result.Request.OutputSchemaJSON) == "" {
 		result.Request.OutputSchemaJSON = captured.request.OutputSchema
 	}
-	result.Request.Env = append(result.Request.Env, envVarSpecsFromSandboxEnv(domain.SchedulerAgentSandboxEnv(captured.request))...)
+	result.Request.Env = append(result.Request.Env, envVarSpecsFromSandboxEnv(schedulers.AgentSandboxEnv(captured.request))...)
 	effectivePolicy := domain.SchedulerSandboxPolicyNew
 	if strings.TrimSpace(definition.Summary.SandboxPolicy) != "" {
-		effectivePolicy = domain.NormalizeSchedulerSandboxPolicy(definition.Summary.SandboxPolicy)
+		effectivePolicy = schedulers.NormalizeSandboxPolicy(definition.Summary.SandboxPolicy)
 	}
-	if strings.TrimSpace(domain.SchedulerAgentSandboxPolicy(captured.request)) != "" {
-		effectivePolicy = domain.NormalizeSchedulerSandboxPolicy(domain.SchedulerAgentSandboxPolicy(captured.request))
+	if strings.TrimSpace(schedulers.AgentSandboxPolicy(captured.request)) != "" {
+		effectivePolicy = schedulers.NormalizeSandboxPolicy(schedulers.AgentSandboxPolicy(captured.request))
 	}
 	if effectivePolicy == domain.SchedulerSandboxPolicySticky {
 		configHash, err := schedulers.SchedulerSandboxConfigHash(definition)

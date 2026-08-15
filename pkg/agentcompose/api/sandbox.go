@@ -166,7 +166,7 @@ func (h *SandboxHandler) ListSandboxes(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	statuses, err := domain.NormalizeSandboxVMStatuses(statusValues)
+	statuses, err := sandboxes.NormalizeVMStatuses(statusValues)
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}

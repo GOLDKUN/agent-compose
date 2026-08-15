@@ -130,11 +130,11 @@ func (s *schedulerStore) ReplaceSchedulerTriggers(ctx context.Context, scheduler
 			switch current.Kind {
 			case domain.SchedulerTriggerKindInterval:
 				if current.NextFireAt.IsZero() {
-					current.NextFireAt = domain.SchedulerTriggerScheduledAt(now, current.IntervalMs)
+					current.NextFireAt = schedulers.TriggerScheduledAt(now, current.IntervalMs)
 				}
 			case domain.SchedulerTriggerKindTimeout:
 				if !sameSchedule {
-					current.NextFireAt = domain.SchedulerTriggerScheduledAt(now, current.IntervalMs)
+					current.NextFireAt = schedulers.TriggerScheduledAt(now, current.IntervalMs)
 				}
 			case domain.SchedulerTriggerKindCron:
 				if !sameSchedule || current.NextFireAt.IsZero() {
@@ -243,7 +243,7 @@ func (s *schedulerStore) SetSchedulerEnabled(ctx context.Context, schedulerID st
 	}
 	if enabled {
 		for _, trigger := range triggers {
-			if !trigger.Enabled || !domain.SchedulerTriggerUsesSchedule(trigger.Kind) {
+			if !trigger.Enabled || !schedulers.TriggerUsesSchedule(trigger.Kind) {
 				continue
 			}
 			nextFireAt, err := schedulers.SchedulerTriggerNextFireAt(now, trigger, false)
@@ -281,7 +281,7 @@ func (s *schedulerStore) SetSchedulerTriggerEnabled(ctx context.Context, schedul
 		return err
 	}
 	nextFireAt := int64(0)
-	if enabled && domain.SchedulerTriggerUsesSchedule(trigger.Kind) {
+	if enabled && schedulers.TriggerUsesSchedule(trigger.Kind) {
 		scheduledAt, err := schedulers.SchedulerTriggerNextFireAt(time.Now().UTC(), trigger, false)
 		if err != nil {
 			return fmt.Errorf("schedule scheduler trigger %s/%s: %w", schedulerID, triggerID, err)
@@ -346,7 +346,7 @@ func (s *schedulerStore) CreateSchedulerRun(ctx context.Context, run domain.Sche
 		strings.TrimSpace(run.TriggerID),
 		strings.TrimSpace(run.TriggerKind),
 		strings.TrimSpace(run.TriggerSource),
-		domain.NormalizeSchedulerRunStatus(run.Status),
+		schedulers.NormalizeRunStatus(run.Status),
 		run.StartedAt.UTC().UnixMilli(),
 		domain.NonZeroTimeUnixMilli(run.CompletedAt),
 		run.DurationMs,
@@ -369,7 +369,7 @@ func (s *schedulerStore) UpdateSchedulerRun(ctx context.Context, run domain.Sche
 		strings.TrimSpace(run.TriggerID),
 		strings.TrimSpace(run.TriggerKind),
 		strings.TrimSpace(run.TriggerSource),
-		domain.NormalizeSchedulerRunStatus(run.Status),
+		schedulers.NormalizeRunStatus(run.Status),
 		run.StartedAt.UTC().UnixMilli(),
 		domain.NonZeroTimeUnixMilli(run.CompletedAt),
 		run.DurationMs,

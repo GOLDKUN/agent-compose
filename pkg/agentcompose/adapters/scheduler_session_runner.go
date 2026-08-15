@@ -94,9 +94,9 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 	if err != nil {
 		return nil, "", err
 	}
-	effectivePolicy := domain.NormalizeSchedulerSandboxPolicy(scheduler.Summary.SandboxPolicy)
-	if strings.TrimSpace(domain.SchedulerAgentSandboxPolicy(request)) != "" {
-		effectivePolicy = domain.NormalizeSchedulerSandboxPolicy(domain.SchedulerAgentSandboxPolicy(request))
+	effectivePolicy := schedulers.NormalizeSandboxPolicy(scheduler.Summary.SandboxPolicy)
+	if strings.TrimSpace(schedulers.AgentSandboxPolicy(request)) != "" {
+		effectivePolicy = schedulers.NormalizeSandboxPolicy(schedulers.AgentSandboxPolicy(request))
 	}
 	hasOverrides := schedulers.AgentRequestOverridesSession(request, titleOverridesSession)
 	forceNew := effectivePolicy == domain.SchedulerSandboxPolicyNew || hasOverrides
@@ -122,7 +122,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		agentConfig.Provider = domain.DefaultAgentProvider
 	}
 	providerEnvItems = domain.MergeEnvItems(providerEnvItems, scheduler.EnvItems)
-	providerEnvItems = domain.MergeEnvItems(providerEnvItems, domain.SchedulerAgentSandboxEnv(request))
+	providerEnvItems = domain.MergeEnvItems(providerEnvItems, schedulers.AgentSandboxEnv(request))
 	envItems := domain.MergeEnvItems(globalEnvItems, providerEnvItems)
 	envItems = llms.FilterPersistedRuntimeEnv(envItems)
 	workspaceID := r.workspaceID(scheduler, request, agentDefinition)
@@ -178,7 +178,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		)
 	}
 	tags = append(tags, capabilityTags...)
-	title := firstNonEmpty(strings.TrimSpace(request.Title), strings.TrimSpace(scheduler.Summary.Name), domain.DefaultSchedulerName(time.Now().UTC()))
+	title := firstNonEmpty(strings.TrimSpace(request.Title), strings.TrimSpace(scheduler.Summary.Name), schedulers.DefaultName(time.Now().UTC()))
 	if agentDefinition != nil {
 		tags = append(tags,
 			domain.SandboxTag{Name: domain.AgentSandboxTagSource, Value: domain.AgentSandboxTagSourceVal},

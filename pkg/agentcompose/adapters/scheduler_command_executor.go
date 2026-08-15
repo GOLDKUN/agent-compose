@@ -277,7 +277,7 @@ func (e *SchedulerCommandExecutor) prepareSchedulerCommandLLMFacadeEnv(ctx conte
 		// so its persisted environment snapshot remains the compatible fallback.
 		execSession.ProviderEnvItems = append([]domain.SandboxEnvVar(nil), session.EnvItems...)
 	}
-	execSession.ProviderEnvItems = domain.MergeEnvItems(execSession.ProviderEnvItems, domain.SchedulerCommandSandboxEnv(request))
+	execSession.ProviderEnvItems = domain.MergeEnvItems(execSession.ProviderEnvItems, schedulers.CommandSandboxEnv(request))
 
 	managedConfig, err := runtimefacade.EnsureSessionCommandFacadeConfig(ctx, e.Config, commandFacadeStoreFor(e.ConfigDB), &execSession, agent, model, runtimefacade.TokenSourceSchedulerCommand, runID)
 	if err != nil {
