@@ -594,9 +594,9 @@ func (c *Controller) resolveProjectRef(ctx context.Context, ref ProjectRef, incl
 	projectValue := func(project domain.ProjectRecord) string { return project.Name }
 	selectorName := "name"
 	if ref.kind == projectRefSourcePath {
-		query = domain.NormalizeProjectSourcePath(value)
+		query = NormalizeProjectSourcePath(value)
 		projectValue = func(project domain.ProjectRecord) string {
-			return domain.NormalizeProjectSourcePath(project.SourcePath)
+			return NormalizeProjectSourcePath(project.SourcePath)
 		}
 		selectorName = "source path"
 	} else if ref.kind != projectRefName {

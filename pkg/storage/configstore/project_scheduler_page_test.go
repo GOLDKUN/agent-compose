@@ -7,6 +7,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 )
 
 func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {
@@ -25,7 +26,7 @@ func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {
 		{ProjectID: "project-a", AgentName: "agent-b", ID: "scheduler-record-b", Enabled: true},
 		{ProjectID: "project-b", AgentName: "agent-c", ID: "scheduler-record-c", Enabled: true},
 	} {
-		agentID, err := domain.StableProjectAgentID(scheduler.ProjectID, scheduler.AgentName)
+		agentID, err := projects.StableProjectAgentID(scheduler.ProjectID, scheduler.AgentName)
 		if err != nil {
 			t.Fatalf("derive agent id %s: %v", scheduler.AgentName, err)
 		}
@@ -96,7 +97,7 @@ func TestProjectSchedulerPageScalesWithRunHistory(t *testing.T) {
 	for index := range schedulerCount {
 		agentName := fmt.Sprintf("agent-%03d", index)
 		schedulerID := fmt.Sprintf("scheduler-%03d", index)
-		agentID, err := domain.StableProjectAgentID(projectID, agentName)
+		agentID, err := projects.StableProjectAgentID(projectID, agentName)
 		if err != nil {
 			t.Fatalf("derive agent id %s: %v", agentName, err)
 		}

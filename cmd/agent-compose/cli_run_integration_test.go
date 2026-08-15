@@ -2,7 +2,7 @@ package main
 
 import (
 	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"encoding/json"
@@ -473,11 +473,11 @@ agents:
 	})
 	defer server.Close()
 
-	projectID, err := domain.StableProjectID("cli-run-command", composePath)
+	projectID, err := projects.StableProjectID("cli-run-command", composePath)
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}
-	agentID, err := domain.StableProjectAgentID(projectID, "reviewer")
+	agentID, err := projects.StableProjectAgentID(projectID, "reviewer")
 	if err != nil {
 		t.Fatalf("StableProjectAgentID returned error: %v", err)
 	}

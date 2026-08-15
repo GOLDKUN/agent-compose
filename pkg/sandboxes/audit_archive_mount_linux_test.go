@@ -10,8 +10,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"agent-compose/pkg/sandboxes"
 )
 
 func TestIntegrationSandboxRetentionExcludesMountedExternalVolume(t *testing.T) {

@@ -305,7 +305,7 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 	if err != nil {
 		return nil, "", err
 	}
-	if vmState.StartedAt.IsZero() || domain.SandboxRuntimeReleaseIntentional(session) {
+	if vmState.StartedAt.IsZero() || sandboxes.RuntimeReleaseIntentional(session) {
 		if err := r.AgentExecutor.PrepareSandboxAgentEnvironmentFromTags(ctx, session); err != nil {
 			return nil, "", err
 		}

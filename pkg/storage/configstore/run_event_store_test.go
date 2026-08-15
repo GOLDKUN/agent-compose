@@ -13,6 +13,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 )
 
 func TestProjectRunEventsAreOrderedIdempotentAndCascade(t *testing.T) {
@@ -280,7 +281,7 @@ func TestProjectRunEventSequencesAreAtomicAcrossConnections(t *testing.T) {
 
 func createRunEventTestAgent(t *testing.T, ctx context.Context, store *ConfigStore, projectID, agentName string) string {
 	t.Helper()
-	agentID, err := domain.StableProjectAgentID(projectID, agentName)
+	agentID, err := projects.StableProjectAgentID(projectID, agentName)
 	if err != nil {
 		t.Fatalf("derive project agent id: %v", err)
 	}

@@ -3,7 +3,7 @@ package main
 import (
 	"agent-compose/pkg/compose"
 	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"context"
 	"fmt"
 	"io"
@@ -43,7 +43,7 @@ func resolveComposeAgentNameFromSpec(normalized *compose.NormalizedProjectSpec, 
 		if name == "" {
 			continue
 		}
-		id, err := domain.StableProjectAgentID(projectID, name)
+		id, err := projects.StableProjectAgentID(projectID, name)
 		if err != nil {
 			return "", commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("resolve agent %q id: %w", name, err)}
 		}

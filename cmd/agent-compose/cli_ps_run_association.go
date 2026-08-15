@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -81,7 +81,7 @@ func legacySchedulerAgentForProject(tags map[string]string, project *agentcompos
 	}
 	for _, scheduler := range project.GetSchedulers() {
 		agentName := strings.TrimSpace(scheduler.GetAgentName())
-		schedulerID, err := domain.StableProjectSchedulerID(projectID, agentName, "")
+		schedulerID, err := projects.StableProjectSchedulerID(projectID, agentName, "")
 		// The one-shot migrator preserves historical sandbox identity tags. This
 		// ID is computed only to associate those sandboxes; new resources use the
 		// native Scheduler identity above.

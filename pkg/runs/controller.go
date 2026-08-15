@@ -247,7 +247,7 @@ func (c *Controller) StartProjectRun(ctx context.Context, req RunAgentRequest) (
 	}
 	req = resolved.Request
 	warnings := resolved.Warnings
-	coordinator := NewCoordinator(c.configDB, domain.StableProjectRunID)
+	coordinator := NewCoordinator(c.configDB, projects.StableProjectRunID)
 	run, err := coordinator.BeginRun(ctx, StartRequest{
 		ProjectID:       req.ProjectID,
 		AgentName:       req.AgentName,
@@ -532,7 +532,7 @@ func (c *Controller) completeProjectRunWithoutJournal(ctx context.Context, trans
 			}
 		}
 	}
-	return NewCoordinator(c.configDB, domain.StableProjectRunID).TransitionRun(ctx, transition)
+	return NewCoordinator(c.configDB, projects.StableProjectRunID).TransitionRun(ctx, transition)
 }
 
 type controllerCompletionStopper struct{ controller *Controller }
@@ -681,7 +681,7 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.Pr
 }
 
 func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run domain.ProjectRunRecord, req RunAgentRequest, warnings []string, start RunAttachInput, mode RunAttachMode, receive RunAttachReceiver, send RunAttachSender) (domain.ProjectRunRecord, error, error) {
-	coordinator := NewCoordinator(c.configDB, domain.StableProjectRunID)
+	coordinator := NewCoordinator(c.configDB, projects.StableProjectRunID)
 	commandText := strings.TrimSpace(req.Command)
 	transitionCtx := context.WithoutCancel(ctx)
 	prepared, err := c.prepareProjectRun(ctx, run, req.Env)
@@ -2038,7 +2038,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			if err := c.validateSandboxRuntimeDriver(driver); err != nil {
 				return SandboxResult{Sandbox: sandbox}, err
 			}
-			if _, err := NewCoordinator(c.configDB, domain.StableProjectRunID).BindSandbox(ctx, run.RunID, sandboxID, false); err != nil {
+			if _, err := NewCoordinator(c.configDB, projects.StableProjectRunID).BindSandbox(ctx, run.RunID, sandboxID, false); err != nil {
 				return SandboxResult{Sandbox: sandbox}, fmt.Errorf("bind reused sandbox to project run: %w", err)
 			}
 			if sandbox.Summary.VMStatus != domain.VMStatusRunning {
@@ -2103,7 +2103,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	if err != nil {
 		return SandboxResult{}, err
 	}
-	if _, err := NewCoordinator(c.configDB, domain.StableProjectRunID).BindSandbox(ctx, run.RunID, sandbox.Summary.ID, true); err != nil {
+	if _, err := NewCoordinator(c.configDB, projects.StableProjectRunID).BindSandbox(ctx, run.RunID, sandbox.Summary.ID, true); err != nil {
 		bindErr := fmt.Errorf("bind created sandbox to project run: %w", err)
 		if c.removal == nil {
 			return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, bindErr
@@ -2277,7 +2277,7 @@ func (c *Controller) prepareFreshStartAgentEnvironment(ctx context.Context, sand
 	if err != nil {
 		return err
 	}
-	if !vmState.StartedAt.IsZero() && !domain.SandboxRuntimeReleaseIntentional(sandbox) {
+	if !vmState.StartedAt.IsZero() && !sandboxes.RuntimeReleaseIntentional(sandbox) {
 		return nil
 	}
 	if c.executor == nil {

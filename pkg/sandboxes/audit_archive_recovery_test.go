@@ -1,6 +1,7 @@
 package sandboxes_test
 
 import (
+	"agent-compose/pkg/sandboxes"
 	"context"
 	"errors"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/storage/sandboxstore"
 )
 

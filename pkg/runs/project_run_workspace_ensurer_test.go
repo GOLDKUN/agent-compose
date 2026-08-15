@@ -7,6 +7,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -233,8 +234,8 @@ func TestRunsControllerProjectRunWorkspaceEnsurerFailureShortCircuitsAndCleansUp
 		if loadErr != nil {
 			t.Fatalf("reused sandbox was removed: %v", loadErr)
 		}
-		if persisted.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(persisted) != domain.StoppedRuntimeStateReleased {
-			t.Fatalf("reused sandbox stop state = %q/%q, want stopped/released", persisted.Summary.VMStatus, domain.EffectiveStoppedRuntimeState(persisted))
+		if persisted.Summary.VMStatus != domain.VMStatusStopped || sandboxes.EffectiveStoppedRuntimeState(persisted) != domain.StoppedRuntimeStateReleased {
+			t.Fatalf("reused sandbox stop state = %q/%q, want stopped/released", persisted.Summary.VMStatus, sandboxes.EffectiveStoppedRuntimeState(persisted))
 		}
 		assertProjectRunWorkspaceSnapshot(t, "reused failed sandbox", persisted.Workspace, original)
 	})

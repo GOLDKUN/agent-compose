@@ -18,8 +18,8 @@ func NewRecordFromSpec(spec *compose.NormalizedProjectSpec, sourcePath string) (
 	if spec == nil {
 		return domain.ProjectRecord{}, fmt.Errorf("project spec is required")
 	}
-	sourcePath = domain.NormalizeProjectSourcePath(sourcePath)
-	projectID, err := domain.StableProjectID(spec.Name, sourcePath)
+	sourcePath = NormalizeProjectSourcePath(sourcePath)
+	projectID, err := StableProjectID(spec.Name, sourcePath)
 	if err != nil {
 		return domain.ProjectRecord{}, err
 	}
@@ -42,7 +42,7 @@ func NewRecordFromSpec(spec *compose.NormalizedProjectSpec, sourcePath string) (
 }
 
 func NewAgentRecordFromSpec(projectID string, revision int64, agent compose.NormalizedAgentSpec) (domain.ProjectAgentRecord, error) {
-	projectAgentID, err := domain.StableProjectAgentID(projectID, agent.Name)
+	projectAgentID, err := StableProjectAgentID(projectID, agent.Name)
 	if err != nil {
 		return domain.ProjectAgentRecord{}, err
 	}
@@ -95,7 +95,7 @@ func NewAgentDefinitionsFromSpec(project domain.ProjectRecord, revision int64, s
 }
 
 func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, agent compose.NormalizedAgentSpec, projectMCPServers map[string]compose.NormalizedMCPServerSpec, projectOctoBusServers map[string]compose.NormalizedOctoBusServerSpec) (domain.AgentDefinition, error) {
-	projectAgentID, err := domain.StableProjectAgentID(project.ID, agent.Name)
+	projectAgentID, err := StableProjectAgentID(project.ID, agent.Name)
 	if err != nil {
 		return domain.AgentDefinition{}, err
 	}
@@ -188,7 +188,7 @@ func selectedAgentMCPServers(agent compose.NormalizedAgentSpec, projectMCPServer
 }
 
 func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.ProjectSchedulerRecord, agent compose.NormalizedAgentSpec) (domain.Scheduler, error) {
-	projectAgentID, err := domain.StableProjectAgentID(project.ID, agent.Name)
+	projectAgentID, err := StableProjectAgentID(project.ID, agent.Name)
 	if err != nil {
 		return domain.Scheduler{}, err
 	}
@@ -285,7 +285,7 @@ func AgentSkillsFromCompose(values []compose.NormalizedSkillSpec, sourcePath str
 }
 
 func composeSourceRoot(sourcePath string) string {
-	sourcePath = domain.NormalizeProjectSourcePath(sourcePath)
+	sourcePath = NormalizeProjectSourcePath(sourcePath)
 	if sourcePath == "" {
 		return ""
 	}
@@ -360,7 +360,7 @@ func NewSchedulerRecordFromSpec(projectID string, revision int64, agent compose.
 	if agent.Scheduler == nil {
 		return domain.ProjectSchedulerRecord{}, false, nil
 	}
-	schedulerID, err := domain.StableProjectSchedulerID(projectID, agent.Name, "")
+	schedulerID, err := StableProjectSchedulerID(projectID, agent.Name, "")
 	if err != nil {
 		return domain.ProjectSchedulerRecord{}, false, err
 	}
@@ -384,7 +384,7 @@ func NewSchedulerRecordFromSpec(projectID string, revision int64, agent compose.
 func EncodeSourceJSON(sourcePath string) (string, error) {
 	data, err := json.Marshal(struct {
 		ComposePath string `json:"compose_path,omitempty"`
-	}{ComposePath: domain.NormalizeProjectSourcePath(sourcePath)})
+	}{ComposePath: NormalizeProjectSourcePath(sourcePath)})
 	if err != nil {
 		return "", fmt.Errorf("marshal project source: %w", err)
 	}

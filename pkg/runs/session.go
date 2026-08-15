@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 )
 
 type SandboxResult struct {
@@ -62,7 +63,7 @@ func MergeSandboxTags(existing, additions []domain.SandboxTag) []domain.SandboxT
 }
 
 func WorkspaceID(run domain.ProjectRunRecord, provider string) string {
-	return domain.StableReadableID("workspace", run.AgentName+"-"+provider, run.RunID+"|workspace|"+provider)
+	return projects.StableReadableID("workspace", run.AgentName+"-"+provider, run.RunID+"|workspace|"+provider)
 }
 
 func WorkspaceName(run domain.ProjectRunRecord, provider string) string {

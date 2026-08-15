@@ -14,6 +14,7 @@ import (
 
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
 )
@@ -75,16 +76,16 @@ agents:
 
 	ctx := context.Background()
 	store := do.MustInvoke[*configstore.ConfigStore](app.DI)
-	projects, err := store.ListProjects(ctx, domain.ProjectListOptions{Query: "scheduler-prune-test", Limit: 10})
-	if err != nil || len(projects.Projects) != 1 {
-		t.Fatalf("list project result=%#v err=%v", projects, err)
+	projectList, err := store.ListProjects(ctx, domain.ProjectListOptions{Query: "scheduler-prune-test", Limit: 10})
+	if err != nil || len(projectList.Projects) != 1 {
+		t.Fatalf("list project result=%#v err=%v", projectList, err)
 	}
-	project := projects.Projects[0]
+	project := projectList.Projects[0]
 	schedulers, err := store.ListProjectSchedulers(ctx, project.ID)
 	if err != nil || len(schedulers) != 1 || schedulers[0].ID == "" {
 		t.Fatalf("list project schedulers=%#v err=%v", schedulers, err)
 	}
-	triggerID, err := domain.StableSchedulerTriggerID(project.ID, "reviewer", "", "nightly", 0)
+	triggerID, err := projects.StableSchedulerTriggerID(project.ID, "reviewer", "", "nightly", 0)
 	if err != nil {
 		t.Fatalf("stable trigger id: %v", err)
 	}

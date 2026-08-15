@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
 )
 
@@ -13,7 +14,7 @@ func NormalizeRecord(project domain.ProjectRecord) (domain.ProjectRecord, error)
 	project.ID = strings.TrimSpace(project.ID)
 	project.Name = strings.TrimSpace(project.Name)
 	project.ShortID = strings.TrimSpace(project.ShortID)
-	project.SourcePath = domain.NormalizeProjectSourcePath(project.SourcePath)
+	project.SourcePath = NormalizeProjectSourcePath(project.SourcePath)
 	project.SourceJSON = strings.TrimSpace(project.SourceJSON)
 	project.SpecHash = strings.TrimSpace(project.SpecHash)
 	if project.ID == "" {
@@ -22,8 +23,8 @@ func NormalizeRecord(project domain.ProjectRecord) (domain.ProjectRecord, error)
 	if project.Name == "" {
 		return domain.ProjectRecord{}, fmt.Errorf("project name is required")
 	}
-	if !domain.IsProjectName(project.Name) {
-		return domain.ProjectRecord{}, fmt.Errorf("project name %q must match %s", project.Name, domain.ProjectNamePattern)
+	if !compose.IsProjectName(project.Name) {
+		return domain.ProjectRecord{}, fmt.Errorf("project name %q must match %s", project.Name, compose.ProjectNamePattern)
 	}
 	if project.ShortID == "" {
 		project.ShortID = identity.ShortID(project.ID)
@@ -62,7 +63,7 @@ func NormalizeAgentRecord(agent domain.ProjectAgentRecord) (domain.ProjectAgentR
 		agent.Name = agent.AgentName
 	}
 	if agent.ID == "" {
-		agentID, err := domain.StableProjectAgentID(agent.ProjectID, agent.AgentName)
+		agentID, err := StableProjectAgentID(agent.ProjectID, agent.AgentName)
 		if err != nil {
 			return domain.ProjectAgentRecord{}, err
 		}
@@ -97,7 +98,7 @@ func NormalizeSchedulerRecord(scheduler domain.ProjectSchedulerRecord) (domain.P
 		scheduler.ID = scheduler.SchedulerID
 	}
 	if scheduler.ID == "" {
-		schedulerID, err := domain.StableProjectSchedulerID(scheduler.ProjectID, scheduler.AgentName, "")
+		schedulerID, err := StableProjectSchedulerID(scheduler.ProjectID, scheduler.AgentName, "")
 		if err != nil {
 			return domain.ProjectSchedulerRecord{}, err
 		}

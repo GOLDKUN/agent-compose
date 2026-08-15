@@ -12,6 +12,7 @@ import (
 	"agent-compose/pkg/capabilities"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/volumes"
 )
@@ -173,7 +174,7 @@ func TestSchedulerSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *te
 	if err != nil {
 		t.Fatalf("GetSandbox returned error: %v", err)
 	}
-	if loaded.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
+	if loaded.Summary.VMStatus != domain.VMStatusStopped || sandboxes.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
 		t.Fatalf("stopped sandbox = %#v release=%#v", loaded.Summary, loaded.StoppedRuntime)
 	}
 	if _, ok := resolver.tokens[capabilityToken]; ok {

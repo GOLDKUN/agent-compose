@@ -70,9 +70,9 @@ func ResolveProjectRef(ctx context.Context, store ProjectRefStore, ref ProjectRe
 			return project.Name
 		})
 	case projectRefSourcePath:
-		value = domain.NormalizeProjectSourcePath(value)
+		value = NormalizeProjectSourcePath(value)
 		return resolveProjectByExactMatch(ctx, store, value, false, "source path", func(project domain.ProjectRecord) string {
-			return domain.NormalizeProjectSourcePath(project.SourcePath)
+			return NormalizeProjectSourcePath(project.SourcePath)
 		})
 	default:
 		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project selector is required", nil)

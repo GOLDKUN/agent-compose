@@ -2,7 +2,7 @@ package main
 
 import (
 	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
@@ -48,7 +48,7 @@ func resolveComposeRuntimeProject(ctx context.Context, client agentcomposev2conn
 	}))
 	if err != nil {
 		if connect.CodeOf(err) == connect.CodeUnimplemented && selection.localSpec != nil {
-			projectID, idErr := domain.StableProjectID(selection.requestedName, "")
+			projectID, idErr := projects.StableProjectID(selection.requestedName, "")
 			if idErr != nil {
 				return composeRuntimeProject{}, idErr
 			}

@@ -440,7 +440,7 @@ func TestStopProjectSandboxRuntimeReleaseFailureFinalizesConfirmedStop(t *testin
 	if driver.stopCount != 1 || driver.releaseCount != 1 {
 		t.Fatalf("stop/release calls = %d/%d, want 1/1", driver.stopCount, driver.releaseCount)
 	}
-	if store.updated == nil || store.updated.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(store.updated) != domain.StoppedRuntimeStateReleasePending {
+	if store.updated == nil || store.updated.Summary.VMStatus != domain.VMStatusStopped || sandboxes.EffectiveStoppedRuntimeState(store.updated) != domain.StoppedRuntimeStateReleasePending {
 		t.Fatalf("updated sandbox = %#v", store.updated)
 	}
 	if len(store.events) != 2 || store.events[0].Type != "sandbox.runtime_release_failed" || store.events[1].Type != "sandbox.stopped" {

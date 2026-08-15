@@ -5,6 +5,7 @@ import (
 	"agent-compose/pkg/compose"
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
@@ -70,7 +71,7 @@ func listComposeSchedulerTriggers(ctx context.Context, clients cliServiceClients
 		if agent.Scheduler == nil {
 			continue
 		}
-		schedulerID, err := domain.StableProjectSchedulerID(projectID, agent.Name, "")
+		schedulerID, err := projects.StableProjectSchedulerID(projectID, agent.Name, "")
 		if err != nil {
 			return nil, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("resolve scheduler for agent %q: %w", agent.Name, err)}
 		}
@@ -86,7 +87,7 @@ func listComposeSchedulerTriggers(ctx context.Context, clients cliServiceClients
 			continue
 		}
 		for index, trigger := range agent.Scheduler.Triggers {
-			id, err := domain.StableSchedulerTriggerID(projectID, agent.Name, "", trigger.Name, index)
+			id, err := projects.StableSchedulerTriggerID(projectID, agent.Name, "", trigger.Name, index)
 			if err != nil {
 				return nil, commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("resolve trigger for agent %q: %w", agent.Name, err)}
 			}
@@ -288,7 +289,7 @@ func resolveSchedulerRuntimeRun(ctx context.Context, client agentcomposev2connec
 	}))
 	if err == nil && response != nil && response.Msg.GetRun() != nil {
 		run := response.Msg.GetRun()
-		schedulerID, idErr := domain.StableProjectSchedulerID(projectID, run.GetAgentName(), "")
+		schedulerID, idErr := projects.StableProjectSchedulerID(projectID, run.GetAgentName(), "")
 		if idErr != nil {
 			return nil, idErr
 		}
@@ -360,7 +361,7 @@ func resolveComposeScheduler(normalized *compose.NormalizedProjectSpec, projectI
 		if agent.Scheduler == nil {
 			continue
 		}
-		schedulerID, err := domain.StableProjectSchedulerID(projectID, agent.Name, "")
+		schedulerID, err := projects.StableProjectSchedulerID(projectID, agent.Name, "")
 		if err != nil {
 			return nil, err
 		}

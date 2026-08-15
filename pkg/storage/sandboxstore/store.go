@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
@@ -370,7 +371,7 @@ func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImag
 		return nil, err
 	}
 	guestImage = driverpkg.ResolveSandboxGuestImage(guestImage, "", driverpkg.DefaultGuestImageForDriver(s.config, driver))
-	stoppedRuntimePolicy, err := domain.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy)
+	stoppedRuntimePolicy, err := compose.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy)
 	if err != nil {
 		return nil, fmt.Errorf("create sandbox: %w", err)
 	}
