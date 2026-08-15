@@ -101,14 +101,20 @@ func (x *sandboxCache) quickCheck(ctx context.Context) error {
 	return nil
 }
 
-func (x *sandboxCache) validateSchema(ctx context.Context) error {
+func (x *sandboxCache) validateSchema(ctx context.Context) (err error) {
 	// LIMIT 0 executes the column list without producing rows, so the query
 	// fails exactly when the cache schema has drifted from the expected columns.
 	rows, err := x.db.QueryContext(ctx, `SELECT `+sandboxCacheValidationCols+` FROM sandboxes LIMIT 0`)
 	if err != nil {
 		return sandboxCacheError("validate schema", err)
 	}
-	defer func() { _ = rows.Close() }()
+	// The cursor is never drained, so database/sql does not release its
+	// connection on its own; closing here keeps the pool free for the caller.
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = sandboxCacheError("close schema validation query", closeErr)
+		}
+	}()
 	if err := rows.Err(); err != nil {
 		return sandboxCacheError("validate schema", err)
 	}
