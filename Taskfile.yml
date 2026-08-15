@@ -182,16 +182,18 @@ tasks:
     deps: ['generate:proto']
     cmds:
       - mkdir -p {{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_BUILD_CACHE_DIR}}
-      - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint fmt --no-config --diff {{.GO_LINT_PACKAGES}}
-      - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint run --no-config --allow-parallel-runners {{.GO_LINT_PACKAGES}}
+      - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint fmt --diff {{.GO_LINT_PACKAGES}}
+      - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint run --allow-parallel-runners {{.GO_LINT_PACKAGES}}
 
   lint:installer:
     desc: Lint and format the standalone installer module
     dir: '{{.TASKFILE_DIR}}/cmd/installer'
     cmds:
       - mkdir -p {{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_BUILD_CACHE_DIR}}
-      - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint fmt --no-config --diff ./...
-      - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint run --no-config --allow-parallel-runners ./...
+      # The installer is a separate module, so the repository config is passed
+      # explicitly rather than discovered by walking up from this directory.
+      - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint fmt -c {{.TASKFILE_DIR}}/.golangci.yml --diff ./...
+      - GOCACHE={{.GO_BUILD_CACHE_DIR}} GOLANGCI_LINT_CACHE={{.GOLANGCI_LINT_CACHE_DIR}} {{.GO_TOOLCHAIN_ENV}} golangci-lint run -c {{.TASKFILE_DIR}}/.golangci.yml --allow-parallel-runners ./...
 
   test:
     desc: Run all test shapes with coverage quality gates
