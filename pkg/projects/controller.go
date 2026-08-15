@@ -728,7 +728,7 @@ func (c *Controller) validateProjectAgentDefinitions(normalized NormalizedProjec
 	var issues []ValidationIssue
 	for _, agent := range agents {
 		path := "agents." + agent.AgentName
-		if _, err := domain.NormalizeAgentDefinition(agent, true); err != nil {
+		if _, err := NormalizeAgentDefinition(agent, true); err != nil {
 			issues = append(issues, ValidationIssue{Path: path, Message: err.Error()})
 			continue
 		}

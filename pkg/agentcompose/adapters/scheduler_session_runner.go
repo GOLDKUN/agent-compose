@@ -477,7 +477,7 @@ func mergeSchedulerVolumeMountSpecs(groups ...[]domain.VolumeMountSpec) ([]domai
 	var merged []domain.VolumeMountSpec
 	byTarget := make(map[string]int)
 	for _, group := range groups {
-		normalized, err := domain.NormalizeVolumeMountSpecs(group)
+		normalized, err := volumes.NormalizeMountSpecs(group)
 		if err != nil {
 			return nil, err
 		}

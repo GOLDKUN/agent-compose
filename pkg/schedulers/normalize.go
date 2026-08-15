@@ -10,6 +10,7 @@ import (
 	"agent-compose/pkg/capabilities"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/volumes"
 )
 
 func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler, error) {
@@ -69,7 +70,7 @@ func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler,
 		}
 	}
 	item.EnvItems = domain.NormalizeEnvItems(item.EnvItems)
-	volumes, err := domain.NormalizeVolumeMountSpecs(item.Volumes)
+	volumes, err := volumes.NormalizeMountSpecs(item.Volumes)
 	if err != nil {
 		return domain.Scheduler{}, fmt.Errorf("scheduler volumes: %w", err)
 	}

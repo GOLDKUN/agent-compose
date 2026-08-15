@@ -10,6 +10,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/volumes"
 
 	"github.com/fastschema/qjs"
 	"github.com/samber/do/v2"
@@ -1213,7 +1214,7 @@ func schedulerVolumeMountSpecsOption(options map[string]any, apiName string) ([]
 		}
 		specs = append(specs, spec)
 	}
-	normalized, err := domain.NormalizeVolumeMountSpecs(specs)
+	normalized, err := volumes.NormalizeMountSpecs(specs)
 	if err != nil {
 		return nil, fmt.Errorf("decode %s volumes: %w", apiName, err)
 	}

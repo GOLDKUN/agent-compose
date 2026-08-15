@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"agent-compose/pkg/schedulers"
 )
 
@@ -174,7 +175,7 @@ type schedulerAgentSandboxConfig struct {
 func schedulerRequestSandboxConfigHash(baseHash string, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition, providerEnvItems, envItems []domain.SandboxEnvVar, workspace *domain.SandboxWorkspace, driver, guestImage string, volumeMounts []domain.SandboxVolumeMount) (string, error) {
 	var agentConfig *schedulerAgentSandboxConfig
 	if agentDefinition != nil {
-		current, err := domain.NormalizeAgentDefinition(*agentDefinition, true)
+		current, err := projects.NormalizeAgentDefinition(*agentDefinition, true)
 		if err != nil {
 			return "", err
 		}

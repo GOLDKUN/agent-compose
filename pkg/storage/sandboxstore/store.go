@@ -27,6 +27,7 @@ import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/sandboxes"
 	storagesqlite "agent-compose/pkg/storage/sqlite"
+	"agent-compose/pkg/volumes"
 
 	"github.com/google/uuid"
 )
@@ -423,7 +424,7 @@ func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImag
 		WorkspaceProvisioning: workspaceProvisioning,
 		StoppedRuntimePolicy:  stoppedRuntimePolicy,
 		EnvItems:              append([]SandboxEnvVar(nil), envItems...),
-		VolumeMounts:          domain.NormalizeSandboxVolumeMounts(options.VolumeMounts),
+		VolumeMounts:          volumes.NormalizeSandboxMounts(options.VolumeMounts),
 	}
 
 	if session.Summary.Title == "" {

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/volumes"
 )
 
 type volumeStore struct {
@@ -25,7 +26,7 @@ func (s *volumeStore) CreateVolume(ctx context.Context, item domain.VolumeRecord
 	if item.ID == "" {
 		item.ID = uuid.NewString()
 	}
-	normalized, err := domain.NormalizeVolumeRecord(item)
+	normalized, err := volumes.NormalizeRecord(item)
 	if err != nil {
 		return domain.VolumeRecord{}, err
 	}
@@ -53,7 +54,7 @@ func (s *volumeStore) CreateVolume(ctx context.Context, item domain.VolumeRecord
 }
 
 func (s *volumeStore) UpdateVolume(ctx context.Context, item domain.VolumeRecord) (domain.VolumeRecord, error) {
-	normalized, err := domain.NormalizeVolumeRecord(item)
+	normalized, err := volumes.NormalizeRecord(item)
 	if err != nil {
 		return domain.VolumeRecord{}, err
 	}
@@ -407,11 +408,11 @@ func scanVolume(scan func(dest ...any) error) (domain.VolumeRecord, error) {
 	item.Options = options
 	item.CreatedAt = ParseStoredTime(createdAtRaw)
 	item.UpdatedAt = ParseStoredTime(updatedAtRaw)
-	return domain.NormalizeVolumeRecord(item)
+	return volumes.NormalizeRecord(item)
 }
 
 func encodeStringMapJSON(values map[string]string) (string, error) {
-	normalized := domain.NormalizeStringMap(values)
+	normalized := volumes.NormalizeStringMap(values)
 	if normalized == nil {
 		normalized = map[string]string{}
 	}
@@ -431,5 +432,5 @@ func decodeStringMapJSON(raw string) (map[string]string, error) {
 	if err := json.Unmarshal([]byte(raw), &values); err != nil {
 		return nil, err
 	}
-	return domain.NormalizeStringMap(values), nil
+	return volumes.NormalizeStringMap(values), nil
 }

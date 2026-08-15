@@ -10,6 +10,7 @@ import (
 	"agent-compose/pkg/capabilities"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/volumes"
 )
 
 type schedulerSandboxConfig struct {
@@ -32,7 +33,7 @@ type schedulerSandboxConfig struct {
 // state is used as a tie-breaker so equivalent inputs produce the same order
 // even when a boundary supplies conflicting mounts for the same target.
 func NormalizeStickySandboxVolumeMounts(items []domain.SandboxVolumeMount) []domain.SandboxVolumeMount {
-	mounts := domain.NormalizeSandboxVolumeMounts(items)
+	mounts := volumes.NormalizeSandboxMounts(items)
 	sort.Slice(mounts, func(i, j int) bool {
 		left, right := mounts[i], mounts[j]
 		if left.Target != right.Target {
@@ -76,7 +77,7 @@ func SchedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {
 			return "", err
 		}
 	}
-	volumes, err := domain.NormalizeVolumeMountSpecs(scheduler.Volumes)
+	volumes, err := volumes.NormalizeMountSpecs(scheduler.Volumes)
 	if err != nil {
 		return "", err
 	}
