@@ -285,24 +285,8 @@ func (s *volumeStore) FindVolumeConfigReferences(ctx context.Context, volumeID s
 	if err != nil {
 		return nil, err
 	}
-	var refs []domain.VolumeReference
-	projectRows, err := s.db.QueryContext(ctx, `SELECT project_id, volume_key FROM project_volumes WHERE volume_id = ? ORDER BY project_id, volume_key`, volume.ID)
+	refs, err := s.findProjectVolumeReferences(ctx, volume.ID)
 	if err != nil {
-		return nil, fmt.Errorf("query project volume references: %w", err)
-	}
-	for projectRows.Next() {
-		var projectID string
-		var key string
-		if err := projectRows.Scan(&projectID, &key); err != nil {
-			_ = projectRows.Close()
-			return nil, fmt.Errorf("scan project volume reference: %w", err)
-		}
-		refs = append(refs, domain.VolumeReference{ResourceType: "project_volume", ResourceID: projectID, Name: key})
-	}
-	if err := projectRows.Close(); err != nil {
-		return nil, err
-	}
-	if err := projectRows.Err(); err != nil {
 		return nil, err
 	}
 	configRefs, err := s.findVolumeSpecReferences(ctx, volume.Name)
@@ -310,6 +294,32 @@ func (s *volumeStore) FindVolumeConfigReferences(ctx context.Context, volumeID s
 		return nil, err
 	}
 	refs = append(refs, configRefs...)
+	return refs, nil
+}
+
+// findProjectVolumeReferences lists the project bindings that hold this volume.
+func (s *volumeStore) findProjectVolumeReferences(ctx context.Context, volumeID string) (_ []domain.VolumeReference, err error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT project_id, volume_key FROM project_volumes WHERE volume_id = ? ORDER BY project_id, volume_key`, volumeID)
+	if err != nil {
+		return nil, fmt.Errorf("query project volume references: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+	var refs []domain.VolumeReference
+	for rows.Next() {
+		var projectID string
+		var key string
+		if scanErr := rows.Scan(&projectID, &key); scanErr != nil {
+			return nil, fmt.Errorf("scan project volume reference: %w", scanErr)
+		}
+		refs = append(refs, domain.VolumeReference{ResourceType: "project_volume", ResourceID: projectID, Name: key})
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, rowsErr
+	}
 	return refs, nil
 }
 
@@ -321,28 +331,42 @@ func (s *volumeStore) findVolumeSpecReferences(ctx context.Context, volumeName s
 	}{
 		{resourceType: "project_agent", sql: `SELECT id, name, COALESCE(json_extract(spec_json, '$.volumes'), '[]') FROM project_agent`},
 	} {
-		rows, err := s.db.QueryContext(ctx, query.sql)
+		queryRefs, err := s.findVolumeSpecReferencesIn(ctx, query.resourceType, query.sql, volumeName)
 		if err != nil {
-			return nil, fmt.Errorf("query %s volume references: %w", query.resourceType, err)
-		}
-		for rows.Next() {
-			var id string
-			var name string
-			var raw string
-			if err := rows.Scan(&id, &name, &raw); err != nil {
-				_ = rows.Close()
-				return nil, fmt.Errorf("scan %s volume reference: %w", query.resourceType, err)
-			}
-			if volumeSpecsReference(raw, volumeName) {
-				refs = append(refs, domain.VolumeReference{ResourceType: query.resourceType, ResourceID: id, Name: name})
-			}
-		}
-		if err := rows.Close(); err != nil {
 			return nil, err
 		}
-		if err := rows.Err(); err != nil {
-			return nil, err
+		refs = append(refs, queryRefs...)
+	}
+	return refs, nil
+}
+
+// findVolumeSpecReferencesIn scans one spec-bearing table for mounts of
+// volumeName. It owns its cursor so the caller can loop over several tables
+// without holding every cursor open until the walk finishes.
+func (s *volumeStore) findVolumeSpecReferencesIn(ctx context.Context, resourceType, query, volumeName string) (_ []domain.VolumeReference, err error) {
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query %s volume references: %w", resourceType, err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
 		}
+	}()
+	var refs []domain.VolumeReference
+	for rows.Next() {
+		var id string
+		var name string
+		var raw string
+		if scanErr := rows.Scan(&id, &name, &raw); scanErr != nil {
+			return nil, fmt.Errorf("scan %s volume reference: %w", resourceType, scanErr)
+		}
+		if volumeSpecsReference(raw, volumeName) {
+			refs = append(refs, domain.VolumeReference{ResourceType: resourceType, ResourceID: id, Name: name})
+		}
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, rowsErr
 	}
 	return refs, nil
 }

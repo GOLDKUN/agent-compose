@@ -78,21 +78,11 @@ func (s *projectStore) ListProjects(ctx context.Context, options ProjectListOpti
 	if err != nil {
 		return ProjectListResult{}, fmt.Errorf("query project page: %w", err)
 	}
-	for rows.Next() {
-		project, counts, scanErr := scanProjectListRow(rows)
-		if scanErr != nil {
-			_ = rows.Close()
-			return ProjectListResult{}, scanErr
-		}
-		result.Projects = append(result.Projects, project)
-		result.CountsByProjectID[project.ID] = counts
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return ProjectListResult{}, fmt.Errorf("iterate project page: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		return ProjectListResult{}, fmt.Errorf("close project page: %w", err)
+	// The cursor belongs to tx and must be released before Commit below, so it is
+	// consumed in a helper whose deferred Close runs at that point rather than at
+	// the end of this function.
+	if err := collectProjectListPage(rows, &result); err != nil {
+		return ProjectListResult{}, err
 	}
 
 	result.NextOffset = offset + len(result.Projects)
@@ -101,6 +91,29 @@ func (s *projectStore) ListProjects(ctx context.Context, options ProjectListOpti
 		return ProjectListResult{}, fmt.Errorf("commit project list transaction: %w", err)
 	}
 	return result, nil
+}
+
+// collectProjectListPage drains one project page cursor into result. It owns the
+// cursor for its whole lifetime so that the deferred Close runs before the
+// caller commits the transaction the cursor was opened on.
+func collectProjectListPage(rows *sql.Rows, result *ProjectListResult) (err error) {
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close project page: %w", closeErr)
+		}
+	}()
+	for rows.Next() {
+		project, counts, scanErr := scanProjectListRow(rows)
+		if scanErr != nil {
+			return scanErr
+		}
+		result.Projects = append(result.Projects, project)
+		result.CountsByProjectID[project.ID] = counts
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate project page: %w", err)
+	}
+	return nil
 }
 
 func projectListBounds(options ProjectListOptions) (limit, offset int) {

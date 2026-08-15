@@ -101,12 +101,15 @@ func (x *sandboxCache) quickCheck(ctx context.Context) error {
 }
 
 func (x *sandboxCache) validateSchema(ctx context.Context) error {
+	// LIMIT 0 executes the column list without producing rows, so the query
+	// fails exactly when the cache schema has drifted from the expected columns.
 	rows, err := x.db.QueryContext(ctx, `SELECT `+sandboxCacheValidationCols+` FROM sandboxes LIMIT 0`)
 	if err != nil {
 		return sandboxCacheError("validate schema", err)
 	}
-	if err := rows.Close(); err != nil {
-		return sandboxCacheError("close schema validation query", err)
+	defer func() { _ = rows.Close() }()
+	if err := rows.Err(); err != nil {
+		return sandboxCacheError("validate schema", err)
 	}
 	return nil
 }

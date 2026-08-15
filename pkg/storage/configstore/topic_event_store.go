@@ -422,16 +422,11 @@ func (s *eventStore) ListDescendantEventIDs(ctx context.Context, rootEventID str
 	for len(queue) > 0 && len(ids) < limit {
 		parent := queue[0]
 		queue = queue[1:]
-		rows, err := s.db.QueryContext(ctx, `SELECT id FROM event WHERE parent_event_id = ? ORDER BY sequence ASC`, parent)
+		children, err := s.childEventIDs(ctx, parent)
 		if err != nil {
-			return nil, fmt.Errorf("query descendant events: %w", err)
+			return nil, err
 		}
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				_ = rows.Close()
-				return nil, fmt.Errorf("scan descendant event: %w", err)
-			}
+		for _, id := range children {
 			if _, ok := seen[id]; ok {
 				continue
 			}
@@ -442,14 +437,35 @@ func (s *eventStore) ListDescendantEventIDs(ctx context.Context, rootEventID str
 				break
 			}
 		}
-		if err := rows.Close(); err != nil {
-			return nil, fmt.Errorf("close descendant event rows: %w", err)
-		}
-		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("iterate descendant events: %w", err)
-		}
 	}
 	return ids, nil
+}
+
+// childEventIDs reads the direct children of one event. The traversal above
+// visits many parents, so the cursor is owned by this call rather than deferred
+// to the end of the walk.
+func (s *eventStore) childEventIDs(ctx context.Context, parent string) (_ []string, err error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM event WHERE parent_event_id = ? ORDER BY sequence ASC`, parent)
+	if err != nil {
+		return nil, fmt.Errorf("query descendant events: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close descendant event rows: %w", closeErr)
+		}
+	}()
+	var children []string
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			return nil, fmt.Errorf("scan descendant event: %w", scanErr)
+		}
+		children = append(children, id)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("iterate descendant events: %w", rowsErr)
+	}
+	return children, nil
 }
 
 func (s *eventStore) ListEnabledWebhookSourcesForTopic(ctx context.Context, topic string) ([]domain.WebhookSource, error) {
