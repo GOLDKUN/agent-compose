@@ -1,6 +1,7 @@
 package configstore
 
 import (
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/storage/storeutil"
 	"context"
@@ -119,7 +120,7 @@ func (s *eventStore) UpdateEventPayload(ctx context.Context, eventID, payloadJSO
 	if _, err := domain.NormalizeJSONDocument(payloadJSON); err != nil {
 		return err
 	}
-	payloadHash := domain.TopicEventPayloadSHA256(payloadJSON)
+	payloadHash := events.PayloadSHA256(payloadJSON)
 	result, err := s.db.ExecContext(ctx, `UPDATE event SET payload_hash = ?, payload_json = ? WHERE id = ?`, payloadHash, payloadJSON, eventID)
 	if err != nil {
 		return fmt.Errorf("update event payload: %w", err)
@@ -190,7 +191,7 @@ func (s *eventStore) ClaimEvent(ctx context.Context, eventID, claimID string, no
 func (s *eventStore) ReleaseEventClaim(ctx context.Context, eventID, claimID, status, lastError string, nextAttemptAt time.Time) error {
 	eventID = strings.TrimSpace(eventID)
 	claimID = strings.TrimSpace(claimID)
-	status = domain.NormalizeTopicEventDispatchStatus(status)
+	status = events.NormalizeDispatchStatus(status)
 	if eventID == "" || claimID == "" || status == "" {
 		return fmt.Errorf("event claim release requires event, claim, and status")
 	}
@@ -243,7 +244,7 @@ func (s *eventStore) UpsertEventDelivery(ctx context.Context, delivery domain.Ev
 	delivery.SchedulerID = strings.TrimSpace(delivery.SchedulerID)
 	delivery.TriggerID = strings.TrimSpace(delivery.TriggerID)
 	delivery.RunID = strings.TrimSpace(delivery.RunID)
-	delivery.Status = domain.NormalizeEventDeliveryStatus(delivery.Status)
+	delivery.Status = events.NormalizeDeliveryStatus(delivery.Status)
 	delivery.Error = strings.TrimSpace(delivery.Error)
 	if delivery.EventID == "" || delivery.SchedulerID == "" || delivery.TriggerID == "" || delivery.Status == "" {
 		return fmt.Errorf("event delivery requires event, scheduler, trigger, and status")
@@ -573,7 +574,7 @@ func (s *eventStore) UpsertWebhookSource(ctx context.Context, source domain.Webh
 	source.Provider = strings.TrimSpace(source.Provider)
 	source.TopicPrefix = strings.TrimSpace(source.TopicPrefix)
 	source.TokenHash = strings.TrimSpace(source.TokenHash)
-	tokenHeader, err := domain.NormalizeHTTPHeaderName(source.TokenHeader)
+	tokenHeader, err := events.NormalizeHTTPHeaderName(source.TokenHeader)
 	if err != nil {
 		return domain.WebhookSource{}, fmt.Errorf("webhook source token header is invalid: %w", err)
 	}
@@ -592,7 +593,7 @@ func (s *eventStore) UpsertWebhookSource(ctx context.Context, source domain.Webh
 	if !strings.HasSuffix(source.TopicPrefix, ".") {
 		return domain.WebhookSource{}, fmt.Errorf("webhook source topic prefix must end with dot")
 	}
-	if err := domain.ValidateTopicEventName(strings.TrimSuffix(source.TopicPrefix, ".")); err != nil {
+	if err := events.ValidateTopicName(strings.TrimSuffix(source.TopicPrefix, ".")); err != nil {
 		return domain.WebhookSource{}, fmt.Errorf("webhook source topic prefix is invalid: %w", err)
 	}
 	if source.Name == "" {

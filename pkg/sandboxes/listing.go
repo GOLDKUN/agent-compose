@@ -1,16 +1,19 @@
-package model
+package sandboxes
 
 import (
 	"strings"
 	"time"
+
+	domain "agent-compose/pkg/model"
 )
 
-const DefaultSandboxListLimit = 50
+// DefaultListLimit caps an unbounded sandbox listing request.
+const DefaultListLimit = 50
 
-func NormalizeSandboxTriggerSource(value string, tags []SandboxTag) string {
+func NormalizeTriggerSource(value string, tags []domain.SandboxTag) string {
 	value = strings.TrimSpace(value)
 	if value != "" {
-		if value == SandboxTypeManual || strings.HasPrefix(value, SandboxTypeScript+":") {
+		if value == domain.SandboxTypeManual || strings.HasPrefix(value, domain.SandboxTypeScript+":") {
 			return value
 		}
 	}
@@ -30,33 +33,33 @@ func NormalizeSandboxTriggerSource(value string, tags []SandboxTag) string {
 		}
 	}
 	if origin == "scheduler" && schedulerID != "" {
-		return SandboxTypeScript + ":" + schedulerID
+		return domain.SandboxTypeScript + ":" + schedulerID
 	}
 	if (origin == "loader" || origin == "scheduler") && legacySchedulerID != "" {
-		return SandboxTypeScript + ":" + legacySchedulerID
+		return domain.SandboxTypeScript + ":" + legacySchedulerID
 	}
-	return SandboxTypeManual
+	return domain.SandboxTypeManual
 }
 
-func SandboxTypeFromTriggerSource(value string) string {
-	value = NormalizeSandboxTriggerSource(value, nil)
-	if strings.HasPrefix(value, SandboxTypeScript+":") {
-		return SandboxTypeScript
+func TypeFromTriggerSource(value string) string {
+	value = NormalizeTriggerSource(value, nil)
+	if strings.HasPrefix(value, domain.SandboxTypeScript+":") {
+		return domain.SandboxTypeScript
 	}
-	return SandboxTypeManual
+	return domain.SandboxTypeManual
 }
 
-func NormalizeSandboxListBounds(offset, limit int) (int, int) {
+func NormalizeListBounds(offset, limit int) (int, int) {
 	if offset < 0 {
 		offset = 0
 	}
 	if limit <= 0 {
-		limit = DefaultSandboxListLimit
+		limit = DefaultListLimit
 	}
 	return offset, limit
 }
 
-func PaginateSandboxes(items []*Sandbox, offset, limit int) []*Sandbox {
+func Paginate(items []*domain.Sandbox, offset, limit int) []*domain.Sandbox {
 	if offset >= len(items) {
 		return nil
 	}
@@ -67,13 +70,13 @@ func PaginateSandboxes(items []*Sandbox, offset, limit int) []*Sandbox {
 	return items[offset:end]
 }
 
-func SandboxMatchesListOptions(session *Sandbox, options SandboxListOptions) bool {
+func MatchesListOptions(session *domain.Sandbox, options domain.SandboxListOptions) bool {
 	if session == nil {
 		return false
 	}
 	summary := session.Summary
 	if value := strings.ToLower(strings.TrimSpace(options.SandboxType)); value != "" {
-		if SandboxTypeFromTriggerSource(summary.TriggerSource) != value {
+		if TypeFromTriggerSource(summary.TriggerSource) != value {
 			return false
 		}
 	}

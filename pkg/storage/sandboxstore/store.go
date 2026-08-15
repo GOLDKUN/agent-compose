@@ -407,7 +407,7 @@ func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImag
 			ID:            id,
 			ShortID:       shortID,
 			Title:         strings.TrimSpace(title),
-			TriggerSource: domain.NormalizeSandboxTriggerSource(triggerSource, tags),
+			TriggerSource: sandboxes.NormalizeTriggerSource(triggerSource, tags),
 			Driver:        driver,
 			VMStatus:      VMStatusPending,
 			GuestImage:    guestImage,
@@ -574,7 +574,7 @@ func (s *Store) ListSandboxes(ctx context.Context, options SandboxListOptions) (
 	if err := s.ensureIndexCurrent(ctx); err != nil {
 		return SandboxListResult{}, err
 	}
-	offset, limit := domain.NormalizeSandboxListBounds(options.Offset, options.Limit)
+	offset, limit := sandboxes.NormalizeListBounds(options.Offset, options.Limit)
 	queryOffset := 0
 	skipped := 0
 	var page []*Sandbox
@@ -952,7 +952,7 @@ func (s *Store) loadSandboxFromDir(id, sandboxDir string) (*Sandbox, error) {
 	// WorkspacePath is derived from the active sandbox root. Persisted absolute
 	// paths may refer to the filesystem namespace of an older daemon process.
 	session.Summary.WorkspacePath = filepath.Join(sandboxDir, "workspace")
-	session.Summary.TriggerSource = domain.NormalizeSandboxTriggerSource(session.Summary.TriggerSource, session.Summary.Tags)
+	session.Summary.TriggerSource = sandboxes.NormalizeTriggerSource(session.Summary.TriggerSource, session.Summary.Tags)
 	if strings.TrimSpace(session.Summary.ShortID) == "" {
 		session.Summary.ShortID = identity.ShortID(session.Summary.ID)
 	}

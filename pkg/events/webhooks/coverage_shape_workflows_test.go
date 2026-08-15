@@ -10,6 +10,7 @@ import (
 	"time"
 
 	appconfig "agent-compose/pkg/config"
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 
 	"github.com/labstack/echo/v4"
@@ -404,7 +405,7 @@ func (s *webhookRouteStore) GetWebhookSource(_ context.Context, sourceID string)
 }
 
 func (s *webhookRouteStore) UpsertWebhookSource(_ context.Context, source domain.WebhookSource) (domain.WebhookSource, error) {
-	tokenHeader, err := domain.NormalizeHTTPHeaderName(source.TokenHeader)
+	tokenHeader, err := events.NormalizeHTTPHeaderName(source.TokenHeader)
 	if err != nil {
 		return domain.WebhookSource{}, err
 	}

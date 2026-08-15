@@ -10,7 +10,9 @@ import (
 	"github.com/samber/do/v2"
 
 	driverpkg "agent-compose/pkg/driver"
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
 )
@@ -44,7 +46,7 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 		WorkspaceID: "workspace-1",
 		Workspace:   &domain.SandboxWorkspace{ID: "workspace-1", Name: "Workspace One", Type: "file"},
 	}
-	if !domain.SandboxMatchesListOptions(session, domain.SandboxListOptions{
+	if !sandboxes.MatchesListOptions(session, domain.SandboxListOptions{
 		SandboxType:        domain.SandboxTypeScript,
 		TriggerSourceQuery: "scheduler",
 		TitleQuery:         "branch",
@@ -70,24 +72,24 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 		{UpdatedFrom: now.Add(2 * time.Minute)},
 		{UpdatedTo: now.Add(-time.Second)},
 	} {
-		if domain.SandboxMatchesListOptions(session, options) {
+		if sandboxes.MatchesListOptions(session, options) {
 			t.Fatalf("session unexpectedly matched options %#v", options)
 		}
 	}
-	if domain.SandboxMatchesListOptions(nil, domain.SandboxListOptions{}) {
+	if sandboxes.MatchesListOptions(nil, domain.SandboxListOptions{}) {
 		t.Fatalf("nil session matched list options")
 	}
-	if got := domain.NormalizeSandboxTriggerSource("", []domain.SandboxTag{{Name: "origin", Value: "loader"}, {Name: "loader_id", Value: "loader-9"}}); got != "script:loader-9" {
+	if got := sandboxes.NormalizeTriggerSource("", []domain.SandboxTag{{Name: "origin", Value: "loader"}, {Name: "loader_id", Value: "loader-9"}}); got != "script:loader-9" {
 		t.Fatalf("NormalizeSandboxTriggerSource legacy tags = %q", got)
 	}
-	if got := domain.NormalizeSandboxTriggerSource("", []domain.SandboxTag{{Name: "origin", Value: "scheduler"}, {Name: "scheduler_id", Value: "scheduler-9"}}); got != "script:scheduler-9" {
+	if got := sandboxes.NormalizeTriggerSource("", []domain.SandboxTag{{Name: "origin", Value: "scheduler"}, {Name: "scheduler_id", Value: "scheduler-9"}}); got != "script:scheduler-9" {
 		t.Fatalf("NormalizeSandboxTriggerSource scheduler tags = %q", got)
 	}
-	if got := domain.PaginateSandboxes([]*domain.Sandbox{session}, 5, 10); got != nil {
+	if got := sandboxes.Paginate([]*domain.Sandbox{session}, 5, 10); got != nil {
 		t.Fatalf("PaginateSandboxes beyond end = %#v", got)
 	}
-	offset, limit := domain.NormalizeSandboxListBounds(-1, 0)
-	if offset != 0 || limit != domain.DefaultSandboxListLimit {
+	offset, limit := sandboxes.NormalizeListBounds(-1, 0)
+	if offset != 0 || limit != sandboxes.DefaultListLimit {
 		t.Fatalf("NormalizeSandboxListBounds = %d/%d", offset, limit)
 	}
 
@@ -141,36 +143,36 @@ func testModelBranchCoverageWorkflows(t *testing.T) {
 	if domain.DefaultSchedulerName(now) == "" || !strings.Contains(domain.DefaultSchedulerScript(), "scheduler.interval") || domain.SchedulerSourceSHA("script") == "" || domain.SchedulerTriggerStableID("kind", "topic", 1, "cb", 0) == "" {
 		t.Fatalf("scheduler default/hash helpers returned empty values")
 	}
-	if err := domain.ValidateTopicEventName("runtime.topic-1"); err != nil {
+	if err := events.ValidateTopicName("runtime.topic-1"); err != nil {
 		t.Fatalf("ValidateTopicEventName returned error: %v", err)
 	}
 	for _, topic := range []string{" ", strings.Repeat("a", 129), "bad topic"} {
-		if err := domain.ValidateTopicEventName(topic); err == nil {
+		if err := events.ValidateTopicName(topic); err == nil {
 			t.Fatalf("ValidateTopicEventName(%q) returned nil error", topic)
 		}
 	}
 	for _, source := range []string{domain.TopicEventSourceWebhook, " LOADER ", domain.TopicEventSourceSystem} {
-		if domain.NormalizeTopicEventSource(source) == "" {
+		if events.NormalizeSource(source) == "" {
 			t.Fatalf("NormalizeTopicEventSource(%q) returned empty", source)
 		}
 	}
-	if domain.NormalizeTopicEventSource("bad") != "" {
+	if events.NormalizeSource("bad") != "" {
 		t.Fatalf("NormalizeTopicEventSource bad returned non-empty")
 	}
 	for _, status := range []string{"", domain.TopicEventDispatchPending, domain.TopicEventDispatchPublishing, domain.TopicEventDispatchPublishedToBus, domain.TopicEventDispatchNoSubscriber, domain.TopicEventDispatchRetrying, domain.TopicEventDispatchDeadLetter} {
-		if domain.NormalizeTopicEventDispatchStatus(status) == "" {
+		if events.NormalizeDispatchStatus(status) == "" {
 			t.Fatalf("NormalizeTopicEventDispatchStatus(%q) returned empty", status)
 		}
 	}
-	if domain.NormalizeTopicEventDispatchStatus("bad") != "" {
+	if events.NormalizeDispatchStatus("bad") != "" {
 		t.Fatalf("NormalizeTopicEventDispatchStatus bad returned non-empty")
 	}
 	for _, status := range []string{domain.EventDeliveryStatusMatched, domain.EventDeliveryStatusRunStarted, domain.EventDeliveryStatusRunSucceeded, domain.EventDeliveryStatusRunFailed, domain.EventDeliveryStatusSkipped} {
-		if domain.NormalizeEventDeliveryStatus(status) != status {
+		if events.NormalizeDeliveryStatus(status) != status {
 			t.Fatalf("NormalizeEventDeliveryStatus(%q) changed", status)
 		}
 	}
-	if domain.NormalizeEventDeliveryStatus("bad") != "" || !strings.HasPrefix(domain.TopicEventPayloadSHA256(`{"ok":true}`), "sha256:") {
+	if events.NormalizeDeliveryStatus("bad") != "" || !strings.HasPrefix(events.PayloadSHA256(`{"ok":true}`), "sha256:") {
 		t.Fatalf("topic event status/hash helpers returned unexpected values")
 	}
 

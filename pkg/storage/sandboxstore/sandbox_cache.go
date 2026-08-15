@@ -9,6 +9,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 )
 
 const sandboxCacheVersion = 2
@@ -168,7 +169,7 @@ ON CONFLICT(id) DO UPDATE SET
 		s.ID, s.ShortID, s.Title, s.TriggerSource, s.Driver, s.VMStatus, projectID,
 		s.WorkspacePath, wsID, nestedWSID, wsName, wsType,
 		sandboxCacheUnixNano(s.CreatedAt), sandboxCacheUnixNano(s.UpdatedAt),
-		domain.SandboxTypeFromTriggerSource(s.TriggerSource), strings.ToLower(s.Title), strings.ToLower(s.TriggerSource),
+		sandboxes.TypeFromTriggerSource(s.TriggerSource), strings.ToLower(s.Title), strings.ToLower(s.TriggerSource),
 		strings.ToLower(strings.TrimSpace(s.Driver)), strings.ToUpper(strings.TrimSpace(s.VMStatus)), strings.ToLower(projectID),
 		strings.ToLower(strings.TrimSpace(s.WorkspacePath)), strings.ToLower(strings.TrimSpace(wsID)),
 		strings.ToLower(strings.TrimSpace(nestedWSID)), strings.ToLower(strings.TrimSpace(wsName)),

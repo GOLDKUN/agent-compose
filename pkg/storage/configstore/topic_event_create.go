@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 )
 
@@ -101,7 +102,7 @@ func storeSequencedTopicEventPayload(ctx context.Context, tx *sql.Tx, item *doma
 		return nil
 	}
 	item.PayloadJSON = sequencedPayload
-	item.PayloadHash = domain.TopicEventPayloadSHA256(sequencedPayload)
+	item.PayloadHash = events.PayloadSHA256(sequencedPayload)
 	update, err := tx.ExecContext(ctx, `UPDATE event SET payload_hash = ?, payload_json = ? WHERE id = ?`, item.PayloadHash, item.PayloadJSON, item.ID)
 	if err != nil {
 		return fmt.Errorf("store sequenced event payload: %w", err)
@@ -144,5 +145,5 @@ func topicEventPayloadHashForSequence(payloadJSON, payloadHash string, sequence 
 	if !changed {
 		return payloadHash, nil
 	}
-	return domain.TopicEventPayloadSHA256(sequencedPayload), nil
+	return events.PayloadSHA256(sequencedPayload), nil
 }
