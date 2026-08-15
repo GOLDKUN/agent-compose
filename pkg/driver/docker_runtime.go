@@ -288,12 +288,12 @@ func (r *dockerRuntime) cleanupDockerContainerAfterEnsureFailure(
 	defer cancel()
 	if created {
 		if err := cleaner.ContainerRemove(cleanupCtx, containerID, containerapi.RemoveOptions{Force: true}); err != nil && !isDockerNotFound(err) {
-			return fmt.Errorf("%w; cleanup newly created docker container %s: %v", cause, containerID, err)
+			return fmt.Errorf("%w; cleanup newly created docker container %s: %w", cause, containerID, err)
 		}
 		return cause
 	}
 	if err := cleaner.ContainerStop(cleanupCtx, containerID, containerapi.StopOptions{}); err != nil && !isDockerNotFound(err) {
-		return fmt.Errorf("%w; stop docker container %s after failed ensure: %v", cause, containerID, err)
+		return fmt.Errorf("%w; stop docker container %s after failed ensure: %w", cause, containerID, err)
 	}
 	return cause
 }
@@ -322,7 +322,7 @@ func (r *dockerRuntime) StopSandbox(ctx context.Context, sandbox *Sandbox, vmSta
 				return true, nil
 			}
 			if stopped, inspectErr := r.containerStoppedAfterStopError(containerInfo.ID); inspectErr != nil {
-				return false, fmt.Errorf("stop docker container %s: %w; inspect after stop failure: %v", containerInfo.ID, err, inspectErr)
+				return false, fmt.Errorf("stop docker container %s: %w; inspect after stop failure: %w", containerInfo.ID, err, inspectErr)
 			} else if !stopped {
 				return false, fmt.Errorf("stop docker container %s: %w", containerInfo.ID, err)
 			}
@@ -1505,7 +1505,7 @@ func isDockerStreamClosed(err error) bool {
 	if err == nil {
 		return false
 	}
-	return err == io.EOF || strings.Contains(strings.ToLower(err.Error()), "use of closed network connection")
+	return errors.Is(err, io.EOF) || strings.Contains(strings.ToLower(err.Error()), "use of closed network connection")
 }
 
 func sanitizeDockerContainerName(value string) string {

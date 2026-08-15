@@ -2,6 +2,7 @@ package webhooks
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,7 +59,7 @@ func TestWebhookHelpersAndQueueCoverageWorkflows(t *testing.T) {
 	if _, _, err := DecodeJSONObject([]byte(`[]`)); err == nil {
 		t.Fatalf("expected non-object decode error")
 	}
-	if _, err := ReadBody(&http.Request{Body: ioNopCloser{strings.NewReader("toolong")}}, 3); err != domain.ErrBodyTooLarge {
+	if _, err := ReadBody(&http.Request{Body: ioNopCloser{strings.NewReader("toolong")}}, 3); !errors.Is(err, domain.ErrBodyTooLarge) {
 		t.Fatalf("expected body too large, got %v", err)
 	}
 

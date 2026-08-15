@@ -456,7 +456,10 @@ func DefaultFileConfigJSON(config *appconfig.Config, workspaceID string) string 
 	if err != nil {
 		root = filepath.Join(config.DataRoot, "workspaces", strings.TrimSpace(workspaceID), FileWorkspaceContentDirName)
 	}
-	payload, _ := json.Marshal(FileWorkspaceConfig{Root: root})
+	payload, err := json.Marshal(FileWorkspaceConfig{Root: root})
+	if err != nil {
+		return "{}"
+	}
 	return string(payload)
 }
 

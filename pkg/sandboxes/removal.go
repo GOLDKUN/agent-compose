@@ -129,7 +129,7 @@ func (c *RemovalCoordinator) Remove(ctx context.Context, sandboxID string, force
 	sandbox, sandboxErr := c.Store.GetSandbox(ctx, sandboxID)
 	if recordErr != nil {
 		if !os.IsNotExist(recordErr) {
-			return RemovalResult{}, fmt.Errorf("%w: sandbox %s lifecycle record is invalid: %v", ErrOwnershipUnknown, sandboxID, recordErr)
+			return RemovalResult{}, fmt.Errorf("%w: sandbox %s lifecycle record is invalid: %w", ErrOwnershipUnknown, sandboxID, recordErr)
 		}
 		if sandboxErr != nil {
 			return RemovalResult{}, fmt.Errorf("%w: sandbox %s has neither record nor metadata", ErrOwnershipUnknown, sandboxID)

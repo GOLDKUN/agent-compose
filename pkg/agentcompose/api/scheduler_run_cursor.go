@@ -21,7 +21,7 @@ type schedulerRunPageCursor struct {
 }
 
 func encodeSchedulerRunCursor(projectID string, projectRevision int64, agentName, triggerID, status string, run domain.SchedulerRunSummary) string {
-	payload, _ := json.Marshal(schedulerRunPageCursor{
+	payload, err := json.Marshal(schedulerRunPageCursor{
 		ProjectID:       strings.TrimSpace(projectID),
 		ProjectRevision: projectRevision,
 		AgentName:       strings.TrimSpace(agentName),
@@ -31,5 +31,10 @@ func encodeSchedulerRunCursor(projectID string, projectRevision int64, agentName
 		SchedulerID:     strings.TrimSpace(run.SchedulerID),
 		RunID:           strings.TrimSpace(run.ID),
 	})
+	if err != nil {
+		// An unencodable timestamp cannot produce a resumable page cursor; an
+		// empty cursor makes the caller restart paging from the beginning.
+		return ""
+	}
 	return base64.RawURLEncoding.EncodeToString(payload)
 }

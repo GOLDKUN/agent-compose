@@ -123,7 +123,8 @@ func TestWorkspaceRouteErrorMappingCoverage(t *testing.T) {
 		{domain.ErrRequired, http.StatusBadRequest},
 		{errors.New("boom"), http.StatusInternalServerError},
 	} {
-		httpErr, ok := ToWorkspaceHTTPError(item.err).(*echo.HTTPError)
+		var httpErr *echo.HTTPError
+		ok := errors.As(ToWorkspaceHTTPError(item.err), &httpErr)
 		if !ok || httpErr.Code != item.code {
 			t.Fatalf("ToWorkspaceHTTPError(%v) = %#v", item.err, httpErr)
 		}
@@ -131,7 +132,8 @@ func TestWorkspaceRouteErrorMappingCoverage(t *testing.T) {
 	if !IsHTTPRequestBodyTooLarge(&http.MaxBytesError{Limit: 1}) {
 		t.Fatalf("expected MaxBytesError to be detected")
 	}
-	if httpErr, ok := ToWorkspaceUploadHTTPError(&http.MaxBytesError{Limit: 1}).(*echo.HTTPError); !ok || httpErr.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("upload error = %#v", httpErr)
+	var uploadErr *echo.HTTPError
+	if !errors.As(ToWorkspaceUploadHTTPError(&http.MaxBytesError{Limit: 1}), &uploadErr) || uploadErr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("upload error = %#v", uploadErr)
 	}
 }

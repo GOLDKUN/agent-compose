@@ -236,7 +236,6 @@ func TestProvisionerPendingAndFailedMaterializeToReady(t *testing.T) {
 		domain.SandboxWorkspaceProvisioningStatusPending,
 		domain.SandboxWorkspaceProvisioningStatusFailed,
 	} {
-		initialStatus := initialStatus
 		t.Run(initialStatus, func(t *testing.T) {
 			t.Parallel()
 

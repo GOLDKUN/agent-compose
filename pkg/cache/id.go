@@ -47,7 +47,7 @@ func GenerateCacheID(item Item) (string, error) {
 func ParseCacheID(cacheID string) (ParsedCacheID, error) {
 	hash, err := identity.Hash(cacheID)
 	if err != nil {
-		return ParsedCacheID{}, fmt.Errorf("%w: %v", ErrInvalidCacheID, err)
+		return ParsedCacheID{}, fmt.Errorf("%w: %w", ErrInvalidCacheID, err)
 	}
 	return ParsedCacheID{ID: hash, Hash: hash}, nil
 }

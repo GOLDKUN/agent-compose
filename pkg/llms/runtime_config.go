@@ -159,8 +159,9 @@ func buildCodexManagedMCPBlock(mcps map[string]compose.NormalizedMCPServerSpec) 
 		if mcp.Type == "local" {
 			fmt.Fprintf(&b, "command = %q\n", mcp.Command)
 			if len(mcp.Args) > 0 {
-				args, _ := json.Marshal(mcp.Args)
-				fmt.Fprintf(&b, "args = %s\n", args)
+				if args, argsErr := json.Marshal(mcp.Args); argsErr == nil {
+					fmt.Fprintf(&b, "args = %s\n", args)
+				}
 			}
 			if len(mcp.Env) > 0 {
 				b.WriteString("[mcp_servers." + name + ".env]\n")

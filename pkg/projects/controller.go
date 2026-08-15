@@ -394,11 +394,11 @@ func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecyc
 		changes = append(changes, schedulerChanges...)
 		agents, listAgentsErr := c.store.ListProjectAgents(ctx, project.ID)
 		if listAgentsErr != nil {
-			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project agents after reconcile failure: %v", normalized.Spec.Name, err, listAgentsErr)
+			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project agents after reconcile failure: %w", normalized.Spec.Name, err, listAgentsErr)
 		}
 		schedulers, listSchedulersErr := c.store.ListProjectSchedulers(ctx, project.ID)
 		if listSchedulersErr != nil {
-			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project schedulers after reconcile failure: %v", normalized.Spec.Name, err, listSchedulersErr)
+			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project schedulers after reconcile failure: %w", normalized.Spec.Name, err, listSchedulersErr)
 		}
 		return ApplyResult{
 			Project:      project,

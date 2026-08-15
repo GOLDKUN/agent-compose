@@ -1,6 +1,7 @@
 package echofn
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -16,8 +17,8 @@ func SendResultAsJson[T any, RT restful.ResponseType[T]](c echo.Context, result 
 	data, err := result.Get()
 
 	if err != nil {
-		oopsErr, ok := err.(oops.OopsError)
-		if ok {
+		var oopsErr oops.OopsError
+		if errors.As(err, &oopsErr) {
 			msg := oops.GetPublic(oopsErr, oopsErr.Error())
 			code := oopsErr.Code()
 			if code == nil {

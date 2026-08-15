@@ -87,7 +87,10 @@ func normalizeRuntimeRawResponsesContent(item map[string]json.RawMessage, generi
 			textType = "output_text"
 		}
 	}
-	textTypeJSON, _ := json.Marshal(textType)
+	textTypeJSON, err := json.Marshal(textType)
+	if err != nil {
+		return false
+	}
 	var changed bool
 	for _, part := range parts {
 		if len(part["text"]) == 0 || string(part["text"]) == "null" {
@@ -126,7 +129,10 @@ func normalizeRuntimeRawRoleItems(payload map[string]json.RawMessage, field stri
 		return false
 	}
 	var changed bool
-	systemRole, _ := json.Marshal(string(protocolbridge.RoleSystem))
+	systemRole, err := json.Marshal(string(protocolbridge.RoleSystem))
+	if err != nil {
+		return false
+	}
 	for _, item := range items {
 		var role string
 		if err := json.Unmarshal(item["role"], &role); err == nil && role == string(protocolbridge.RoleDeveloper) {

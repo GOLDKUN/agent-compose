@@ -37,5 +37,7 @@ func NullHandler[RT ResponseType[any]](w http.ResponseWriter, r *http.Request) {
 		"server_version": version,
 	})
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("write null handler response", "err", err)
+	}
 }

@@ -134,7 +134,6 @@ func TestStableYAMLFixtures(t *testing.T) {
 		t.Fatal("no stable YAML fixtures found")
 	}
 	for _, path := range paths {
-		path := path
 		t.Run(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)), func(t *testing.T) {
 			spec, err := ParseFile(path)
 			if err != nil {

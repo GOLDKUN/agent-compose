@@ -101,21 +101,19 @@ func TestMigrationBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query migration history: %v", err)
 	}
+	defer func() { _ = rows.Close() }()
 	migrationIndex := 0
 	for rows.Next() {
 		var version, timestamp int64
 		var name, checksum string
 		if err := rows.Scan(&version, &name, &checksum, &timestamp); err != nil {
-			_ = rows.Close()
 			t.Fatalf("scan migration history: %v", err)
 		}
 		if migrationIndex >= len(available) {
-			_ = rows.Close()
 			t.Fatalf("unexpected migration history row (%d, %q)", version, name)
 		}
 		expected := available[migrationIndex]
 		if version != expected.version || name != expected.name || checksum != expected.checksum {
-			_ = rows.Close()
 			t.Fatalf("migration history row %d = (%d, %q, %q), want (%d, %q, %q)",
 				migrationIndex, version, name, checksum, expected.version, expected.name, expected.checksum)
 		}
@@ -123,11 +121,7 @@ func TestMigrationBaseline(t *testing.T) {
 		migrationIndex++
 	}
 	if err := rows.Err(); err != nil {
-		_ = rows.Close()
 		t.Fatalf("iterate migration history: %v", err)
-	}
-	if err := rows.Close(); err != nil {
-		t.Fatalf("close migration history: %v", err)
 	}
 	if migrationIndex != len(available) {
 		t.Fatalf("migration history row count = %d, want %d", migrationIndex, len(available))
@@ -255,11 +249,7 @@ func TestSandboxProjectProjectionMigrationInvalidatesCache(t *testing.T) {
 	if versionCount != 0 {
 		t.Fatalf("migrated sandbox projection version rows = %d, want 0 to force rebuild", versionCount)
 	}
-	if rows, err := db.QueryContext(ctx, `SELECT project_id, project_id_search FROM sandboxes LIMIT 0`); err != nil {
-		t.Fatalf("query migrated sandbox project columns: %v", err)
-	} else if err := rows.Close(); err != nil {
-		t.Fatalf("close migrated sandbox project column query: %v", err)
-	}
+	assertSandboxProjectColumnsExist(t, ctx, db)
 	assertSQLiteIndexColumns(t, db, "idx_sandboxes_project_updated", []string{"project_id_search", "updated_at", "id"}, []bool{false, true, true})
 }
 
@@ -294,6 +284,23 @@ func TestBaselineIncludesPreviouslyOmittedSchema(t *testing.T) {
 		assertSQLiteIndexColumns(t, db, definition.name, definition.columns, definition.descending)
 	}
 }
+
+// assertSandboxProjectColumnsExist probes the migrated projection columns with a
+// row-less query. The cursor is never drained, so database/sql does not release
+// its connection on its own; it is scoped to this helper to keep the pool free
+// for the caller's next query.
+func assertSandboxProjectColumnsExist(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	rows, err := db.QueryContext(ctx, `SELECT project_id, project_id_search FROM sandboxes LIMIT 0`)
+	if err != nil {
+		t.Fatalf("query migrated sandbox project columns: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("query migrated sandbox project columns: %v", err)
+	}
+}
+
 func assertSQLiteIndexColumns(t *testing.T, db *sql.DB, indexName string, columns []string, descending []bool) {
 	t.Helper()
 	if len(columns) != len(descending) {

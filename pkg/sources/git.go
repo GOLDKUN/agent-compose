@@ -95,7 +95,7 @@ func (c GitClient) CheckoutCommit(ctx context.Context, source Source, commit, de
 	// only those repositories use the full-ref fallback needed for correctness.
 	if shallowErr := c.run(ctx, destination, source, "fetch", "--depth=1", "--no-tags", "--", "origin", commit); shallowErr != nil {
 		if fallbackErr := c.fetchAllGitRefs(ctx, source, destination); fallbackErr != nil {
-			return fmt.Errorf("fetch git commit %s: shallow fetch failed: %v; full fetch fallback failed: %w", commit, shallowErr, fallbackErr)
+			return fmt.Errorf("fetch git commit %s: shallow fetch failed: %w; full fetch fallback failed: %w", commit, shallowErr, fallbackErr)
 		}
 	}
 	return c.checkoutLocalCommit(ctx, source, commit, destination)

@@ -134,7 +134,7 @@ func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, defin
 		PayloadJSON: payloadJSON,
 	}, host)
 	if err != nil {
-		return capturedManualTriggerAgentRequest{}, fmt.Errorf("%w: resolve trigger %s prompt: %v", domain.ErrInvalidArgument, trigger.ID, err)
+		return capturedManualTriggerAgentRequest{}, fmt.Errorf("%w: resolve trigger %s prompt: %w", domain.ErrInvalidArgument, trigger.ID, err)
 	}
 	if host.calls != 1 || strings.TrimSpace(host.prompt) == "" {
 		return capturedManualTriggerAgentRequest{}, fmt.Errorf("%w: trigger %s must call scheduler.agent exactly once", domain.ErrInvalidArgument, trigger.ID)
