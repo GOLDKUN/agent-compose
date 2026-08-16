@@ -252,6 +252,7 @@ Bearer Token 不会加密网络流量。跨机器连接时，请使用 HTTPS、S
 | `gemini` | Gemini CLI |
 | `opencode` | OpenCode CLI |
 | `pi` | Pi coding agent CLI |
+| `dsh` | DeepSeek Harness CLI |
 
 按你的 agent 使用的后端家族设置变量。**OpenAI 家族**（Codex，以及 daemon 自身的 `LLMService` 和 scheduler LLM 调用）：
 

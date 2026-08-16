@@ -284,6 +284,7 @@ Each agent sets a `provider`, which selects the CLI it runs inside the sandbox:
 | `gemini` | Gemini CLI |
 | `opencode` | OpenCode CLI |
 | `pi` | Pi coding agent CLI |
+| `dsh` | DeepSeek Harness CLI |
 
 Set the variables for the backend family your agents use. **OpenAI-family**
 (Codex, plus the daemon's own `LLMService` and scheduler LLM calls):

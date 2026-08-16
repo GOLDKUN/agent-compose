@@ -1,0 +1,71 @@
+# agent-compose's dsh profile: a static overlay on top of the @deepseek-ai/dsh-base
+# bundle layer. Every mutable value (facade credentials, model, skills, session
+# root, prompt text) flows in through the spawn-time environment set by
+# runtime/javascript/src/runners/dsh.ts — see docs/design/dsh_agent_provider_design.md
+# §3.2/§3.5. This file ships as a repo asset (assets/.dsh/...), not an npm package.
+
+- id: llm-deepseek
+  config:
+    apiKeyEnv: LLM_API_KEY
+    baseURL: !!js process.env.LLM_API_ENDPOINT
+    thinking: enabled
+    reasoningEffort: !!js process.env.DSH_REASONING_EFFORT || 'max'
+
+# llm-deepseek registers a single route, 'deepseek-official' (see §4.2); the
+# model name alone comes from the spawn environment.
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: !!js process.env.DSH_MODEL || 'deepseek-v4-flash'
+
+# agent-compose assembles persona/skills-catalog/workspace context host-side.
+# Read directly from the env var, not a file: the Loader's `!!js` sandbox is
+# `new Function('ctx', 'expr', 'with (ctx) { return eval(expr) }')`, which has
+# no `require` in scope under the real ESM `dsh` binary (verified against a
+# live boot — `require('node:fs')` throws ReferenceError there even though
+# dump-config's static render never catches it). process.env survives an
+# execve-style spawn env with embedded newlines intact (no shell involved),
+# so this doesn't need a temp file the way a large prompt body does.
+- id: system-prompt
+  config:
+    persona: !!js process.env.DSH_SYSTEM_CONTEXT || ''
+
+# Each sandbox gets its own durable session store on the agent-compose state
+# volume, not dsh-base's default $DSH_HOME/sessions.
+- id: session-persistence-jsonl
+  config:
+    root: !!js process.env.DSH_SESSION_ROOT
+
+# Local credential discovery is disabled — the only LLM credential is the
+# run-scoped facade token injected as LLM_API_KEY (see §5.4). llm-deepseek
+# still resolves apiKeyEnv from the launch environment when this row is off.
+- id: credentials
+  disabled: true
+
+# $DSH_HOME/settings.yaml can otherwise override llm-deepseek's apiKeyEnv/
+# baseURL at runtime; disabling this row keeps the facade the only LLM
+# credential source (see §5.4).
+- id: settings
+  disabled: true
+
+# Tenant isolation: an agent only sees the skill directories agent-compose
+# resolved for it, never the shared ~/.agents/skills tree (see §5.1).
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: !!js (process.env.DSH_SKILL_DIRS || '').split(':').filter(Boolean)
+
+# No approval/sandbox-policy overrides here: dsh-base's own rows already key
+# off DSH_PERMISSION_MODE (agent-compose always sets danger-full-access — see
+# §5.3/§5.5, guest sandboxing is provided by the agent-compose sandbox, not a
+# nested provider-side sandbox backend).
+
+- insert:
+    # Resume + JSON event-stream glue: agent-compose's own plugin, not part of
+    # any published DSH bundle (see §3.1/§3.3/§3.4).
+    - id: agent-compose-runner
+      name: './runner.js'
+      inject: [agents, sessions, agentDefaultModel]
+      config:
+        promptFile: !!js process.env.DSH_PROMPT_FILE
+        sessionId: !!js process.env.DSH_SESSION_ID ?? undefined

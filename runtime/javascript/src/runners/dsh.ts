@@ -1,0 +1,326 @@
+import { createHash, randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
+import readline from "node:readline";
+import { extractText } from "../text.js";
+import { flattenEnvMap, type RuntimeMCPServer } from "../mcp-config.js";
+import { readStoredThread, writeStoredThread } from "../session-state.js";
+import { TranscriptWriter, type TranscriptTextWriter } from "../transcript.js";
+import type { AgentResult, RunnerOptions } from "../types.js";
+import { cancellationRequested } from "../shutdown.js";
+import { waitForChildExit } from "../child-process.js";
+
+const maxDiagnosticBytes = 64 * 1024;
+
+export class DshRunner {
+  private reportedError: Error | null = null;
+
+  constructor(
+    private readonly options: RunnerOptions,
+    private readonly writer: TranscriptTextWriter = new TranscriptWriter(),
+  ) {}
+
+  async runPrompt(promptText: string): Promise<AgentResult> {
+    this.reportedError = null;
+    if (this.options.outputSchema) {
+      throw new Error("structured JSON output is not supported by dsh runner");
+    }
+    const mcpServers = toDshMcpServers(this.options.mcpConfig as Record<string, RuntimeMCPServer> | undefined);
+
+    const stored = await readStoredThread(this.options.sessionRoot, "dsh");
+    const providerRoot = path.join(this.options.sessionRoot, "agents", "providers", "dsh");
+    const sessionRoot = path.join(providerRoot, "sessions");
+    const tempRoot = path.join(providerRoot, "tmp");
+    await fs.mkdir(sessionRoot, { recursive: true });
+    await fs.mkdir(tempRoot, { recursive: true });
+    const invocationDir = await fs.mkdtemp(path.join(tempRoot, "prompt-"));
+
+    const resume = Boolean(stored?.threadId);
+    const sessionId = stored?.threadId || `session-${randomUUID()}`;
+
+    const result: AgentResult = {
+      provider: "dsh",
+      threadId: sessionId,
+      stopReason: "completed",
+      finalText: "",
+      finalTextSource: "none",
+      transcript: "",
+      stderr: "",
+    };
+
+    try {
+      const promptFile = path.join(invocationDir, "prompt.txt");
+      await fs.writeFile(promptFile, promptText, { encoding: "utf8", mode: 0o600 });
+
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        HOME: this.options.home,
+        DSH_PERMISSION_MODE: "danger-full-access",
+        DSH_SESSION_ROOT: sessionRoot,
+        DSH_PROMPT_FILE: promptFile,
+        // Not a temp file: the Loader's `!!js` eval sandbox
+        // (new Function('ctx','expr','with(ctx){return eval(expr)}')) has no
+        // `require` in scope under the real ESM dsh binary, so
+        // `system-prompt.persona` reads this env var directly instead of
+        // `require('node:fs').readFileSync(...)` (verified against a live
+        // boot; the prior file-based approach threw ReferenceError). A
+        // spawn()-passed env object survives embedded newlines untouched
+        // (no shell involved), so this is safe for multi-line context.
+        DSH_SYSTEM_CONTEXT: this.options.systemContext || "",
+        DSH_SESSION_ID: sessionId,
+      };
+      if (resume) {
+        env.DSH_RESUME = "1";
+      }
+      const modelName = dshModelName(this.options.model);
+      if (modelName) {
+        env.DSH_MODEL = modelName;
+      }
+      const effort = dshReasoningEffort(this.options.effort);
+      if (effort) {
+        env.DSH_REASONING_EFFORT = effort;
+      }
+      if (mcpServers.length > 0) {
+        env.DSH_MCP_SERVERS = JSON.stringify(mcpServers);
+      }
+      const skillDirs = await this.resolveSkillPaths();
+      if (skillDirs.length > 0) {
+        env.DSH_SKILL_DIRS = skillDirs.join(":");
+      }
+
+      const child = spawn("dsh", ["--profile", "agent-compose"], {
+        cwd: this.options.workspace,
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+        signal: this.options.abortController?.signal,
+      });
+      // Attach the process error handler immediately. A failed spawn may emit
+      // before stdout iteration completes, and an unhandled child "error"
+      // event would otherwise terminate the runtime process.
+      const exit = waitForChildExit(child, this.options.abortController?.signal);
+
+      let stderrBytes: Buffer = Buffer.alloc(0);
+      child.stderr?.on("data", (chunk) => {
+        const text = String(chunk || "");
+        stderrBytes = appendBounded(stderrBytes, Buffer.from(text), maxDiagnosticBytes);
+        this.writer.write(text);
+      });
+
+      let protocolError: Error | null = null;
+      const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
+      for await (const line of lines) {
+        if (!line.trim()) continue;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line);
+        } catch (error) {
+          protocolError ??= new Error(`dsh emitted invalid JSON event: ${truncate(line, 4096)}`, { cause: error });
+          continue;
+        }
+        if (!isRecord(parsed) || parsed.type !== "session_event") {
+          continue;
+        }
+        const eventSessionId = firstString(parsed, "sessionId", "session_id");
+        if (eventSessionId && eventSessionId !== sessionId) {
+          protocolError ??= new Error(`dsh emitted an event for unexpected session ${eventSessionId}`);
+          continue;
+        }
+        const event = recordValue(parsed.event);
+        if (!event) continue;
+        this.handleEvent(event, result);
+      }
+
+      const processResult = await exit;
+      const stderr = stderrBytes.toString("utf8");
+      result.stderr = stderr;
+      const cancelled = cancellationRequested(this.options.abortController?.signal);
+      if (processResult.spawnError && !cancelled) throw processResult.spawnError;
+      if (protocolError && !cancelled) throw protocolError;
+      if (this.reportedError && !cancelled) throw this.reportedError;
+      if (processResult.exitCode !== 0 && !cancelled) {
+        throw new Error(`dsh exited with code ${processResult.exitCode}${stderr ? `: ${stderr}` : ""}`);
+      }
+      if (cancelled) {
+        result.stopReason = "cancelled";
+      }
+      result.transcript = this.writer.transcript();
+      if (!result.finalText && result.transcript) {
+        result.finalText = result.transcript;
+        result.finalTextSource = "transcript_fallback";
+      }
+      if (!cancelled) {
+        await writeStoredThread(this.options.sessionRoot, "dsh", sessionId);
+      }
+      return result;
+    } finally {
+      await fs.rm(invocationDir, { recursive: true, force: true });
+    }
+  }
+
+  handleEvent(event: Record<string, unknown>, result: AgentResult): void {
+    // event is a DSH SessionEvent: {type, seq, time, data}. See
+    // packages/core/session/src/types.ts in deepseek-harness.
+    const type = String(event.type || "");
+    const data = recordValue(event.data);
+    if (type === "assistant/chunk") {
+      const chunk = recordValue(data?.chunk);
+      if (String(chunk?.type || "") === "text-delta" && typeof chunk?.text === "string" && chunk.text) {
+        this.writer.write(chunk.text);
+      }
+      return;
+    }
+    if (type === "assistant/message") {
+      const text = extractAssistantMessageText(data);
+      if (text) {
+        result.finalText = text;
+        result.finalTextSource = "provider_message";
+      }
+      return;
+    }
+    if (type === "tool/call" || type === "tool/result" || type.startsWith("tool/code-dispatch")) {
+      return;
+    }
+    if (type === "turn/start" || type === "step/start" || type === "step/end") {
+      return;
+    }
+    if (type === "turn/end") {
+      const reason = recordValue(data?.reason);
+      const kind = firstString(reason, "kind") || "completed";
+      result.stopReason = kind;
+      if (kind === "error") {
+        const errorDetail = recordValue(reason?.error);
+        const code = firstString(errorDetail, "code");
+        const message = firstString(errorDetail, "message") || "unknown dsh error";
+        this.reportedError ??= new Error(`dsh turn ended with error${code ? ` (${code})` : ""}: ${message}`);
+      }
+      return;
+    }
+    if (type.startsWith("compaction/") || type.startsWith("llm/retry")) {
+      this.writer.line(`\n[dsh:${type}]`);
+      return;
+    }
+  }
+
+  private async resolveSkillPaths(): Promise<string[]> {
+    if (!this.options.skills?.length) return [];
+    const root = path.join(this.options.home, ".agents", "skills");
+    const realRoot = await fs.realpath(root);
+    const resolved: string[] = [];
+    for (const name of this.options.skills) {
+      if (!name || path.isAbsolute(name) || name.includes("/") || name.includes("\\")) {
+        throw new Error(`invalid dsh skill name ${JSON.stringify(name)}`);
+      }
+      const skillDir = path.join(realRoot, name);
+      // Resolve SKILL.md's real target (not just the directory) so a
+      // directory that stays under root but symlinks its SKILL.md elsewhere
+      // is still caught as an escape.
+      const skillFile = await fs.realpath(path.join(skillDir, "SKILL.md"));
+      if (!isWithin(realRoot, skillFile)) throw new Error(`dsh skill ${JSON.stringify(name)} escapes the skills directory`);
+      resolved.push(await fs.realpath(skillDir));
+    }
+    return resolved;
+  }
+}
+
+function dshModelName(model: string | undefined): string {
+  const trimmed = (model || "").trim();
+  if (!trimmed) return "";
+  const separator = trimmed.lastIndexOf("/");
+  return separator >= 0 ? trimmed.slice(separator + 1) : trimmed;
+}
+
+function dshReasoningEffort(effort: RunnerOptions["effort"]): string {
+  switch (effort) {
+    case "low":
+    case "medium":
+    case "high":
+      return "high";
+    case "xhigh":
+    case "max":
+      return "max";
+    default:
+      return "";
+  }
+}
+
+// See docs/design/dsh_agent_provider_design.md §6.
+type DshMcpServerConfig =
+  | { transport: "stdio"; serverName: string; command: string; args: string[]; env: Record<string, string> }
+  | { transport: "streamable-http"; serverName: string; url: string; headers: Record<string, string> };
+
+// dsh-mcp-client requires serverName to match [A-Za-z0-9_-]{1,32} and be
+// unique across live instances. agent-compose's mcp_servers keys have no
+// such constraint (see pkg/compose/normalize.go's validateNamedMap), so
+// every name is sanitized and suffixed with a deterministic hash of the raw
+// name — this guarantees both validity and uniqueness without tracking a
+// "seen names" set across servers.
+function sanitizeDshServerName(name: string): string {
+  const hash = createHash("sha256").update(name).digest("hex").slice(0, 8);
+  const cleaned = name.replace(/[^A-Za-z0-9_-]/g, "_");
+  const base = cleaned.slice(0, 32 - 1 - hash.length) || "server";
+  return `${base}-${hash}`;
+}
+
+function toDshMcpServers(mcpConfig: Record<string, RuntimeMCPServer> | undefined): DshMcpServerConfig[] {
+  return Object.entries(mcpConfig || {}).map(([name, server]) => {
+    const serverName = sanitizeDshServerName(name);
+    if (server.type === "local") {
+      return {
+        transport: "stdio",
+        serverName,
+        command: server.command || "",
+        args: Array.isArray(server.args) ? server.args : [],
+        env: flattenEnvMap(server.env) ?? {},
+      };
+    }
+    if (server.transport === "sse") {
+      throw new Error(`dsh runner does not support MCP transport "sse" (server "${name}")`);
+    }
+    return {
+      transport: "streamable-http",
+      serverName,
+      url: server.url || "",
+      headers: flattenEnvMap(server.headers) ?? {},
+    };
+  });
+}
+
+function extractAssistantMessageText(data: Record<string, unknown> | undefined): string {
+  const message = recordValue(data?.message);
+  const content = message?.content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((block): block is Record<string, unknown> => isRecord(block) && block.type === "text")
+      .map((block) => String(block.text || ""))
+      .join("");
+  }
+  return extractText(content) || extractText(message);
+}
+
+function appendBounded(current: Buffer, next: Buffer, limit: number): Buffer {
+  if (current.length >= limit) return current;
+  return Buffer.concat([current, next.subarray(0, limit - current.length)]);
+}
+
+function truncate(value: string, limit: number): string {
+  return value.length <= limit ? value : `${value.slice(0, limit)}...[truncated]`;
+}
+
+function isWithin(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+function firstString(value: Record<string, unknown> | undefined, ...keys: string[]): string {
+  for (const key of keys) if (typeof value?.[key] === "string") return String(value[key]);
+  return "";
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

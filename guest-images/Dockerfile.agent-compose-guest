@@ -12,6 +12,9 @@ ARG GEMINI_CLI_VERSION=0.53.0
 ARG OPENCODE_VERSION=1.18.9
 ARG PI_AGENT_VERSION=0.82.1
 ARG PI_MCP_ADAPTER_VERSION=2.11.0
+# @deepseek-ai/dsh-root's engines is ^22.19.0 || >=24.0.0 — keep NODE_MAJOR at
+# or above that when bumping DSH_VERSION.
+ARG DSH_VERSION=0.1.0-rc.6
 
 FROM ${REGISTRY_MIRROR}/library/golang:${GO_VERSION}-alpine AS grpcurl-builder
 ARG GOPROXY
@@ -33,6 +36,7 @@ ARG GEMINI_CLI_VERSION
 ARG OPENCODE_VERSION
 ARG PI_AGENT_VERSION
 ARG PI_MCP_ADAPTER_VERSION
+ARG DSH_VERSION
 ARG TARGETARCH
 
 COPY --from=grpcurl-builder /out/grpcurl /usr/local/bin/grpcurl
@@ -73,16 +77,18 @@ RUN set -e; \
       "@google/gemini-cli@${GEMINI_CLI_VERSION}" \
       "opencode-ai@${OPENCODE_VERSION}" \
       "@earendil-works/pi-coding-agent@${PI_AGENT_VERSION}" \
-      "pi-mcp-adapter@${PI_MCP_ADAPTER_VERSION}" && \
+      "pi-mcp-adapter@${PI_MCP_ADAPTER_VERSION}" \
+      "@deepseek-ai/dsh@${DSH_VERSION}" && \
     npm cache clean --force && \
     rm -rf /root/.npm
 
-RUN mkdir -p /usr/local/share/jupyter/kernels/javascript /root/.codex /root/.opencode /root/.local/bin /root/.cargo/bin /workspace /data/state /data/runtime /data/logs
+RUN mkdir -p /usr/local/share/jupyter/kernels/javascript /root/.codex /root/.opencode /root/.dsh /root/.local/bin /root/.cargo/bin /workspace /data/state /data/runtime /data/logs
 
 COPY ./assets/.codex/ /root/.codex/
 COPY ./assets/.claude/ /root/.claude/
 COPY ./assets/.claude.json /root/
 COPY ./assets/.gitconfig /root/
+COPY ./assets/.dsh/ /root/.dsh/
 
 COPY runtime/jupyter-javascript-kernel/kernel.json /usr/local/share/jupyter/kernels/javascript/kernel.json
 COPY runtime/javascript /tmp/agent-compose-runtime
@@ -101,11 +107,13 @@ RUN cd /tmp/agent-compose-runtime && \
     ln -sf ../lib/node_modules/@google/gemini-cli/bundle/gemini.js /usr/bin/gemini && \
     ln -sf ../lib/node_modules/opencode-ai/bin/opencode.exe /usr/bin/opencode && \
     ln -sf ../lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js /usr/bin/pi && \
+    ln -sf ../lib/node_modules/@deepseek-ai/dsh/lib/bin.js /usr/bin/dsh && \
     mkdir -p /usr/local/share/agent-compose/pi-mcp-adapter && \
     ln -sf /usr/lib/node_modules/pi-mcp-adapter/index.ts /usr/local/share/agent-compose/pi-mcp-adapter/index.ts && \
     test -f /usr/local/share/agent-compose/pi-mcp-adapter/index.ts && \
     cd / && \
-    pi --version
+    pi --version && \
+    dsh --version
 
 RUN mkdir -p /opt/agent-compose/npm && \
     cd /tmp/agent-compose-runtime-sdk && \
@@ -126,7 +134,7 @@ ENV HOME=/root \
 RUN printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
-  'mkdir -p /root/.codex /root/.opencode /root/.local/bin /root/.cargo/bin /workspace /data/state /data/runtime /data/logs' \
+  'mkdir -p /root/.codex /root/.opencode /root/.dsh /root/.local/bin /root/.cargo/bin /workspace /data/state /data/runtime /data/logs' \
   'export HOME=${HOME:-/root}' \
   'export OPENCODE_DISABLE_AUTOUPDATE=${OPENCODE_DISABLE_AUTOUPDATE:-true}' \
   'export OPENCODE_DISABLE_MODELS_FETCH=${OPENCODE_DISABLE_MODELS_FETCH:-1}' \

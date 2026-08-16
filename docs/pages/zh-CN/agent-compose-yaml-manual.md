@@ -427,8 +427,8 @@ agents:
 | `enabled` | bool | `true` | 是否启用 Agent。禁用后定义保留但不可按正常流程运行，Scheduler 也不会启用。 |
 | `display_name` | string | 空 | Agent 的可读显示名称。 |
 | `description` | string | 空 | Agent 职责的可读说明。 |
-| `provider` | string | `codex` | Agent CLI/provider：`codex`、`claude`、`gemini`、`opencode` 或 `pi`。兼容别名会在持久化边界归一化。 |
-| `model` | string | provider/daemon 默认 | 模型名；Pi 要求使用 `<llm-provider-id>/<model-name>`；支持 `${NAME}` 插值。 |
+| `provider` | string | `codex` | Agent CLI/provider：`codex`、`claude`、`gemini`、`opencode`、`pi` 或 `dsh`。兼容别名会在持久化边界归一化。 |
+| `model` | string | provider/daemon 默认 | 模型名；Pi 和 dsh 要求使用 `<llm-provider-id>/<model-name>`；支持 `${NAME}` 插值。 |
 | `system_prompt` | string | 空 | 附加的系统提示，适合使用 YAML `|` 多行标量。 |
 | `image` | string | daemon 默认镜像 | Guest 镜像引用，也会作为 `build` 的一个输出 tag。 |
 | `build` | string/object | 无 | `agent-compose build` 使用的镜像构建配置。 |
@@ -455,9 +455,9 @@ agents:
       Focus on correctness, security, and regression risk.
 ```
 
-Provider 支持 `codex`、`claude`、`gemini`、`opencode` 和 `pi`。当前兼容归一化还接受 `claude-code` / `claude_code`、`gemini-cli` / `gemini_cli`、`open-code` / `open_code`、`pi-agent` / `pi_agent`，新配置建议使用规范名称。
+Provider 支持 `codex`、`claude`、`gemini`、`opencode`、`pi` 和 `dsh`。当前兼容归一化还接受 `claude-code` / `claude_code`、`gemini-cli` / `gemini_cli`、`open-code` / `open_code`、`pi-agent` / `pi_agent`、`deepseek` / `deepseek-harness` / `deepseek_harness`，新配置建议使用规范名称。
 
-Pi 是多模型 Agent，因此 model 必须同时标识已配置的 LLM provider 和模型，例如：
+Pi 和 dsh 是多模型 Agent，因此 model 必须同时标识已配置的 LLM provider 和模型，例如：
 
 ```yaml
 agents:
@@ -466,7 +466,7 @@ agents:
     model: openai/gpt-5.4
 ```
 
-第一个 `/` 前的部分是 agent-compose 中配置的 LLM Provider ID，后面的全部内容是发送给上游的字面量 Model ID，Model ID 本身还可以包含 `/`。Pi 的模型流量通过 sandbox runtime LLM facade 转发，上游凭据仍只保留在 daemon 中。
+第一个 `/` 前的部分是 agent-compose 中配置的 LLM Provider ID，后面的全部内容是发送给上游的字面量 Model ID，Model ID 本身还可以包含 `/`。Pi 和 dsh 的模型流量都通过 sandbox runtime LLM facade 转发，上游凭据仍只保留在 daemon 中。
 
 ### Daemon `models.json`
 

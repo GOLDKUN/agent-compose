@@ -6,6 +6,7 @@ import { readMpiContext } from "./mpi.js";
 import { normalizeProvider } from "./provider.js";
 import { ClaudeRunner } from "./runners/claude.js";
 import { CodexRunner } from "./runners/codex.js";
+import { DshRunner } from "./runners/dsh.js";
 import { GeminiRunner } from "./runners/gemini.js";
 import { OpenCodeRunner } from "./runners/opencode.js";
 import { PiRunner } from "./runners/pi.js";
@@ -86,6 +87,9 @@ export async function runPromptCommand(commandOptions: PromptCommandOptions): Pr
   }
   if (provider === "pi") {
     return await new PiRunner(options).runPrompt(promptText);
+  }
+  if (provider === "dsh") {
+    return await new DshRunner(options).runPrompt(promptText);
   }
   return await new GeminiRunner(options).runPrompt(promptText);
 }

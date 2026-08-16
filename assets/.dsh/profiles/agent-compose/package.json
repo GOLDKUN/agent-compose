@@ -1,0 +1,11 @@
+{
+  "name": "dsh-profile-agent-compose",
+  "private": true,
+  "type": "module",
+  "dependencies": {},
+  "dsh": {
+    "profile": {
+      "bundles": ["@deepseek-ai/dsh-base"]
+    }
+  }
+}

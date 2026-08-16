@@ -39,6 +39,36 @@ func TestNormalizeAgentDefinitionAcceptsPiAndRejectsUnknownProvider(t *testing.T
 	}
 }
 
+func TestNormalizeAgentKindDshAliases(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "dsh", want: "dsh"},
+		{input: " deepseek ", want: "dsh"},
+		{input: "DEEPSEEK-HARNESS", want: "dsh"},
+		{input: "deepseek_harness", want: "dsh"},
+	}
+	for _, test := range tests {
+		t.Run(test.input, func(t *testing.T) {
+			if got := NormalizeAgentKind(test.input); got != test.want {
+				t.Fatalf("NormalizeAgentKind(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeAgentDefinitionAcceptsDsh(t *testing.T) {
+	definition := AgentDefinition{ID: "dsh-agent", Name: "reviewer", Provider: "deepseek-harness", Model: " deepseek-official/deepseek-v4-flash ", ProjectID: "project-1", AgentName: "reviewer"}
+	normalized, err := NormalizeAgentDefinition(definition, false)
+	if err != nil {
+		t.Fatalf("NormalizeAgentDefinition returned error: %v", err)
+	}
+	if normalized.Provider != "dsh" || normalized.Model != "deepseek-official/deepseek-v4-flash" {
+		t.Fatalf("normalized definition = %#v", normalized)
+	}
+}
+
 func TestProjectOwnershipJSONKeepsHistoricalFieldNames(t *testing.T) {
 	payload := struct {
 		Agent     AgentDefinition  `json:"agent"`
