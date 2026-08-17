@@ -596,7 +596,7 @@ if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
     'versioned Pi coding agent install in Arch Linux guest image'
   require_regex "$archlinux_guest_source" '"pi-mcp-adapter@\$\{PI_MCP_ADAPTER_VERSION\}"' \
     'versioned Pi MCP adapter install in Arch Linux guest image'
-  require_regex "$archlinux_guest_source" 'ARG[[:space:]]+DSH_VERSION=[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+' \
+  require_regex "$archlinux_guest_source" 'ARG[[:space:]]+DSH_VERSION=[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?' \
     'pinned DSH version in Arch Linux guest image'
   require_regex "$archlinux_guest_source" '"@deepseek-ai/dsh@\$\{DSH_VERSION\}"' \
     'versioned DSH install in Arch Linux guest image'

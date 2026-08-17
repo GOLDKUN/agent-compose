@@ -402,14 +402,17 @@ describe("DshRunner", () => {
   it("keeps successful stderr diagnostics out of the transcript and final text", async () => {
     const { DshRunner } = await import("../src/runners/dsh.js");
     await withTempSession(async (root) => {
+      const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
       processState.stderr = ["MCP server startup log\n"];
 
       const result = await new DshRunner(runnerOptions(root, "", "dsh")).runPrompt("prompt");
 
+      expect(stderrWrite).toHaveBeenCalledWith("MCP server startup log\n");
       expect(result.stderr).toBe("MCP server startup log\n");
       expect(result.transcript).toBe("");
       expect(result.finalText).toBe("");
       expect(result.finalTextSource).toBe("none");
+      stderrWrite.mockRestore();
     });
   });
 
