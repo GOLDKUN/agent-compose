@@ -100,7 +100,7 @@ vi.mock("node:child_process", () => ({
     child.stderr = new EventEmitter();
     const originalOnce = child.once.bind(child);
     child.once = ((eventName: string | symbol, listener: (...args: unknown[]) => void) => {
-      if (eventName === "exit" && !childProcessState.error) {
+      if ((eventName === "exit" || eventName === "close") && !childProcessState.error) {
         queueMicrotask(() => listener(childProcessState.exitCode));
         return child;
       }
@@ -883,6 +883,78 @@ describe("runner execution", () => {
 
       await expect(new GeminiRunner(runnerOptions(root, "", "gemini")).runPrompt("prompt")).rejects.toThrow("spawn failed");
       childProcessState.error = null;
+    });
+  });
+
+  function dshSessionEventLine(sessionId: string | undefined, event: Record<string, unknown>): string {
+    return JSON.stringify({ type: "session_event", sessionId, event });
+  }
+
+  it("runs a DSH session end to end with model, effort, skill, MCP servers, and persona", async () => {
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      const skillDir = path.join(root, "home", ".agents", "skills", "review");
+      await fs.mkdir(skillDir, { recursive: true });
+      await fs.writeFile(path.join(skillDir, "SKILL.md"), "---\nname: review\n---\n");
+
+      childProcessState.error = null;
+      childProcessState.exitCode = 0;
+      childProcessState.stderrChunks = [];
+      childProcessState.stdoutLines = [
+        dshSessionEventLine(undefined, { type: "assistant/message", seq: 1, time: 1, data: { turn: 0, step: 0, message: { role: "assistant", content: [{ type: "text", text: "dsh final answer" }] } } }),
+        dshSessionEventLine(undefined, { type: "turn/end", seq: 2, time: 2, data: { turn: 0, reason: { kind: "completed" } } }),
+      ];
+
+      const result = await new DshRunner({
+        ...runnerOptions(root, "persona text", "dsh"),
+        model: "deepseek-official/org/deepseek-v4",
+        effort: "xhigh",
+        skills: ["review"],
+        mcpConfig: {
+          docs: { type: "local", command: "npx", args: ["-y", "server"], env: { TOKEN: { value: "secret" } } },
+        },
+      }).runPrompt("user prompt");
+
+      expect(result.provider).toBe("dsh");
+      expect(result.finalText).toBe("dsh final answer");
+      expect(result.stopReason).toBe("completed");
+
+      const call = childProcessState.spawnCalls.at(-1);
+      expect(call?.command).toBe("dsh");
+      const env = call?.options.env as Record<string, string>;
+      expect(env.DSH_MODEL).toBe("org/deepseek-v4");
+      expect(env.DSH_REASONING_EFFORT).toBe("max");
+      expect(env.DSH_SKILL_DIRS).toBe(await fs.realpath(skillDir));
+      const mcpServers = JSON.parse(env.DSH_MCP_SERVERS) as Array<Record<string, unknown>>;
+      expect(mcpServers[0]).toMatchObject({ transport: "stdio", command: "npx" });
+      expect(env.DSH_SYSTEM_CONTEXT_FILE).toBeTruthy();
+
+      const stored = JSON.parse(await fs.readFile(path.join(root, "state", "agents", "providers", "dsh.json"), "utf8"));
+      expect(stored.threadId).toBe(result.threadId);
+    });
+  });
+
+  it("resumes a stored DSH session and surfaces a turn/end error", async () => {
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      const providerDir = path.join(root, "state", "agents", "providers");
+      await fs.mkdir(providerDir, { recursive: true });
+      await fs.writeFile(path.join(providerDir, "dsh.json"), JSON.stringify({ provider: "dsh", threadId: "session-existing" }));
+
+      childProcessState.error = null;
+      childProcessState.exitCode = 0;
+      childProcessState.stderrChunks = [];
+      childProcessState.stdoutLines = [
+        dshSessionEventLine("session-existing", { type: "turn/end", seq: 1, time: 1, data: { turn: 0, reason: { kind: "error", error: { code: "BOOM", message: "dsh failed" } } } }),
+      ];
+
+      await expect(new DshRunner(runnerOptions(root, "", "dsh")).runPrompt("prompt"))
+        .rejects.toThrow("dsh turn ended with error (BOOM): dsh failed");
+
+      const call = childProcessState.spawnCalls.at(-1);
+      const env = call?.options.env as Record<string, string>;
+      expect(env.DSH_RESUME).toBe("1");
+      expect(env.DSH_SESSION_ID).toBe("session-existing");
     });
   });
 });
