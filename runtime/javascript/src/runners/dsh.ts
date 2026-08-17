@@ -147,9 +147,9 @@ export class DshRunner {
 
       let stderrBytes: Buffer = Buffer.alloc(0);
       child.stderr?.on("data", (chunk) => {
-        const text = String(chunk || "");
-        stderrBytes = appendBounded(stderrBytes, Buffer.from(text), maxDiagnosticBytes);
-        process.stderr.write(text);
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk || ""));
+        stderrBytes = appendBounded(stderrBytes, bytes, maxDiagnosticBytes);
+        process.stderr.write(bytes);
       });
 
       let protocolError: Error | null = null;

@@ -8,7 +8,7 @@ import { runnerOptions, withTempSession } from "./helpers.js";
 
 const processState = vi.hoisted(() => ({
   lines: [] as string[],
-  stderr: [] as string[],
+  stderr: [] as Array<string | Buffer>,
   exitCode: 0,
   error: null as Error | null,
   calls: [] as Array<{ command: string; args: string[]; options: Record<string, unknown>; systemContextFileContent: string | undefined }>,
@@ -407,11 +407,27 @@ describe("DshRunner", () => {
 
       const result = await new DshRunner(runnerOptions(root, "", "dsh")).runPrompt("prompt");
 
-      expect(stderrWrite).toHaveBeenCalledWith("MCP server startup log\n");
+      expect(stderrWrite).toHaveBeenCalledWith(Buffer.from("MCP server startup log\n"));
       expect(result.stderr).toBe("MCP server startup log\n");
       expect(result.transcript).toBe("");
       expect(result.finalText).toBe("");
       expect(result.finalTextSource).toBe("none");
+      stderrWrite.mockRestore();
+    });
+  });
+
+  it("forwards raw stderr bytes without corrupting a split UTF-8 character", async () => {
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      const multibyte = Buffer.from("好");
+      processState.stderr = [multibyte.subarray(0, 1), multibyte.subarray(1)];
+
+      const result = await new DshRunner(runnerOptions(root, "", "dsh")).runPrompt("prompt");
+
+      const forwarded = Buffer.concat(stderrWrite.mock.calls.map(([chunk]) => Buffer.from(chunk as Uint8Array)));
+      expect(forwarded).toEqual(multibyte);
+      expect(result.stderr).toBe("好");
       stderrWrite.mockRestore();
     });
   });
