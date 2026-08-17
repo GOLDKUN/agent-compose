@@ -1505,7 +1505,9 @@ func isDockerStreamClosed(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, io.EOF) || strings.Contains(strings.ToLower(err.Error()), "use of closed network connection")
+	// The attach stream is a hijacked net.Conn, so closing it surfaces as a
+	// *net.OpError wrapping net.ErrClosed rather than as a distinct error value.
+	return errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)
 }
 
 func sanitizeDockerContainerName(value string) string {

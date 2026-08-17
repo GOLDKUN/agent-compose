@@ -136,13 +136,16 @@ func IsHTTPRequestBodyTooLarge(err error) bool {
 	if errors.As(err, &maxBytesErr) {
 		return true
 	}
+	// Echo builds some binding failures into an HTTPError carrying only the
+	// message, which loses the *http.MaxBytesError the check above relies on.
+	// Comparing echo's own message is the only signal left on that path.
 	var httpErr *echo.HTTPError
 	if errors.As(err, &httpErr) &&
 		httpErr.Code == http.StatusBadRequest &&
 		httpErr.Message == "http: request body too large" {
 		return true
 	}
-	return err.Error() == "http: request body too large"
+	return false
 }
 
 func ToWorkspaceHTTPError(err error) error {
