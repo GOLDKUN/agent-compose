@@ -106,10 +106,14 @@ func (c *Client) CatalogMarkdown(ctx context.Context, capsetID string) ([]byte, 
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("octobus returned HTTP %d", resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
-	return io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, octobusHTTPError(resp.StatusCode, body)
+	}
+	return body, nil
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, target any) error {
@@ -126,11 +130,14 @@ func (c *Client) getJSON(ctx context.Context, path string, target any) error {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("octobus returned HTTP %d", resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
 	}
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(target); err != nil {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return octobusHTTPError(resp.StatusCode, body)
+	}
+	if err := json.Unmarshal(body, target); err != nil {
 		return err
 	}
 	return nil
