@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CODEX_SYSTEM_CONTEXT_HASH_VERSION, hashSystemContext } from "../src/codex-thread-resume.js";
 import { captureStdio, runnerOptions, withTempSession } from "./helpers.js";
 
@@ -120,6 +120,8 @@ vi.mock("node:child_process", () => ({
 }));
 
 describe("runner execution", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
     codexState.constructorOptions = [];
     codexState.events = [];
@@ -934,7 +936,18 @@ describe("runner execution", () => {
     });
   });
 
-  it("resumes a stored DSH session and surfaces a turn/end error", async () => {
+  it("resumes a stored DSH session, surfaces a turn/end error, and clears host-inherited DSH_* vars this run didn't set", async () => {
+    // This run configures no model/effort/skills/mcpConfig/systemContext, so
+    // it exercises every else-branch delete in dsh.ts's runPrompt at once.
+    // Stub host values first so the assertions below are deterministic —
+    // proof the delete branches ran, not that the CI environment happened
+    // not to have these vars set (see docs/design/dsh_agent_provider_design.md §3.5).
+    vi.stubEnv("DSH_MODEL", "host-leaked-model");
+    vi.stubEnv("DSH_REASONING_EFFORT", "max");
+    vi.stubEnv("DSH_SKILL_DIRS", "/host/leaked/skills");
+    vi.stubEnv("DSH_MCP_SERVERS", JSON.stringify([{ transport: "stdio", serverName: "leaked", command: "evil" }]));
+    vi.stubEnv("DSH_SYSTEM_CONTEXT_FILE", "/host/leaked/persona.txt");
+
     const { DshRunner } = await import("../src/runners/dsh.js");
     await withTempSession(async (root) => {
       const providerDir = path.join(root, "state", "agents", "providers");
@@ -955,6 +968,11 @@ describe("runner execution", () => {
       const env = call?.options.env as Record<string, string>;
       expect(env.DSH_RESUME).toBe("1");
       expect(env.DSH_SESSION_ID).toBe("session-existing");
+      expect(env).not.toHaveProperty("DSH_MODEL");
+      expect(env).not.toHaveProperty("DSH_REASONING_EFFORT");
+      expect(env).not.toHaveProperty("DSH_SKILL_DIRS");
+      expect(env).not.toHaveProperty("DSH_MCP_SERVERS");
+      expect(env).not.toHaveProperty("DSH_SYSTEM_CONTEXT_FILE");
     });
   });
 });
