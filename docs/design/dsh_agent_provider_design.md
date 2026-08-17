@@ -48,6 +48,8 @@ Env vars aren't unbounded: Linux caps a single `argv`/`envp` string at `MAX_ARG_
 | `DSH_MCP_SERVERS` | `dsh.ts` | JSON array of per-server `dsh-mcp-client` configs; consumed by `runner.js` (§6) |
 | `LLM_API_KEY`, `LLM_API_ENDPOINT` | facade config | Consumed by the `llm-deepseek` row (§4) |
 
+`env` starts from `...process.env`, so a key this run has no value for isn't automatically absent — it's whatever the host process happened to export. `DSH_SYSTEM_CONTEXT_FILE` and `DSH_MCP_SERVERS` are explicitly `delete`d when this run has no persona/MCP servers, rather than left conditionally-set, so a host-inherited value can't leak through as this run's persona file or server list.
+
 ## 4. LLM facade routing
 
 ### 4.1 Facade token and wire protocol
