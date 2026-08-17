@@ -456,6 +456,8 @@ func DefaultFileConfigJSON(config *appconfig.Config, workspaceID string) string 
 	if err != nil {
 		root = filepath.Join(config.DataRoot, "workspaces", strings.TrimSpace(workspaceID), FileWorkspaceContentDirName)
 	}
+	// FileWorkspaceConfig holds a single string, so this cannot fail; the empty
+	// object keeps callers parsing valid JSON if that ever stops being true.
 	payload, err := json.Marshal(FileWorkspaceConfig{Root: root})
 	if err != nil {
 		return "{}"
