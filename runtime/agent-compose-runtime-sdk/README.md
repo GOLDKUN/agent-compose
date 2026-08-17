@@ -175,12 +175,12 @@ Options:
 
 | Option | Description |
 | --- | --- |
-| `provider` | Agent provider. One of `codex`, `claude`, `gemini`, `opencode`, or `pi`. Defaults to `codex`. |
+| `provider` | Agent provider. One of `codex`, `claude`, `gemini`, `opencode`, `pi`, or `dsh`. Defaults to `codex`. |
 | `stateRoot` | Agent state root directory. Defaults to `runtime.paths.stateRoot`. |
 | `workspace` | Workspace path. Defaults to `runtime.paths.workspace`. |
 | `home` | Home directory. Defaults to `runtime.paths.home`. |
 | `timeoutMs` | Terminates the agent bridge after this number of milliseconds. |
-| `outputSchema` | Zod schema or JSON Schema object. When set, the returned `json` field is parsed from `finalText`. Codex and Claude support this; Gemini currently throws an unsupported error when schema-based output is unavailable. |
+| `outputSchema` | Zod schema or JSON Schema object. When set, the returned `json` field is parsed from `finalText`. Codex and Claude support this; Gemini, OpenCode, Pi, and DSH currently throw an unsupported error when schema-based output is unavailable. |
 
 Return value:
 
