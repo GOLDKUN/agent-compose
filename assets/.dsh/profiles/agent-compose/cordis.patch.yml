@@ -18,17 +18,15 @@
     provider: deepseek-official
     model: !!js process.env.DSH_MODEL || 'deepseek-v4-flash'
 
-# agent-compose assembles persona/skills-catalog/workspace context host-side.
-# Read directly from the env var, not a file: the Loader's `!!js` sandbox is
-# `new Function('ctx', 'expr', 'with (ctx) { return eval(expr) }')`, which has
-# no `require` in scope under the real ESM `dsh` binary (verified against a
-# live boot — `require('node:fs')` throws ReferenceError there even though
-# dump-config's static render never catches it). process.env survives an
-# execve-style spawn env with embedded newlines intact (no shell involved),
-# so this doesn't need a temp file the way a large prompt body does.
-- id: system-prompt
-  config:
-    persona: !!js process.env.DSH_SYSTEM_CONTEXT || ''
+# agent-compose assembles persona/skills-catalog/workspace context host-side,
+# but doesn't patch this row's `persona` config to read it: the Loader's
+# `!!js` sandbox (`new Function('ctx', 'expr', 'with (ctx) { return eval(expr) }')`)
+# has no `require` in scope under the real ESM `dsh` binary, so it can't
+# `readFileSync` a temp file the way runner.js can, and passing a large
+# system context as a single env var risks Linux's exec() argument-length
+# limit. Left at its dsh-base default (empty persona); agent-compose-runner
+# injects the persona itself as an agent-scoped section instead (see
+# docs/design/dsh_agent_provider_design.md §3.2).
 
 # Each sandbox gets its own durable session store on the agent-compose state
 # volume, not dsh-base's default $DSH_HOME/sessions.
@@ -69,3 +67,4 @@
       config:
         promptFile: !!js process.env.DSH_PROMPT_FILE
         sessionId: !!js process.env.DSH_SESSION_ID ?? undefined
+        systemContextFile: !!js process.env.DSH_SYSTEM_CONTEXT_FILE ?? undefined

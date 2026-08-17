@@ -22,9 +22,9 @@ This file ships as a repo asset (`assets/.dsh/...`), baked into the guest image 
 
 ### 3.2 Parameterization via spawn-time environment
 
-`cordis.patch.yml` reads every per-run value with `!!js process.env.X` (a `new Function('ctx','expr','with(ctx){return eval(expr)}')` sandbox with no `require`). That constrains parameterization to environment variables — no temp-file indirection, since the eval sandbox can't `readFileSync`. A `spawn()`-passed env object survives embedded newlines untouched (no shell involved), which is what lets `DSH_SYSTEM_CONTEXT` carry multi-line system-prompt text safely.
+`cordis.patch.yml` reads most per-run values with `!!js process.env.X` (a `new Function('ctx','expr','with(ctx){return eval(expr)}')` sandbox with no `require`), which constrains that path to environment variables — no temp-file indirection, since the eval sandbox can't `readFileSync`. `runner.js`, by contrast, is real ESM with full `fs` access, so anything it (rather than a static YAML row) consumes can go through a temp file instead — see §7 for why `DSH_SYSTEM_CONTEXT` does.
 
-Env vars aren't unbounded, though: Linux caps a single `argv`/`envp` string at `MAX_ARG_STRLEN` (128 KiB). `dsh.ts` checks `DSH_SYSTEM_CONTEXT` and `DSH_MCP_SERVERS` against that limit before spawning and fails with a named, actionable error rather than letting the OS reject the `exec()` call as an opaque `E2BIG`.
+Env vars aren't unbounded: Linux caps a single `argv`/`envp` string at `MAX_ARG_STRLEN` (128 KiB). `dsh.ts` checks `DSH_MCP_SERVERS` against that limit before spawning and fails with a named, actionable error rather than letting the OS reject the `exec()` call as an opaque `E2BIG`.
 
 ### 3.3 Create vs. resume
 
@@ -43,7 +43,7 @@ Env vars aren't unbounded, though: Linux caps a single `argv`/`envp` string at `
 | `DSH_PERMISSION_MODE` | facade config + `dsh.ts` | Always `danger-full-access`; guest sandboxing is the agent-compose sandbox, not a nested DSH one (§5.3/§5.5) |
 | `DSH_SESSION_ROOT`, `DSH_SESSION_ID`, `DSH_RESUME` | `dsh.ts` | Session persistence and resume (§3.3) |
 | `DSH_PROMPT_FILE` | `dsh.ts` | Path to the prompt text file `runner.js` reads |
-| `DSH_SYSTEM_CONTEXT` | `dsh.ts` | Persona text, read directly by `cordis.patch.yml`'s `system-prompt` row (§3.2) |
+| `DSH_SYSTEM_CONTEXT_FILE` | `dsh.ts` | Path to the persona text file `runner.js` reads and injects (§7); unset when there's no system context |
 | `DSH_SKILL_DIRS` | `dsh.ts` | Colon-joined resolved skill directories; consumed by the `skill-filesystem` row's `customSkillDirs` (§5.1) |
 | `DSH_MCP_SERVERS` | `dsh.ts` | JSON array of per-server `dsh-mcp-client` configs; consumed by `runner.js` (§6) |
 | `LLM_API_KEY`, `LLM_API_ENDPOINT` | facade config | Consumed by the `llm-deepseek` row (§4) |
@@ -89,3 +89,15 @@ Because `cordis.patch.yml` is static and the server list is a dynamic 0..N value
 `dsh.ts`'s `toDshMcpServers()` maps agent-compose's generic `RuntimeMCPServer` (`type: "local"|"remote"`) onto `dsh-mcp-client`'s shape (`transport: "stdio"|"streamable-http"`): `local` → `stdio`, `remote`+`http` → `streamable-http`. `remote`+`sse` has no `dsh-mcp-client` equivalent and is rejected fail-fast, naming the offending server. Server names are sanitized to `dsh-mcp-client`'s `[A-Za-z0-9_-]{1,32}` requirement and suffixed with a deterministic hash of the raw name, since agent-compose's own name validation doesn't guarantee that charset.
 
 **Known limitation:** `dsh-mcp-client`'s `StdioClientTransport` construction doesn't pass a `stderr` option, so the MCP SDK defaults the spawned server's stderr to `'inherit'` — it lands directly in `dsh`'s own stderr, indistinguishable from DSH's own diagnostics. `dsh.ts`'s `child.stderr` handler treats all of `dsh`'s stderr as transcript text, so any stdio MCP server that logs to its own stderr on startup (a common convention) will have that text appear in the agent's transcript. There is no `dsh-mcp-client` config option to suppress this today; fixing it requires an upstream change.
+
+## 7. Persona injection
+
+`cordis.patch.yml`'s `system-prompt` row is left at its `dsh-base` default (empty persona) rather than patched to read an env var, for the same env-var-size reason as §3.2/§6: a large persona risks the 128 KiB exec() limit, and unlike `DSH_MCP_SERVERS` there's no natural size cap to check against.
+
+Instead `dsh.ts` writes the system context to a temp file and passes its path as `DSH_SYSTEM_CONTEXT_FILE` (config field `systemContextFile`, since `runner.js` — real ESM — can read it directly, unlike the static YAML row's `!!js` sandbox). After `agents.create()`/`agents.resume()` resolves an `agent`, `runner.js` reads that file and calls:
+
+```js
+agent.ctx.systemPrompt.section({ name: PERSONA_SECTION, order: PERSONA_ORDER, text });
+```
+
+`PERSONA_SECTION` (`"deployment:persona"`) and `PERSONA_ORDER` (`0`) are exported by `@deepseek-ai/dsh-system-prompt` specifically for this: "an agent preset shadows the deployment's persona with its own — and both sides naming the same section is what makes the replacement work rather than duplicate" (the package's own doc comment). `agent.ctx` is agent-scoped, so this can't collide with the (empty, dropped-at-render) global persona section the static row would otherwise own. This must happen before `agent.followup()` fires the first turn — the same ordering constraint MCP registration has (§6) — and does, since it runs synchronously after agent creation in the same function.

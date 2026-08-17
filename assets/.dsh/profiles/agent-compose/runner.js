@@ -16,6 +16,7 @@ import fs from 'node:fs/promises';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import * as dshMcpClient from '@deepseek-ai/dsh-mcp-client';
 import { SessionId } from '@deepseek-ai/dsh-session';
+import { PERSONA_ORDER, PERSONA_SECTION } from '@deepseek-ai/dsh-system-prompt';
 import z from '@deepseek-ai/schemastery';
 
 export const name = 'agent-compose-runner';
@@ -24,6 +25,7 @@ export const inject = ['agents', 'sessions', 'agentDefaultModel'];
 export const Config = z.object({
   promptFile: z.string().required(),
   sessionId: z.string(),
+  systemContextFile: z.string(),
 });
 
 function writeSessionEventLine(sessionId, event) {
@@ -44,6 +46,19 @@ async function registerMcpServers(ctx) {
   if (!raw) return;
   const servers = JSON.parse(raw);
   await Promise.all(servers.map((server) => ctx.plugin(dshMcpClient, server)));
+}
+
+// PERSONA_SECTION/PERSONA_ORDER are exported by dsh-system-prompt specifically
+// so a composition can shadow the deployment persona per-agent instead of
+// duplicating the slot ("an agent preset shadows the deployment's persona
+// with its own" — dsh-system-prompt's own doc comment). agent.ctx is
+// agent-scoped, so this can't collide with the (now-empty) global persona
+// default the cordis.patch.yml `system-prompt` row leaves in place. See
+// docs/design/dsh_agent_provider_design.md §3.2.
+async function injectPersona(agent, config) {
+  if (!config.systemContextFile) return;
+  const text = await fs.readFile(config.systemContextFile, 'utf8');
+  agent.ctx.systemPrompt.section({ name: PERSONA_SECTION, order: PERSONA_ORDER, text });
 }
 
 /** Request a bounded process exit once the tree disposes (mirrors dsh-headless / dsh-cc-tui). */
@@ -103,6 +118,8 @@ async function run(ctx, config) {
     });
     agent = created.agent;
   }
+
+  await injectPersona(agent, config);
 
   const sessionId = agent.session.id;
   const unsubscribe = ctx.on('session/event', (session, event) => {

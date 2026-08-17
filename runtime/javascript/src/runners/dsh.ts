@@ -14,11 +14,10 @@ import { waitForChildExit } from "../child-process.js";
 const maxDiagnosticBytes = 64 * 1024;
 
 // Linux caps a single argv/envp string at MAX_ARG_STRLEN (PAGE_SIZE * 32,
-// conventionally 128 KiB); exceeding it fails spawn() with E2BIG. dsh.ts
-// passes large, unbounded-size values (system context, MCP server configs)
-// as single env vars rather than temp files (see the DSH_SYSTEM_CONTEXT
-// comment below for why), so check proactively and fail with an actionable
-// message instead of letting the OS reject the exec() call opaquely.
+// conventionally 128 KiB); exceeding it fails spawn() with E2BIG. DSH_MCP_SERVERS
+// is still passed as a single env var (unlike DSH_SYSTEM_CONTEXT, which now
+// goes through a temp file — see runPrompt), so check proactively and fail
+// with an actionable message instead of letting the OS reject exec() opaquely.
 const maxExecEnvValueBytes = 128 * 1024;
 
 function assertEnvValueWithinExecLimit(name: string, value: string): void {
@@ -70,24 +69,30 @@ export class DshRunner {
       const promptFile = path.join(invocationDir, "prompt.txt");
       await fs.writeFile(promptFile, promptText, { encoding: "utf8", mode: 0o600 });
 
+      // Not an env var: runner.js is real ESM (unlike cordis.patch.yml's
+      // `!!js` eval sandbox, which has no `require`), so it can read this
+      // file directly and inject it as an agent-scoped persona section via
+      // `agent.ctx.systemPrompt.section()` — see docs/design/dsh_agent_provider_design.md
+      // §3.2. Avoids the exec() argument-length limit a large system context
+      // would risk as a single env var (§3.5).
+      const systemContext = this.options.systemContext || "";
+      let systemContextFile = "";
+      if (systemContext) {
+        systemContextFile = path.join(invocationDir, "system-context.txt");
+        await fs.writeFile(systemContextFile, systemContext, { encoding: "utf8", mode: 0o600 });
+      }
+
       const env: NodeJS.ProcessEnv = {
         ...process.env,
         HOME: this.options.home,
         DSH_PERMISSION_MODE: "danger-full-access",
         DSH_SESSION_ROOT: sessionRoot,
         DSH_PROMPT_FILE: promptFile,
-        // Not a temp file: the Loader's `!!js` eval sandbox
-        // (new Function('ctx','expr','with(ctx){return eval(expr)}')) has no
-        // `require` in scope under the real ESM dsh binary, so
-        // `system-prompt.persona` reads this env var directly instead of
-        // `require('node:fs').readFileSync(...)` (verified against a live
-        // boot; the prior file-based approach threw ReferenceError). A
-        // spawn()-passed env object survives embedded newlines untouched
-        // (no shell involved), so this is safe for multi-line context.
-        DSH_SYSTEM_CONTEXT: this.options.systemContext || "",
         DSH_SESSION_ID: sessionId,
       };
-      assertEnvValueWithinExecLimit("DSH_SYSTEM_CONTEXT", env.DSH_SYSTEM_CONTEXT as string);
+      if (systemContextFile) {
+        env.DSH_SYSTEM_CONTEXT_FILE = systemContextFile;
+      }
       if (resume) {
         env.DSH_RESUME = "1";
       }

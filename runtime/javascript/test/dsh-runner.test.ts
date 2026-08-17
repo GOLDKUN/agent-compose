@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -10,12 +11,16 @@ const processState = vi.hoisted(() => ({
   stderr: [] as string[],
   exitCode: 0,
   error: null as Error | null,
-  calls: [] as Array<{ command: string; args: string[]; options: Record<string, unknown> }>,
+  calls: [] as Array<{ command: string; args: string[]; options: Record<string, unknown>; systemContextFileContent: string | undefined }>,
 }));
 
 vi.mock("node:child_process", () => ({
   spawn: vi.fn((command: string, args: string[], options: Record<string, unknown>) => {
-    processState.calls.push({ command, args, options });
+    // Read eagerly: dsh.ts removes its temp dir once the process "exits" below,
+    // so the file is gone by the time a test's `await runPrompt(...)` resolves.
+    const systemContextFile = (options.env as Record<string, string> | undefined)?.DSH_SYSTEM_CONTEXT_FILE;
+    const systemContextFileContent = systemContextFile ? readFileSync(systemContextFile, "utf8") : undefined;
+    processState.calls.push({ command, args, options, systemContextFileContent });
     const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: EventEmitter };
     child.stdout = Readable.from(processState.lines.map((line) => `${line}\n`));
     child.stderr = new EventEmitter();
@@ -105,8 +110,11 @@ describe("DshRunner", () => {
       expect(env.DSH_SESSION_ROOT).toBe(path.join(root, "state", "agents", "providers", "dsh", "sessions"));
       expect(env.DSH_SESSION_ID).toBe(result.threadId);
       expect(env.DSH_RESUME).toBeUndefined();
-      expect(env.DSH_SYSTEM_CONTEXT).toBe("system context");
+      expect(env.DSH_SYSTEM_CONTEXT).toBeUndefined();
+      expect(env.DSH_SYSTEM_CONTEXT_FILE).toBe(path.join(path.dirname(env.DSH_PROMPT_FILE), "system-context.txt"));
+      expect(call.systemContextFileContent).toBe("system context");
       await expect(fs.access(env.DSH_PROMPT_FILE)).rejects.toThrow();
+      await expect(fs.access(env.DSH_SYSTEM_CONTEXT_FILE)).rejects.toThrow();
 
       const storedThread = JSON.parse(await fs.readFile(path.join(root, "state", "agents", "providers", "dsh.json"), "utf8"));
       expect(storedThread.threadId).toBe(result.threadId);
@@ -243,13 +251,23 @@ describe("DshRunner", () => {
     });
   });
 
-  it("fails fast when DSH_SYSTEM_CONTEXT would exceed the exec() argument limit", async () => {
+  it("carries a system context well past the exec() env-var limit, since it now goes through a file", async () => {
     const { DshRunner } = await import("../src/runners/dsh.js");
     await withTempSession(async (root) => {
       const oversized = "x".repeat(129 * 1024);
-      await expect(new DshRunner(runnerOptions(root, oversized, "dsh")).runPrompt("prompt"))
-        .rejects.toThrow(/DSH_SYSTEM_CONTEXT is \d+ bytes, exceeding the \d+-byte exec\(\) argument limit/);
-      expect(processState.calls).toHaveLength(0);
+      await new DshRunner(runnerOptions(root, oversized, "dsh")).runPrompt("prompt");
+      const env = processState.calls[0].options.env as Record<string, string>;
+      expect(env.DSH_SYSTEM_CONTEXT).toBeUndefined();
+      expect(processState.calls[0].systemContextFileContent).toBe(oversized);
+    });
+  });
+
+  it("does not set DSH_SYSTEM_CONTEXT_FILE when there is no system context", async () => {
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      await new DshRunner(runnerOptions(root, "", "dsh")).runPrompt("prompt");
+      const env = processState.calls[0].options.env as Record<string, string>;
+      expect(env.DSH_SYSTEM_CONTEXT_FILE).toBeUndefined();
     });
   });
 
