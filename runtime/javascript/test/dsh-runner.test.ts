@@ -271,6 +271,26 @@ describe("DshRunner", () => {
     });
   });
 
+  it("clears a host-inherited DSH_SYSTEM_CONTEXT_FILE when this run has no system context", async () => {
+    vi.stubEnv("DSH_SYSTEM_CONTEXT_FILE", "/host/leaked/persona.txt");
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      await new DshRunner(runnerOptions(root, "", "dsh")).runPrompt("prompt");
+      const env = processState.calls[0].options.env as Record<string, string>;
+      expect(env.DSH_SYSTEM_CONTEXT_FILE).toBeUndefined();
+    });
+  });
+
+  it("clears a host-inherited DSH_MCP_SERVERS when this run has no MCP servers", async () => {
+    vi.stubEnv("DSH_MCP_SERVERS", JSON.stringify([{ transport: "stdio", serverName: "leaked", command: "evil" }]));
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      await new DshRunner(runnerOptions(root, "", "dsh")).runPrompt("prompt");
+      const env = processState.calls[0].options.env as Record<string, string>;
+      expect(env.DSH_MCP_SERVERS).toBeUndefined();
+    });
+  });
+
   it("fails fast when DSH_MCP_SERVERS would exceed the exec() argument limit", async () => {
     const { DshRunner } = await import("../src/runners/dsh.js");
     await withTempSession(async (root) => {

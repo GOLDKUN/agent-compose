@@ -90,8 +90,15 @@ export class DshRunner {
         DSH_PROMPT_FILE: promptFile,
         DSH_SESSION_ID: sessionId,
       };
+      // env starts from ...process.env (line 86), so an unset key here isn't
+      // "absent" — it's whatever the host process happened to have exported.
+      // Explicitly clear rather than conditionally set, so a run with no
+      // system context can't inherit a stale/host DSH_SYSTEM_CONTEXT_FILE and
+      // have runner.js inject an unrelated file's contents as the persona.
       if (systemContextFile) {
         env.DSH_SYSTEM_CONTEXT_FILE = systemContextFile;
+      } else {
+        delete env.DSH_SYSTEM_CONTEXT_FILE;
       }
       if (resume) {
         env.DSH_RESUME = "1";
@@ -104,10 +111,15 @@ export class DshRunner {
       if (effort) {
         env.DSH_REASONING_EFFORT = effort;
       }
+      // Same reasoning as DSH_SYSTEM_CONTEXT_FILE above: clear explicitly so
+      // a run with no MCP servers can't inherit a stale/host DSH_MCP_SERVERS
+      // and have runner.js register servers this run never configured.
       if (mcpServers.length > 0) {
         const mcpServersJson = JSON.stringify(mcpServers);
         assertEnvValueWithinExecLimit("DSH_MCP_SERVERS", mcpServersJson);
         env.DSH_MCP_SERVERS = mcpServersJson;
+      } else {
+        delete env.DSH_MCP_SERVERS;
       }
       const skillDirs = await this.resolveSkillPaths();
       if (skillDirs.length > 0) {
