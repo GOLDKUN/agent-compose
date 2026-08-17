@@ -216,6 +216,7 @@ func runtimeMountEntries(config *appconfig.Config) []logicalRuntimeMountEntry {
 		{sandboxPath: "home/.claude", guestPath: filepath.Join(config.GuestHomePath, ".claude"), directoryOnlyExposure: directoryOnlyExposureSymlink},
 		{sandboxPath: "home/.opencode", guestPath: filepath.Join(config.GuestHomePath, ".opencode"), directoryOnlyExposure: directoryOnlyExposureSymlink},
 		{sandboxPath: "home/.pi", guestPath: filepath.Join(config.GuestHomePath, ".pi"), directoryOnlyExposure: directoryOnlyExposureSymlink},
+		{sandboxPath: "home/.dsh", guestPath: filepath.Join(config.GuestHomePath, ".dsh"), directoryOnlyExposure: directoryOnlyExposureSymlink},
 		{sandboxPath: "home/.claude.json", guestPath: filepath.Join(config.GuestHomePath, ".claude.json"), isFile: true, directoryOnlyExposure: directoryOnlyExposureSymlink},
 		{sandboxPath: "home/.gitconfig", guestPath: filepath.Join(config.GuestHomePath, ".gitconfig"), isFile: true, directoryOnlyExposure: directoryOnlyExposureSymlink},
 		{sandboxPath: "home/.gemini", guestPath: filepath.Join(config.GuestHomePath, ".gemini"), directoryOnlyExposure: directoryOnlyExposureSymlink},
@@ -310,7 +311,7 @@ func initializeSandboxHomeDefaults(session *Sandbox) error {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		return fmt.Errorf("create sandbox home: %w", err)
 	}
-	for _, item := range []string{".codex", ".claude", ".claude.json", ".gitconfig"} {
+	for _, item := range []string{".codex", ".claude", ".claude.json", ".gitconfig", ".dsh"} {
 		target := filepath.Join(home, item)
 		if _, err := os.Stat(target); err == nil {
 			continue

@@ -1,4 +1,4 @@
-export type Provider = "codex" | "claude" | "gemini" | "opencode" | "pi";
+export type Provider = "codex" | "claude" | "gemini" | "opencode" | "pi" | "dsh";
 export type RuntimeJsonSchema = Record<string, unknown>;
 export type FinalTextSource = "none" | "provider_message" | "transcript_fallback";
 

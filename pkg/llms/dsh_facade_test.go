@@ -1,0 +1,151 @@
+package llms
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
+)
+
+func TestSplitDshModel(t *testing.T) {
+	provider, model, err := SplitDshModel(" custom/model/variant ")
+	if err != nil || provider != "custom" || model != "model/variant" {
+		t.Fatalf("SplitDshModel provider=%q model=%q err=%v", provider, model, err)
+	}
+	for _, invalid := range []string{"", "model", "/model", "provider/", " / "} {
+		if _, _, err := SplitDshModel(invalid); err == nil {
+			t.Fatalf("SplitDshModel(%q) succeeded", invalid)
+		}
+	}
+}
+
+func TestEnsureDshFacadeConfigBindsConfiguredProviderToken(t *testing.T) {
+	isolateLLMEnv(t)
+	store := newDshFacadeTestStore()
+	store.providers = []Provider{{
+		ID: "deepseek-catalog", ProviderType: ProviderFamilyOpenAI,
+		DefaultWireAPI: APIProtocolResponses, BaseURL: "https://deepseek.test", APIKey: "secret", Enabled: true,
+	}}
+	store.models = []Model{{ID: "model-id", Name: "org/deepseek-v4", Enabled: true}}
+	store.wire["deepseek-catalog\x00model-id"] = APIProtocolResponses
+
+	env, err := EnsureDshFacadeConfig(
+		context.Background(),
+		&appconfig.Config{RuntimeBaseURL: "http://runtime.test/base/"},
+		store,
+		&domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
+		"deepseek-catalog/org/deepseek-v4", "agent", "run-1",
+	)
+	if err != nil {
+		t.Fatalf("EnsureDshFacadeConfig returned error: %v", err)
+	}
+	if env["DSH_MODEL"] != "org/deepseek-v4" || env["LLM_API_PROTOCOL"] != APIProtocolChatCompletions {
+		t.Fatalf("DSH environment = %#v", env)
+	}
+	if env["LLM_API_ENDPOINT"] != "http://runtime.test/base/api/runtime/sandboxes/sandbox-1/llm/openai/v1" {
+		t.Fatalf("LLM_API_ENDPOINT = %q", env["LLM_API_ENDPOINT"])
+	}
+	if env["AGENT_COMPOSE_SANDBOX_TOKEN"] == "" || env["LLM_API_KEY"] != env["AGENT_COMPOSE_SANDBOX_TOKEN"] {
+		t.Fatalf("facade token environment = %#v", env)
+	}
+	if len(store.savedTokens) != 1 {
+		t.Fatalf("saved token count = %d", len(store.savedTokens))
+	}
+	token := store.savedTokens[0]
+	if token.SandboxID != "sandbox-1" || token.Model != "org/deepseek-v4" || token.ProviderID != "deepseek-catalog" ||
+		token.WireAPI != APIProtocolChatCompletions || token.Source != "agent" || token.RunID != "run-1" {
+		t.Fatalf("saved token = %#v", token)
+	}
+}
+
+func TestEnsureDshFacadeConfigUsesOpenAIFamilyAndPropagatesSaveFailure(t *testing.T) {
+	isolateLLMEnv(t)
+	store := newDshFacadeTestStore()
+	store.providers = []Provider{{
+		ID: ProviderIDDefaultOpenAI, ProviderType: ProviderFamilyOpenAI,
+		DefaultWireAPI: APIProtocolChatCompletions, BaseURL: "https://openai.test", APIKey: "secret", Enabled: true,
+	}}
+	store.models = []Model{{ID: "deepseek-v4", Name: "deepseek-v4", Enabled: true}}
+	store.wire[ProviderIDDefaultOpenAI+"\x00deepseek-v4"] = APIProtocolChatCompletions
+	store.saveErr = errors.New("save token failed")
+
+	_, err := EnsureDshFacadeConfig(
+		context.Background(),
+		&appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
+		store,
+		&domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
+		"openai/deepseek-v4", "scheduler", "run-2",
+	)
+	if !errors.Is(err, store.saveErr) {
+		t.Fatalf("EnsureDshFacadeConfig error = %v", err)
+	}
+}
+
+func TestEnsureDshFacadeConfigUsesSessionEnvProvider(t *testing.T) {
+	isolateLLMEnv(t)
+	store := newDshFacadeTestStore()
+	sandbox := &domain.Sandbox{
+		Summary: domain.SandboxSummary{ID: "sandbox-env"},
+		ProviderEnvItems: []domain.SandboxEnvVar{
+			{Name: "LLM_API_ENDPOINT", Value: "https://session.test/v1"},
+			{Name: "LLM_API_KEY", Value: "session-key", Secret: true},
+			{Name: "LLM_API_PROTOCOL", Value: APIProtocolResponses},
+		},
+	}
+
+	env, err := EnsureDshFacadeConfig(
+		context.Background(),
+		&appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
+		store,
+		sandbox,
+		"ignored-provider/org/deepseek-v4", "agent", "run-env",
+	)
+	if err != nil {
+		t.Fatalf("EnsureDshFacadeConfig returned error: %v", err)
+	}
+	wantProviderID := SessionEnvProviderID("sandbox-env", ProviderFamilyOpenAI)
+	if len(store.savedTokens) != 1 || store.savedTokens[0].ProviderID != wantProviderID {
+		t.Fatalf("saved tokens = %#v, want session provider %q", store.savedTokens, wantProviderID)
+	}
+	if store.savedTokens[0].Model != "org/deepseek-v4" || store.savedTokens[0].WireAPI != APIProtocolChatCompletions {
+		t.Fatalf("saved token = %#v", store.savedTokens[0])
+	}
+	if env["DSH_MODEL"] != "org/deepseek-v4" {
+		t.Fatalf("DSH_MODEL = %q", env["DSH_MODEL"])
+	}
+}
+
+func TestEnsureDshFacadeConfigRejectsUnknownCustomProvider(t *testing.T) {
+	isolateLLMEnv(t)
+	_, err := EnsureDshFacadeConfig(
+		context.Background(),
+		&appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
+		newDshFacadeTestStore(),
+		&domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
+		"unconfigured/deepseek-v4", "agent", "run-1",
+	)
+	if err == nil || !strings.Contains(err.Error(), "is not configured") {
+		t.Fatalf("EnsureDshFacadeConfig error = %v", err)
+	}
+}
+
+type dshFacadeTestStore struct {
+	*resolverCoverageStore
+	savedTokens []FacadeToken
+	saveErr     error
+}
+
+func newDshFacadeTestStore() *dshFacadeTestStore {
+	return &dshFacadeTestStore{resolverCoverageStore: newResolverCoverageStore()}
+}
+
+func (s *dshFacadeTestStore) SaveLLMFacadeToken(_ context.Context, token FacadeToken) error {
+	if s.saveErr != nil {
+		return s.saveErr
+	}
+	s.savedTokens = append(s.savedTokens, token)
+	return nil
+}

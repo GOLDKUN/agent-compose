@@ -592,6 +592,30 @@ func TestAgentRunnerPrepareManagedMCPConfigForProviders(t *testing.T) {
 		}
 	})
 
+	t.Run("dsh writes only unified state config", func(t *testing.T) {
+		root := t.TempDir()
+		session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+		payload, err := json.Marshal(map[string]any{
+			"mcp_servers": map[string]any{
+				"filesystem": map[string]any{"type": "local", "command": "npx", "args": []string{"-y", "server"}},
+			},
+		})
+		if err != nil {
+			t.Fatalf("Marshal returned error: %v", err)
+		}
+		definition := &domain.AgentDefinition{ConfigJSON: string(payload)}
+		if err := prepareAgentMCPConfig(session, "dsh", definition); err != nil {
+			t.Fatalf("prepareAgentMCPConfig returned error: %v", err)
+		}
+		stateConfig, err := os.ReadFile(execution.HostAgentMCPConfigPath(session))
+		if err != nil || !strings.Contains(string(stateConfig), `"filesystem"`) {
+			t.Fatalf("state mcp config=%q err=%v", string(stateConfig), err)
+		}
+		if _, err := os.Stat(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")); !os.IsNotExist(err) {
+			t.Fatalf("unexpected codex config stat err=%v", err)
+		}
+	})
+
 	t.Run("missing agent clears stale provider config", func(t *testing.T) {
 		root := t.TempDir()
 		session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}

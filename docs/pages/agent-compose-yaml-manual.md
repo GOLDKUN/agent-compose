@@ -426,8 +426,8 @@ agents:
 | `enabled` | bool | `true` | Whether the Agent is enabled. A disabled definition remains stored but cannot run normally, and its scheduler is not enabled. |
 | `display_name` | string | Empty | Human-readable agent label. |
 | `description` | string | Empty | Human-readable explanation of the agent's role. |
-| `provider` | string | `codex` | Agent provider: `codex`, `claude`, `gemini`, `opencode`, or `pi`. Compatibility aliases are normalized at persistence boundaries. |
-| `model` | string | Provider/daemon default | Model name. Pi requires `<llm-provider-id>/<model-name>`. Supports `${NAME}` interpolation. |
+| `provider` | string | `codex` | Agent provider: `codex`, `claude`, `gemini`, `opencode`, `pi`, or `dsh`. Compatibility aliases are normalized at persistence boundaries. |
+| `model` | string | Provider/daemon default | Model name. Pi and dsh require `<llm-provider-id>/<model-name>`. Supports `${NAME}` interpolation. |
 | `system_prompt` | string | Empty | Additional system instructions; YAML block scalars are recommended for multiline text. |
 | `image` | string | Daemon default image | Guest image reference and an output tag when `build` is used. |
 | `build` | string/object | None | Image build configuration used by `agent-compose build`. |
@@ -454,9 +454,9 @@ agents:
       Focus on correctness, security, and regression risk.
 ```
 
-Canonical providers are `codex`, `claude`, `gemini`, `opencode`, and `pi`. Compatibility normalization also accepts `claude-code` / `claude_code`, `gemini-cli` / `gemini_cli`, `open-code` / `open_code`, and `pi-agent` / `pi_agent`; new files should use canonical names.
+Canonical providers are `codex`, `claude`, `gemini`, `opencode`, `pi`, and `dsh`. Compatibility normalization also accepts `claude-code` / `claude_code`, `gemini-cli` / `gemini_cli`, `open-code` / `open_code`, `pi-agent` / `pi_agent`, and `deepseek` / `deepseek-harness` / `deepseek_harness`; new files should use canonical names.
 
-Pi is a multi-model agent, so its model must identify both the configured LLM provider and model, for example:
+Pi and dsh are multi-model agents, so their model must identify both the configured LLM provider and model, for example:
 
 ```yaml
 agents:
@@ -465,7 +465,7 @@ agents:
     model: openai/gpt-5.4
 ```
 
-The part before the first slash is an LLM provider ID configured in agent-compose; the entire remainder is the literal upstream model ID and may contain additional slashes. Pi model traffic is routed through the sandbox runtime LLM facade, so upstream credentials remain on the daemon.
+The part before the first slash is an LLM provider ID configured in agent-compose; the entire remainder is the literal upstream model ID and may contain additional slashes. Pi and dsh model traffic is routed through the sandbox runtime LLM facade, so upstream credentials remain on the daemon.
 
 ### Daemon `models.json`
 

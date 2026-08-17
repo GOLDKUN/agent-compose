@@ -72,7 +72,7 @@ func ResolveAgentModel(ctx context.Context, config *appconfig.Config, store Agen
 	providerFamily := agentProviderFamily(provider)
 	if providerFamily == "" {
 		source := AgentModelSourceProviderDefault
-		if provider == "opencode" || provider == "pi" {
+		if provider == "opencode" || provider == "pi" || provider == "dsh" {
 			source = AgentModelSourceUnresolved
 		}
 		return AgentModelResolution{Source: source}, nil

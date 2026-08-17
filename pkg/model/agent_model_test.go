@@ -23,6 +23,24 @@ func TestNormalizeAgentKindPiAliases(t *testing.T) {
 	}
 }
 
+func TestNormalizeAgentKindDshAliases(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "dsh", want: "dsh"},
+		{input: " deepseek ", want: "dsh"},
+		{input: "DEEPSEEK-HARNESS", want: "dsh"},
+		{input: "deepseek_harness", want: "dsh"},
+	}
+	for _, test := range tests {
+		t.Run(test.input, func(t *testing.T) {
+			if got := NormalizeAgentKind(test.input); got != test.want {
+				t.Fatalf("NormalizeAgentKind(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
+	}
+}
 func TestProjectOwnershipJSONKeepsHistoricalFieldNames(t *testing.T) {
 	payload := struct {
 		Agent     AgentDefinition  `json:"agent"`

@@ -21,3 +21,14 @@ func TestNormalizeAgentDefinitionAcceptsPiAndRejectsUnknownProvider(t *testing.T
 		t.Fatal("NormalizeAgentDefinition accepted an unknown provider")
 	}
 }
+
+func TestNormalizeAgentDefinitionAcceptsDsh(t *testing.T) {
+	definition := domain.AgentDefinition{ID: "dsh-agent", Name: "reviewer", Provider: "deepseek-harness", Model: " deepseek-official/deepseek-v4-flash ", ProjectID: "project-1", AgentName: "reviewer"}
+	normalized, err := NormalizeAgentDefinition(definition, false)
+	if err != nil {
+		t.Fatalf("NormalizeAgentDefinition returned error: %v", err)
+	}
+	if normalized.Provider != "dsh" || normalized.Model != "deepseek-official/deepseek-v4-flash" {
+		t.Fatalf("normalized definition = %#v", normalized)
+	}
+}

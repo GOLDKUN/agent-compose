@@ -596,10 +596,18 @@ if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
     'versioned Pi coding agent install in Arch Linux guest image'
   require_regex "$archlinux_guest_source" '"pi-mcp-adapter@\$\{PI_MCP_ADAPTER_VERSION\}"' \
     'versioned Pi MCP adapter install in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" 'ARG[[:space:]]+DSH_VERSION=[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?' \
+    'pinned DSH version in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" '"@deepseek-ai/dsh@\$\{DSH_VERSION\}"' \
+    'versioned DSH install in Arch Linux guest image'
   require_regex "$archlinux_guest_source" '/usr/bin/pi' \
     'stable Pi executable path in Arch Linux guest image'
   require_regex "$archlinux_guest_source" '/usr/local/share/agent-compose/pi-mcp-adapter/index\.ts' \
     'stable Pi MCP adapter path in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" '/usr/bin/dsh' \
+    'stable DSH executable path in Arch Linux guest image'
+  require_regex "$archlinux_guest_source" 'COPY[[:space:]]+\./assets/\.dsh/[[:space:]]+/root/\.dsh/' \
+    'DSH profile assets in Arch Linux guest image'
   forbid_regex "$archlinux_guest_source" '^[[:space:]]*base-devel[[:space:]]*\\' \
     'full Arch Linux development package group'
   require_regex "$archlinux_guest_source" 'allow-scripts=.*@anthropic-ai/claude-code.*opencode-ai' \
@@ -618,12 +626,12 @@ if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
     'catatonit entrypoint in Arch Linux guest image'
   require_regex "$archlinux_guest_source" 'CMD[[:space:]]+\["/usr/local/bin/agent-compose-env"' \
     'long-running default command in Arch Linux guest image'
-  for provider_cli in codex claude gemini opencode pi; do
+  for provider_cli in codex claude gemini opencode pi dsh; do
     require_regex "$archlinux_guest_source" "$provider_cli[[:space:]]+--version" \
       "$provider_cli build-time validation in Arch Linux guest image"
   done
   runtime_cleanup_line=$(awk '/rm -rf \/tmp\/agent-compose-runtime[[:space:]]*&&|rm -rf \/tmp\/agent-compose-runtime[[:space:]]*$/ { print NR; exit }' "$ARCHLINUX_GUEST_DOCKERFILE")
-  provider_validation_end_line=$(awk '/pi --version/ { print NR; exit }' "$ARCHLINUX_GUEST_DOCKERFILE")
+  provider_validation_end_line=$(awk '/dsh --version/ { print NR; exit }' "$ARCHLINUX_GUEST_DOCKERFILE")
   if [[ -z $runtime_cleanup_line || -z $provider_validation_end_line ]] ||
     ((runtime_cleanup_line <= provider_validation_end_line)); then
     fail 'Arch Linux guest runtime cleanup after provider build-time validation'

@@ -8,7 +8,7 @@ agent-compose 当前已经具备 guest runtime、provider runner、runtime SDK�
 
 - 用户或 workspace 脚本可以提供一段确定性 JavaScript workflow 脚本。
 - workflow 脚本可以通过 `agent()`、`parallel()`、`pipeline()`、`phase()`、`log()`、`workflow()` 等内置函数编排多个子 agent。
-- 子 agent 继续复用 agent-compose 已有 provider runners，包括 `codex`、`claude`、`gemini`、`opencode`、`pi`。
+- 子 agent 继续复用 agent-compose 已有 provider runners，包括 `codex`、`claude`、`gemini`、`opencode`、`pi`、`dsh`。
 - workflow run 可以持久化运行状态，并在 `resumeRunId` 下复用已完成且输入 hash 匹配的子 agent 结果。
 - workflow 可以通过 CLI 协议输出最终结果和流式进度事件，SDK 可以解析这些协议并暴露给调用方。
 - `agent(..., { isolation: "worktree" })` 首版提供真实 git worktree 隔离，不做静默降级。
@@ -408,7 +408,7 @@ type WorkflowAgentOptions = {
   label?: string
   phase?: string
   schema?: Record<string, unknown>
-  provider?: "codex" | "claude" | "gemini" | "opencode" | "pi"
+  provider?: "codex" | "claude" | "gemini" | "opencode" | "pi" | "dsh"
   model?: string
   effort?: "low" | "medium" | "high" | "xhigh" | "max"
   isolation?: "worktree"
@@ -490,7 +490,7 @@ SDK 类型：
 ```ts
 type RuntimeWorkflowOptions = {
   args?: unknown
-  provider?: "codex" | "claude" | "gemini" | "opencode" | "pi"
+  provider?: "codex" | "claude" | "gemini" | "opencode" | "pi" | "dsh"
   model?: string
   concurrency?: number
   tokenBudget?: number
