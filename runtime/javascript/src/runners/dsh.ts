@@ -13,6 +13,23 @@ import { waitForChildExit } from "../child-process.js";
 
 const maxDiagnosticBytes = 64 * 1024;
 
+// Linux caps a single argv/envp string at MAX_ARG_STRLEN (PAGE_SIZE * 32,
+// conventionally 128 KiB); exceeding it fails spawn() with E2BIG. dsh.ts
+// passes large, unbounded-size values (system context, MCP server configs)
+// as single env vars rather than temp files (see the DSH_SYSTEM_CONTEXT
+// comment below for why), so check proactively and fail with an actionable
+// message instead of letting the OS reject the exec() call opaquely.
+const maxExecEnvValueBytes = 128 * 1024;
+
+function assertEnvValueWithinExecLimit(name: string, value: string): void {
+  const byteLength = Buffer.byteLength(`${name}=${value}`, "utf8");
+  if (byteLength > maxExecEnvValueBytes) {
+    throw new Error(
+      `dsh runner: ${name} is ${byteLength} bytes, exceeding the ${maxExecEnvValueBytes}-byte exec() argument limit (Linux MAX_ARG_STRLEN); reduce its size before running`,
+    );
+  }
+}
+
 export class DshRunner {
   private reportedError: Error | null = null;
 
@@ -70,6 +87,7 @@ export class DshRunner {
         DSH_SYSTEM_CONTEXT: this.options.systemContext || "",
         DSH_SESSION_ID: sessionId,
       };
+      assertEnvValueWithinExecLimit("DSH_SYSTEM_CONTEXT", env.DSH_SYSTEM_CONTEXT as string);
       if (resume) {
         env.DSH_RESUME = "1";
       }
@@ -82,7 +100,9 @@ export class DshRunner {
         env.DSH_REASONING_EFFORT = effort;
       }
       if (mcpServers.length > 0) {
-        env.DSH_MCP_SERVERS = JSON.stringify(mcpServers);
+        const mcpServersJson = JSON.stringify(mcpServers);
+        assertEnvValueWithinExecLimit("DSH_MCP_SERVERS", mcpServersJson);
+        env.DSH_MCP_SERVERS = mcpServersJson;
       }
       const skillDirs = await this.resolveSkillPaths();
       if (skillDirs.length > 0) {
@@ -223,10 +243,15 @@ export class DshRunner {
   }
 }
 
+// Matches SplitDshModel's (pkg/llms/dsh_facade.go) strings.Cut(value, "/")
+// semantics: split on the FIRST slash, not the last. The model remainder may
+// itself contain slashes (see agent-compose-yaml-manual.md), and the facade
+// token daemon-side is bound to that full remainder — extracting anything
+// else here would send DSH a model name that doesn't match the token.
 function dshModelName(model: string | undefined): string {
   const trimmed = (model || "").trim();
   if (!trimmed) return "";
-  const separator = trimmed.lastIndexOf("/");
+  const separator = trimmed.indexOf("/");
   return separator >= 0 ? trimmed.slice(separator + 1) : trimmed;
 }
 

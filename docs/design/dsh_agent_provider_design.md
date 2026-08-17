@@ -24,6 +24,8 @@ This file ships as a repo asset (`assets/.dsh/...`), baked into the guest image 
 
 `cordis.patch.yml` reads every per-run value with `!!js process.env.X` (a `new Function('ctx','expr','with(ctx){return eval(expr)}')` sandbox with no `require`). That constrains parameterization to environment variables — no temp-file indirection, since the eval sandbox can't `readFileSync`. A `spawn()`-passed env object survives embedded newlines untouched (no shell involved), which is what lets `DSH_SYSTEM_CONTEXT` carry multi-line system-prompt text safely.
 
+Env vars aren't unbounded, though: Linux caps a single `argv`/`envp` string at `MAX_ARG_STRLEN` (128 KiB). `dsh.ts` checks `DSH_SYSTEM_CONTEXT` and `DSH_MCP_SERVERS` against that limit before spawning and fails with a named, actionable error rather than letting the OS reject the `exec()` call as an opaque `E2BIG`.
+
 ### 3.3 Create vs. resume
 
 `DSH_RESUME=1` plus `DSH_SESSION_ID` selects `agents.resume()`; otherwise `agents.create()` with a host-generated `session-<uuid>`. A resume miss is deliberately uncaught — falling back to `create()` would silently drop the caller's history, so it fails loud instead.

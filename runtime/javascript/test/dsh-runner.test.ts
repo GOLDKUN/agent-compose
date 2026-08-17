@@ -113,6 +113,18 @@ describe("DshRunner", () => {
     });
   });
 
+  it("keeps every slash after the provider id when the model remainder itself contains slashes", async () => {
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      await new DshRunner({
+        ...runnerOptions(root, "", "dsh"),
+        model: "deepseek-official/org/deepseek-v4-flash",
+      }).runPrompt("prompt");
+      const env = processState.calls[0].options.env as Record<string, string>;
+      expect(env.DSH_MODEL).toBe("org/deepseek-v4-flash");
+    });
+  });
+
   it("resumes a stored session with DSH_RESUME=1 and the stored id", async () => {
     const { DshRunner } = await import("../src/runners/dsh.js");
     await withTempSession(async (root) => {
@@ -228,6 +240,34 @@ describe("DshRunner", () => {
       await new DshRunner(runnerOptions(root, "", "dsh")).runPrompt("prompt");
       const env = processState.calls[0].options.env as Record<string, string>;
       expect(env.DSH_MCP_SERVERS).toBeUndefined();
+    });
+  });
+
+  it("fails fast when DSH_SYSTEM_CONTEXT would exceed the exec() argument limit", async () => {
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      const oversized = "x".repeat(129 * 1024);
+      await expect(new DshRunner(runnerOptions(root, oversized, "dsh")).runPrompt("prompt"))
+        .rejects.toThrow(/DSH_SYSTEM_CONTEXT is \d+ bytes, exceeding the \d+-byte exec\(\) argument limit/);
+      expect(processState.calls).toHaveLength(0);
+    });
+  });
+
+  it("fails fast when DSH_MCP_SERVERS would exceed the exec() argument limit", async () => {
+    const { DshRunner } = await import("../src/runners/dsh.js");
+    await withTempSession(async (root) => {
+      await expect(new DshRunner({
+        ...runnerOptions(root, "", "dsh"),
+        mcpConfig: {
+          docs: {
+            type: "remote",
+            transport: "http",
+            url: "https://docs.example.invalid/mcp",
+            headers: { Authorization: { value: "x".repeat(129 * 1024) } },
+          },
+        },
+      }).runPrompt("prompt")).rejects.toThrow(/DSH_MCP_SERVERS is \d+ bytes, exceeding the \d+-byte exec\(\) argument limit/);
+      expect(processState.calls).toHaveLength(0);
     });
   });
 
