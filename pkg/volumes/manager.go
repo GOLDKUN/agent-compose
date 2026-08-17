@@ -76,7 +76,7 @@ func (m *Manager) Create(ctx context.Context, item domain.VolumeRecord) (domain.
 	if m == nil || m.Store == nil {
 		return domain.VolumeRecord{}, fmt.Errorf("volume store is required")
 	}
-	item.Driver = domain.NormalizeVolumeDriver(item.Driver)
+	item.Driver = NormalizeDriver(item.Driver)
 	driver, err := m.driver(item.Driver)
 	if err != nil {
 		return domain.VolumeRecord{}, err
@@ -103,7 +103,7 @@ func (m *Manager) Ensure(ctx context.Context, item domain.VolumeRecord) (domain.
 	if m == nil || m.Store == nil {
 		return domain.VolumeRecord{}, false, fmt.Errorf("volume store is required")
 	}
-	name, err := domain.NormalizeVolumeName(item.Name)
+	name, err := NormalizeName(item.Name)
 	if err != nil {
 		return domain.VolumeRecord{}, false, err
 	}
@@ -136,7 +136,7 @@ func (m *Manager) List(ctx context.Context, options domain.VolumeListOptions) ([
 	if m == nil || m.Store == nil {
 		return nil, fmt.Errorf("volume store is required")
 	}
-	options.Driver = domain.NormalizeVolumeDriver(options.Driver)
+	options.Driver = NormalizeDriver(options.Driver)
 	if strings.TrimSpace(options.Driver) == domain.VolumeDriverLocal || strings.TrimSpace(options.Driver) == "" {
 		return m.Store.ListVolumes(ctx, options)
 	}
@@ -281,7 +281,7 @@ func (m *Manager) findSandboxReferences(ctx context.Context, volumeID string) ([
 }
 
 func (m *Manager) ResolveMounts(ctx context.Context, specs []domain.VolumeMountSpec, options ResolveOptions) ([]domain.SandboxVolumeMount, []string, error) {
-	normalized, err := domain.NormalizeVolumeMountSpecs(specs)
+	normalized, err := NormalizeMountSpecs(specs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -350,7 +350,7 @@ func (m *Manager) ResolveMounts(ctx context.Context, specs []domain.VolumeMountS
 }
 
 func (m *Manager) driver(name string) (Driver, error) {
-	name = domain.NormalizeVolumeDriver(name)
+	name = NormalizeDriver(name)
 	if m == nil {
 		return nil, fmt.Errorf("volume manager is required")
 	}

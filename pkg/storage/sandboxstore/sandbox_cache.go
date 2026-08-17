@@ -9,6 +9,8 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/storage/storeutil"
 )
 
 const sandboxCacheVersion = 2
@@ -100,13 +102,18 @@ func (x *sandboxCache) quickCheck(ctx context.Context) error {
 	return nil
 }
 
-func (x *sandboxCache) validateSchema(ctx context.Context) error {
+func (x *sandboxCache) validateSchema(ctx context.Context) (err error) {
+	// LIMIT 0 executes the column list without producing rows, so the query
+	// fails exactly when the cache schema has drifted from the expected columns.
 	rows, err := x.db.QueryContext(ctx, `SELECT `+sandboxCacheValidationCols+` FROM sandboxes LIMIT 0`)
 	if err != nil {
 		return sandboxCacheError("validate schema", err)
 	}
-	if err := rows.Close(); err != nil {
-		return sandboxCacheError("close schema validation query", err)
+	// The cursor is never drained, so database/sql does not release its
+	// connection on its own; closing here keeps the pool free for the caller.
+	defer func() { storeutil.ReportCloseWith(rows.Close(), &err, "schema validation query", sandboxCacheError) }()
+	if err := rows.Err(); err != nil {
+		return sandboxCacheError("validate schema", err)
 	}
 	return nil
 }
@@ -165,7 +172,7 @@ ON CONFLICT(id) DO UPDATE SET
 		s.ID, s.ShortID, s.Title, s.TriggerSource, s.Driver, s.VMStatus, projectID,
 		s.WorkspacePath, wsID, nestedWSID, wsName, wsType,
 		sandboxCacheUnixNano(s.CreatedAt), sandboxCacheUnixNano(s.UpdatedAt),
-		domain.SandboxTypeFromTriggerSource(s.TriggerSource), strings.ToLower(s.Title), strings.ToLower(s.TriggerSource),
+		sandboxes.TypeFromTriggerSource(s.TriggerSource), strings.ToLower(s.Title), strings.ToLower(s.TriggerSource),
 		strings.ToLower(strings.TrimSpace(s.Driver)), strings.ToUpper(strings.TrimSpace(s.VMStatus)), strings.ToLower(projectID),
 		strings.ToLower(strings.TrimSpace(s.WorkspacePath)), strings.ToLower(strings.TrimSpace(wsID)),
 		strings.ToLower(strings.TrimSpace(nestedWSID)), strings.ToLower(strings.TrimSpace(wsName)),

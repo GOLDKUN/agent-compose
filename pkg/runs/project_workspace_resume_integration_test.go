@@ -17,7 +17,9 @@ import (
 	"agent-compose/pkg/images"
 	"agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"agent-compose/pkg/runs"
+	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/storage/configstore"
 	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/workspaces"
@@ -56,7 +58,7 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	agentID, err := domain.StableProjectAgentID(projectID, "worker")
+	agentID, err := projects.StableProjectAgentID(projectID, "worker")
 	if err != nil {
 		t.Fatalf("derive project agent id: %v", err)
 	}
@@ -102,8 +104,8 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	if sandboxA.Summary.VMStatus != domain.VMStatusStopped || sandboxA.Workspace == nil || sandboxA.Workspace.Type != "file" {
 		t.Fatalf("run A sandbox = %#v", sandboxA)
 	}
-	if domain.EffectiveStoppedRuntimePolicy(sandboxA) != domain.StoppedRuntimePolicyRemove || domain.EffectiveStoppedRuntimeState(sandboxA) != domain.StoppedRuntimeStateReleased || !reflect.DeepEqual(driver.released, []string{runA.SandboxID}) {
-		t.Fatalf("run A runtime policy/state/releases = %q/%q/%#v, want remove/released/[sandbox]", domain.EffectiveStoppedRuntimePolicy(sandboxA), domain.EffectiveStoppedRuntimeState(sandboxA), driver.released)
+	if sandboxes.EffectiveStoppedRuntimePolicy(sandboxA) != domain.StoppedRuntimePolicyRemove || sandboxes.EffectiveStoppedRuntimeState(sandboxA) != domain.StoppedRuntimeStateReleased || !reflect.DeepEqual(driver.released, []string{runA.SandboxID}) {
+		t.Fatalf("run A runtime policy/state/releases = %q/%q/%#v, want remove/released/[sandbox]", sandboxes.EffectiveStoppedRuntimePolicy(sandboxA), sandboxes.EffectiveStoppedRuntimeState(sandboxA), driver.released)
 	}
 	if sandboxA.WorkspaceProvisioning == nil || sandboxA.WorkspaceProvisioning.Status != domain.SandboxWorkspaceProvisioningStatusReady {
 		t.Fatalf("run A provisioning = %#v, want ready", sandboxA.WorkspaceProvisioning)

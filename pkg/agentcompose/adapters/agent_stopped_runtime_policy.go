@@ -1,10 +1,10 @@
 package adapters
 
 import (
+	"agent-compose/pkg/compose"
+	domain "agent-compose/pkg/model"
 	"encoding/json"
 	"strings"
-
-	domain "agent-compose/pkg/model"
 )
 
 func stoppedRuntimePolicyFromAgentDefinition(definition *domain.AgentDefinition) string {
@@ -22,7 +22,7 @@ func stoppedRuntimePolicyFromAgentDefinition(definition *domain.AgentDefinition)
 	if config.Sandbox == nil {
 		return domain.DefaultStoppedRuntimePolicy
 	}
-	policy, err := domain.NormalizeStoppedRuntimePolicy(config.Sandbox.StoppedRuntimePolicy)
+	policy, err := compose.NormalizeStoppedRuntimePolicy(config.Sandbox.StoppedRuntimePolicy)
 	if err != nil {
 		return domain.StoppedRuntimePolicyRetain
 	}

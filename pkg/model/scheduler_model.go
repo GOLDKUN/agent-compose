@@ -2,10 +2,6 @@ package model
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
-	"strings"
 	"time"
 )
 
@@ -214,110 +210,6 @@ type SchedulerTopicEvent struct {
 	Release         func()                                         `json:"-"`
 }
 
-func NormalizeSchedulerRuntime(runtime string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(runtime)) {
-	case "", SchedulerRuntimeScheduler:
-		return SchedulerRuntimeScheduler, nil
-	default:
-		return "", fmt.Errorf("unsupported scheduler runtime %q", runtime)
-	}
-}
-
-func NormalizeSchedulerTriggerKind(kind string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case SchedulerTriggerKindInterval:
-		return SchedulerTriggerKindInterval, nil
-	case SchedulerTriggerKindEvent:
-		return SchedulerTriggerKindEvent, nil
-	case SchedulerTriggerKindTimeout:
-		return SchedulerTriggerKindTimeout, nil
-	case SchedulerTriggerKindCron:
-		return SchedulerTriggerKindCron, nil
-	default:
-		return "", fmt.Errorf("unsupported scheduler trigger kind %q", kind)
-	}
-}
-
-func NormalizeSchedulerSandboxPolicy(policy string) string {
-	switch strings.ToLower(strings.TrimSpace(policy)) {
-	case "", SchedulerSandboxPolicySticky, SchedulerSandboxPolicyReuse:
-		return SchedulerSandboxPolicySticky
-	case SchedulerSandboxPolicyNew:
-		return SchedulerSandboxPolicyNew
-	default:
-		return SchedulerSandboxPolicySticky
-	}
-}
-
-func SchedulerAgentSandboxPolicy(request SchedulerAgentRequest) string {
-	return strings.TrimSpace(request.SandboxPolicy)
-}
-
-func SchedulerAgentSandboxEnv(request SchedulerAgentRequest) []SandboxEnvVar {
-	return request.SandboxEnv
-}
-
-func SchedulerCommandSandboxPolicy(request SchedulerCommandRequest) string {
-	return strings.TrimSpace(request.SandboxPolicy)
-}
-
-func SchedulerCommandSandboxEnv(request SchedulerCommandRequest) []SandboxEnvVar {
-	return request.SandboxEnv
-}
-
-func NormalizeSchedulerConcurrencyPolicy(policy string) string {
-	switch strings.ToLower(strings.TrimSpace(policy)) {
-	case "", SchedulerConcurrencyPolicySkip:
-		return SchedulerConcurrencyPolicySkip
-	case SchedulerConcurrencyPolicyParallel, "allow":
-		return SchedulerConcurrencyPolicyParallel
-	default:
-		return SchedulerConcurrencyPolicySkip
-	}
-}
-
-func NormalizeSchedulerRunStatus(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case SchedulerRunStatusRunning:
-		return SchedulerRunStatusRunning
-	case SchedulerRunStatusSucceeded:
-		return SchedulerRunStatusSucceeded
-	case SchedulerRunStatusFailed:
-		return SchedulerRunStatusFailed
-	case SchedulerRunStatusCanceled:
-		return SchedulerRunStatusCanceled
-	case SchedulerRunStatusSkipped:
-		return SchedulerRunStatusSkipped
-	default:
-		return SchedulerRunStatusRunning
-	}
-}
-
-func SchedulerTriggerStableID(kind, topic string, intervalMs int64, callbackSource string, index int) string {
-	h := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d|%s|%d", kind, topic, intervalMs, callbackSource, index)))
-	return "auto-" + hex.EncodeToString(h[:6])
-}
-
-func SchedulerSourceSHA(script string) string {
-	h := sha256.Sum256([]byte(script))
-	return hex.EncodeToString(h[:])
-}
-
-func SchedulerTriggerTopicMatches(pattern, topic string) bool {
-	pattern = strings.TrimSpace(pattern)
-	topic = strings.TrimSpace(topic)
-	if pattern == "" || topic == "" {
-		return false
-	}
-	if pattern == topic {
-		return true
-	}
-	if strings.HasSuffix(pattern, "*") {
-		return strings.HasPrefix(topic, strings.TrimSuffix(pattern, "*"))
-	}
-	return false
-}
-
 func TimeIsSet(value time.Time) bool {
 	return !value.IsZero()
 }
@@ -327,45 +219,4 @@ func NonZeroTimeUnixMilli(value time.Time) int64 {
 		return 0
 	}
 	return value.UTC().UnixMilli()
-}
-
-func SchedulerTriggerUsesSchedule(kind string) bool {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case SchedulerTriggerKindInterval, SchedulerTriggerKindTimeout, SchedulerTriggerKindCron:
-		return true
-	default:
-		return false
-	}
-}
-
-func SchedulerTriggerScheduledAt(now time.Time, delayMs int64) time.Time {
-	if delayMs <= 0 {
-		return time.Time{}
-	}
-	return now.UTC().Add(time.Duration(delayMs) * time.Millisecond)
-}
-
-func DefaultSchedulerName(now time.Time) string {
-	return "Scheduler " + now.UTC().Format("2006-01-02 15:04")
-}
-
-func DefaultSchedulerScript() string {
-	return strings.TrimSpace(`function main(payload) {
-  const result = {
-    status: "ready",
-    now: new Date().toISOString(),
-    payload: payload ?? null,
-  };
-  scheduler.log("scheduler ready", result);
-  return result;
-}
-
-scheduler.interval("heartbeat", function heartbeat() {
-  scheduler.log("heartbeat", { at: new Date().toISOString() });
-}, 60000);
-
-scheduler.on("agent-compose.session.created", "on-session-created", function onSession(event) {
-  scheduler.log("session created", event);
-});
-`)
 }

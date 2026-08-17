@@ -2,7 +2,7 @@ package main
 
 import (
 	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"encoding/json"
@@ -651,11 +651,11 @@ agents:
     provider: codex
 `)
 	project := testCLIProject("project-inspect", "cli-inspect-demo", composePath)
-	reviewerID, err := domain.StableProjectAgentID(project.GetSummary().GetProjectId(), "reviewer")
+	reviewerID, err := projects.StableProjectAgentID(project.GetSummary().GetProjectId(), "reviewer")
 	if err != nil {
 		t.Fatalf("StableProjectAgentID reviewer returned error: %v", err)
 	}
-	workerID, err := domain.StableProjectAgentID(project.GetSummary().GetProjectId(), "worker")
+	workerID, err := projects.StableProjectAgentID(project.GetSummary().GetProjectId(), "worker")
 	if err != nil {
 		t.Fatalf("StableProjectAgentID worker returned error: %v", err)
 	}

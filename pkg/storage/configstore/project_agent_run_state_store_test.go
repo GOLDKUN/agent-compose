@@ -6,6 +6,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 )
 
 func TestListProjectAgentRunStatesAggregatesAllAgentRuns(t *testing.T) {
@@ -19,7 +20,7 @@ func TestListProjectAgentRunStatesAggregatesAllAgentRuns(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 	for _, agentName := range []string{"agent-a", "agent-b"} {
-		agentID, err := domain.StableProjectAgentID(project.ID, agentName)
+		agentID, err := projects.StableProjectAgentID(project.ID, agentName)
 		if err != nil {
 			t.Fatalf("derive agent id for %s: %v", agentName, err)
 		}
@@ -27,8 +28,8 @@ func TestListProjectAgentRunStatesAggregatesAllAgentRuns(t *testing.T) {
 			t.Fatalf("create project agent %s: %v", agentName, err)
 		}
 	}
-	agentAID, _ := domain.StableProjectAgentID(project.ID, "agent-a")
-	agentBID, _ := domain.StableProjectAgentID(project.ID, "agent-b")
+	agentAID, _ := projects.StableProjectAgentID(project.ID, "agent-a")
+	agentBID, _ := projects.StableProjectAgentID(project.ID, "agent-b")
 	runs := []domain.ProjectRunRecord{
 		{RunID: "a-old-manual", ProjectID: project.ID, AgentName: "agent-a", AgentID: agentAID, Status: domain.ProjectRunStatusRunning, Source: domain.ProjectRunSourceManual},
 		{RunID: "a-scheduler", ProjectID: project.ID, AgentName: "agent-a", AgentID: agentAID, Status: domain.ProjectRunStatusRunning, Source: domain.ProjectRunSourceScheduler},

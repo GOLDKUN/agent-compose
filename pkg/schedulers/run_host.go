@@ -277,14 +277,14 @@ func (h *RuntimeHost) Agent(ctx context.Context, prompt string, request domain.S
 func (h *RuntimeHost) Command(ctx context.Context, request domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
 	cleanupSession := h.commandRequiresCleanup(request)
 	agentRequest := domain.SchedulerAgentRequest{
-		SandboxPolicy:    domain.SchedulerCommandSandboxPolicy(request),
+		SandboxPolicy:    CommandSandboxPolicy(request),
 		Title:            request.Title,
 		Driver:           request.Driver,
 		GuestImage:       request.GuestImage,
 		PullPolicy:       request.PullPolicy,
 		WorkspaceID:      request.WorkspaceID,
 		JupyterEnabled:   request.JupyterEnabled,
-		SandboxEnv:       domain.SchedulerCommandSandboxEnv(request),
+		SandboxEnv:       CommandSandboxEnv(request),
 		Volumes:          request.Volumes,
 		BindingTriggerID: h.execution.TriggerID,
 	}
@@ -499,7 +499,7 @@ func AgentRequestOverridesSession(request domain.SchedulerAgentRequest, includeT
 		strings.TrimSpace(request.Driver) != "" ||
 		strings.TrimSpace(request.GuestImage) != "" ||
 		strings.TrimSpace(request.WorkspaceID) != "" ||
-		len(domain.NormalizeEnvItems(domain.SchedulerAgentSandboxEnv(request))) > 0 ||
+		len(domain.NormalizeEnvItems(AgentSandboxEnv(request))) > 0 ||
 		len(request.Volumes) > 0
 }
 

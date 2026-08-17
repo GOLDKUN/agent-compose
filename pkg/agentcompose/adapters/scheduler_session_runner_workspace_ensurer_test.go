@@ -336,7 +336,7 @@ func TestSchedulerSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 		runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
 
 		_, _, err = runner.LoadOrResume(ctx, stopped.Summary.ID)
-		if err != ensureErr {
+		if !errors.Is(err, ensureErr) {
 			t.Fatalf("LoadOrResume error = %v, want direct %v", err, ensureErr)
 		}
 		if len(ensurer.calls) != 1 || len(driver.startCalls) != 0 || guideCalls != 0 {
@@ -374,7 +374,7 @@ func TestSchedulerSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 		runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
 
 		_, _, err = runner.LoadOrResume(ctx, stopped.Summary.ID)
-		if err != startErr {
+		if !errors.Is(err, startErr) {
 			t.Fatalf("LoadOrResume error = %v, want direct %v", err, startErr)
 		}
 		persisted, loadErr := bridge.store.GetSandbox(ctx, stopped.Summary.ID)

@@ -3,6 +3,7 @@ package imagecache
 import (
 	"archive/tar"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -145,7 +146,7 @@ func applyLayerTarArchive(ctx context.Context, src io.Reader, dstDir string) err
 			return err
 		}
 		header, err := reader.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {

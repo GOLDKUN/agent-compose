@@ -1,10 +1,7 @@
 package model
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -13,8 +10,6 @@ const (
 	TopicEventSourceWebhook   = "webhook"
 	TopicEventSourceScheduler = "scheduler"
 	TopicEventSourceSystem    = "system"
-
-	legacyTopicEventSourceLoader = "loader"
 
 	TopicEventDispatchPending        = "pending"
 	TopicEventDispatchPublishing     = "publishing_to_bus"
@@ -29,9 +24,6 @@ const (
 	EventDeliveryStatusRunFailed    = "run_failed"
 	EventDeliveryStatusSkipped      = "skipped"
 )
-
-var topicEventNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-var httpHeaderNamePattern = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 type TopicEventRecord struct {
 	ID              string    `json:"event_id"`
@@ -199,99 +191,4 @@ type EventSandboxTraceItem struct {
 	SchedulerEventID string    `json:"scheduler_event_id,omitempty"`
 	EventID          string    `json:"event_id"`
 	CreatedAt        time.Time `json:"created_at"`
-}
-
-func ValidateTopicEventName(topic string) error {
-	topic = strings.TrimSpace(topic)
-	if topic == "" {
-		return fmt.Errorf("topic is required")
-	}
-	if len(topic) > 128 {
-		return fmt.Errorf("topic is too long")
-	}
-	if !topicEventNamePattern.MatchString(topic) {
-		return fmt.Errorf("topic contains invalid characters")
-	}
-	return nil
-}
-
-func NormalizeHTTPHeaderName(name string) (string, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "", nil
-	}
-	if !httpHeaderNamePattern.MatchString(name) {
-		return "", fmt.Errorf("header name contains invalid characters")
-	}
-	return name, nil
-}
-
-func NormalizeTopicEventSource(source string) string {
-	switch strings.ToLower(strings.TrimSpace(source)) {
-	case TopicEventSourceWebhook:
-		return TopicEventSourceWebhook
-	case TopicEventSourceScheduler, legacyTopicEventSourceLoader:
-		return TopicEventSourceScheduler
-	case TopicEventSourceSystem:
-		return TopicEventSourceSystem
-	default:
-		return ""
-	}
-}
-
-// TopicEventSourceFilterValues returns every persisted source value that is
-// equivalent to source. Loader was renamed to scheduler, but upgraded databases
-// intentionally retain loader-era event rows, so scheduler filters must match
-// both stored values.
-func TopicEventSourceFilterValues(source string) []string {
-	normalized := NormalizeTopicEventSource(source)
-	switch normalized {
-	case "":
-		return nil
-	case TopicEventSourceScheduler:
-		return []string{TopicEventSourceScheduler, legacyTopicEventSourceLoader}
-	default:
-		return []string{normalized}
-	}
-}
-
-func NormalizeTopicEventDispatchStatus(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "", TopicEventDispatchPending:
-		return TopicEventDispatchPending
-	case TopicEventDispatchPublishing:
-		return TopicEventDispatchPublishing
-	case TopicEventDispatchPublishedToBus:
-		return TopicEventDispatchPublishedToBus
-	case TopicEventDispatchNoSubscriber:
-		return TopicEventDispatchNoSubscriber
-	case TopicEventDispatchRetrying:
-		return TopicEventDispatchRetrying
-	case TopicEventDispatchDeadLetter:
-		return TopicEventDispatchDeadLetter
-	default:
-		return ""
-	}
-}
-
-func NormalizeEventDeliveryStatus(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case EventDeliveryStatusMatched:
-		return EventDeliveryStatusMatched
-	case EventDeliveryStatusRunStarted:
-		return EventDeliveryStatusRunStarted
-	case EventDeliveryStatusRunSucceeded:
-		return EventDeliveryStatusRunSucceeded
-	case EventDeliveryStatusRunFailed:
-		return EventDeliveryStatusRunFailed
-	case EventDeliveryStatusSkipped:
-		return EventDeliveryStatusSkipped
-	default:
-		return ""
-	}
-}
-
-func TopicEventPayloadSHA256(payloadJSON string) string {
-	sum := sha256.Sum256([]byte(payloadJSON))
-	return "sha256:" + hex.EncodeToString(sum[:])
 }

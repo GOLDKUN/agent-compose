@@ -478,7 +478,6 @@ func dockerBuildArgs(args map[string]string) map[string]*string {
 		if key == "" {
 			continue
 		}
-		value := value
 		result[key] = &value
 	}
 	return result

@@ -10,6 +10,7 @@ import (
 	"agent-compose/pkg/capabilities"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/volumes"
 )
 
 func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler, error) {
@@ -23,10 +24,10 @@ func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler,
 	}
 	item.Summary.Name = strings.TrimSpace(item.Summary.Name)
 	if item.Summary.Name == "" {
-		item.Summary.Name = domain.DefaultSchedulerName(now)
+		item.Summary.Name = DefaultName(now)
 	}
 	item.Summary.Description = strings.TrimSpace(item.Summary.Description)
-	runtime, err := domain.NormalizeSchedulerRuntime(item.Summary.Runtime)
+	runtime, err := NormalizeRuntime(item.Summary.Runtime)
 	if err != nil {
 		return domain.Scheduler{}, err
 	}
@@ -50,8 +51,8 @@ func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler,
 	if item.Summary.DefaultAgent == "" {
 		item.Summary.DefaultAgent = "codex"
 	}
-	item.Summary.SandboxPolicy = domain.NormalizeSchedulerSandboxPolicy(item.Summary.SandboxPolicy)
-	item.Summary.ConcurrencyPolicy = domain.NormalizeSchedulerConcurrencyPolicy(item.Summary.ConcurrencyPolicy)
+	item.Summary.SandboxPolicy = NormalizeSandboxPolicy(item.Summary.SandboxPolicy)
+	item.Summary.ConcurrencyPolicy = NormalizeConcurrencyPolicy(item.Summary.ConcurrencyPolicy)
 	item.Summary.CapsetIDs = capabilities.NormalizeCapsetIDs(item.Summary.CapsetIDs)
 	item.Summary.ProjectID = strings.TrimSpace(item.Summary.ProjectID)
 	item.Summary.AgentName = strings.TrimSpace(item.Summary.AgentName)
@@ -69,7 +70,7 @@ func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler,
 		}
 	}
 	item.EnvItems = domain.NormalizeEnvItems(item.EnvItems)
-	volumes, err := domain.NormalizeVolumeMountSpecs(item.Volumes)
+	volumes, err := volumes.NormalizeMountSpecs(item.Volumes)
 	if err != nil {
 		return domain.Scheduler{}, fmt.Errorf("scheduler volumes: %w", err)
 	}
@@ -87,7 +88,7 @@ func NormalizeSchedulerTrigger(schedulerID string, trigger domain.SchedulerTrigg
 	if trigger.ID == "" {
 		return domain.SchedulerTrigger{}, fmt.Errorf("scheduler trigger id is required")
 	}
-	kind, err := domain.NormalizeSchedulerTriggerKind(trigger.Kind)
+	kind, err := NormalizeTriggerKind(trigger.Kind)
 	if err != nil {
 		return domain.SchedulerTrigger{}, err
 	}

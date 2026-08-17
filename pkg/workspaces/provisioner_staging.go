@@ -173,7 +173,7 @@ func (p *Provisioner) resolveProvisioningPaths(sandbox *domain.Sandbox) (provisi
 	}
 	sandboxRoot, err := filepath.Abs(filepath.Clean(rawSandboxRoot))
 	if err != nil {
-		return provisioningPaths{}, fmt.Errorf("%w: resolve sandbox %s root: %v", domain.ErrInvalidArgument, sandbox.Summary.ID, err)
+		return provisioningPaths{}, fmt.Errorf("%w: resolve sandbox %s root: %w", domain.ErrInvalidArgument, sandbox.Summary.ID, err)
 	}
 	rawWorkspacePath := strings.TrimSpace(sandbox.Summary.WorkspacePath)
 	if rawWorkspacePath == "" {
@@ -181,7 +181,7 @@ func (p *Provisioner) resolveProvisioningPaths(sandbox *domain.Sandbox) (provisi
 	}
 	workspacePath, err := filepath.Abs(filepath.Clean(rawWorkspacePath))
 	if err != nil {
-		return provisioningPaths{}, fmt.Errorf("%w: resolve sandbox %s workspace path: %v", domain.ErrInvalidArgument, sandbox.Summary.ID, err)
+		return provisioningPaths{}, fmt.Errorf("%w: resolve sandbox %s workspace path: %w", domain.ErrInvalidArgument, sandbox.Summary.ID, err)
 	}
 	expectedWorkspace := filepath.Join(sandboxRoot, "workspace")
 	if workspacePath != expectedWorkspace {

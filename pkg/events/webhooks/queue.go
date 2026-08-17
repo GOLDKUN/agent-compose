@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	appconfig "agent-compose/pkg/config"
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 )
 
@@ -108,7 +109,7 @@ func normalizeQueueRule(raw queueRuleConfig) (queueRule, error) {
 		if pattern == "" {
 			return queueRule{}, fmt.Errorf("match.topic must not be only wildcard")
 		}
-		if err := domain.ValidateTopicEventName(pattern); err != nil {
+		if err := events.ValidateTopicName(pattern); err != nil {
 			return queueRule{}, fmt.Errorf("match.topic is invalid: %w", err)
 		}
 	}
@@ -168,7 +169,7 @@ func (q *RunQueue) Match(event domain.SchedulerTopicEvent) (string, int) {
 }
 
 func (r queueRule) matches(event domain.SchedulerTopicEvent) bool {
-	if r.Match.Topic != "" && !domain.SchedulerTriggerTopicMatches(r.Match.Topic, event.Topic) {
+	if r.Match.Topic != "" && !events.TriggerTopicMatches(r.Match.Topic, event.Topic) {
 		return false
 	}
 	if r.Match.Provider != "" && r.Match.Provider != event.Provider {

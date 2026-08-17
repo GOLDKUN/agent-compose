@@ -149,6 +149,9 @@ func testUniqueProjectNameMigrationRenamesDuplicatesInStableOrder(t *testing.T) 
 	if rows.Next() {
 		t.Fatal("foreign key check reported a violation")
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate foreign key check: %v", err)
+	}
 }
 
 func TestUniqueProjectNameMigrationPreservesProjectListDuplicateData(t *testing.T) {

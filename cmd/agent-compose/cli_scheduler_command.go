@@ -3,6 +3,7 @@ package main
 import (
 	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"context"
 	"encoding/json"
 	"errors"
@@ -290,7 +291,7 @@ func (b *composeDisplayChangeBuilder) addTriggerChanges(action, id, agentName, m
 	}
 	for _, triggerRef := range triggerRefs {
 		triggerID := id
-		if stableID, err := domain.StableSchedulerTriggerID(b.projectID, agentName, "", triggerRef.name, triggerRef.index); err == nil {
+		if stableID, err := projects.StableSchedulerTriggerID(b.projectID, agentName, "", triggerRef.name, triggerRef.index); err == nil {
 			triggerID = shortOpaqueID(stableID)
 		}
 		b.add(composeDisplayChangeOutput{

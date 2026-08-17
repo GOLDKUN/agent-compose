@@ -1,6 +1,7 @@
 package sandboxes_test
 
 import (
+	"agent-compose/pkg/sandboxes"
 	"context"
 	"errors"
 	"os"
@@ -11,7 +12,6 @@ import (
 
 	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/storage/sandboxstore"
 )
 
@@ -74,7 +74,7 @@ func TestIntegrationLifecycleRecoversInterruptedStoppedRuntimeRelease(t *testing
 	if err != nil {
 		t.Fatalf("GetSandbox returned error: %v", err)
 	}
-	if loaded.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleased ||
+	if loaded.Summary.VMStatus != domain.VMStatusStopped || sandboxes.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleased ||
 		driver.stopped.Load() != 1 || driver.released.Load() != 1 {
 		t.Fatalf("sandbox=%#v release=%#v calls=%d/%d", loaded.Summary, loaded.StoppedRuntime, driver.stopped.Load(), driver.released.Load())
 	}
@@ -110,7 +110,7 @@ func TestIntegrationLifecycleRecoversRuntimeRecreatedBeforeRunningStatePersisted
 	if err != nil {
 		t.Fatalf("GetSandbox returned error: %v", err)
 	}
-	if loaded.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleased ||
+	if loaded.Summary.VMStatus != domain.VMStatusStopped || sandboxes.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleased ||
 		driver.stopped.Load() != 1 || driver.released.Load() != 1 {
 		t.Fatalf("sandbox=%#v release=%#v calls=%d/%d", loaded.Summary, loaded.StoppedRuntime, driver.stopped.Load(), driver.released.Load())
 	}

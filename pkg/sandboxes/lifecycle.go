@@ -284,7 +284,7 @@ func (l Lifecycle) prepareFreshStartAgentEnvironment(ctx context.Context, sessio
 	if err != nil {
 		return err
 	}
-	if !vmState.StartedAt.IsZero() && !domain.SandboxRuntimeReleaseIntentional(session) {
+	if !vmState.StartedAt.IsZero() && !RuntimeReleaseIntentional(session) {
 		return nil
 	}
 	return l.PrepareAgentEnvironment(ctx, session)
@@ -483,8 +483,8 @@ func (l Lifecycle) RecoverStoppedRuntimeReleases(ctx context.Context) []string {
 	}
 	var warnings []string
 	for _, sandbox := range listed.Sandboxes {
-		state := domain.EffectiveStoppedRuntimeState(sandbox)
-		if domain.EffectiveStoppedRuntimePolicy(sandbox) != domain.StoppedRuntimePolicyRemove ||
+		state := EffectiveStoppedRuntimeState(sandbox)
+		if EffectiveStoppedRuntimePolicy(sandbox) != domain.StoppedRuntimePolicyRemove ||
 			(state != domain.StoppedRuntimeStateReleasePending && state != domain.StoppedRuntimeStateReleased) {
 			continue
 		}

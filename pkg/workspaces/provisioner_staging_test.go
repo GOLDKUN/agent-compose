@@ -48,11 +48,15 @@ func TestProvisionerStagingPromotionReplacesPendingWorkspace(t *testing.T) {
 			if _, err := os.Lstat(filepath.Join(stagingRoot, "attempt-link")); !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("stale attempt symlink still exists before materialization: %w", err)
 			}
-			if data, err := os.ReadFile(filepath.Join(outsideAttemptTarget, "preserved.txt")); err != nil || string(data) != "outside preserved\n" {
-				return fmt.Errorf("stale attempt symlink target changed: data=%q err=%v", data, err)
+			if data, err := os.ReadFile(filepath.Join(outsideAttemptTarget, "preserved.txt")); err != nil {
+				return fmt.Errorf("stale attempt symlink target unreadable: %w", err)
+			} else if string(data) != "outside preserved\n" {
+				return fmt.Errorf("stale attempt symlink target changed: data=%q", data)
 			}
-			if data, err := os.ReadFile(filepath.Join(stagingRoot, "keep", "sentinel.txt")); err != nil || string(data) != "keep sibling\n" {
-				return fmt.Errorf("non-attempt staging sibling changed: data=%q err=%v", data, err)
+			if data, err := os.ReadFile(filepath.Join(stagingRoot, "keep", "sentinel.txt")); err != nil {
+				return fmt.Errorf("non-attempt staging sibling unreadable: %w", err)
+			} else if string(data) != "keep sibling\n" {
+				return fmt.Errorf("non-attempt staging sibling changed: data=%q", data)
 			}
 			data, err := os.ReadFile(filepath.Join(workspacePath, "pending-half.txt"))
 			if err != nil {

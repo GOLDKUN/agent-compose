@@ -26,22 +26,22 @@ func ValidateCachePath(root, target string) (SafePath, error) {
 	}
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return SafePath{}, fmt.Errorf("%w: absolute root: %v", ErrUnsafePath, err)
+		return SafePath{}, fmt.Errorf("%w: absolute root: %w", ErrUnsafePath, err)
 	}
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
-		return SafePath{}, fmt.Errorf("%w: absolute target: %v", ErrUnsafePath, err)
+		return SafePath{}, fmt.Errorf("%w: absolute target: %w", ErrUnsafePath, err)
 	}
 	if !pathWithinRoot(absRoot, absTarget) {
 		return SafePath{}, fmt.Errorf("%w: target %s is outside root %s", ErrUnsafePath, absTarget, absRoot)
 	}
 	canonicalRoot, err := filepath.EvalSymlinks(absRoot)
 	if err != nil {
-		return SafePath{}, fmt.Errorf("%w: canonical root: %v", ErrUnsafePath, err)
+		return SafePath{}, fmt.Errorf("%w: canonical root: %w", ErrUnsafePath, err)
 	}
 	canonicalTarget, err := filepath.EvalSymlinks(absTarget)
 	if err != nil {
-		return SafePath{}, fmt.Errorf("%w: canonical target: %v", ErrUnsafePath, err)
+		return SafePath{}, fmt.Errorf("%w: canonical target: %w", ErrUnsafePath, err)
 	}
 	canonicalRoot = filepath.Clean(canonicalRoot)
 	canonicalTarget = filepath.Clean(canonicalTarget)

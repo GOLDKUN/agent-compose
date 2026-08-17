@@ -21,7 +21,7 @@ type stoppedRuntimeTestStore struct {
 
 func (s *stoppedRuntimeTestStore) UpdateSandbox(_ context.Context, sandbox *domain.Sandbox) error {
 	s.sandbox = sandbox
-	s.updates = append(s.updates, sandbox.Summary.VMStatus+":"+domain.EffectiveStoppedRuntimeState(sandbox))
+	s.updates = append(s.updates, sandbox.Summary.VMStatus+":"+EffectiveStoppedRuntimeState(sandbox))
 	return nil
 }
 
@@ -44,7 +44,7 @@ type stoppedRuntimeTestDriver struct {
 
 func (d *stoppedRuntimeTestDriver) StopSandboxVM(context.Context, *domain.Sandbox) error {
 	d.stopCalls++
-	if d.requireIntent && (d.store == nil || domain.EffectiveStoppedRuntimeState(d.store.sandbox) != domain.StoppedRuntimeStateReleasePending) {
+	if d.requireIntent && (d.store == nil || EffectiveStoppedRuntimeState(d.store.sandbox) != domain.StoppedRuntimeStateReleasePending) {
 		return errors.New("release intent was not persisted before stop")
 	}
 	return nil
@@ -63,7 +63,7 @@ func TestStopSandboxRuntimeRetainsByDefault(t *testing.T) {
 	if err != nil || !result.Stopped || result.Released || driver.stopCalls != 1 || driver.releaseCalls != 0 {
 		t.Fatalf("result=%#v stop/release=%d/%d err=%v", result, driver.stopCalls, driver.releaseCalls, err)
 	}
-	if domain.EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateRetained {
+	if EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateRetained {
 		t.Fatalf("runtime state = %#v, want retained", sandbox.StoppedRuntime)
 	}
 	if message := SandboxStoppedEventMessage(sandbox, result); message != "sandbox stopped and runtime retained" {
@@ -81,7 +81,7 @@ func TestStopSandboxRuntimePersistsIntentAndReleasesOwnership(t *testing.T) {
 	if err != nil || !result.Stopped || !result.Released || driver.stopCalls != 1 || driver.releaseCalls != 1 {
 		t.Fatalf("result=%#v stop/release=%d/%d err=%v", result, driver.stopCalls, driver.releaseCalls, err)
 	}
-	if domain.EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateReleased || sandbox.StoppedRuntime.ReleasedAt.IsZero() {
+	if EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateReleased || sandbox.StoppedRuntime.ReleasedAt.IsZero() {
 		t.Fatalf("runtime release = %#v, want released timestamp", sandbox.StoppedRuntime)
 	}
 	if len(store.events) != 1 || store.events[0].Type != "sandbox.runtime_released" {
@@ -113,7 +113,7 @@ func TestStopSandboxRuntimeReleaseFailureIsRetryable(t *testing.T) {
 
 	result, err := StopSandboxRuntime(context.Background(), root, store, driver, sandbox)
 	if !errors.Is(err, releaseErr) || sandbox.Summary.VMStatus != domain.VMStatusStopped ||
-		domain.EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateReleasePending || sandbox.StoppedRuntime.LastError == "" {
+		EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateReleasePending || sandbox.StoppedRuntime.LastError == "" {
 		t.Fatalf("sandbox=%#v release=%#v err=%v", sandbox.Summary, sandbox.StoppedRuntime, err)
 	}
 	if len(store.events) != 1 || store.events[0].Type != "sandbox.runtime_release_failed" {

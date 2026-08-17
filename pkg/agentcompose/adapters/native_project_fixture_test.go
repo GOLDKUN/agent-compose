@@ -8,6 +8,7 @@ import (
 
 	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"agent-compose/pkg/storage/configstore"
 )
 
@@ -48,7 +49,7 @@ func createNativeTestAgent(t testing.TB, ctx context.Context, store *configstore
 	if err != nil {
 		t.Fatalf("save native agent revision: %v", err)
 	}
-	agentID, err := domain.StableProjectAgentID(project.ID, agentName)
+	agentID, err := projects.StableProjectAgentID(project.ID, agentName)
 	if err != nil {
 		t.Fatalf("derive native project agent id: %v", err)
 	}

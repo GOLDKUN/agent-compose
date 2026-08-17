@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"agent-compose/pkg/sources"
 	"context"
 	"fmt"
 	"net/url"
@@ -11,9 +12,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
 
 	"github.com/robfig/cron/v3"
 )
@@ -337,7 +335,7 @@ func normalizeSandboxSpec(path string, sandbox *SandboxSpec) (*NormalizedSandbox
 	if sandbox == nil {
 		return nil, nil
 	}
-	policy, err := domain.NormalizeStoppedRuntimePolicy(sandbox.StoppedRuntimePolicy)
+	policy, err := NormalizeStoppedRuntimePolicy(sandbox.StoppedRuntimePolicy)
 	if err != nil {
 		return nil, &ValidationError{Path: path + ".stopped_runtime_policy", Message: err.Error()}
 	}
@@ -1363,8 +1361,8 @@ func validateProjectName(path, value string) error {
 	if value == "" {
 		return &ValidationError{Path: path, Message: "project name is required"}
 	}
-	if !domain.IsProjectName(value) {
-		return &ValidationError{Path: path, Message: "project name must match " + domain.ProjectNamePattern}
+	if !IsProjectName(value) {
+		return &ValidationError{Path: path, Message: "project name must match " + ProjectNamePattern}
 	}
 	return nil
 }

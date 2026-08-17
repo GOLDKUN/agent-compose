@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agent-compose/pkg/compose"
+	"agent-compose/pkg/storage/storeutil"
 )
 
 const uniqueProjectNameMigrationVersion int64 = 9
@@ -27,7 +28,9 @@ func applyMigrationDataStep(ctx context.Context, conn migrationConn, item migrat
 	return renameDuplicateProjects(ctx, conn)
 }
 
-func renameDuplicateProjects(ctx context.Context, conn migrationConn) error {
+// listProjectsForNameMigration reads every project in the deterministic order
+// the rename pass depends on, together with the set of names already in use.
+func listProjectsForNameMigration(ctx context.Context, conn migrationConn) (_ []projectNameMigrationRow, _ map[string]struct{}, err error) {
 	rows, err := conn.QueryContext(ctx, `SELECT id, name, current_revision
 		FROM project
 		ORDER BY name ASC,
@@ -36,25 +39,32 @@ func renameDuplicateProjects(ctx context.Context, conn migrationConn) error {
 			created_at DESC,
 			id ASC`)
 	if err != nil {
-		return fmt.Errorf("list projects before enforcing unique names: %w", err)
+		return nil, nil, fmt.Errorf("list projects before enforcing unique names: %w", err)
 	}
+	defer func() { storeutil.ReportClose(rows.Close(), &err, "projects before enforcing unique names") }()
 
 	var projects []projectNameMigrationRow
 	usedNames := make(map[string]struct{})
 	for rows.Next() {
 		var project projectNameMigrationRow
-		if err := rows.Scan(&project.id, &project.name, &project.currentRevision); err != nil {
-			_ = rows.Close() // Preserve the scan error as the primary failure.
-			return fmt.Errorf("scan project before enforcing unique names: %w", err)
+		if scanErr := rows.Scan(&project.id, &project.name, &project.currentRevision); scanErr != nil {
+			return nil, nil, fmt.Errorf("scan project before enforcing unique names: %w", scanErr)
 		}
 		projects = append(projects, project)
 		usedNames[project.name] = struct{}{}
 	}
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close projects before enforcing unique names: %w", err)
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, nil, fmt.Errorf("iterate projects before enforcing unique names: %w", rowsErr)
 	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate projects before enforcing unique names: %w", err)
+	return projects, usedNames, nil
+}
+
+func renameDuplicateProjects(ctx context.Context, conn migrationConn) error {
+	// The cursor is drained in a helper because the renames below write through
+	// the same connection and must not run while it is still open.
+	projects, usedNames, err := listProjectsForNameMigration(ctx, conn)
+	if err != nil {
+		return err
 	}
 
 	seenNames := make(map[string]struct{}, len(usedNames))
@@ -126,31 +136,38 @@ func createRenamedProjectRevision(ctx context.Context, conn migrationConn, proje
 	return nextRevision, specHash, nil
 }
 
-func materializeImplicitProjectVolumeNames(ctx context.Context, conn migrationConn, projectID string, spec *compose.NormalizedProjectSpec) error {
-	if spec == nil || len(spec.Volumes) == 0 {
-		return nil
-	}
+// listLinkedVolumeNames maps each volume key bound to projectID to the volume
+// name it resolves to.
+func listLinkedVolumeNames(ctx context.Context, conn migrationConn, projectID string) (_ map[string]string, err error) {
 	rows, err := conn.QueryContext(ctx, `SELECT project_volumes.volume_key, volumes.name
 		FROM project_volumes
 		JOIN volumes ON volumes.id = project_volumes.volume_id
 		WHERE project_volumes.project_id = ?`, projectID)
 	if err != nil {
-		return fmt.Errorf("list volumes for renamed project %s: %w", projectID, err)
+		return nil, fmt.Errorf("list volumes for renamed project %s: %w", projectID, err)
 	}
+	defer func() { storeutil.ReportClose(rows.Close(), &err, "volumes for renamed project "+projectID) }()
 	linkedNames := make(map[string]string)
 	for rows.Next() {
 		var key, name string
-		if err := rows.Scan(&key, &name); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("scan volume for renamed project %s: %w", projectID, err)
+		if scanErr := rows.Scan(&key, &name); scanErr != nil {
+			return nil, fmt.Errorf("scan volume for renamed project %s: %w", projectID, scanErr)
 		}
 		linkedNames[key] = name
 	}
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close volumes for renamed project %s: %w", projectID, err)
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("iterate volumes for renamed project %s: %w", projectID, rowsErr)
 	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate volumes for renamed project %s: %w", projectID, err)
+	return linkedNames, nil
+}
+
+func materializeImplicitProjectVolumeNames(ctx context.Context, conn migrationConn, projectID string, spec *compose.NormalizedProjectSpec) error {
+	if spec == nil || len(spec.Volumes) == 0 {
+		return nil
+	}
+	linkedNames, err := listLinkedVolumeNames(ctx, conn, projectID)
+	if err != nil {
+		return err
 	}
 	for key, volume := range spec.Volumes {
 		if strings.TrimSpace(volume.Name) != "" {

@@ -111,7 +111,7 @@ func (r schedulerProjectAgentRunner) RunProjectAgent(ctx context.Context, reques
 	cleanupPolicy := agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_UNSPECIFIED
 	stickySchedulerID := ""
 	stickyTriggerID := ""
-	if domain.NormalizeSchedulerSandboxPolicy(request.SandboxPolicy) == domain.SchedulerSandboxPolicySticky {
+	if schedulers.NormalizeSandboxPolicy(request.SandboxPolicy) == domain.SchedulerSandboxPolicySticky {
 		cleanupPolicy = agentcomposev2.RunSandboxCleanupPolicy_RUN_SANDBOX_CLEANUP_POLICY_KEEP_RUNNING
 		stickySchedulerID = request.SchedulerID
 		stickyTriggerID = request.TriggerID

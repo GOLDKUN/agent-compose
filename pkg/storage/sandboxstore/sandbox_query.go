@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 )
 
 // sandboxWhere builds the WHERE clause and bound arguments for a sandbox list
@@ -106,7 +107,7 @@ func (x *sandboxCache) list(ctx context.Context, o domain.SandboxListOptions, sa
 		return nil, 0, fmt.Errorf("count sandbox listing cache: %w", err)
 	}
 
-	offset, limit := domain.NormalizeSandboxListBounds(o.Offset, o.Limit)
+	offset, limit := sandboxes.NormalizeListBounds(o.Offset, o.Limit)
 	query := `SELECT ` + sandboxSelectCols + ` FROM sandboxes` + where +
 		` ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`
 	rows, err := x.db.QueryContext(ctx, query, append(args, limit, offset)...)

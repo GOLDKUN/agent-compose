@@ -31,7 +31,7 @@ func CollectDueScheduledRuns(items map[string]domain.Scheduler, now time.Time) (
 		updated := false
 		for index := range scheduler.Triggers {
 			trigger := &scheduler.Triggers[index]
-			if !trigger.Enabled || !domain.SchedulerTriggerUsesSchedule(trigger.Kind) || trigger.NextFireAt.IsZero() || trigger.NextFireAt.After(now) {
+			if !trigger.Enabled || !TriggerUsesSchedule(trigger.Kind) || trigger.NextFireAt.IsZero() || trigger.NextFireAt.After(now) {
 				continue
 			}
 			nextFireAt, err := SchedulerTriggerNextFireAt(now, *trigger, true)

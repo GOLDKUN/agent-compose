@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -271,7 +272,7 @@ func declaredTriggerSpec(scheduler domain.ProjectSchedulerRecord, triggerID stri
 		return nil
 	}
 	for index, trigger := range spec.GetTriggers() {
-		id, err := domain.StableSchedulerTriggerID(scheduler.ProjectID, scheduler.AgentName, "", trigger.GetName(), index)
+		id, err := projects.StableSchedulerTriggerID(scheduler.ProjectID, scheduler.AgentName, "", trigger.GetName(), index)
 		if err == nil && id == triggerID {
 			return trigger
 		}

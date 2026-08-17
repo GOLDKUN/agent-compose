@@ -3,7 +3,7 @@ package main
 import (
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
@@ -751,7 +751,7 @@ func TestComposePSAllIncludesEveryStatusOnlyForCurrentProject(t *testing.T) {
 func testCLIProject(projectID, name, sourcePath string) *agentcomposev2.Project {
 	if strings.TrimSpace(projectID) == "" {
 		var err error
-		projectID, err = domain.StableProjectID(name, sourcePath)
+		projectID, err = projects.StableProjectID(name, sourcePath)
 		if err != nil {
 			panic(fmt.Sprintf("resolve test project ID: %v", err))
 		}

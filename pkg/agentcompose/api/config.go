@@ -18,7 +18,7 @@ import (
 var errWorkspaceContent = errors.New("workspace content operation failed")
 
 func workspaceContentError(err error) error {
-	return fmt.Errorf("%w: %v", errWorkspaceContent, err)
+	return fmt.Errorf("%w: %w", errWorkspaceContent, err)
 }
 
 type ConfigStore interface {
@@ -70,7 +70,7 @@ func (h *workspaceSettings) createWorkspaceConfig(ctx context.Context, item doma
 		if err := h.createFileWorkspaceContent(item.ID, item.ConfigJSON); err != nil {
 			deleteErr := h.store.DeleteWorkspaceConfig(ctx, item.ID)
 			if deleteErr != nil {
-				return domain.WorkspaceConfig{}, workspaceContentError(fmt.Errorf("create file workspace content: %w; rollback workspace config: %v", err, deleteErr))
+				return domain.WorkspaceConfig{}, workspaceContentError(fmt.Errorf("create file workspace content: %w; rollback workspace config: %w", err, deleteErr))
 			}
 			return domain.WorkspaceConfig{}, workspaceContentError(err)
 		}
@@ -115,7 +115,7 @@ func (h *workspaceSettings) updateWorkspaceConfig(ctx context.Context, requested
 		if err := h.createFileWorkspaceContent(item.ID, item.ConfigJSON); err != nil {
 			_, rollbackErr := h.store.UpdateWorkspaceConfig(ctx, previous)
 			if rollbackErr != nil {
-				return domain.WorkspaceConfig{}, workspaceContentError(fmt.Errorf("create file workspace content: %w; rollback workspace config: %v", err, rollbackErr))
+				return domain.WorkspaceConfig{}, workspaceContentError(fmt.Errorf("create file workspace content: %w; rollback workspace config: %w", err, rollbackErr))
 			}
 			return domain.WorkspaceConfig{}, workspaceContentError(err)
 		}
@@ -123,7 +123,7 @@ func (h *workspaceSettings) updateWorkspaceConfig(ctx context.Context, requested
 		if err := h.removeFileWorkspaceContent(previous); err != nil {
 			_, rollbackErr := h.store.UpdateWorkspaceConfig(ctx, previous)
 			if rollbackErr != nil {
-				return domain.WorkspaceConfig{}, workspaceContentError(fmt.Errorf("remove file workspace content: %w; rollback workspace config: %v", err, rollbackErr))
+				return domain.WorkspaceConfig{}, workspaceContentError(fmt.Errorf("remove file workspace content: %w; rollback workspace config: %w", err, rollbackErr))
 			}
 			return domain.WorkspaceConfig{}, workspaceContentError(err)
 		}
@@ -148,7 +148,7 @@ func (h *workspaceSettings) deleteWorkspaceConfig(ctx context.Context, workspace
 		if err := h.removeFileWorkspaceContent(workspace); err != nil {
 			_, rollbackErr := h.store.CreateWorkspaceConfig(ctx, workspace)
 			if rollbackErr != nil {
-				return workspaceContentError(fmt.Errorf("remove file workspace content: %w; rollback workspace config: %v", err, rollbackErr))
+				return workspaceContentError(fmt.Errorf("remove file workspace content: %w; rollback workspace config: %w", err, rollbackErr))
 			}
 			return workspaceContentError(err)
 		}

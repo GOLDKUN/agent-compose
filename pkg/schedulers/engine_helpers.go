@@ -48,12 +48,12 @@ func SchedulerTriggerNextFireAt(now time.Time, trigger domain.SchedulerTrigger, 
 	now = now.UTC()
 	switch strings.ToLower(strings.TrimSpace(trigger.Kind)) {
 	case domain.SchedulerTriggerKindInterval:
-		return domain.SchedulerTriggerScheduledAt(now, trigger.IntervalMs), nil
+		return TriggerScheduledAt(now, trigger.IntervalMs), nil
 	case domain.SchedulerTriggerKindTimeout:
 		if fired {
 			return time.Time{}, nil
 		}
-		return domain.SchedulerTriggerScheduledAt(now, trigger.IntervalMs), nil
+		return TriggerScheduledAt(now, trigger.IntervalMs), nil
 	case domain.SchedulerTriggerKindCron:
 		spec, err := parseSchedulerCronSpecJSON(trigger.SpecJSON)
 		if err != nil {
@@ -126,7 +126,7 @@ func normalizeAgentKind(agent string) string {
 }
 
 func normalizeSchedulerSandboxPolicy(policy string) string {
-	return domain.NormalizeSchedulerSandboxPolicy(policy)
+	return NormalizeSandboxPolicy(policy)
 }
 
 func normalizeEnvItems(items []domain.SandboxEnvVar) []domain.SandboxEnvVar {

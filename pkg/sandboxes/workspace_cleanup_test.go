@@ -1,6 +1,7 @@
 package sandboxes_test
 
 import (
+	"agent-compose/pkg/sandboxes"
 	"archive/tar"
 	"context"
 	"crypto/sha256"
@@ -19,7 +20,6 @@ import (
 
 	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/workspaces"
 )

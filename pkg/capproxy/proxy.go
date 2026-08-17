@@ -241,7 +241,7 @@ func (s *Server) proxyStream(client grpc.ServerStream, method string, outgoing m
 		for {
 			frame := rawFrame(nil)
 			err := client.RecvMsg(&frame)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				errCh <- backend.CloseSend()
 				return
 			}
@@ -259,7 +259,7 @@ func (s *Server) proxyStream(client grpc.ServerStream, method string, outgoing m
 		for {
 			frame := rawFrame(nil)
 			err := backend.RecvMsg(&frame)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				errCh <- nil
 				return
 			}

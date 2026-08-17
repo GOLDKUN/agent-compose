@@ -345,7 +345,7 @@ func TestSandboxRPCBridgeRuntimeReleaseFailureRevokesCapabilityAfterConfirmedSto
 	if err != nil {
 		t.Fatalf("GetSandbox returned error: %v", err)
 	}
-	if loaded.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
+	if loaded.Summary.VMStatus != domain.VMStatusStopped || sandboxes.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
 		t.Fatalf("stopped sandbox = %#v release=%#v", loaded.Summary, loaded.StoppedRuntime)
 	}
 }

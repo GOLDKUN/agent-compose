@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
@@ -113,7 +113,7 @@ func assertSchedulerProjectJSONMinimal(t *testing.T, data string, summary *agent
 
 func testSchedulerProjectSummary(t *testing.T, name, sourcePath string) *agentcomposev2.ProjectSummary {
 	t.Helper()
-	projectID, err := domain.StableProjectID(name, sourcePath)
+	projectID, err := projects.StableProjectID(name, sourcePath)
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}

@@ -1,6 +1,7 @@
 package sandboxes_test
 
 import (
+	"agent-compose/pkg/sandboxes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,7 +15,6 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/storage/configstore"
 	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/workspaces"
@@ -222,8 +222,8 @@ func seedPersistenceWorkspace(t *testing.T, ctx context.Context, root string) pe
 	if stopped.Summary.VMStatus != domain.VMStatusStopped {
 		t.Fatalf("stopped VM status = %q, want %q", stopped.Summary.VMStatus, domain.VMStatusStopped)
 	}
-	if domain.EffectiveStoppedRuntimePolicy(stopped) != domain.StoppedRuntimePolicyRemove || domain.EffectiveStoppedRuntimeState(stopped) != domain.StoppedRuntimeStateReleased {
-		t.Fatalf("stopped runtime policy/state = %q/%q, want remove/released", domain.EffectiveStoppedRuntimePolicy(stopped), domain.EffectiveStoppedRuntimeState(stopped))
+	if sandboxes.EffectiveStoppedRuntimePolicy(stopped) != domain.StoppedRuntimePolicyRemove || sandboxes.EffectiveStoppedRuntimeState(stopped) != domain.StoppedRuntimeStateReleased {
+		t.Fatalf("stopped runtime policy/state = %q/%q, want remove/released", sandboxes.EffectiveStoppedRuntimePolicy(stopped), sandboxes.EffectiveStoppedRuntimeState(stopped))
 	}
 	manifest := mustPersistenceWorkspaceManifest(t, workspaceRoot)
 
