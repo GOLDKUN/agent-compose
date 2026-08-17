@@ -893,6 +893,10 @@ describe("runner execution", () => {
   }
 
   it("runs a DSH session end to end with model, effort, skill, MCP servers, and persona", async () => {
+    // A fresh session (no stored thread) takes DSH_RESUME's else-delete branch —
+    // stub a host-leaked value so clearing it is asserted deterministically,
+    // the same way the resume test below covers the other four vars' deletes.
+    vi.stubEnv("DSH_RESUME", "1");
     const { DshRunner } = await import("../src/runners/dsh.js");
     await withTempSession(async (root) => {
       const skillDir = path.join(root, "home", ".agents", "skills", "review");
@@ -930,6 +934,7 @@ describe("runner execution", () => {
       const mcpServers = JSON.parse(env.DSH_MCP_SERVERS) as Array<Record<string, unknown>>;
       expect(mcpServers[0]).toMatchObject({ transport: "stdio", command: "npx" });
       expect(env.DSH_SYSTEM_CONTEXT_FILE).toBeTruthy();
+      expect(env).not.toHaveProperty("DSH_RESUME");
 
       const stored = JSON.parse(await fs.readFile(path.join(root, "state", "agents", "providers", "dsh.json"), "utf8"));
       expect(stored.threadId).toBe(result.threadId);
