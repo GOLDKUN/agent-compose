@@ -48,7 +48,7 @@ Env vars aren't unbounded: Linux caps a single `argv`/`envp` string at `MAX_ARG_
 | `DSH_MCP_SERVERS` | `dsh.ts` | JSON array of per-server `dsh-mcp-client` configs; consumed by `runner.js` (§6) |
 | `LLM_API_KEY`, `LLM_API_ENDPOINT` | facade config | Consumed by the `llm-deepseek` row (§4) |
 
-`env` starts from `...process.env`, so a key this run has no value for isn't automatically absent — it's whatever the host process happened to export. `DSH_SYSTEM_CONTEXT_FILE` and `DSH_MCP_SERVERS` are explicitly `delete`d when this run has no persona/MCP servers, rather than left conditionally-set, so a host-inherited value can't leak through as this run's persona file or server list.
+`env` starts from `...process.env`, so a key this run has no value for isn't automatically absent — it's whatever the host process happened to export. Every conditional `DSH_*` var (`DSH_SYSTEM_CONTEXT_FILE`, `DSH_MCP_SERVERS`, `DSH_RESUME`, `DSH_MODEL`, `DSH_REASONING_EFFORT`, `DSH_SKILL_DIRS`) is therefore explicitly `delete`d in its false branch rather than left conditionally-set, so a host-inherited value can't leak through as this run's persona file, MCP server list, resume flag, model, effort, or skill directories. `DSH_SKILL_DIRS` is the sharpest case: an inherited value would have `dsh` load a skill directory `resolveSkillPaths()`'s symlink-escape check never saw, under `danger-full-access` permissions.
 
 ## 4. LLM facade routing
 

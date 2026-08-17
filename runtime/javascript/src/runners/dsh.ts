@@ -90,11 +90,14 @@ export class DshRunner {
         DSH_PROMPT_FILE: promptFile,
         DSH_SESSION_ID: sessionId,
       };
-      // env starts from ...process.env (line 86), so an unset key here isn't
+      // env starts from ...process.env (line 86), so an unset key below isn't
       // "absent" — it's whatever the host process happened to have exported.
-      // Explicitly clear rather than conditionally set, so a run with no
-      // system context can't inherit a stale/host DSH_SYSTEM_CONTEXT_FILE and
-      // have runner.js inject an unrelated file's contents as the persona.
+      // Every conditional DSH_* var must therefore have an explicit else-branch
+      // delete, not just a truthy-branch set, or a host-exported value with the
+      // same name passes straight through to the dsh child. DSH_SKILL_DIRS is
+      // the sharpest case: an inherited value would have dsh load an
+      // unvalidated skill directory (resolveSkillPaths()'s symlink-escape check
+      // never sees it) under danger-full-access permissions.
       if (systemContextFile) {
         env.DSH_SYSTEM_CONTEXT_FILE = systemContextFile;
       } else {
@@ -102,18 +105,21 @@ export class DshRunner {
       }
       if (resume) {
         env.DSH_RESUME = "1";
+      } else {
+        delete env.DSH_RESUME;
       }
       const modelName = dshModelName(this.options.model);
       if (modelName) {
         env.DSH_MODEL = modelName;
+      } else {
+        delete env.DSH_MODEL;
       }
       const effort = dshReasoningEffort(this.options.effort);
       if (effort) {
         env.DSH_REASONING_EFFORT = effort;
+      } else {
+        delete env.DSH_REASONING_EFFORT;
       }
-      // Same reasoning as DSH_SYSTEM_CONTEXT_FILE above: clear explicitly so
-      // a run with no MCP servers can't inherit a stale/host DSH_MCP_SERVERS
-      // and have runner.js register servers this run never configured.
       if (mcpServers.length > 0) {
         const mcpServersJson = JSON.stringify(mcpServers);
         assertEnvValueWithinExecLimit("DSH_MCP_SERVERS", mcpServersJson);
@@ -124,6 +130,8 @@ export class DshRunner {
       const skillDirs = await this.resolveSkillPaths();
       if (skillDirs.length > 0) {
         env.DSH_SKILL_DIRS = skillDirs.join(":");
+      } else {
+        delete env.DSH_SKILL_DIRS;
       }
 
       const child = spawn("dsh", ["--profile", "agent-compose"], {
