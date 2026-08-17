@@ -2,6 +2,7 @@ package echofn
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,11 +23,12 @@ func EchoHTTPErrorHandler(err error, c echo.Context) {
 		return
 	}
 
-	he, ok := err.(*echo.HTTPError)
-	if ok {
+	var he *echo.HTTPError
+	if errors.As(err, &he) {
 		if he.Internal != nil {
-			if herr, ok := he.Internal.(*echo.HTTPError); ok {
-				he = herr
+			var internal *echo.HTTPError
+			if errors.As(he.Internal, &internal) {
+				he = internal
 			}
 		}
 	} else {

@@ -87,7 +87,7 @@ func (s *Scheduler) NextFireAt() (time.Time, bool) {
 			continue
 		}
 		for _, trigger := range scheduler.Triggers {
-			if !trigger.Enabled || !domain.SchedulerTriggerUsesSchedule(trigger.Kind) || trigger.NextFireAt.IsZero() {
+			if !trigger.Enabled || !TriggerUsesSchedule(trigger.Kind) || trigger.NextFireAt.IsZero() {
 				continue
 			}
 			if nextFireAt.IsZero() || trigger.NextFireAt.Before(nextFireAt) {

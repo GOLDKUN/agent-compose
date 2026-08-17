@@ -323,7 +323,6 @@ func TestStoreConcurrentAddEventJSONL(t *testing.T) {
 	var wg sync.WaitGroup
 	errCh := make(chan error, eventCount)
 	for index := 0; index < eventCount; index++ {
-		index := index
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

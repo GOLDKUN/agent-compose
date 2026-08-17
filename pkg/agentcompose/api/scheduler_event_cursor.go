@@ -21,7 +21,7 @@ type projectSchedulerEventCursor struct {
 }
 
 func encodeProjectSchedulerEventCursor(projectID string, projectRevision int64, agentName, triggerID, runID string, event domain.SchedulerEvent) string {
-	payload, _ := json.Marshal(projectSchedulerEventCursor{
+	payload, err := json.Marshal(projectSchedulerEventCursor{
 		ProjectID:       strings.TrimSpace(projectID),
 		ProjectRevision: projectRevision,
 		AgentName:       strings.TrimSpace(agentName),
@@ -31,5 +31,11 @@ func encodeProjectSchedulerEventCursor(projectID string, projectRevision int64, 
 		SchedulerID:     strings.TrimSpace(event.SchedulerID),
 		EventID:         strings.TrimSpace(event.ID),
 	})
+	if err != nil {
+		// An unencodable timestamp cannot produce a resumable checkpoint; an
+		// empty cursor makes the caller restart the stream rather than resume
+		// from a corrupt position.
+		return ""
+	}
 	return base64.RawURLEncoding.EncodeToString(payload)
 }

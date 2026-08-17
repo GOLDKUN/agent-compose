@@ -166,7 +166,7 @@ func (h *SandboxHandler) ListSandboxes(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	statuses, err := domain.NormalizeSandboxVMStatuses(statusValues)
+	statuses, err := sandboxes.NormalizeVMStatuses(statusValues)
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
@@ -317,8 +317,8 @@ func (h *SandboxHandler) StopSandbox(ctx context.Context, req *connect.Request[a
 	if err != nil {
 		return nil, err
 	}
-	policy := domain.EffectiveStoppedRuntimePolicy(sandbox)
-	state := domain.EffectiveStoppedRuntimeState(sandbox)
+	policy := sandboxes.EffectiveStoppedRuntimePolicy(sandbox)
+	state := sandboxes.EffectiveStoppedRuntimeState(sandbox)
 	if sandbox.Summary.VMStatus == domain.VMStatusStopped &&
 		(policy == domain.StoppedRuntimePolicyRetain || state == domain.StoppedRuntimeStateReleased) {
 		outcome := agentcomposev2.SandboxStopOutcome_SANDBOX_STOP_OUTCOME_FORCE
@@ -451,8 +451,8 @@ func sandboxToV2WithTarget(sandbox *domain.Sandbox, target runs.SandboxRunTarget
 		EventCount:           uint32(sandbox.Summary.EventCount),
 		ProjectId:            target.ProjectID,
 		AgentName:            target.AgentName,
-		StoppedRuntimePolicy: domain.EffectiveStoppedRuntimePolicy(sandbox),
-		StoppedRuntimeState:  domain.EffectiveStoppedRuntimeState(sandbox),
+		StoppedRuntimePolicy: sandboxes.EffectiveStoppedRuntimePolicy(sandbox),
+		StoppedRuntimeState:  sandboxes.EffectiveStoppedRuntimeState(sandbox),
 	}
 	if stoppedRuntime := sandbox.StoppedRuntime; stoppedRuntime != nil {
 		result.StoppedRuntimeLastError = stoppedRuntime.LastError

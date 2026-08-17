@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 )
 
@@ -144,7 +145,7 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	if existing, ok, err := h.store().FindEventByIdempotencyKey(c.Request().Context(), topic, idempotencyKey); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook event"})
 	} else if ok {
-		if ExistingBodyHash(existing.PayloadJSON) != domain.TopicEventPayloadSHA256(compactBody) {
+		if ExistingBodyHash(existing.PayloadJSON) != events.PayloadSHA256(compactBody) {
 			return c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
 		}
 		return c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
@@ -160,7 +161,7 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to encode webhook payload"})
 	}
-	payloadHash := domain.TopicEventPayloadSHA256(payloadJSON)
+	payloadHash := events.PayloadSHA256(payloadJSON)
 	created, err := h.store().CreateEvent(c.Request().Context(), domain.TopicEventRecord{
 		ID:             eventID,
 		Topic:          topic,
@@ -182,7 +183,7 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 			if strings.TrimSpace(existing.ID) == "" || strings.TrimSpace(existing.Topic) != topic {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "invalid conflicting webhook event"})
 			}
-			if ExistingBodyHash(existing.PayloadJSON) == domain.TopicEventPayloadSHA256(compactBody) {
+			if ExistingBodyHash(existing.PayloadJSON) == events.PayloadSHA256(compactBody) {
 				return c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
 			}
 			return c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
@@ -210,14 +211,14 @@ func (h routeHandler) handleGetEvent(c echo.Context) error {
 func (h routeHandler) handleListEvents(c echo.Context) error {
 	source := strings.TrimSpace(c.QueryParam("source"))
 	if source != "" {
-		source = domain.NormalizeTopicEventSource(source)
+		source = events.NormalizeSource(source)
 		if source == "" {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "source is invalid"})
 		}
 	}
 	topic := strings.TrimSpace(c.QueryParam("topic"))
 	if topic != "" {
-		if err := domain.ValidateTopicEventName(topic); err != nil {
+		if err := events.ValidateTopicName(topic); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
 	}
@@ -291,7 +292,7 @@ func (h routeHandler) handleListEventTopics(c echo.Context) error {
 	if store == nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "event query store is required"})
 	}
-	source := domain.NormalizeTopicEventSource(c.QueryParam("source"))
+	source := events.NormalizeSource(c.QueryParam("source"))
 	if source == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "source is required"})
 	}

@@ -426,7 +426,7 @@ func (c *Controller) UpdateTriggerEventDelivery(ctx context.Context, run domain.
 
 func (c *Controller) EnterRun(scheduler domain.Scheduler) bool {
 	schedulerID := strings.TrimSpace(scheduler.Summary.ID)
-	policy := domain.NormalizeSchedulerConcurrencyPolicy(scheduler.Summary.ConcurrencyPolicy)
+	policy := NormalizeConcurrencyPolicy(scheduler.Summary.ConcurrencyPolicy)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if policy != domain.SchedulerConcurrencyPolicyParallel && c.running[schedulerID] > 0 {

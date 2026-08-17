@@ -8,6 +8,7 @@ import (
 
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
+	"agent-compose/pkg/storage/storeutil"
 )
 
 const (
@@ -47,35 +48,42 @@ func (s *projectStore) ListProjects(ctx context.Context, options ProjectListOpti
 	}
 
 	pageArgs := append(append([]any(nil), args...), limit, offset)
-	rows, err := tx.QueryContext(ctx, `SELECT
-		p.id, p.name, p.short_id, p.source_path, p.source_json,
-		p.current_revision, p.spec_hash, p.created_at, p.updated_at, p.removed_at,
-		(SELECT COUNT(*) FROM project_agent a
-			WHERE a.project_id = p.id AND (p.current_revision <= 0 OR a.revision = p.current_revision)),
-		(SELECT COUNT(*) FROM project_scheduler s
-			WHERE s.project_id = p.id AND (p.current_revision <= 0 OR s.revision = p.current_revision))
+	rows, err := tx.QueryContext(ctx, `WITH page AS (
+		SELECT p.id, p.name, p.short_id, p.source_path, p.source_json,
+			p.current_revision, p.spec_hash, p.created_at, p.updated_at, p.removed_at
 		FROM project p
 		WHERE `+where+`
 		ORDER BY p.updated_at DESC, p.created_at DESC, p.id ASC
-		LIMIT ? OFFSET ?`, pageArgs...)
+		LIMIT ? OFFSET ?
+	), agent_counts AS (
+		SELECT a.project_id AS id, COUNT(*) AS agent_count
+		FROM project_agent a
+		JOIN page ON page.id = a.project_id
+		WHERE page.current_revision <= 0 OR a.revision = page.current_revision
+		GROUP BY a.project_id
+	), scheduler_counts AS (
+		SELECT s.project_id AS id, COUNT(*) AS scheduler_count
+		FROM project_scheduler s
+		JOIN page ON page.id = s.project_id
+		WHERE page.current_revision <= 0 OR s.revision = page.current_revision
+		GROUP BY s.project_id
+	)
+	SELECT page.id, page.name, page.short_id, page.source_path, page.source_json,
+		page.current_revision, page.spec_hash, page.created_at, page.updated_at, page.removed_at,
+		COALESCE(agent_counts.agent_count, 0),
+		COALESCE(scheduler_counts.scheduler_count, 0)
+	FROM page
+	LEFT JOIN agent_counts ON agent_counts.id = page.id
+	LEFT JOIN scheduler_counts ON scheduler_counts.id = page.id
+	ORDER BY page.updated_at DESC, page.created_at DESC, page.id ASC`, pageArgs...)
 	if err != nil {
 		return ProjectListResult{}, fmt.Errorf("query project page: %w", err)
 	}
-	for rows.Next() {
-		project, counts, scanErr := scanProjectListRow(rows)
-		if scanErr != nil {
-			_ = rows.Close()
-			return ProjectListResult{}, scanErr
-		}
-		result.Projects = append(result.Projects, project)
-		result.CountsByProjectID[project.ID] = counts
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return ProjectListResult{}, fmt.Errorf("iterate project page: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		return ProjectListResult{}, fmt.Errorf("close project page: %w", err)
+	// The cursor belongs to tx and must be released before Commit below, so it is
+	// consumed in a helper whose deferred Close runs at that point rather than at
+	// the end of this function.
+	if err := collectProjectListPage(rows, &result); err != nil {
+		return ProjectListResult{}, err
 	}
 
 	result.NextOffset = offset + len(result.Projects)
@@ -84,6 +92,25 @@ func (s *projectStore) ListProjects(ctx context.Context, options ProjectListOpti
 		return ProjectListResult{}, fmt.Errorf("commit project list transaction: %w", err)
 	}
 	return result, nil
+}
+
+// collectProjectListPage drains one project page cursor into result. It owns the
+// cursor for its whole lifetime so that the deferred Close runs before the
+// caller commits the transaction the cursor was opened on.
+func collectProjectListPage(rows *sql.Rows, result *ProjectListResult) (err error) {
+	defer func() { storeutil.ReportClose(rows.Close(), &err, "project page") }()
+	for rows.Next() {
+		project, counts, scanErr := scanProjectListRow(rows)
+		if scanErr != nil {
+			return scanErr
+		}
+		result.Projects = append(result.Projects, project)
+		result.CountsByProjectID[project.ID] = counts
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate project page: %w", err)
+	}
+	return nil
 }
 
 func projectListBounds(options ProjectListOptions) (limit, offset int) {

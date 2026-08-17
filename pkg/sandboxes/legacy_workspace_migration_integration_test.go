@@ -1,6 +1,7 @@
 package sandboxes_test
 
 import (
+	"agent-compose/pkg/sandboxes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,7 +18,6 @@ import (
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/storage/sandboxstore"
 	"agent-compose/pkg/workspaces"
 )

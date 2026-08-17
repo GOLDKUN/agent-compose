@@ -2,6 +2,7 @@ package webhooks
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	appconfig "agent-compose/pkg/config"
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 
 	"github.com/labstack/echo/v4"
@@ -58,7 +60,7 @@ func TestWebhookHelpersAndQueueCoverageWorkflows(t *testing.T) {
 	if _, _, err := DecodeJSONObject([]byte(`[]`)); err == nil {
 		t.Fatalf("expected non-object decode error")
 	}
-	if _, err := ReadBody(&http.Request{Body: ioNopCloser{strings.NewReader("toolong")}}, 3); err != domain.ErrBodyTooLarge {
+	if _, err := ReadBody(&http.Request{Body: ioNopCloser{strings.NewReader("toolong")}}, 3); !errors.Is(err, domain.ErrBodyTooLarge) {
 		t.Fatalf("expected body too large, got %v", err)
 	}
 
@@ -403,7 +405,7 @@ func (s *webhookRouteStore) GetWebhookSource(_ context.Context, sourceID string)
 }
 
 func (s *webhookRouteStore) UpsertWebhookSource(_ context.Context, source domain.WebhookSource) (domain.WebhookSource, error) {
-	tokenHeader, err := domain.NormalizeHTTPHeaderName(source.TokenHeader)
+	tokenHeader, err := events.NormalizeHTTPHeaderName(source.TokenHeader)
 	if err != nil {
 		return domain.WebhookSource{}, err
 	}

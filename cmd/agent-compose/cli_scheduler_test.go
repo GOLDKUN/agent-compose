@@ -3,7 +3,7 @@ package main
 import (
 	"agent-compose/pkg/compose"
 	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"encoding/json"
@@ -318,15 +318,15 @@ agents:
 		t.Fatalf("scheduler ls stdout = %q", stdout)
 	}
 
-	projectID, err := domain.StableProjectID("cli-scheduler-list", composePath)
+	projectID, err := projects.StableProjectID("cli-scheduler-list", composePath)
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}
-	agentID, err := domain.StableProjectAgentID(projectID, "reviewer")
+	agentID, err := projects.StableProjectAgentID(projectID, "reviewer")
 	if err != nil {
 		t.Fatalf("StableProjectAgentID returned error: %v", err)
 	}
-	schedulerID, err := domain.StableProjectSchedulerID(projectID, "reviewer", "")
+	schedulerID, err := projects.StableProjectSchedulerID(projectID, "reviewer", "")
 	if err != nil {
 		t.Fatalf("StableProjectSchedulerID returned error: %v", err)
 	}
@@ -355,7 +355,7 @@ agents:
 }
 
 func TestComposeUpUsesDistinctStableTriggerIDs(t *testing.T) {
-	projectID, err := domain.StableProjectID("trigger-ids", "/tmp/trigger-ids/agent-compose.yml")
+	projectID, err := projects.StableProjectID("trigger-ids", "/tmp/trigger-ids/agent-compose.yml")
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestComposeUpUsesDistinctStableTriggerIDs(t *testing.T) {
 		t.Fatalf("trigger display changes = %#v, want 2", changes)
 	}
 	for index, name := range []string{"hourly", "startup"} {
-		wantID, err := domain.StableSchedulerTriggerID(projectID, "reviewer", "", name, index)
+		wantID, err := projects.StableSchedulerTriggerID(projectID, "reviewer", "", name, index)
 		if err != nil {
 			t.Fatalf("StableSchedulerTriggerID(%q) returned error: %v", name, err)
 		}
@@ -444,7 +444,7 @@ agents:
 	server := newComposeServiceStubServer(t, composeServiceStubs{
 		project: projectServiceStub{
 			getProject: func(ctx context.Context, req *connect.Request[agentcomposev2.GetProjectRequest]) (*connect.Response[agentcomposev2.GetProjectResponse], error) {
-				projectID, err := domain.StableProjectID("cli-scheduler-observability", "")
+				projectID, err := projects.StableProjectID("cli-scheduler-observability", "")
 				if err != nil {
 					t.Fatalf("resolve test project ID: %v", err)
 				}
@@ -742,11 +742,11 @@ agents:
 	if !strings.Contains(stdout, "name: nightly") || !strings.Contains(stdout, "cron: 0 2 * * *") || !strings.Contains(stdout, "prompt: review nightly") {
 		t.Fatalf("scheduler inspect stdout = %q", stdout)
 	}
-	projectID, err := domain.StableProjectID("cli-scheduler-inspect", composePath)
+	projectID, err := projects.StableProjectID("cli-scheduler-inspect", composePath)
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}
-	triggerID, err := domain.StableSchedulerTriggerID(projectID, "reviewer", "", "nightly", 0)
+	triggerID, err := projects.StableSchedulerTriggerID(projectID, "reviewer", "", "nightly", 0)
 	if err != nil {
 		t.Fatalf("StableSchedulerTriggerID returned error: %v", err)
 	}

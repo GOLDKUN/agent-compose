@@ -3,6 +3,7 @@ package webhooks
 import (
 	"encoding/json"
 
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 )
 
@@ -19,5 +20,5 @@ func ExistingBodyHash(payloadJSON string) string {
 	if err != nil {
 		return ""
 	}
-	return domain.TopicEventPayloadSHA256(compact)
+	return events.PayloadSHA256(compact)
 }

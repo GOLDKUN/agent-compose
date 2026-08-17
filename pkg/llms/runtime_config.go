@@ -159,8 +159,13 @@ func buildCodexManagedMCPBlock(mcps map[string]compose.NormalizedMCPServerSpec) 
 		if mcp.Type == "local" {
 			fmt.Fprintf(&b, "command = %q\n", mcp.Command)
 			if len(mcp.Args) > 0 {
-				args, _ := json.Marshal(mcp.Args)
-				fmt.Fprintf(&b, "args = %s\n", args)
+				// Args is []string, which encoding/json can always encode, so the
+				// error is unreachable and dropping it cannot lose an args line.
+				// Should Args ever hold an arbitrary type, omitting the line keeps
+				// the generated TOML parseable; emitting a bare "args =" would not.
+				if args, argsErr := json.Marshal(mcp.Args); argsErr == nil {
+					fmt.Fprintf(&b, "args = %s\n", args)
+				}
 			}
 			if len(mcp.Env) > 0 {
 				b.WriteString("[mcp_servers." + name + ".env]\n")

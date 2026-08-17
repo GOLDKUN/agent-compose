@@ -32,10 +32,10 @@ type HostProjectAgentRunner interface {
 func (h *RuntimeHost) ProjectAgent(ctx context.Context, prompt string, request domain.SchedulerAgentRequest) (domain.SchedulerAgentResult, error) {
 	sandboxPolicy := domain.SchedulerSandboxPolicyNew
 	if strings.TrimSpace(h.scheduler.Summary.SandboxPolicy) != "" {
-		sandboxPolicy = domain.NormalizeSchedulerSandboxPolicy(h.scheduler.Summary.SandboxPolicy)
+		sandboxPolicy = NormalizeSandboxPolicy(h.scheduler.Summary.SandboxPolicy)
 	}
-	if strings.TrimSpace(domain.SchedulerAgentSandboxPolicy(request)) != "" {
-		sandboxPolicy = domain.NormalizeSchedulerSandboxPolicy(domain.SchedulerAgentSandboxPolicy(request))
+	if strings.TrimSpace(AgentSandboxPolicy(request)) != "" {
+		sandboxPolicy = NormalizeSandboxPolicy(AgentSandboxPolicy(request))
 	}
 	configHash, err := SchedulerSandboxConfigHash(h.scheduler)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 
 	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 )
 
 func upsertNativeTestScheduler(ctx context.Context, store *ConfigStore, scheduler domain.Scheduler) (domain.Scheduler, error) {
@@ -62,7 +63,7 @@ func upsertNativeTestScheduler(ctx context.Context, store *ConfigStore, schedule
 	}
 	agentID := scheduler.Summary.AgentID
 	if agentID == "" {
-		agentID, err = domain.StableProjectAgentID(projectID, agentName)
+		agentID, err = projects.StableProjectAgentID(projectID, agentName)
 		if err != nil {
 			return domain.Scheduler{}, err
 		}

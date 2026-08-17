@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 )
 
@@ -18,7 +19,7 @@ type eventListQuery struct {
 }
 
 func buildEventSourcePredicate(source string) (string, []any) {
-	values := domain.TopicEventSourceFilterValues(source)
+	values := events.SourceFilterValues(source)
 	if len(values) == 0 {
 		return "", nil
 	}
@@ -53,7 +54,7 @@ func buildEventListQuery(filter domain.TopicEventFilter) (eventListQuery, error)
 		args = append(args, sourceArgs...)
 	}
 	if topic := strings.TrimSpace(filter.Topic); topic != "" {
-		if err := domain.ValidateTopicEventName(topic); err != nil {
+		if err := events.ValidateTopicName(topic); err != nil {
 			return eventListQuery{}, err
 		}
 		clauses = append(clauses, "topic = ?")
@@ -67,7 +68,7 @@ func buildEventListQuery(filter domain.TopicEventFilter) (eventListQuery, error)
 		clauses = append(clauses, "sequence > ?")
 		args = append(args, filter.AfterSequence)
 	}
-	if status := domain.NormalizeTopicEventDispatchStatus(filter.DispatchStatus); status != "" && strings.TrimSpace(filter.DispatchStatus) != "" {
+	if status := events.NormalizeDispatchStatus(filter.DispatchStatus); status != "" && strings.TrimSpace(filter.DispatchStatus) != "" {
 		clauses = append(clauses, "dispatch_status = ?")
 		args = append(args, status)
 	}

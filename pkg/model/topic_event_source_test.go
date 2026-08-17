@@ -4,12 +4,13 @@ import (
 	"slices"
 	"testing"
 
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 )
 
 func TestTopicEventSourceFilterValuesIncludeLegacyLoaderAlias(t *testing.T) {
 	for _, source := range []string{domain.TopicEventSourceScheduler, "loader"} {
-		got := domain.TopicEventSourceFilterValues(source)
+		got := events.SourceFilterValues(source)
 		want := []string{domain.TopicEventSourceScheduler, "loader"}
 		if !slices.Equal(got, want) {
 			t.Fatalf("TopicEventSourceFilterValues(%q) = %#v, want %#v", source, got, want)
@@ -17,12 +18,12 @@ func TestTopicEventSourceFilterValuesIncludeLegacyLoaderAlias(t *testing.T) {
 	}
 
 	for _, source := range []string{domain.TopicEventSourceWebhook, domain.TopicEventSourceSystem} {
-		got := domain.TopicEventSourceFilterValues(source)
+		got := events.SourceFilterValues(source)
 		if !slices.Equal(got, []string{source}) {
 			t.Fatalf("TopicEventSourceFilterValues(%q) = %#v, want [%q]", source, got, source)
 		}
 	}
-	if got := domain.TopicEventSourceFilterValues("unknown"); got != nil {
+	if got := events.SourceFilterValues("unknown"); got != nil {
 		t.Fatalf("TopicEventSourceFilterValues(unknown) = %#v, want nil", got)
 	}
 }

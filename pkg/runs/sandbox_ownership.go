@@ -20,7 +20,7 @@ func validateProjectRunSandboxOwnership(sandbox *domain.Sandbox, run domain.Proj
 	}
 	ownership, err := projectRunSandboxOwnership(sandbox)
 	if err != nil {
-		return fmt.Errorf("%w: sandbox %s has conflicting ownership metadata: %v", ErrInvalidRequest, sandbox.Summary.ID, err)
+		return fmt.Errorf("%w: sandbox %s has conflicting ownership metadata: %w", ErrInvalidRequest, sandbox.Summary.ID, err)
 	}
 	if ownership.ProjectID != "" && ownership.ProjectID != strings.TrimSpace(run.ProjectID) {
 		return projectRunSandboxOwnershipMismatch(sandbox.Summary.ID, ownership, run)

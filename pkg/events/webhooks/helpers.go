@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 )
 
@@ -68,7 +69,7 @@ func ReadBody(r *http.Request, limit int64) ([]byte, error) {
 }
 
 func ValidateExternalTopic(topic string) error {
-	if err := domain.ValidateTopicEventName(topic); err != nil {
+	if err := events.ValidateTopicName(topic); err != nil {
 		return err
 	}
 	if !strings.HasPrefix(topic, "webhook.") {

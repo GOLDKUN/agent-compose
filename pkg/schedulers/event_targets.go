@@ -3,6 +3,7 @@ package schedulers
 import (
 	"strings"
 
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 )
 
@@ -18,7 +19,7 @@ func CollectEventTargets(items []domain.Scheduler, topic string) []EventTarget {
 			continue
 		}
 		for _, trigger := range scheduler.Triggers {
-			if !trigger.Enabled || trigger.Kind != domain.SchedulerTriggerKindEvent || !domain.SchedulerTriggerTopicMatches(trigger.Topic, topic) {
+			if !trigger.Enabled || trigger.Kind != domain.SchedulerTriggerKindEvent || !events.TriggerTopicMatches(trigger.Topic, topic) {
 				continue
 			}
 			targets = append(targets, EventTarget{
@@ -54,7 +55,7 @@ func DedupeWebhookEventTargets(event domain.SchedulerTopicEvent, targets []Event
 func AnyTargetBusy(targets []EventTarget, running map[string]int) bool {
 	for _, target := range targets {
 		schedulerID := strings.TrimSpace(target.Scheduler.Summary.ID)
-		if domain.NormalizeSchedulerConcurrencyPolicy(target.Scheduler.Summary.ConcurrencyPolicy) != domain.SchedulerConcurrencyPolicyParallel && running[schedulerID] > 0 {
+		if NormalizeConcurrencyPolicy(target.Scheduler.Summary.ConcurrencyPolicy) != domain.SchedulerConcurrencyPolicyParallel && running[schedulerID] > 0 {
 			return true
 		}
 	}

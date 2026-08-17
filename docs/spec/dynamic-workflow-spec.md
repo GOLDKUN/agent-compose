@@ -634,7 +634,7 @@ SDK behavior：
 
 `runtime/javascript/package-lock.json` 更新。
 
-`runtime/javascript` 和 `runtime/agent-compose-runtime-sdk` package version 从当前 `0.8.0` 升到 `0.9.0`。`dist/` 不在 Git 跟踪文件内，不手工提交。
+`runtime/javascript` 和 `runtime/agent-compose-runtime-sdk` package version 从当前 `0.9.0` 升到 `0.10.0`。`dist/` 不在 Git 跟踪文件内，不手工提交。
 
 ## 工作流和失败语义
 

@@ -2,6 +2,7 @@ package workspaces
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -190,7 +191,7 @@ func TestProvisionerConcurrentWaiterCancellationDoesNotCancelSharedAttempt(t *te
 	}()
 	select {
 	case err := <-waiterResult:
-		if err != context.Canceled {
+		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("canceled waiter error = %v, want %v", err, context.Canceled)
 		}
 	case <-time.After(500 * time.Millisecond):

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 
 	"github.com/google/uuid"
@@ -73,7 +74,7 @@ func NewPublishedTopicEvent(topic, payloadJSON string, trigger TriggerEventMetad
 			Source:         domain.TopicEventSourceScheduler,
 			Provider:       provider,
 			CorrelationID:  correlationID,
-			PayloadHash:    domain.TopicEventPayloadSHA256(envelopeJSON),
+			PayloadHash:    events.PayloadSHA256(envelopeJSON),
 			PayloadJSON:    envelopeJSON,
 			DispatchStatus: domain.TopicEventDispatchPending,
 			ParentEventID:  parentEventID,
@@ -96,7 +97,7 @@ func UpdatePublishedTopicEventSequence(event PublishedTopicEvent, sequence int64
 		return domain.TopicEventRecord{}, err
 	}
 	event.Record.PayloadJSON = envelopeJSON
-	event.Record.PayloadHash = domain.TopicEventPayloadSHA256(envelopeJSON)
+	event.Record.PayloadHash = events.PayloadSHA256(envelopeJSON)
 	return event.Record, nil
 }
 
@@ -119,7 +120,7 @@ func ParseTriggerEventMetadata(payloadJSON string) TriggerEventMetadata {
 }
 
 func ValidatePublishTopic(topic string) error {
-	if err := domain.ValidateTopicEventName(topic); err != nil {
+	if err := events.ValidateTopicName(topic); err != nil {
 		return err
 	}
 	if strings.HasPrefix(topic, "runtime.") || strings.HasPrefix(topic, "workflow.") || strings.HasPrefix(topic, "external.") {

@@ -34,7 +34,7 @@ func SandboxStoppedEventMessage(sandbox *domain.Sandbox, result StopRuntimeResul
 	if result.Released {
 		return "sandbox stopped and runtime released"
 	}
-	if domain.SandboxRuntimeReleaseIntentional(sandbox) {
+	if RuntimeReleaseIntentional(sandbox) {
 		return "sandbox stopped; runtime release pending"
 	}
 	return "sandbox stopped and runtime retained"
@@ -51,7 +51,7 @@ func StopSandboxRuntime(ctx context.Context, sandboxRoot string, store StoppedRu
 	if err != nil {
 		return StopRuntimeResult{}, err
 	}
-	policy := domain.EffectiveStoppedRuntimePolicy(sandbox)
+	policy := EffectiveStoppedRuntimePolicy(sandbox)
 	if !stopRequired && policy == domain.StoppedRuntimePolicyRetain {
 		return StopRuntimeResult{}, nil
 	}
@@ -64,7 +64,7 @@ func StopSandboxRuntime(ctx context.Context, sandboxRoot string, store StoppedRu
 	}
 
 	now := time.Now().UTC()
-	if policy == domain.StoppedRuntimePolicyRemove && (domain.EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateReleased || stopRequired) {
+	if policy == domain.StoppedRuntimePolicyRemove && (EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateReleased || stopRequired) {
 		if sandbox.StoppedRuntime == nil || sandbox.StoppedRuntime.State != domain.StoppedRuntimeStateReleasePending {
 			sandbox.StoppedRuntime = &domain.StoppedRuntime{State: domain.StoppedRuntimeStateReleasePending, RequestedAt: now}
 		} else {
@@ -88,7 +88,7 @@ func StopSandboxRuntime(ctx context.Context, sandboxRoot string, store StoppedRu
 			return result, fmt.Errorf("persist stopped sandbox: %w", err)
 		}
 	}
-	if policy != domain.StoppedRuntimePolicyRemove || domain.EffectiveStoppedRuntimeState(sandbox) == domain.StoppedRuntimeStateReleased {
+	if policy != domain.StoppedRuntimePolicyRemove || EffectiveStoppedRuntimeState(sandbox) == domain.StoppedRuntimeStateReleased {
 		return result, nil
 	}
 

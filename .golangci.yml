@@ -1,0 +1,35 @@
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, unused — the set that was already
+  # in effect back when lint ran with --no-config.
+  default: standard
+  enable:
+    # Errors: classify by identity, never by message or unwrapped comparison.
+    - errorlint
+    # Resources: bodies, rows, and statements released on every exit path.
+    - bodyclose
+    - sqlclosecheck
+    - rowserrcheck
+    # Correctness traps that are silent at runtime.
+    - errchkjson
+    - makezero
+    - durationcheck
+    - wastedassign
+    - copyloopvar
+
+  exclusions:
+    generated: lax
+    rules:
+      # A failed marshal in a test is a test bug that the assertion following it
+      # already surfaces.
+      - linters: [errchkjson]
+        path: _test\.go
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

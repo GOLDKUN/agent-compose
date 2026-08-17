@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
@@ -27,6 +28,7 @@ import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/sandboxes"
 	storagesqlite "agent-compose/pkg/storage/sqlite"
+	"agent-compose/pkg/volumes"
 
 	"github.com/google/uuid"
 )
@@ -369,7 +371,7 @@ func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImag
 		return nil, err
 	}
 	guestImage = driverpkg.ResolveSandboxGuestImage(guestImage, "", driverpkg.DefaultGuestImageForDriver(s.config, driver))
-	stoppedRuntimePolicy, err := domain.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy)
+	stoppedRuntimePolicy, err := compose.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy)
 	if err != nil {
 		return nil, fmt.Errorf("create sandbox: %w", err)
 	}
@@ -406,7 +408,7 @@ func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImag
 			ID:            id,
 			ShortID:       shortID,
 			Title:         strings.TrimSpace(title),
-			TriggerSource: domain.NormalizeSandboxTriggerSource(triggerSource, tags),
+			TriggerSource: sandboxes.NormalizeTriggerSource(triggerSource, tags),
 			Driver:        driver,
 			VMStatus:      VMStatusPending,
 			GuestImage:    guestImage,
@@ -423,7 +425,7 @@ func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImag
 		WorkspaceProvisioning: workspaceProvisioning,
 		StoppedRuntimePolicy:  stoppedRuntimePolicy,
 		EnvItems:              append([]SandboxEnvVar(nil), envItems...),
-		VolumeMounts:          domain.NormalizeSandboxVolumeMounts(options.VolumeMounts),
+		VolumeMounts:          volumes.NormalizeSandboxMounts(options.VolumeMounts),
 	}
 
 	if session.Summary.Title == "" {
@@ -573,7 +575,7 @@ func (s *Store) ListSandboxes(ctx context.Context, options SandboxListOptions) (
 	if err := s.ensureIndexCurrent(ctx); err != nil {
 		return SandboxListResult{}, err
 	}
-	offset, limit := domain.NormalizeSandboxListBounds(options.Offset, options.Limit)
+	offset, limit := sandboxes.NormalizeListBounds(options.Offset, options.Limit)
 	queryOffset := 0
 	skipped := 0
 	var page []*Sandbox
@@ -593,9 +595,10 @@ func (s *Store) ListSandboxes(ctx context.Context, options SandboxListOptions) (
 		if len(indexed) == 0 {
 			break
 		}
+		loaded := s.loadSandboxesConcurrently(indexed)
 		ghosts := 0
-		for _, item := range indexed {
-			full, loadErr := s.loadSandbox(item.Summary.ID)
+		for i, item := range indexed {
+			full, loadErr := loaded[i].sandbox, loaded[i].err
 			if loadErr != nil {
 				if err := s.deleteIndexRow(item.Summary.ID); err != nil {
 					return SandboxListResult{}, fmt.Errorf("prune unreadable sandbox listing cache row %s: %w", item.Summary.ID, err)
@@ -623,6 +626,38 @@ func (s *Store) ListSandboxes(ctx context.Context, options SandboxListOptions) (
 		HasMore:    nextOffset < total,
 		NextOffset: nextOffset,
 	}, nil
+}
+
+// sandboxLoadConcurrency bounds how many metadata.json reads ListSandboxes
+// issues at once per page batch, so a large page doesn't open unbounded
+// concurrent file descriptors.
+const sandboxLoadConcurrency = 8
+
+type sandboxLoadResult struct {
+	sandbox *Sandbox
+	err     error
+}
+
+// loadSandboxesConcurrently hydrates each indexed row's full Sandbox from
+// disk in parallel, preserving input order so callers can still apply
+// offset/skip logic positionally. loadSandbox and the layout registration it
+// performs are safe for concurrent use.
+func (s *Store) loadSandboxesConcurrently(indexed []*Sandbox) []sandboxLoadResult {
+	results := make([]sandboxLoadResult, len(indexed))
+	sem := make(chan struct{}, sandboxLoadConcurrency)
+	var wg sync.WaitGroup
+	for i, item := range indexed {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, id string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			full, err := s.loadSandbox(id)
+			results[i] = sandboxLoadResult{sandbox: full, err: err}
+		}(i, item.Summary.ID)
+	}
+	wg.Wait()
+	return results
 }
 
 func listRowsNeeded(skip, page int) int {
@@ -918,7 +953,7 @@ func (s *Store) loadSandboxFromDir(id, sandboxDir string) (*Sandbox, error) {
 	// WorkspacePath is derived from the active sandbox root. Persisted absolute
 	// paths may refer to the filesystem namespace of an older daemon process.
 	session.Summary.WorkspacePath = filepath.Join(sandboxDir, "workspace")
-	session.Summary.TriggerSource = domain.NormalizeSandboxTriggerSource(session.Summary.TriggerSource, session.Summary.Tags)
+	session.Summary.TriggerSource = sandboxes.NormalizeTriggerSource(session.Summary.TriggerSource, session.Summary.Tags)
 	if strings.TrimSpace(session.Summary.ShortID) == "" {
 		session.Summary.ShortID = identity.ShortID(session.Summary.ID)
 	}

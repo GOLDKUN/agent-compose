@@ -7,6 +7,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 )
 
 type sandboxRPCIDRequest struct {
@@ -44,7 +45,7 @@ type sandboxRPCListRequest struct {
 }
 
 func (r sandboxRPCListRequest) Options() (domain.SandboxListOptions, error) {
-	vmStatus, err := domain.NormalizeSandboxVMStatus(r.VMStatus)
+	vmStatus, err := sandboxes.NormalizeVMStatus(r.VMStatus)
 	if err != nil {
 		return domain.SandboxListOptions{}, err
 	}

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 )
 
 // listSandboxesFromFilesystem preserves the original listing contract for
@@ -17,7 +17,7 @@ func (s *Store) listSandboxesFromFilesystem(ctx context.Context, options Sandbox
 	if err != nil {
 		return SandboxListResult{}, fmt.Errorf("discover sandbox directories: %w", err)
 	}
-	var sandboxes []*Sandbox
+	var items []*Sandbox
 	for _, location := range locations {
 		if err := ctx.Err(); err != nil {
 			return SandboxListResult{}, err
@@ -27,33 +27,33 @@ func (s *Store) listSandboxesFromFilesystem(ctx context.Context, options Sandbox
 			continue
 		}
 		s.hydrateSandboxGuestImage(sandbox)
-		if !domain.SandboxMatchesListOptions(sandbox, options) || sandboxAtOrAfterCursor(sandbox, options) {
+		if !sandboxes.MatchesListOptions(sandbox, options) || sandboxAtOrAfterCursor(sandbox, options) {
 			continue
 		}
-		sandboxes = append(sandboxes, sandbox)
+		items = append(items, sandbox)
 	}
 	if projectID := strings.TrimSpace(options.ProjectID); projectID != "" {
-		projectIDs, err := s.resolveSandboxProjectIDs(ctx, sandboxes)
+		projectIDs, err := s.resolveSandboxProjectIDs(ctx, items)
 		if err != nil {
 			return SandboxListResult{}, fmt.Errorf("resolve sandbox project filter: %w", err)
 		}
-		filtered := sandboxes[:0]
-		for _, sandbox := range sandboxes {
+		filtered := items[:0]
+		for _, sandbox := range items {
 			if strings.EqualFold(projectIDs[sandbox.Summary.ID], projectID) {
 				filtered = append(filtered, sandbox)
 			}
 		}
-		sandboxes = filtered
+		items = filtered
 	}
-	sort.Slice(sandboxes, func(i, j int) bool {
-		if sandboxes[i].Summary.UpdatedAt.Equal(sandboxes[j].Summary.UpdatedAt) {
-			return sandboxes[i].Summary.ID > sandboxes[j].Summary.ID
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Summary.UpdatedAt.Equal(items[j].Summary.UpdatedAt) {
+			return items[i].Summary.ID > items[j].Summary.ID
 		}
-		return sandboxes[i].Summary.UpdatedAt.After(sandboxes[j].Summary.UpdatedAt)
+		return items[i].Summary.UpdatedAt.After(items[j].Summary.UpdatedAt)
 	})
-	total := len(sandboxes)
-	offset, limit := domain.NormalizeSandboxListBounds(options.Offset, options.Limit)
-	page := domain.PaginateSandboxes(sandboxes, offset, limit)
+	total := len(items)
+	offset, limit := sandboxes.NormalizeListBounds(options.Offset, options.Limit)
+	page := sandboxes.Paginate(items, offset, limit)
 	nextOffset := min(offset+len(page), total)
 	return SandboxListResult{
 		Sandboxes:  page,

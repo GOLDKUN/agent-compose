@@ -394,10 +394,17 @@ func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecyc
 		changes = append(changes, schedulerChanges...)
 		agents, listAgentsErr := c.store.ListProjectAgents(ctx, project.ID)
 		if listAgentsErr != nil {
+			// The listing failure is reported for diagnosis only and is formatted
+			// with %v on purpose. projectConnectError classifies this error with an
+			// ordered switch, so wrapping a second, unrelated cause would let the
+			// follow-up failure decide the status code instead of the reconcile
+			// failure that actually broke the apply.
+			//nolint:errorlint // secondary cause is diagnostic; see comment above
 			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project agents after reconcile failure: %v", normalized.Spec.Name, err, listAgentsErr)
 		}
 		schedulers, listSchedulersErr := c.store.ListProjectSchedulers(ctx, project.ID)
 		if listSchedulersErr != nil {
+			//nolint:errorlint // secondary cause is diagnostic; see comment above
 			return ApplyResult{}, fmt.Errorf("apply project %s: %w; list project schedulers after reconcile failure: %v", normalized.Spec.Name, err, listSchedulersErr)
 		}
 		return ApplyResult{
@@ -594,9 +601,9 @@ func (c *Controller) resolveProjectRef(ctx context.Context, ref ProjectRef, incl
 	projectValue := func(project domain.ProjectRecord) string { return project.Name }
 	selectorName := "name"
 	if ref.kind == projectRefSourcePath {
-		query = domain.NormalizeProjectSourcePath(value)
+		query = NormalizeProjectSourcePath(value)
 		projectValue = func(project domain.ProjectRecord) string {
-			return domain.NormalizeProjectSourcePath(project.SourcePath)
+			return NormalizeProjectSourcePath(project.SourcePath)
 		}
 		selectorName = "source path"
 	} else if ref.kind != projectRefName {
@@ -728,7 +735,7 @@ func (c *Controller) validateProjectAgentDefinitions(normalized NormalizedProjec
 	var issues []ValidationIssue
 	for _, agent := range agents {
 		path := "agents." + agent.AgentName
-		if _, err := domain.NormalizeAgentDefinition(agent, true); err != nil {
+		if _, err := NormalizeAgentDefinition(agent, true); err != nil {
 			issues = append(issues, ValidationIssue{Path: path, Message: err.Error()})
 			continue
 		}

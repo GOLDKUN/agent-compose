@@ -104,7 +104,7 @@ func (e *RunExecutor) Prepare(ctx context.Context, scheduler domain.Scheduler, t
 		Status:           domain.SchedulerRunStatusRunning,
 		StartedAt:        now,
 		PayloadJSON:      payloadJSON,
-		SourceScriptHash: domain.SchedulerSourceSHA(scheduler.Script),
+		SourceScriptHash: SourceSHA(scheduler.Script),
 		ArtifactsDir:     e.artifactsDir(scheduler.Summary.ID, ""),
 	}
 	if trigger != nil {

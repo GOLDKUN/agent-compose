@@ -2,7 +2,7 @@ package main
 
 import (
 	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
@@ -100,7 +100,7 @@ func resolveComposeProject(cli cliOptions) (string, *compose.NormalizedProjectSp
 	if err != nil {
 		return "", nil, "", err
 	}
-	projectID, err := domain.StableProjectID(normalized.Name, domain.NormalizeProjectSourcePath(composePath))
+	projectID, err := projects.StableProjectID(normalized.Name, projects.NormalizeProjectSourcePath(composePath))
 	if err != nil {
 		return "", nil, "", commandExitError{Code: exitCodeUsage, Err: fmt.Errorf("%s: resolve project %s: %w", composePath, normalized.Name, err)}
 	}

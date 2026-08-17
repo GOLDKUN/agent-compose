@@ -131,7 +131,7 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetSandbox: %v", err)
 		}
-		if loaded.Summary.VMStatus != domain.VMStatusStopped || domain.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
+		if loaded.Summary.VMStatus != domain.VMStatusStopped || sandboxes.EffectiveStoppedRuntimeState(loaded) != domain.StoppedRuntimeStateReleasePending {
 			t.Fatalf("stopped sandbox = %#v release=%#v", loaded.Summary, loaded.StoppedRuntime)
 		}
 		if len(indexer.revoked) != 1 || indexer.revoked[0] != sandbox.Summary.ID {

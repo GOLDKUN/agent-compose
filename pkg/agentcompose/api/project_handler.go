@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -147,16 +148,12 @@ func (h *ProjectHandler) ListSchedulers(ctx context.Context, req *connect.Reques
 	}
 	summaries := make([]*agentcomposev2.SchedulerSummary, 0, len(schedulers))
 	for _, scheduler := range schedulers {
-		enabled, err := h.effectiveSchedulerEnabled(ctx, scheduler)
-		if err != nil {
-			return nil, err
-		}
 		displayName, description := projectSchedulerPresentation(scheduler.SpecJSON)
 		summary := &agentcomposev2.SchedulerSummary{
 			ProjectId:    scheduler.ProjectID,
 			AgentName:    scheduler.AgentName,
 			SchedulerId:  scheduler.SchedulerID,
-			Enabled:      enabled,
+			Enabled:      scheduler.Enabled,
 			TriggerCount: uint32(scheduler.TriggerCount),
 			DisplayName:  displayName,
 			Description:  description,
@@ -167,21 +164,6 @@ func (h *ProjectHandler) ListSchedulers(ctx context.Context, req *connect.Reques
 		summaries = append(summaries, summary)
 	}
 	return connect.NewResponse(&agentcomposev2.ListSchedulersResponse{Schedulers: summaries, Total: uint32(total)}), nil
-}
-
-func (h *ProjectHandler) effectiveSchedulerEnabled(ctx context.Context, scheduler domain.ProjectSchedulerRecord) (bool, error) {
-	schedulerStore, ok := h.store.(ProjectSchedulerStore)
-	if !ok || scheduler.ID == "" {
-		return scheduler.Enabled, nil
-	}
-	definition, err := schedulerStore.GetScheduler(ctx, scheduler.ID)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, sql.ErrNoRows) {
-			return scheduler.Enabled, nil
-		}
-		return false, connect.NewError(connect.CodeInternal, err)
-	}
-	return definition.Summary.Enabled, nil
 }
 
 func (h *ProjectHandler) ListSchedulerEvents(ctx context.Context, req *connect.Request[agentcomposev2.ListSchedulerEventsRequest]) (*connect.Response[agentcomposev2.ListSchedulerEventsResponse], error) {
@@ -290,7 +272,7 @@ func declaredTriggerSpec(scheduler domain.ProjectSchedulerRecord, triggerID stri
 		return nil
 	}
 	for index, trigger := range spec.GetTriggers() {
-		id, err := domain.StableSchedulerTriggerID(scheduler.ProjectID, scheduler.AgentName, "", trigger.GetName(), index)
+		id, err := projects.StableSchedulerTriggerID(scheduler.ProjectID, scheduler.AgentName, "", trigger.GetName(), index)
 		if err == nil && id == triggerID {
 			return trigger
 		}

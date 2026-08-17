@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"agent-compose/pkg/capabilities"
+	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/sandboxstore"
@@ -48,7 +49,7 @@ type stickyProjectSandboxOptions struct {
 
 func stickyProjectSandboxOptionsFrom(options sandboxstore.CreateSandboxOptions) stickyProjectSandboxOptions {
 	policy := ""
-	if normalized, err := domain.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy); err == nil && normalized == domain.StoppedRuntimePolicyRemove {
+	if normalized, err := compose.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy); err == nil && normalized == domain.StoppedRuntimePolicyRemove {
 		policy = domain.StoppedRuntimePolicyRemove
 	}
 	return stickyProjectSandboxOptions{

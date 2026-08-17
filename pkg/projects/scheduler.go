@@ -27,7 +27,7 @@ func ProjectSchedulerTriggersAndScript(projectID, agentName, schedulerName strin
 			}
 			seenNames[name] = struct{}{}
 		}
-		id, err := domain.StableSchedulerTriggerID(projectID, agentName, schedulerName, name, i)
+		id, err := StableSchedulerTriggerID(projectID, agentName, schedulerName, name, i)
 		if err != nil {
 			return nil, "", err
 		}

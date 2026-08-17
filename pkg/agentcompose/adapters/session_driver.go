@@ -60,7 +60,7 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 		return err
 	}
 	runtimeStarted := false
-	freshRuntime := vmState.StartedAt.IsZero() || domain.SandboxRuntimeReleaseIntentional(session)
+	freshRuntime := vmState.StartedAt.IsZero() || sandboxes.RuntimeReleaseIntentional(session)
 	if freshRuntime && d.ConfigDB != nil {
 		defer func() {
 			if resultErr == nil || runtimeStarted {
@@ -93,7 +93,7 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 		return err
 	}
 
-	if domain.EffectiveStoppedRuntimeState(session) == domain.StoppedRuntimeStateReleasePending {
+	if sandboxes.EffectiveStoppedRuntimeState(session) == domain.StoppedRuntimeStateReleasePending {
 		if _, err := d.releaseSandboxRuntime(ctx, session, runtime, vmState); err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func (d *SandboxDriver) StartSandboxVM(ctx context.Context, session *domain.Sand
 		}
 	}
 	runtimeVMState := vmState
-	if domain.SandboxRuntimeReleaseIntentional(session) {
+	if sandboxes.RuntimeReleaseIntentional(session) {
 		runtimeVMState.StoppedAt = time.Time{}
 	}
 	info, err := runtime.EnsureSandbox(ctx, session, runtimeVMState, proxyState)

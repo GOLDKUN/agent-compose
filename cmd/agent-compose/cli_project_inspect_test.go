@@ -10,7 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -112,7 +112,7 @@ name: compose-project
 agents: {}
 `)
 	selectedProject := testCLIProject(strings.Repeat("a", 64), "selected-project", composePath)
-	composeProjectID, err := domain.StableProjectID("compose-project", domain.NormalizeProjectSourcePath(composePath))
+	composeProjectID, err := projects.StableProjectID("compose-project", projects.NormalizeProjectSourcePath(composePath))
 	if err != nil {
 		t.Fatalf("StableProjectID returned error: %v", err)
 	}

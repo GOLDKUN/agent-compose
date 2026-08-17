@@ -10,6 +10,7 @@ import (
 	"agent-compose/pkg/capabilities"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/volumes"
 )
 
 type schedulerSandboxConfig struct {
@@ -32,7 +33,7 @@ type schedulerSandboxConfig struct {
 // state is used as a tie-breaker so equivalent inputs produce the same order
 // even when a boundary supplies conflicting mounts for the same target.
 func NormalizeStickySandboxVolumeMounts(items []domain.SandboxVolumeMount) []domain.SandboxVolumeMount {
-	mounts := domain.NormalizeSandboxVolumeMounts(items)
+	mounts := volumes.NormalizeSandboxMounts(items)
 	sort.Slice(mounts, func(i, j int) bool {
 		left, right := mounts[i], mounts[j]
 		if left.Target != right.Target {
@@ -76,20 +77,20 @@ func SchedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {
 			return "", err
 		}
 	}
-	volumes, err := domain.NormalizeVolumeMountSpecs(scheduler.Volumes)
+	mounts, err := volumes.NormalizeMountSpecs(scheduler.Volumes)
 	if err != nil {
 		return "", err
 	}
 	capsetIDs := capabilities.NormalizeCapsetIDs(scheduler.Summary.CapsetIDs)
 	sort.Strings(capsetIDs)
-	sort.Slice(volumes, func(i, j int) bool {
-		if volumes[i].Target != volumes[j].Target {
-			return volumes[i].Target < volumes[j].Target
+	sort.Slice(mounts, func(i, j int) bool {
+		if mounts[i].Target != mounts[j].Target {
+			return mounts[i].Target < mounts[j].Target
 		}
-		if volumes[i].Type != volumes[j].Type {
-			return volumes[i].Type < volumes[j].Type
+		if mounts[i].Type != mounts[j].Type {
+			return mounts[i].Type < mounts[j].Type
 		}
-		return volumes[i].Source < volumes[j].Source
+		return mounts[i].Source < mounts[j].Source
 	})
 	defaultAgent := domain.NormalizeAgentKind(scheduler.Summary.DefaultAgent)
 	if defaultAgent == "" {
@@ -101,10 +102,10 @@ func SchedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {
 		Driver:             driver,
 		GuestImage:         strings.TrimSpace(scheduler.Summary.GuestImage),
 		DefaultAgent:       defaultAgent,
-		SandboxPolicy:      domain.NormalizeSchedulerSandboxPolicy(scheduler.Summary.SandboxPolicy),
+		SandboxPolicy:      NormalizeSandboxPolicy(scheduler.Summary.SandboxPolicy),
 		CapsetIDs:          capsetIDs,
 		EnvItems:           domain.NormalizeEnvItems(scheduler.EnvItems),
-		Volumes:            volumes,
+		Volumes:            mounts,
 		ProjectID:          strings.TrimSpace(scheduler.Summary.ProjectID),
 		AgentName:          strings.TrimSpace(scheduler.Summary.AgentName),
 		ProjectSchedulerID: strings.TrimSpace(scheduler.Summary.ProjectSchedulerID),

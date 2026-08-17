@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sandboxes"
 )
 
 type composeDisplayChangeBuilder struct {
@@ -57,7 +57,7 @@ func composePSStatusFilter(options composePSOptions) (map[string]bool, error) {
 		if value == "" {
 			continue
 		}
-		status, err := domain.NormalizeSandboxVMStatus(value)
+		status, err := sandboxes.NormalizeVMStatus(value)
 		if err != nil {
 			return nil, fmt.Errorf("invalid --status %q: expected %s", value, composePSSupportedStatusExpectation())
 		}
@@ -73,7 +73,7 @@ func composePSStatusFilter(options composePSOptions) (map[string]bool, error) {
 }
 
 func composePSSupportedStatusExpectation() string {
-	statuses := domain.SupportedSandboxVMStatuses()
+	statuses := sandboxes.SupportedVMStatuses()
 	for index := range statuses {
 		statuses[index] = strings.ToLower(statuses[index])
 	}

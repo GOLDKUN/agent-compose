@@ -19,14 +19,14 @@ func NormalizeTopicEventRecord(item domain.TopicEventRecord, assignID bool) (dom
 		return domain.TopicEventRecord{}, fmt.Errorf("event id is required")
 	}
 	item.Topic = strings.TrimSpace(item.Topic)
-	if err := domain.ValidateTopicEventName(item.Topic); err != nil {
+	if err := ValidateTopicName(item.Topic); err != nil {
 		return domain.TopicEventRecord{}, err
 	}
-	item.Source = domain.NormalizeTopicEventSource(item.Source)
+	item.Source = NormalizeSource(item.Source)
 	if item.Source == "" {
 		return domain.TopicEventRecord{}, fmt.Errorf("event source is required")
 	}
-	item.DispatchStatus = domain.NormalizeTopicEventDispatchStatus(item.DispatchStatus)
+	item.DispatchStatus = NormalizeDispatchStatus(item.DispatchStatus)
 	if item.DispatchStatus == "" {
 		return domain.TopicEventRecord{}, fmt.Errorf("event dispatch status is invalid")
 	}
@@ -47,7 +47,7 @@ func NormalizeTopicEventRecord(item domain.TopicEventRecord, assignID bool) (dom
 	}
 	item.PayloadHash = strings.TrimSpace(item.PayloadHash)
 	if item.PayloadHash == "" {
-		item.PayloadHash = domain.TopicEventPayloadSHA256(item.PayloadJSON)
+		item.PayloadHash = PayloadSHA256(item.PayloadJSON)
 	}
 	item.ParentEventID = strings.TrimSpace(item.ParentEventID)
 	item.PublisherType = strings.TrimSpace(item.PublisherType)

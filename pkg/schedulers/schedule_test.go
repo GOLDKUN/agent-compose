@@ -1,6 +1,7 @@
 package schedulers_test
 
 import (
+	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
 	"os"
@@ -106,42 +107,42 @@ func testSchedulerScheduleModelWorkflows(t *testing.T) {
 		t.Fatalf("invalid cron trigger returned nil error")
 	}
 
-	stableID := domain.SchedulerTriggerStableID(domain.SchedulerTriggerKindEvent, "runtime.*", 0, "function cb() {}", 1)
-	if stableID != domain.SchedulerTriggerStableID(domain.SchedulerTriggerKindEvent, "runtime.*", 0, "function cb() {}", 1) {
+	stableID := schedulers.TriggerStableID(domain.SchedulerTriggerKindEvent, "runtime.*", 0, "function cb() {}", 1)
+	if stableID != schedulers.TriggerStableID(domain.SchedulerTriggerKindEvent, "runtime.*", 0, "function cb() {}", 1) {
 		t.Fatalf("stable trigger id was not stable")
 	}
-	if domain.SchedulerSourceSHA("script") == domain.SchedulerSourceSHA("other") {
+	if schedulers.SourceSHA("script") == schedulers.SourceSHA("other") {
 		t.Fatalf("schedulerSourceSHA returned identical values for different scripts")
 	}
-	if !domain.SchedulerTriggerTopicMatches("runtime.*", "runtime.test") || !domain.SchedulerTriggerTopicMatches("runtime.test", "runtime.test") {
+	if !events.TriggerTopicMatches("runtime.*", "runtime.test") || !events.TriggerTopicMatches("runtime.test", "runtime.test") {
 		t.Fatalf("expected topic patterns to match")
 	}
-	if domain.SchedulerTriggerTopicMatches("", "runtime.test") || domain.SchedulerTriggerTopicMatches("runtime.*", "") || domain.SchedulerTriggerTopicMatches("runtime.test", "runtime.other") {
+	if events.TriggerTopicMatches("", "runtime.test") || events.TriggerTopicMatches("runtime.*", "") || events.TriggerTopicMatches("runtime.test", "runtime.other") {
 		t.Fatalf("unexpected topic match")
 	}
 
-	if domain.NormalizeSchedulerSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || domain.NormalizeSchedulerSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
+	if schedulers.NormalizeSandboxPolicy("new") != domain.SchedulerSandboxPolicyNew || schedulers.NormalizeSandboxPolicy("bad") != domain.SchedulerSandboxPolicySticky {
 		t.Fatalf("session policy normalization failed")
 	}
-	if domain.NormalizeSchedulerConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || domain.NormalizeSchedulerConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
+	if schedulers.NormalizeConcurrencyPolicy("allow") != domain.SchedulerConcurrencyPolicyParallel || schedulers.NormalizeConcurrencyPolicy("bad") != domain.SchedulerConcurrencyPolicySkip {
 		t.Fatalf("concurrency policy normalization failed")
 	}
-	if domain.NormalizeSchedulerRunStatus("failed") != domain.SchedulerRunStatusFailed || domain.NormalizeSchedulerRunStatus("bad") != domain.SchedulerRunStatusRunning {
+	if schedulers.NormalizeRunStatus("failed") != domain.SchedulerRunStatusFailed || schedulers.NormalizeRunStatus("bad") != domain.SchedulerRunStatusRunning {
 		t.Fatalf("run status normalization failed")
 	}
 	if !domain.TimeIsSet(now) || domain.NonZeroTimeUnixMilli(time.Time{}) != 0 || domain.NonZeroTimeUnixMilli(now) != now.UnixMilli() {
 		t.Fatalf("time helpers returned unexpected values")
 	}
-	if !domain.SchedulerTriggerUsesSchedule(domain.SchedulerTriggerKindCron) || domain.SchedulerTriggerUsesSchedule(domain.SchedulerTriggerKindEvent) {
+	if !schedulers.TriggerUsesSchedule(domain.SchedulerTriggerKindCron) || schedulers.TriggerUsesSchedule(domain.SchedulerTriggerKindEvent) {
 		t.Fatalf("schedule trigger helper returned unexpected values")
 	}
-	if !domain.SchedulerTriggerScheduledAt(now, 0).IsZero() || !domain.SchedulerTriggerScheduledAt(now, 1).Equal(now.Add(time.Millisecond)) {
+	if !schedulers.TriggerScheduledAt(now, 0).IsZero() || !schedulers.TriggerScheduledAt(now, 1).Equal(now.Add(time.Millisecond)) {
 		t.Fatalf("scheduled at helper returned unexpected values")
 	}
-	if domain.DefaultSchedulerName(now) != "Scheduler 2026-06-02 09:00" {
-		t.Fatalf("default scheduler name = %q", domain.DefaultSchedulerName(now))
+	if schedulers.DefaultName(now) != "Scheduler 2026-06-02 09:00" {
+		t.Fatalf("default scheduler name = %q", schedulers.DefaultName(now))
 	}
-	if script := domain.DefaultSchedulerScript(); !strings.Contains(script, "function main") || !strings.Contains(script, "scheduler.interval") || !strings.Contains(script, "scheduler.on") {
+	if script := schedulers.DefaultScript(); !strings.Contains(script, "function main") || !strings.Contains(script, "scheduler.interval") || !strings.Contains(script, "scheduler.on") {
 		t.Fatalf("default scheduler script missing expected registrations: %s", script)
 	}
 }

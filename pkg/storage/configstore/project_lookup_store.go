@@ -33,7 +33,7 @@ func (s *projectStore) GetProjectByName(ctx context.Context, name string, includ
 }
 
 func (s *projectStore) GetProjectBySourcePath(ctx context.Context, sourcePath string, includeRemoved bool) (ProjectRecord, error) {
-	sourcePath = domain.NormalizeProjectSourcePath(sourcePath)
+	sourcePath = projects.NormalizeProjectSourcePath(sourcePath)
 	if sourcePath == "" {
 		return ProjectRecord{}, fmt.Errorf("project source path is required")
 	}

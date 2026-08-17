@@ -136,14 +136,27 @@ func IsHTTPRequestBodyTooLarge(err error) bool {
 	if errors.As(err, &maxBytesErr) {
 		return true
 	}
+	// Echo builds some binding failures into an HTTPError carrying only the
+	// message, which loses the *http.MaxBytesError the check above relies on.
+	// Comparing echo's own message is the only signal left on that path.
 	var httpErr *echo.HTTPError
 	if errors.As(err, &httpErr) &&
 		httpErr.Code == http.StatusBadRequest &&
-		httpErr.Message == "http: request body too large" {
+		httpErr.Message == maxBytesMessage {
 		return true
 	}
-	return err.Error() == "http: request body too large"
+	// Both checks above need the original error value. A failure that reaches
+	// here carrying only its text, rebuilt across a transport or constructed by
+	// hand, would otherwise be answered with 400, telling the client to fix a
+	// request that is not malformed.
+	return strings.Contains(err.Error(), maxBytesMessage)
 }
+
+// maxBytesMessage is what *http.MaxBytesError renders as, and the only place
+// net/http produces that text. Its source pins the wording with "Due to Hyrum's
+// law, this text cannot be changed", so matching it identifies the condition
+// rather than guessing at it.
+const maxBytesMessage = "http: request body too large"
 
 func ToWorkspaceHTTPError(err error) error {
 	if err == nil {
