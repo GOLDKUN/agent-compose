@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/storage/storeutil"
 	"agent-compose/pkg/volumes"
 )
 
@@ -304,11 +305,7 @@ func (s *volumeStore) findProjectVolumeReferences(ctx context.Context, volumeID 
 	if err != nil {
 		return nil, fmt.Errorf("query project volume references: %w", err)
 	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
+	defer func() { storeutil.ReportClose(rows.Close(), &err, "project volume references") }()
 	var refs []domain.VolumeReference
 	for rows.Next() {
 		var projectID string
@@ -349,11 +346,7 @@ func (s *volumeStore) findVolumeSpecReferencesIn(ctx context.Context, resourceTy
 	if err != nil {
 		return nil, fmt.Errorf("query %s volume references: %w", resourceType, err)
 	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
+	defer func() { storeutil.ReportClose(rows.Close(), &err, resourceType+" volume references") }()
 	var refs []domain.VolumeReference
 	for rows.Next() {
 		var id string

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agent-compose/pkg/compose"
+	"agent-compose/pkg/storage/storeutil"
 )
 
 const uniqueProjectNameMigrationVersion int64 = 9
@@ -40,11 +41,7 @@ func listProjectsForNameMigration(ctx context.Context, conn migrationConn) (_ []
 	if err != nil {
 		return nil, nil, fmt.Errorf("list projects before enforcing unique names: %w", err)
 	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close projects before enforcing unique names: %w", closeErr)
-		}
-	}()
+	defer func() { storeutil.ReportClose(rows.Close(), &err, "projects before enforcing unique names") }()
 
 	var projects []projectNameMigrationRow
 	usedNames := make(map[string]struct{})
@@ -149,11 +146,7 @@ func listLinkedVolumeNames(ctx context.Context, conn migrationConn, projectID st
 	if err != nil {
 		return nil, fmt.Errorf("list volumes for renamed project %s: %w", projectID, err)
 	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close volumes for renamed project %s: %w", projectID, closeErr)
-		}
-	}()
+	defer func() { storeutil.ReportClose(rows.Close(), &err, "volumes for renamed project "+projectID) }()
 	linkedNames := make(map[string]string)
 	for rows.Next() {
 		var key, name string

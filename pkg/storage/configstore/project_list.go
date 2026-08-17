@@ -8,6 +8,7 @@ import (
 
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
+	"agent-compose/pkg/storage/storeutil"
 )
 
 const (
@@ -97,11 +98,7 @@ func (s *projectStore) ListProjects(ctx context.Context, options ProjectListOpti
 // cursor for its whole lifetime so that the deferred Close runs before the
 // caller commits the transaction the cursor was opened on.
 func collectProjectListPage(rows *sql.Rows, result *ProjectListResult) (err error) {
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close project page: %w", closeErr)
-		}
-	}()
+	defer func() { storeutil.ReportClose(rows.Close(), &err, "project page") }()
 	for rows.Next() {
 		project, counts, scanErr := scanProjectListRow(rows)
 		if scanErr != nil {

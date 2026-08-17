@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -135,5 +136,24 @@ func TestWorkspaceRouteErrorMappingCoverage(t *testing.T) {
 	var uploadErr *echo.HTTPError
 	if !errors.As(ToWorkspaceUploadHTTPError(&http.MaxBytesError{Limit: 1}), &uploadErr) || uploadErr.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("upload error = %#v", uploadErr)
+	}
+}
+
+func TestIsHTTPRequestBodyTooLargeFromMessageAlone(t *testing.T) {
+	// Both typed checks need the original error value. A path that rebuilds the
+	// failure from its message — echo wrapping it under a different code, or a
+	// transport carrying only the text — must still answer 413, because the
+	// request is oversized rather than malformed.
+	for _, err := range []error{
+		errors.New("http: request body too large"),
+		fmt.Errorf("read upload: %w", errors.New("http: request body too large")),
+		echo.NewHTTPError(http.StatusInternalServerError, "http: request body too large"),
+	} {
+		if !IsHTTPRequestBodyTooLarge(err) {
+			t.Fatalf("IsHTTPRequestBodyTooLarge(%v) = false, want true", err)
+		}
+	}
+	if IsHTTPRequestBodyTooLarge(errors.New("workspace path is required")) {
+		t.Fatal("unrelated error classified as body too large")
 	}
 }

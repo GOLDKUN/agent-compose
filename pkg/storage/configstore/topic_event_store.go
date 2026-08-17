@@ -450,11 +450,7 @@ func (s *eventStore) childEventIDs(ctx context.Context, parent string) (_ []stri
 	if err != nil {
 		return nil, fmt.Errorf("query descendant events: %w", err)
 	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close descendant event rows: %w", closeErr)
-		}
-	}()
+	defer func() { storeutil.ReportClose(rows.Close(), &err, "descendant event rows") }()
 	var children []string
 	for rows.Next() {
 		var id string

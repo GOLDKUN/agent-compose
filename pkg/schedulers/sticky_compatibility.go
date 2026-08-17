@@ -77,20 +77,20 @@ func SchedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {
 			return "", err
 		}
 	}
-	volumes, err := volumes.NormalizeMountSpecs(scheduler.Volumes)
+	mounts, err := volumes.NormalizeMountSpecs(scheduler.Volumes)
 	if err != nil {
 		return "", err
 	}
 	capsetIDs := capabilities.NormalizeCapsetIDs(scheduler.Summary.CapsetIDs)
 	sort.Strings(capsetIDs)
-	sort.Slice(volumes, func(i, j int) bool {
-		if volumes[i].Target != volumes[j].Target {
-			return volumes[i].Target < volumes[j].Target
+	sort.Slice(mounts, func(i, j int) bool {
+		if mounts[i].Target != mounts[j].Target {
+			return mounts[i].Target < mounts[j].Target
 		}
-		if volumes[i].Type != volumes[j].Type {
-			return volumes[i].Type < volumes[j].Type
+		if mounts[i].Type != mounts[j].Type {
+			return mounts[i].Type < mounts[j].Type
 		}
-		return volumes[i].Source < volumes[j].Source
+		return mounts[i].Source < mounts[j].Source
 	})
 	defaultAgent := domain.NormalizeAgentKind(scheduler.Summary.DefaultAgent)
 	if defaultAgent == "" {
@@ -105,7 +105,7 @@ func SchedulerSandboxConfigHash(scheduler domain.Scheduler) (string, error) {
 		SandboxPolicy:      NormalizeSandboxPolicy(scheduler.Summary.SandboxPolicy),
 		CapsetIDs:          capsetIDs,
 		EnvItems:           domain.NormalizeEnvItems(scheduler.EnvItems),
-		Volumes:            volumes,
+		Volumes:            mounts,
 		ProjectID:          strings.TrimSpace(scheduler.Summary.ProjectID),
 		AgentName:          strings.TrimSpace(scheduler.Summary.AgentName),
 		ProjectSchedulerID: strings.TrimSpace(scheduler.Summary.ProjectSchedulerID),

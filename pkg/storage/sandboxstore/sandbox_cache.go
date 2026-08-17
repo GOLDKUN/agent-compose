@@ -10,6 +10,7 @@ import (
 
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/sandboxes"
+	"agent-compose/pkg/storage/storeutil"
 )
 
 const sandboxCacheVersion = 2
@@ -110,11 +111,7 @@ func (x *sandboxCache) validateSchema(ctx context.Context) (err error) {
 	}
 	// The cursor is never drained, so database/sql does not release its
 	// connection on its own; closing here keeps the pool free for the caller.
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil && err == nil {
-			err = sandboxCacheError("close schema validation query", closeErr)
-		}
-	}()
+	defer func() { storeutil.ReportCloseWith(rows.Close(), &err, "schema validation query", sandboxCacheError) }()
 	if err := rows.Err(); err != nil {
 		return sandboxCacheError("validate schema", err)
 	}

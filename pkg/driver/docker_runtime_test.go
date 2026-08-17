@@ -4,6 +4,9 @@ import (
 	appconfig "agent-compose/pkg/config"
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -960,5 +963,37 @@ func TestValidateLegacyDockerRecreateRequiresUUIDAndPersistedMounts(t *testing.T
 	sandbox.Summary.ID = strings.Repeat("a", 64)
 	if err := runtime.validateLegacyDockerRecreate(sandbox, state); err == nil || !strings.Contains(err.Error(), "legacy UUID") {
 		t.Fatalf("new sandbox validation error = %v", err)
+	}
+}
+
+func TestIsDockerStreamClosed(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil"},
+		{name: "eof", err: io.EOF, want: true},
+		{name: "wrapped eof", err: fmt.Errorf("read attach stream: %w", io.EOF), want: true},
+		{
+			name: "net closed",
+			err:  &net.OpError{Op: "read", Err: net.ErrClosed},
+			want: true,
+		},
+		{
+			// A client that rebuilds the transport failure from its message drops
+			// net.ErrClosed out of the chain, and an ordinary stream close would
+			// otherwise be reported as an exec failure.
+			name: "message only",
+			err:  errors.New("read tcp 127.0.0.1:2375: use of closed network connection"),
+			want: true,
+		},
+		{name: "real failure", err: errors.New("container 123 is not running")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isDockerStreamClosed(tt.err); got != tt.want {
+				t.Fatalf("isDockerStreamClosed(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
 	}
 }
