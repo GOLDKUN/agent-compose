@@ -375,7 +375,7 @@ func (h *ProjectHandler) GetProject(ctx context.Context, req *connect.Request[ag
 		spec = RedactProjectSpecSecrets(spec)
 	}
 	projectProto := ProjectToProto(project, spec, agents, schedulers)
-	if err := h.enrichProjectAgentModels(ctx, project, projectProto); err != nil {
+	if err := h.enrichProjectAgentModels(ctx, project, agents, projectProto); err != nil {
 		return nil, err
 	}
 	if err := h.enrichProjectAgentRuns(ctx, projectProto); err != nil {
