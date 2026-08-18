@@ -258,32 +258,41 @@ func TestListSchedulerEventsResolvesCommandCompletedFromArtifact(t *testing.T) {
 	}
 }
 
+// TestNewProjectHandlerWithSandboxDirsInjectsResolver builds two separate
+// handlers from independent fixtures — one left plain, one with
+// WithSandboxDirs chained immediately after construction — rather than
+// mutating a single already-constructed handler between requests. Calling
+// WithSandboxDirs after a handler has started serving requests races with
+// every concurrent handler that reads h.sandboxDirs (see its doc comment),
+// so this test must not model that pattern even sequentially.
 func TestNewProjectHandlerWithSandboxDirsInjectsResolver(t *testing.T) {
-	store, _, handler := newSchedulerRunHandlerFixture() // built via plain NewProjectHandler, no sandboxDirs
 	sandboxDir := t.TempDir()
 	writeSchedulerCommandCellArtifact(t, sandboxDir, "cell-1", "resolved after WithSandboxDirs")
 
-	createdAt := time.Unix(1100, 0).UTC()
-	store.events = []domain.SchedulerEvent{
-		{
-			ID: "event-1", SchedulerID: store.scheduler.ID, TriggerID: "trigger-1",
-			Type: "scheduler.command.completed", Message: "",
-			LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1", CreatedAt: createdAt,
-		},
-	}
-	req := connect.NewRequest(&agentcomposev2.ListSchedulerEventsRequest{
-		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, AgentName: store.scheduler.AgentName,
-	})
-
-	before, err := handler.ListSchedulerEvents(context.Background(), req)
-	if err != nil || len(before.Msg.GetEvents()) != 1 || !strings.Contains(before.Msg.GetEvents()[0].GetMessage(), "content unavailable") {
-		t.Fatalf("before WithSandboxDirs: message = %#v err=%v, want an unavailable placeholder (no resolver injected)", before, err)
+	newRequestWithEvent := func(store *schedulerRunProjectStoreFake) *connect.Request[agentcomposev2.ListSchedulerEventsRequest] {
+		store.events = []domain.SchedulerEvent{
+			{
+				ID: "event-1", SchedulerID: store.scheduler.ID, TriggerID: "trigger-1",
+				Type: "scheduler.command.completed", Message: "",
+				LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1", CreatedAt: time.Unix(1100, 0).UTC(),
+			},
+		}
+		return connect.NewRequest(&agentcomposev2.ListSchedulerEventsRequest{
+			Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, AgentName: store.scheduler.AgentName,
+		})
 	}
 
-	handler.WithSandboxDirs(projectHandlerSandboxDirsFake{"sandbox-1": sandboxDir})
-	after, err := handler.ListSchedulerEvents(context.Background(), req)
-	if err != nil || len(after.Msg.GetEvents()) != 1 || after.Msg.GetEvents()[0].GetMessage() != "resolved after WithSandboxDirs" {
-		t.Fatalf("after WithSandboxDirs: message = %#v err=%v, want reconstructed artifact content", after, err)
+	withoutStore, _, withoutHandler := newSchedulerRunHandlerFixture() // plain NewProjectHandler, sandboxDirs never injected
+	without, err := withoutHandler.ListSchedulerEvents(context.Background(), newRequestWithEvent(withoutStore))
+	if err != nil || len(without.Msg.GetEvents()) != 1 || !strings.Contains(without.Msg.GetEvents()[0].GetMessage(), "content unavailable") {
+		t.Fatalf("without WithSandboxDirs: message = %#v err=%v, want an unavailable placeholder", without, err)
+	}
+
+	withStore, _, withHandler := newSchedulerRunHandlerFixture()
+	withHandler.WithSandboxDirs(projectHandlerSandboxDirsFake{"sandbox-1": sandboxDir}) // chained immediately after construction, before any request
+	with, err := withHandler.ListSchedulerEvents(context.Background(), newRequestWithEvent(withStore))
+	if err != nil || len(with.Msg.GetEvents()) != 1 || with.Msg.GetEvents()[0].GetMessage() != "resolved after WithSandboxDirs" {
+		t.Fatalf("with WithSandboxDirs: message = %#v err=%v, want reconstructed artifact content", with, err)
 	}
 }
 

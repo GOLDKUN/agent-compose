@@ -91,6 +91,14 @@ func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRu
 // caller that needs it — beyond NewProjectHandlerWithAgentModels, which
 // takes it directly — chains this instead of silently falling back to the
 // "artifact not accessible" placeholder for every new command.completed row.
+//
+// Like the package's other With* injectors (WithLifecycleLocks,
+// WithRemovalCoordinator, WithRunTargetResolver), this must be called once,
+// immediately after construction, before the handler is registered with the
+// RPC server. h.sandboxDirs is read without synchronization by every
+// concurrent ListSchedulerEvents/ListProjectSchedulerEvents/
+// StreamProjectSchedulerEvents request; calling this after the handler has
+// started serving traffic is a data race.
 func (h *ProjectHandler) WithSandboxDirs(sandboxDirs schedulers.SandboxDirResolver) *ProjectHandler {
 	h.sandboxDirs = sandboxDirs
 	return h
