@@ -110,7 +110,19 @@ func inlineGitWorkspaceConfig(workspaceID string, spec *compose.WorkspaceSpec) (
 	}, nil
 }
 
+// materializeInlineFileWorkspace resets and repopulates the shared content
+// directory for an agent's inline file workspace (keyed by the stable
+// inlineWorkspaceID, not a per-run id, since scheduler sandboxes reuse and
+// reference the same agent workspace across runs). Concurrent scheduler
+// calls for the same agent (parallel triggers, or scheduler.shell/exec/agent
+// racing each other) can reach Ensure at the same time, so the reset+copy is
+// serialized per workspace id to prevent one call's CopyRootDirectoryContents
+// from reading a directory another call is concurrently RemoveAll-ing,
+// which would otherwise surface as intermittent ENOENT failures or leave the
+// shared directory with interleaved content from two different callers.
 func (r *SchedulerSandboxRunner) materializeInlineFileWorkspace(ctx context.Context, agentDefinition *domain.AgentDefinition, workspaceID string, spec *compose.WorkspaceSpec) (domain.WorkspaceConfig, error) {
+	unlock := r.inlineWorkspaceLocks.Lock(workspaceID)
+	defer unlock()
 	projectID := strings.TrimSpace(agentDefinition.ProjectID)
 	if projectID == "" {
 		return domain.WorkspaceConfig{}, fmt.Errorf("file workspace requires a project-managed agent")

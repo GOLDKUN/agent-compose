@@ -3,10 +3,13 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"agent-compose/pkg/compose"
 	driverpkg "agent-compose/pkg/driver"
@@ -171,5 +174,108 @@ func TestSchedulerSandboxRunnerEnsureResolvesInlineFileWorkspace(t *testing.T) {
 	}
 	if string(copied) != "hello from source\n" {
 		t.Fatalf("materialized workspace content = %q, want copied source content", copied)
+	}
+}
+
+// TestSchedulerSandboxRunnerConcurrentInlineFileWorkspaceMaterializationIsSerialized
+// covers a race a reviewer flagged on this fix: materializeInlineFileWorkspace
+// resets and repopulates a shared content directory keyed by the agent's
+// stable inlineWorkspaceID (not a per-run id), on every Ensure call.
+// Scheduler calls for the same agent can run concurrently (parallel
+// triggers, or scheduler.shell/exec/agent racing each other), so without
+// serialization one goroutine's CopyRootDirectoryContents can read a
+// directory another goroutine is concurrently RemoveAll-ing, surfacing as
+// ENOENT. Every concurrent Ensure call here must succeed.
+func TestSchedulerSandboxRunnerConcurrentInlineFileWorkspaceMaterializationIsSerialized(t *testing.T) {
+	ctx := context.Background()
+	bridge, driver := newTestSandboxRPCBridge(t)
+	ensurer := &recordingSchedulerWorkspaceEnsurer{}
+	publisher := &schedulerSessionPublisherFake{}
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+
+	projectSource := t.TempDir()
+	for dir := 0; dir < 8; dir++ {
+		subdir := filepath.Join(projectSource, fmt.Sprintf("dir-%d", dir))
+		if err := os.MkdirAll(subdir, 0o755); err != nil {
+			t.Fatalf("create source subdir %d: %v", dir, err)
+		}
+		for file := 0; file < 40; file++ {
+			content := strings.Repeat(fmt.Sprintf("dir-%d-file-%d\n", dir, file), 64)
+			if err := os.WriteFile(filepath.Join(subdir, fmt.Sprintf("file-%d.txt", file)), []byte(content), 0o644); err != nil {
+				t.Fatalf("write source fixture dir=%d file=%d: %v", dir, file, err)
+			}
+		}
+	}
+
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
+		ID:            "scheduler-inline-file-concurrent",
+		Name:          "Scheduler Inline File Concurrent",
+		Driver:        driverpkg.RuntimeDriverDocker,
+		SandboxPolicy: domain.SchedulerSandboxPolicySticky,
+	}}
+	scheduler = createNativeTestSchedulerWithWorkspace(t, ctx, bridge.configDB, scheduler, projectSource, &compose.WorkspaceSpec{
+		Provider: "file",
+		Path:     ".",
+		Name:     "my-local-workspace-concurrent",
+	})
+	agentDefinition, err := runner.ResolveSchedulerAgentDefinition(ctx, scheduler)
+	if err != nil {
+		t.Fatalf("ResolveSchedulerAgentDefinition returned error: %v", err)
+	}
+	spec := agentDefinitionInlineWorkspace(agentDefinition)
+	if spec == nil {
+		t.Fatalf("agentDefinitionInlineWorkspace returned nil, want the inline file workspace spec")
+	}
+
+	const callerCount = 16
+	const timeout = 10 * time.Second
+	type result struct {
+		index int
+		err   error
+	}
+	results := make(chan result, callerCount)
+	start := make(chan struct{})
+	var ready sync.WaitGroup
+	ready.Add(callerCount)
+	for index := 0; index < callerCount; index++ {
+		go func(index int) {
+			ready.Done()
+			<-start
+			runCtx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+			_, _, err := runner.inlineWorkspaceSnapshot(runCtx, agentDefinition, spec)
+			results <- result{index: index, err: err}
+		}(index)
+	}
+	ready.Wait()
+	close(start)
+
+	for i := 0; i < callerCount; i++ {
+		select {
+		case r := <-results:
+			if r.err != nil {
+				t.Fatalf("concurrent inlineWorkspaceSnapshot call %d returned error: %v, want the shared content directory reset+copy to be serialized", r.index, r.err)
+			}
+		case <-time.After(timeout):
+			t.Fatalf("timed out waiting for concurrent inlineWorkspaceSnapshot calls (%d/%d returned)", i, callerCount)
+		}
+	}
+
+	workspaceID := inlineWorkspaceID(agentDefinition, "file")
+	contentRoot, err := workspaces.FileWorkspaceContentRoot(bridge.config, domain.WorkspaceConfig{ID: workspaceID, Type: "file", ConfigJSON: workspaces.DefaultFileConfigJSON(bridge.config, workspaceID)})
+	if err != nil {
+		t.Fatalf("resolve materialized file workspace content root: %v", err)
+	}
+	for dir := 0; dir < 8; dir++ {
+		for file := 0; file < 40; file++ {
+			want := strings.Repeat(fmt.Sprintf("dir-%d-file-%d\n", dir, file), 64)
+			got, err := os.ReadFile(filepath.Join(contentRoot, fmt.Sprintf("dir-%d", dir), fmt.Sprintf("file-%d.txt", file)))
+			if err != nil {
+				t.Fatalf("read materialized workspace content dir=%d file=%d: %v", dir, file, err)
+			}
+			if string(got) != want {
+				t.Fatalf("materialized workspace content dir=%d file=%d = %q, want %q", dir, file, got, want)
+			}
+		}
 	}
 }
