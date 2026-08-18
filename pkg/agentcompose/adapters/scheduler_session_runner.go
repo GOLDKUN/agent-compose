@@ -126,7 +126,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 	envItems := domain.MergeEnvItems(globalEnvItems, providerEnvItems)
 	envItems = llms.FilterPersistedRuntimeEnv(envItems)
 	workspaceID := r.workspaceID(scheduler, request, agentDefinition)
-	workspaceSnapshot, err := r.workspaceSnapshot(ctx, workspaceID)
+	workspaceSnapshot, workspaceID, err := r.resolveWorkspaceSnapshot(ctx, request, agentDefinition, workspaceID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -369,6 +369,33 @@ func (r *SchedulerSandboxRunner) workspaceID(scheduler domain.Scheduler, request
 		workspaceID = firstNonEmpty(strings.TrimSpace(request.WorkspaceID), strings.TrimSpace(scheduler.Summary.WorkspaceID), strings.TrimSpace(agentDefinition.WorkspaceID))
 	}
 	return workspaceID
+}
+
+// resolveWorkspaceSnapshot resolves the sandbox workspace snapshot for a
+// scheduler run. request.WorkspaceID is an explicit session override (e.g.
+// scheduler.agent(prompt, { workspaceId }) or scheduler.shell/exec) and is
+// always treated as a Settings-managed workspace_config preset id. Absent
+// that override, an agent's yaml `workspace:` declaration is resolved
+// inline instead of being looked up as a preset (see issue #599: the yaml
+// `name` label was never a real preset id, so that lookup always failed).
+func (r *SchedulerSandboxRunner) resolveWorkspaceSnapshot(ctx context.Context, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition, workspaceID string) (*domain.SandboxWorkspace, string, error) {
+	if strings.TrimSpace(request.WorkspaceID) == "" {
+		if spec := agentDefinitionInlineWorkspace(agentDefinition); spec != nil {
+			snapshot, resolvedID, err := r.inlineWorkspaceSnapshot(ctx, agentDefinition, spec)
+			if err != nil {
+				return nil, "", err
+			}
+			return snapshot, resolvedID, nil
+		}
+	}
+	if workspaceID == "" {
+		return nil, "", nil
+	}
+	snapshot, err := r.workspaceSnapshot(ctx, workspaceID)
+	if err != nil {
+		return nil, "", err
+	}
+	return snapshot, workspaceID, nil
 }
 
 func (r *SchedulerSandboxRunner) workspaceSnapshot(ctx context.Context, workspaceID string) (*domain.SandboxWorkspace, error) {
