@@ -203,9 +203,11 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		}
 	}
 	r.recordVolumeWarnings(ctx, session.Summary.ID, volumeWarnings)
-	unlockWorkspaceRead := r.fileWorkspaceReadLock(workspaceSnapshot)
-	ensureErr := r.workspaceEnsurer.Ensure(ctx, session)
-	unlockWorkspaceRead()
+	ensureErr := func() error {
+		unlock := r.fileWorkspaceReadLock(workspaceSnapshot)
+		defer unlock()
+		return r.workspaceEnsurer.Ensure(ctx, session)
+	}()
 	if ensureErr != nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = r.Store.UpdateSandbox(ctx, session)
@@ -302,9 +304,11 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 			return nil, "", err
 		}
 	}
-	unlockWorkspaceRead := r.fileWorkspaceReadLock(session.Workspace)
-	ensureErr := r.workspaceEnsurer.Ensure(ctx, session)
-	unlockWorkspaceRead()
+	ensureErr := func() error {
+		unlock := r.fileWorkspaceReadLock(session.Workspace)
+		defer unlock()
+		return r.workspaceEnsurer.Ensure(ctx, session)
+	}()
 	if ensureErr != nil {
 		return nil, "", ensureErr
 	}

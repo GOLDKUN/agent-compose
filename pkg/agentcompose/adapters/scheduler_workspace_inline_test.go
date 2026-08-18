@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -380,5 +381,71 @@ func TestSchedulerSandboxRunnerConcurrentEnsureSerializesFileWorkspaceReadAgains
 				}
 			}
 		}
+	}
+}
+
+// TestSchedulerSandboxRunnerEnsureReleasesFileWorkspaceLockOnEnsurerPanic
+// covers a third finding from the same review: fileWorkspaceReadLock's
+// unlock was called manually right after workspaceEnsurer.Ensure instead of
+// via defer. If that call panics (an unexpected error from the underlying
+// copy/driver/store layers), the manual unlock never runs and the
+// per-workspace-id lock stays held forever — every later scheduler
+// Ensure/Resume for that agent's inline file workspace would then block on
+// the lock permanently, a lasting availability failure. This drives an
+// ensurer that panics on its first call, recovers (as the caller would),
+// and asserts a second Ensure call for the same workspace still completes
+// instead of hanging on the leaked lock.
+func TestSchedulerSandboxRunnerEnsureReleasesFileWorkspaceLockOnEnsurerPanic(t *testing.T) {
+	ctx := context.Background()
+	bridge, driver := newTestSandboxRPCBridge(t)
+	var calls int32
+	ensurer := &recordingSchedulerWorkspaceEnsurer{ensure: func(context.Context, *domain.Sandbox) error {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			panic("simulated workspaceEnsurer.Ensure panic")
+		}
+		return nil
+	}}
+	publisher := &schedulerSessionPublisherFake{}
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+
+	projectSource := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projectSource, "hello.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write source fixture file: %v", err)
+	}
+
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
+		ID:            "scheduler-inline-file-panic",
+		Name:          "Scheduler Inline File Panic",
+		Driver:        driverpkg.RuntimeDriverDocker,
+		SandboxPolicy: domain.SchedulerSandboxPolicyNew,
+	}}
+	scheduler = createNativeTestSchedulerWithWorkspace(t, ctx, bridge.configDB, scheduler, projectSource, &compose.WorkspaceSpec{
+		Provider: "file",
+		Path:     ".",
+		Name:     "my-local-workspace-panic",
+	})
+
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatalf("expected first Ensure call's workspaceEnsurer.Ensure to panic")
+			}
+		}()
+		_, _, _ = runner.Ensure(ctx, scheduler, domain.SchedulerAgentRequest{BindingTriggerID: "trigger-panic-1", SandboxPolicy: domain.SchedulerSandboxPolicyNew}, false)
+		t.Fatalf("Ensure returned instead of panicking")
+	}()
+
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := runner.Ensure(ctx, scheduler, domain.SchedulerAgentRequest{BindingTriggerID: "trigger-panic-2", SandboxPolicy: domain.SchedulerSandboxPolicyNew}, false)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("second Ensure call after ensurer panic returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("second Ensure call for the same workspace hung, want the per-workspace lock released after the first call's ensurer panic")
 	}
 }
