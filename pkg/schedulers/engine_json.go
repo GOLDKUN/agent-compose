@@ -102,3 +102,39 @@ func schedulerResultJSON(encoder *jsValueEncoder, value *qjs.Value) (string, boo
 	}
 	return jsonValue, true, nil
 }
+
+func schedulerRPCRequestJSON(encoder *jsValueEncoder, args []*qjs.Value, apiName string) (string, error) {
+	if len(args) == 0 {
+		return "", nil
+	}
+	if len(args) > 1 {
+		return "", fmt.Errorf("%s accepts at most one request object", apiName)
+	}
+	value := args[0]
+	if value == nil || value.IsNull() || value.IsUndefined() {
+		return "", nil
+	}
+	requestJSON, err := encoder.Encode(value)
+	if err != nil {
+		return "", fmt.Errorf("encode %s request: %w", apiName, err)
+	}
+	return strings.TrimSpace(requestJSON), nil
+}
+
+func upperFirstASCII(value string) string {
+	if value == "" {
+		return ""
+	}
+	if len(value) == 1 {
+		return strings.ToUpper(value)
+	}
+	return strings.ToUpper(value[:1]) + value[1:]
+}
+
+func payloadValueFromJSON(jsctx *qjs.Context, payloadJSON string) (*qjs.Value, error) {
+	payloadJSON = strings.TrimSpace(payloadJSON)
+	if payloadJSON == "" {
+		return jsctx.NewUndefined(), nil
+	}
+	return jsctx.ParseJSON(payloadJSON), nil
+}

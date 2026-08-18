@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	appconfig "agent-compose/pkg/config"
+	"agent-compose/pkg/execution"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
 )
@@ -75,4 +76,31 @@ func promptAttachHasAnthropicProviderKey(ctx context.Context, config *appconfig.
 		}
 	}
 	return false
+}
+
+func (c *Controller) ensurePromptAttachLLMFacadeEnv(ctx context.Context, sandbox *domain.Sandbox, agent execution.AgentConfig, runID string) (map[string]string, error) {
+	store, ok := c.configDB.(llmFacadeStore)
+	if !ok || c.config == nil || sandbox == nil {
+		return nil, nil
+	}
+	switch domain.NormalizeAgentKind(agent.Provider) {
+	case "claude":
+		return ensurePromptAttachClaudeLLMFacadeEnv(ctx, c.config, store, sandbox, agent.Model, runID)
+	case "opencode":
+		return llms.EnsureOpenCodeFacadeConfig(ctx, c.config, store, sandbox, agent.Model, "agent", runID)
+	case "pi":
+		return llms.EnsurePiFacadeConfig(ctx, c.config, store, sandbox, agent.Model, "agent", runID)
+	case "codex":
+		return llms.EnsureCodexFacadeConfig(ctx, c.config, store, sandbox, agent.Model, "agent", runID)
+	default:
+		return nil, nil
+	}
+}
+
+func (c *Controller) deletePromptAttachLLMFacadeToken(ctx context.Context, token string) {
+	store, ok := c.configDB.(llmFacadeTokenDeleter)
+	if !ok || strings.TrimSpace(token) == "" {
+		return
+	}
+	_ = store.DeleteLLMFacadeToken(ctx, token)
 }

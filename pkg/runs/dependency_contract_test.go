@@ -70,18 +70,27 @@ func TestAttachBoundaryDoesNotDependOnGeneratedProto(t *testing.T) {
 		}
 	}
 
-	controller := parseDependencyContractFile(t, filepath.Join(packageDir, "controller.go"))
-	ast.Inspect(controller, func(node ast.Node) bool {
-		selector, ok := node.(*ast.SelectorExpr)
-		if !ok {
+	files, err := filepath.Glob(filepath.Join(packageDir, "*.go"))
+	if err != nil {
+		t.Fatalf("list package files: %v", err)
+	}
+	for _, path := range files {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		file := parseDependencyContractFile(t, path)
+		ast.Inspect(file, func(node ast.Node) bool {
+			selector, ok := node.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			identifier, ok := selector.X.(*ast.Ident)
+			if ok && identifier.Name == "agentcomposev2" && strings.HasPrefix(selector.Sel.Name, "Attach") {
+				t.Errorf("%s references generated attach type agentcomposev2.%s", filepath.Base(path), selector.Sel.Name)
+			}
 			return true
-		}
-		identifier, ok := selector.X.(*ast.Ident)
-		if ok && identifier.Name == "agentcomposev2" && strings.HasPrefix(selector.Sel.Name, "Attach") {
-			t.Errorf("controller.go references generated attach type agentcomposev2.%s", selector.Sel.Name)
-		}
-		return true
-	})
+		})
+	}
 }
 
 func parseDependencyContractFile(t *testing.T, path string) *ast.File {
