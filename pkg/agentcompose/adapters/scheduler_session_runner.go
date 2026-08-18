@@ -30,22 +30,23 @@ type SchedulerVolumeResolver interface {
 }
 
 type SchedulerSandboxRunner struct {
-	Config           *appconfig.Config
-	Store            *sandboxstore.Store
-	ConfigDB         *configstore.ConfigStore
-	workspaceEnsurer workspaces.WorkspaceEnsurer
-	Driver           sandboxes.SandboxDriver
-	Cap              capabilities.Provider
-	Volumes          SchedulerVolumeResolver
-	Streams          *sandboxes.StreamBroker
-	Publisher        schedulers.ControllerPublisher
-	CapTokens        *CapabilitySandboxResolver
-	AgentExecutor    *AgentExecutor
-	LifecycleLocks   *sandboxes.LifecycleLocks
+	Config               *appconfig.Config
+	Store                *sandboxstore.Store
+	ConfigDB             *configstore.ConfigStore
+	workspaceEnsurer     workspaces.WorkspaceEnsurer
+	Driver               sandboxes.SandboxDriver
+	Cap                  capabilities.Provider
+	Volumes              SchedulerVolumeResolver
+	Streams              *sandboxes.StreamBroker
+	Publisher            schedulers.ControllerPublisher
+	CapTokens            *CapabilitySandboxResolver
+	AgentExecutor        *AgentExecutor
+	LifecycleLocks       *sandboxes.LifecycleLocks
+	inlineWorkspaceLocks *sandboxes.LifecycleLocks
 }
 
 func NewSchedulerSandboxRunner(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, workspaceEnsurer workspaces.WorkspaceEnsurer, driver sandboxes.SandboxDriver, cap capabilities.Provider, volumeResolver SchedulerVolumeResolver, streams *sandboxes.StreamBroker, publisher schedulers.ControllerPublisher, capTokens *CapabilitySandboxResolver, agentExecutor *AgentExecutor, locks ...*sandboxes.LifecycleLocks) *SchedulerSandboxRunner {
-	runner := &SchedulerSandboxRunner{Config: config, Store: store, ConfigDB: configDB, workspaceEnsurer: workspaceEnsurer, Driver: driver, Cap: cap, Volumes: volumeResolver, Streams: streams, Publisher: publisher, CapTokens: capTokens, AgentExecutor: agentExecutor}
+	runner := &SchedulerSandboxRunner{Config: config, Store: store, ConfigDB: configDB, workspaceEnsurer: workspaceEnsurer, Driver: driver, Cap: cap, Volumes: volumeResolver, Streams: streams, Publisher: publisher, CapTokens: capTokens, AgentExecutor: agentExecutor, inlineWorkspaceLocks: sandboxes.NewLifecycleLocks()}
 	if len(locks) > 0 {
 		runner.LifecycleLocks = locks[0]
 	}
@@ -126,7 +127,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 	envItems := domain.MergeEnvItems(globalEnvItems, providerEnvItems)
 	envItems = llms.FilterPersistedRuntimeEnv(envItems)
 	workspaceID := r.workspaceID(scheduler, request, agentDefinition)
-	workspaceSnapshot, err := r.workspaceSnapshot(ctx, workspaceID)
+	workspaceSnapshot, workspaceID, err := r.resolveWorkspaceSnapshot(ctx, request, agentDefinition, workspaceID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -202,10 +203,15 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		}
 	}
 	r.recordVolumeWarnings(ctx, session.Summary.ID, volumeWarnings)
-	if err := r.workspaceEnsurer.Ensure(ctx, session); err != nil {
+	ensureErr := func() error {
+		unlock := r.fileWorkspaceReadLock(workspaceSnapshot)
+		defer unlock()
+		return r.workspaceEnsurer.Ensure(ctx, session)
+	}()
+	if ensureErr != nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = r.Store.UpdateSandbox(ctx, session)
-		return nil, "", err
+		return nil, "", ensureErr
 	}
 	writeCapabilityGuide(ctx, r.Cap, r.Store, r.Streams, session, scheduler.Summary.CapsetIDs)
 	if r.AgentExecutor == nil {
@@ -298,8 +304,13 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 			return nil, "", err
 		}
 	}
-	if err := r.workspaceEnsurer.Ensure(ctx, session); err != nil {
-		return nil, "", err
+	ensureErr := func() error {
+		unlock := r.fileWorkspaceReadLock(session.Workspace)
+		defer unlock()
+		return r.workspaceEnsurer.Ensure(ctx, session)
+	}()
+	if ensureErr != nil {
+		return nil, "", ensureErr
 	}
 	vmState, err := r.Store.GetVMState(session.Summary.ID)
 	if err != nil {
@@ -369,6 +380,52 @@ func (r *SchedulerSandboxRunner) workspaceID(scheduler domain.Scheduler, request
 		workspaceID = firstNonEmpty(strings.TrimSpace(request.WorkspaceID), strings.TrimSpace(scheduler.Summary.WorkspaceID), strings.TrimSpace(agentDefinition.WorkspaceID))
 	}
 	return workspaceID
+}
+
+// resolveWorkspaceSnapshot resolves the sandbox workspace snapshot for a
+// scheduler run. request.WorkspaceID is an explicit session override (e.g.
+// scheduler.agent(prompt, { workspaceId }) or scheduler.shell/exec) and is
+// always treated as a Settings-managed workspace_config preset id. Absent
+// that override, an agent's yaml `workspace:` declaration is resolved
+// inline instead of being looked up as a preset (see issue #599: the yaml
+// `name` label was never a real preset id, so that lookup always failed).
+func (r *SchedulerSandboxRunner) resolveWorkspaceSnapshot(ctx context.Context, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition, workspaceID string) (*domain.SandboxWorkspace, string, error) {
+	if strings.TrimSpace(request.WorkspaceID) == "" {
+		if spec := agentDefinitionInlineWorkspace(agentDefinition); spec != nil {
+			snapshot, resolvedID, err := r.inlineWorkspaceSnapshot(ctx, agentDefinition, spec)
+			if err != nil {
+				return nil, "", err
+			}
+			return snapshot, resolvedID, nil
+		}
+	}
+	if workspaceID == "" {
+		return nil, "", nil
+	}
+	snapshot, err := r.workspaceSnapshot(ctx, workspaceID)
+	if err != nil {
+		return nil, "", err
+	}
+	return snapshot, workspaceID, nil
+}
+
+// fileWorkspaceReadLock holds the same per-workspace-id lock
+// materializeInlineFileWorkspace uses while resetting and recopying its
+// shared content directory (workspaces/<id>/content under the data root).
+// workspaceEnsurer.Ensure reads that same shared directory (see
+// pkg/workspaces file workspace Prepare) to populate the sandbox's own
+// workspace path, at both sandbox creation (Ensure) and resume
+// (loadOrResumeLocked) time. Without holding this lock across that read, a
+// concurrent Ensure call for the same workspace id could RemoveAll/recopy
+// the shared directory while this read is in flight, surfacing as ENOENT or
+// partial content copied into the sandbox. Settings-managed file presets
+// share this lock key too; their content is static outside of Settings
+// edits, so the extra serialization there is harmless.
+func (r *SchedulerSandboxRunner) fileWorkspaceReadLock(workspace *domain.SandboxWorkspace) func() {
+	if workspace == nil || workspace.Type != "file" || strings.TrimSpace(workspace.ID) == "" {
+		return func() {}
+	}
+	return r.inlineWorkspaceLocks.Lock(workspace.ID)
 }
 
 func (r *SchedulerSandboxRunner) workspaceSnapshot(ctx context.Context, workspaceID string) (*domain.SandboxWorkspace, error) {

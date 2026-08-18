@@ -139,6 +139,13 @@ type agentDefinitionConfig struct {
 	Sandbox        *compose.NormalizedSandboxSpec                 `json:"sandbox,omitempty"`
 	MCPServers     map[string]compose.NormalizedMCPServerSpec     `json:"mcp_servers,omitempty"`
 	OctoBusServers map[string]compose.NormalizedOctoBusServerSpec `json:"octobus_servers,omitempty"`
+	// Workspace carries the full yaml `workspace:` declaration (provider,
+	// url/path, ref, target, credentials). AgentDefinition.WorkspaceID only
+	// keeps the yaml `name` label, which is not a workspace_config preset id
+	// (see issue #599), so runtime code must read the inline spec from here
+	// to actually resolve the declared workspace instead of looking it up as
+	// a preset.
+	Workspace *compose.WorkspaceSpec `json:"workspace,omitempty"`
 }
 
 func agentDefinitionConfigJSON(agent compose.NormalizedAgentSpec, projectMCPServers map[string]compose.NormalizedMCPServerSpec, projectOctoBusServers map[string]compose.NormalizedOctoBusServerSpec) (string, error) {
@@ -147,8 +154,9 @@ func agentDefinitionConfigJSON(agent compose.NormalizedAgentSpec, projectMCPServ
 		Sandbox:        agent.Sandbox,
 		MCPServers:     selectedAgentMCPServers(agent, projectMCPServers),
 		OctoBusServers: selectedAgentOctoBusServers(agent, projectOctoBusServers),
+		Workspace:      agent.Workspace,
 	}
-	if payload.Jupyter == nil && payload.Sandbox == nil && len(payload.MCPServers) == 0 && len(payload.OctoBusServers) == 0 {
+	if payload.Jupyter == nil && payload.Sandbox == nil && payload.Workspace == nil && len(payload.MCPServers) == 0 && len(payload.OctoBusServers) == 0 {
 		return "{}", nil
 	}
 	data, err := MarshalCanonicalJSON(payload)
