@@ -9,31 +9,91 @@ import (
 	"agent-compose/pkg/projects"
 )
 
+// agentRunningCounts tracks the non-scheduler and scheduler runs currently in
+// flight for one project agent.
+type agentRunningCounts struct {
+	running          uint32
+	runningScheduler uint32
+}
+
+// ListProjectAgentRunStates returns the latest run plus running counts for each
+// project agent. It replaces a single window-function query — which scanned and
+// partitioned every run for the project — with two narrow queries: one that only
+// touches the running rows, and one that resolves the latest run per agent
+// through the (project_id, agent_name, created_at) index.
 func (s *projectStore) ListProjectAgentRunStates(ctx context.Context, projectID string) ([]domain.ProjectAgentRunState, error) {
-	rows, err := s.db.QueryContext(ctx, `WITH ranked AS (
-		SELECT agent_name, run_id, status, source, started_at, completed_at, created_at,
-			ROW_NUMBER() OVER (PARTITION BY agent_name ORDER BY created_at DESC, run_id DESC) AS position,
-			SUM(CASE WHEN status = ? AND source = ? THEN 1 ELSE 0 END) OVER (PARTITION BY agent_name) AS running_scheduler_count,
-			SUM(CASE WHEN status = ? AND source != ? THEN 1 ELSE 0 END) OVER (PARTITION BY agent_name) AS running_count
-		FROM project_run WHERE project_id = ? AND agent_name != ''
-	)
-	SELECT agent_name, running_count, running_scheduler_count, run_id, status, source,
-		CASE WHEN completed_at != 0 THEN completed_at WHEN started_at != 0 THEN started_at ELSE created_at END
-	FROM ranked WHERE position = 1 ORDER BY agent_name`, domain.ProjectRunStatusRunning, domain.ProjectRunSourceScheduler, domain.ProjectRunStatusRunning, domain.ProjectRunSourceScheduler, strings.TrimSpace(projectID))
+	projectID = strings.TrimSpace(projectID)
+	running, err := s.projectAgentRunningCounts(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("query project agent run states: %w", err)
+		return nil, err
+	}
+	latest, err := s.projectAgentLatestRuns(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	states := make([]domain.ProjectAgentRunState, 0, len(latest))
+	for _, item := range latest {
+		if counts, ok := running[item.AgentName]; ok {
+			item.RunningRunCount = counts.running
+			item.RunningSchedulerRunCount = counts.runningScheduler
+		}
+		states = append(states, item)
+	}
+	return states, nil
+}
+
+func (s *projectStore) projectAgentRunningCounts(ctx context.Context, projectID string) (map[string]agentRunningCounts, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT agent_name,
+		SUM(CASE WHEN source = ? THEN 0 ELSE 1 END),
+		SUM(CASE WHEN source = ? THEN 1 ELSE 0 END)
+	FROM project_run
+	WHERE project_id = ? AND status = ? AND agent_name != ''
+	GROUP BY agent_name`,
+		domain.ProjectRunSourceScheduler, domain.ProjectRunSourceScheduler, projectID, domain.ProjectRunStatusRunning)
+	if err != nil {
+		return nil, fmt.Errorf("query project agent running counts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	result := make(map[string]agentRunningCounts)
+	for rows.Next() {
+		var name string
+		var running, runningScheduler int64
+		if err := rows.Scan(&name, &running, &runningScheduler); err != nil {
+			return nil, err
+		}
+		result[name] = agentRunningCounts{running: uint32(running), runningScheduler: uint32(runningScheduler)}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate project agent running counts: %w", err)
+	}
+	return result, nil
+}
+
+func (s *projectStore) projectAgentLatestRuns(ctx context.Context, projectID string) ([]domain.ProjectAgentRunState, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT r.agent_name, 0, 0, r.run_id, r.status, r.source,
+		CASE WHEN r.completed_at != 0 THEN r.completed_at WHEN r.started_at != 0 THEN r.started_at ELSE r.created_at END
+	FROM project_run r
+	WHERE r.project_id = ? AND r.agent_name != ''
+		AND r.run_id = (
+			SELECT run_id FROM project_run
+			WHERE project_id = r.project_id AND agent_name = r.agent_name
+			ORDER BY created_at DESC, run_id DESC LIMIT 1
+		)
+	ORDER BY r.agent_name`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("query project agent latest runs: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	var states []domain.ProjectAgentRunState
 	for rows.Next() {
-		state, scanErr := projects.ScanProjectAgentRunState(rows.Scan)
-		if scanErr != nil {
-			return nil, scanErr
+		item, err := projects.ScanProjectAgentRunState(rows.Scan)
+		if err != nil {
+			return nil, err
 		}
-		states = append(states, state)
+		states = append(states, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate project agent run states: %w", err)
+		return nil, fmt.Errorf("iterate project agent latest runs: %w", err)
 	}
 	return states, nil
 }
