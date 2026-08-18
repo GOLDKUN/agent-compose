@@ -279,3 +279,106 @@ func TestSchedulerSandboxRunnerConcurrentInlineFileWorkspaceMaterializationIsSer
 		}
 	}
 }
+
+// TestSchedulerSandboxRunnerConcurrentEnsureSerializesFileWorkspaceReadAgainstMaterialize
+// covers a second race a reviewer flagged after the first fix landed: the
+// inlineWorkspaceLocks lock only spanned materializeInlineFileWorkspace's
+// own reset+copy, released as soon as resolveWorkspaceSnapshot returned.
+// Later in Ensure, workspaceEnsurer.Ensure reads that same shared content
+// directory to populate the new sandbox's own workspace path (see
+// pkg/workspaces file workspace Prepare / materializeSessionWorkspace) with
+// no lock held at all. A concurrent Ensure call for the same agent could
+// start resetting/recopying the shared directory while another call's
+// workspaceEnsurer.Ensure was mid-read from it. This exercises the full
+// Ensure path (not just inlineWorkspaceSnapshot) with a real, file-copying
+// WorkspaceEnsurer so that read is actually reached.
+func TestSchedulerSandboxRunnerConcurrentEnsureSerializesFileWorkspaceReadAgainstMaterialize(t *testing.T) {
+	ctx := context.Background()
+	bridge, driver := newTestSandboxRPCBridge(t)
+	provisioner := workspaces.NewProvisioner(bridge.config, bridge.configDB, bridge.store)
+	publisher := &schedulerSessionPublisherFake{}
+	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, provisioner, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+
+	projectSource := t.TempDir()
+	const dirCount, fileCount = 6, 30
+	for dir := 0; dir < dirCount; dir++ {
+		subdir := filepath.Join(projectSource, fmt.Sprintf("dir-%d", dir))
+		if err := os.MkdirAll(subdir, 0o755); err != nil {
+			t.Fatalf("create source subdir %d: %v", dir, err)
+		}
+		for file := 0; file < fileCount; file++ {
+			content := strings.Repeat(fmt.Sprintf("dir-%d-file-%d\n", dir, file), 64)
+			if err := os.WriteFile(filepath.Join(subdir, fmt.Sprintf("file-%d.txt", file)), []byte(content), 0o644); err != nil {
+				t.Fatalf("write source fixture dir=%d file=%d: %v", dir, file, err)
+			}
+		}
+	}
+
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
+		ID:            "scheduler-inline-file-ensure-race",
+		Name:          "Scheduler Inline File Ensure Race",
+		Driver:        driverpkg.RuntimeDriverDocker,
+		SandboxPolicy: domain.SchedulerSandboxPolicyNew,
+	}}
+	scheduler = createNativeTestSchedulerWithWorkspace(t, ctx, bridge.configDB, scheduler, projectSource, &compose.WorkspaceSpec{
+		Provider: "file",
+		Path:     ".",
+		Name:     "my-local-workspace-ensure-race",
+	})
+
+	const callerCount = 12
+	const timeout = 20 * time.Second
+	type result struct {
+		index   int
+		sandbox *domain.Sandbox
+		err     error
+	}
+	results := make(chan result, callerCount)
+	start := make(chan struct{})
+	var ready sync.WaitGroup
+	ready.Add(callerCount)
+	for index := 0; index < callerCount; index++ {
+		go func(index int) {
+			ready.Done()
+			<-start
+			runCtx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+			request := domain.SchedulerAgentRequest{
+				BindingTriggerID: fmt.Sprintf("trigger-ensure-race-%d", index),
+				SandboxPolicy:    domain.SchedulerSandboxPolicyNew,
+			}
+			sandbox, _, err := runner.Ensure(runCtx, scheduler, request, false)
+			results <- result{index: index, sandbox: sandbox, err: err}
+		}(index)
+	}
+	ready.Wait()
+	close(start)
+
+	var sandboxes []*domain.Sandbox
+	for i := 0; i < callerCount; i++ {
+		select {
+		case r := <-results:
+			if r.err != nil {
+				t.Fatalf("concurrent Ensure call %d returned error: %v, want the shared file workspace directory read (workspaceEnsurer.Ensure) to be serialized against concurrent materialization", r.index, r.err)
+			}
+			sandboxes = append(sandboxes, r.sandbox)
+		case <-time.After(timeout):
+			t.Fatalf("timed out waiting for concurrent Ensure calls (%d/%d returned)", i, callerCount)
+		}
+	}
+
+	for _, sandbox := range sandboxes {
+		for dir := 0; dir < dirCount; dir++ {
+			for file := 0; file < fileCount; file++ {
+				want := strings.Repeat(fmt.Sprintf("dir-%d-file-%d\n", dir, file), 64)
+				got, err := os.ReadFile(filepath.Join(sandbox.Summary.WorkspacePath, fmt.Sprintf("dir-%d", dir), fmt.Sprintf("file-%d.txt", file)))
+				if err != nil {
+					t.Fatalf("sandbox %s: read copied workspace content dir=%d file=%d: %v", sandbox.Summary.ID, dir, file, err)
+				}
+				if string(got) != want {
+					t.Fatalf("sandbox %s: copied workspace content dir=%d file=%d = %q, want %q", sandbox.Summary.ID, dir, file, got, want)
+				}
+			}
+		}
+	}
+}

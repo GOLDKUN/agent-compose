@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -410,10 +411,13 @@ func TestE2ESchedulerSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 }
 
 type schedulerSessionPublisherFake struct {
+	mu     sync.Mutex
 	events []domain.SchedulerTopicEvent
 }
 
 func (p *schedulerSessionPublisherFake) Publish(event domain.SchedulerTopicEvent) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.events = append(p.events, event)
 	return true
 }

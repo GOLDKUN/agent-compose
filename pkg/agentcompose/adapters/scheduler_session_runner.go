@@ -203,10 +203,13 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		}
 	}
 	r.recordVolumeWarnings(ctx, session.Summary.ID, volumeWarnings)
-	if err := r.workspaceEnsurer.Ensure(ctx, session); err != nil {
+	unlockWorkspaceRead := r.fileWorkspaceReadLock(workspaceSnapshot)
+	ensureErr := r.workspaceEnsurer.Ensure(ctx, session)
+	unlockWorkspaceRead()
+	if ensureErr != nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = r.Store.UpdateSandbox(ctx, session)
-		return nil, "", err
+		return nil, "", ensureErr
 	}
 	writeCapabilityGuide(ctx, r.Cap, r.Store, r.Streams, session, scheduler.Summary.CapsetIDs)
 	if r.AgentExecutor == nil {
@@ -299,8 +302,11 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 			return nil, "", err
 		}
 	}
-	if err := r.workspaceEnsurer.Ensure(ctx, session); err != nil {
-		return nil, "", err
+	unlockWorkspaceRead := r.fileWorkspaceReadLock(session.Workspace)
+	ensureErr := r.workspaceEnsurer.Ensure(ctx, session)
+	unlockWorkspaceRead()
+	if ensureErr != nil {
+		return nil, "", ensureErr
 	}
 	vmState, err := r.Store.GetVMState(session.Summary.ID)
 	if err != nil {
@@ -397,6 +403,25 @@ func (r *SchedulerSandboxRunner) resolveWorkspaceSnapshot(ctx context.Context, r
 		return nil, "", err
 	}
 	return snapshot, workspaceID, nil
+}
+
+// fileWorkspaceReadLock holds the same per-workspace-id lock
+// materializeInlineFileWorkspace uses while resetting and recopying its
+// shared content directory (workspaces/<id>/content under the data root).
+// workspaceEnsurer.Ensure reads that same shared directory (see
+// pkg/workspaces file workspace Prepare) to populate the sandbox's own
+// workspace path, at both sandbox creation (Ensure) and resume
+// (loadOrResumeLocked) time. Without holding this lock across that read, a
+// concurrent Ensure call for the same workspace id could RemoveAll/recopy
+// the shared directory while this read is in flight, surfacing as ENOENT or
+// partial content copied into the sandbox. Settings-managed file presets
+// share this lock key too; their content is static outside of Settings
+// edits, so the extra serialization there is harmless.
+func (r *SchedulerSandboxRunner) fileWorkspaceReadLock(workspace *domain.SandboxWorkspace) func() {
+	if workspace == nil || workspace.Type != "file" || strings.TrimSpace(workspace.ID) == "" {
+		return func() {}
+	}
+	return r.inlineWorkspaceLocks.Lock(workspace.ID)
 }
 
 func (r *SchedulerSandboxRunner) workspaceSnapshot(ctx context.Context, workspaceID string) (*domain.SandboxWorkspace, error) {
