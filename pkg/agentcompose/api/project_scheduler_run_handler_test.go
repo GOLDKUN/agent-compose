@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -224,6 +226,45 @@ func TestProjectHandlerListsProjectSchedulerEventsWithIdentityAndOffset(t *testi
 	}))
 	if err != nil || len(second.Msg.GetEvents()) != 1 || second.Msg.GetEvents()[0].GetId() != "event-1" || second.Msg.GetTotal() != 2 {
 		t.Fatalf("second event page=%#v err=%v", second, err)
+	}
+}
+
+// projectHandlerSandboxDirsFake is a minimal schedulers.SandboxDirResolver for
+// exercising ResolveEventMessage end-to-end through the RPC handlers.
+type projectHandlerSandboxDirsFake map[string]string
+
+func (f projectHandlerSandboxDirsFake) SandboxDir(id string) string { return f[id] }
+
+func writeSchedulerCommandCellArtifact(t *testing.T, sandboxDir, cellID, content string) {
+	t.Helper()
+	cellDir := filepath.Join(sandboxDir, "state", "cells", cellID)
+	if err := os.MkdirAll(cellDir, 0o755); err != nil {
+		t.Fatalf("mkdir cell dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cellDir, "output.txt"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write output.txt: %v", err)
+	}
+}
+
+func TestListProjectSchedulerEventsResolvesCommandCompletedFromArtifact(t *testing.T) {
+	store, _, handler := newSchedulerRunHandlerFixture()
+	sandboxDir := t.TempDir()
+	writeSchedulerCommandCellArtifact(t, sandboxDir, "cell-1", "full reconstructed output")
+	handler.sandboxDirs = projectHandlerSandboxDirsFake{"sandbox-1": sandboxDir}
+
+	createdAt := time.Unix(700, 0).UTC()
+	store.events = []domain.SchedulerEvent{
+		{
+			ID: "event-1", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1",
+			Type: "scheduler.command.completed", Message: "", // §4: new rows always write an empty message
+			PayloadJSON: `{"outputBytes":26}`, LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1", CreatedAt: createdAt,
+		},
+	}
+	resp, err := handler.ListProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
+	}))
+	if err != nil || len(resp.Msg.GetEvents()) != 1 || resp.Msg.GetEvents()[0].GetMessage() != "full reconstructed output" {
+		t.Fatalf("ListProjectSchedulerEvents = %#v err=%v", resp, err)
 	}
 }
 

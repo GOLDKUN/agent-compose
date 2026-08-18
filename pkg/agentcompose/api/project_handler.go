@@ -73,6 +73,7 @@ type ProjectHandler struct {
 	schedulerRuns    ProjectSchedulerRunRuntime
 	invocations      ProjectSchedulerInvocationRuntime
 	schedulerPrune   ProjectSchedulerPruneRuntime
+	sandboxDirs      schedulers.SandboxDirResolver
 }
 
 func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntimes ...ProjectSchedulerRuntime) *ProjectHandler {
@@ -80,19 +81,20 @@ func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRu
 	if len(schedulerRuntimes) > 0 {
 		schedulerRuntime = schedulerRuntimes[0]
 	}
-	return newProjectHandler(delegate, store, schedulerRuntime, nil)
+	return newProjectHandler(delegate, store, schedulerRuntime, nil, nil)
 }
 
-// NewProjectHandlerWithAgentModels constructs a project handler that enriches project responses with resolved agent models.
-func NewProjectHandlerWithAgentModels(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver) *ProjectHandler {
-	return newProjectHandler(delegate, store, schedulerRuntime, agentModels)
+// NewProjectHandlerWithAgentModels constructs a project handler that enriches project responses with resolved agent models
+// and, given sandboxDirs, reconstructs command.completed scheduler_event messages from sandbox cell artifacts.
+func NewProjectHandlerWithAgentModels(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver, sandboxDirs schedulers.SandboxDirResolver) *ProjectHandler {
+	return newProjectHandler(delegate, store, schedulerRuntime, agentModels, sandboxDirs)
 }
 
-func newProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver) *ProjectHandler {
+func newProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver, sandboxDirs schedulers.SandboxDirResolver) *ProjectHandler {
 	schedulerRuns, _ := schedulerRuntime.(ProjectSchedulerRunRuntime)
 	invocations, _ := schedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := schedulerRuntime.(ProjectSchedulerPruneRuntime)
-	return &ProjectHandler{delegate: delegate, store: store, agentModels: agentModels, schedulerRuntime: schedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune}
+	return &ProjectHandler{delegate: delegate, store: store, agentModels: agentModels, schedulerRuntime: schedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune, sandboxDirs: sandboxDirs}
 }
 
 func (h *ProjectHandler) ValidateProject(ctx context.Context, req *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error) {

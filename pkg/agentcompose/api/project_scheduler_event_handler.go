@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"connectrpc.com/connect"
 
@@ -76,14 +77,53 @@ func (h *ProjectHandler) ListProjectSchedulerEvents(ctx context.Context, req *co
 		return nil, ConnectErrorForDomain(err)
 	}
 	response := &agentcomposev2.ListProjectSchedulerEventsResponse{Events: make([]*agentcomposev2.SchedulerEvent, 0, len(events)), Total: uint32(total)}
+	matched := make([]domain.SchedulerEvent, 0, len(events))
 	for _, event := range events {
 		scheduler, ok := bySchedulerID[event.SchedulerID]
 		if !ok {
 			continue
 		}
+		matched = append(matched, event)
 		response.Events = append(response.Events, schedulerEventToProto(event, scheduler))
 	}
+	resolveSchedulerEventMessages(ctx, matched, response.Events, h.sandboxDirs)
 	return connect.NewResponse(response), nil
+}
+
+// maxConcurrentEventMessageResolves bounds how many ResolveEventMessage calls
+// that actually read a sandbox cell artifact run in parallel for a single
+// response page. New command.completed rows (empty DB message) are the only
+// ones that pay this cost (see docs/design/scheduler_event_storage_design.md
+// §4/§6); a small bounded pool trades a handful of goroutines for lower
+// wall-clock time without unbounded fan-out against the filesystem.
+const maxConcurrentEventMessageResolves = 8
+
+// resolveSchedulerEventMessages fills in item.Message for each item from its
+// index-aligned source event. events and items must be the same length and
+// in the same order. Events that ResolveEventMessage can answer without I/O
+// (every non-command.completed event, and any command.completed event whose
+// DB message is already non-empty — see EventMessageNeedsArtifactRead) are
+// resolved inline; only events that need an artifact read are dispatched to
+// the bounded worker pool, since that's the only case worth the goroutine
+// overhead. Each dispatched goroutine only touches its own index, so no
+// synchronization beyond the WaitGroup is needed.
+func resolveSchedulerEventMessages(ctx context.Context, events []domain.SchedulerEvent, items []*agentcomposev2.SchedulerEvent, sandboxDirs schedulers.SandboxDirResolver) {
+	sem := make(chan struct{}, maxConcurrentEventMessageResolves)
+	var wg sync.WaitGroup
+	for i := range items {
+		if !schedulers.EventMessageNeedsArtifactRead(events[i]) {
+			items[i].Message, _ = schedulers.ResolveEventMessage(ctx, events[i], sandboxDirs)
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			items[i].Message, _ = schedulers.ResolveEventMessage(ctx, events[i], sandboxDirs)
+		}(i)
+	}
+	wg.Wait()
 }
 
 func schedulerEventToProto(event domain.SchedulerEvent, scheduler domain.ProjectSchedulerRecord) *agentcomposev2.SchedulerEvent {
