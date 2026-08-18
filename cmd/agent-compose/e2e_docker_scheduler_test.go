@@ -284,11 +284,11 @@ func waitForScheduledHelloRun(t *testing.T, projectClient agentcomposev2connect.
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for time.Now().Before(deadline) {
-		// ListProjectSchedulerEvents (not the UI-only ListSchedulerEvents) is used here
-		// because scheduler.command.completed rows now write an empty DB message and
-		// only ListProjectSchedulerEvents/StreamProjectSchedulerEvents reconstruct the
-		// full text from the sandbox cell artifact (see
-		// docs/design/scheduler_event_storage_design.md §6).
+		// ListProjectSchedulerEvents is used here because it's what `scheduler
+		// logs` actually calls; ListSchedulerEvents (UI-only, unused by any
+		// current caller) also reconstructs command.completed output from the
+		// sandbox cell artifact and is covered separately by
+		// TestListSchedulerEventsResolvesCommandCompletedFromArtifact.
 		eventsResp, err := projectClient.ListProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.ListProjectSchedulerEventsRequest{
 			Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: scheduler.GetProjectId()}},
 			AgentName: scheduler.GetAgentName(),

@@ -84,6 +84,18 @@ func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRu
 	return newProjectHandler(delegate, store, schedulerRuntime, nil, nil)
 }
 
+// WithSandboxDirs injects the sandbox directory resolver ResolveEventMessage
+// needs to reconstruct command.completed scheduler_event messages from
+// sandbox cell artifacts. NewProjectHandler has no dedicated parameter for
+// it (schedulerRuntimes is already the trailing variadic slot), so any
+// caller that needs it — beyond NewProjectHandlerWithAgentModels, which
+// takes it directly — chains this instead of silently falling back to the
+// "artifact not accessible" placeholder for every new command.completed row.
+func (h *ProjectHandler) WithSandboxDirs(sandboxDirs schedulers.SandboxDirResolver) *ProjectHandler {
+	h.sandboxDirs = sandboxDirs
+	return h
+}
+
 // NewProjectHandlerWithAgentModels constructs a project handler that enriches project responses with resolved agent models
 // and, given sandboxDirs, reconstructs command.completed scheduler_event messages from sandbox cell artifacts.
 func NewProjectHandlerWithAgentModels(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver, sandboxDirs schedulers.SandboxDirResolver) *ProjectHandler {
@@ -194,6 +206,7 @@ func (h *ProjectHandler) ListSchedulerEvents(ctx context.Context, req *connect.R
 	for _, event := range events {
 		response.Events = append(response.Events, schedulerEventToProto(event, scheduler))
 	}
+	resolveSchedulerEventMessages(ctx, events, response.Events, h.sandboxDirs)
 	return connect.NewResponse(response), nil
 }
 

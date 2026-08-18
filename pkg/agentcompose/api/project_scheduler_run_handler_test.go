@@ -235,6 +235,58 @@ type projectHandlerSandboxDirsFake map[string]string
 
 func (f projectHandlerSandboxDirsFake) SandboxDir(id string) string { return f[id] }
 
+func TestListSchedulerEventsResolvesCommandCompletedFromArtifact(t *testing.T) {
+	store, _, handler := newSchedulerRunHandlerFixture()
+	sandboxDir := t.TempDir()
+	writeSchedulerCommandCellArtifact(t, sandboxDir, "cell-1", "ui endpoint full output")
+	handler.WithSandboxDirs(projectHandlerSandboxDirsFake{"sandbox-1": sandboxDir})
+
+	createdAt := time.Unix(1000, 0).UTC()
+	store.events = []domain.SchedulerEvent{
+		{
+			ID: "event-1", SchedulerID: store.scheduler.ID, TriggerID: "trigger-1",
+			Type: "scheduler.command.completed", Message: "",
+			LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1", CreatedAt: createdAt,
+		},
+	}
+	resp, err := handler.ListSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.ListSchedulerEventsRequest{
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
+		AgentName: store.scheduler.AgentName,
+	}))
+	if err != nil || len(resp.Msg.GetEvents()) != 1 || resp.Msg.GetEvents()[0].GetMessage() != "ui endpoint full output" {
+		t.Fatalf("ListSchedulerEvents = %#v err=%v", resp, err)
+	}
+}
+
+func TestNewProjectHandlerWithSandboxDirsInjectsResolver(t *testing.T) {
+	store, _, handler := newSchedulerRunHandlerFixture() // built via plain NewProjectHandler, no sandboxDirs
+	sandboxDir := t.TempDir()
+	writeSchedulerCommandCellArtifact(t, sandboxDir, "cell-1", "resolved after WithSandboxDirs")
+
+	createdAt := time.Unix(1100, 0).UTC()
+	store.events = []domain.SchedulerEvent{
+		{
+			ID: "event-1", SchedulerID: store.scheduler.ID, TriggerID: "trigger-1",
+			Type: "scheduler.command.completed", Message: "",
+			LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1", CreatedAt: createdAt,
+		},
+	}
+	req := connect.NewRequest(&agentcomposev2.ListSchedulerEventsRequest{
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}}, AgentName: store.scheduler.AgentName,
+	})
+
+	before, err := handler.ListSchedulerEvents(context.Background(), req)
+	if err != nil || len(before.Msg.GetEvents()) != 1 || !strings.Contains(before.Msg.GetEvents()[0].GetMessage(), "content unavailable") {
+		t.Fatalf("before WithSandboxDirs: message = %#v err=%v, want an unavailable placeholder (no resolver injected)", before, err)
+	}
+
+	handler.WithSandboxDirs(projectHandlerSandboxDirsFake{"sandbox-1": sandboxDir})
+	after, err := handler.ListSchedulerEvents(context.Background(), req)
+	if err != nil || len(after.Msg.GetEvents()) != 1 || after.Msg.GetEvents()[0].GetMessage() != "resolved after WithSandboxDirs" {
+		t.Fatalf("after WithSandboxDirs: message = %#v err=%v, want reconstructed artifact content", after, err)
+	}
+}
+
 func writeSchedulerCommandCellArtifact(t *testing.T, sandboxDir, cellID, content string) {
 	t.Helper()
 	cellDir := filepath.Join(sandboxDir, "state", "cells", cellID)
