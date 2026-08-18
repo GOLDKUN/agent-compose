@@ -102,6 +102,7 @@ func RegisterRoutes(di do.Injector) {
 		do.MustInvoke[*configstore.ConfigStore](di),
 		do.MustInvoke[*schedulers.Controller](di),
 		newProjectAgentModelResolver(do.MustInvoke[*appconfig.Config](di), do.MustInvoke[*configstore.ConfigStore](di)),
+		do.MustInvoke[*sandboxstore.Store](di),
 	)
 	path, handler := agentcomposev2connect.NewProjectServiceHandler(projectHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))

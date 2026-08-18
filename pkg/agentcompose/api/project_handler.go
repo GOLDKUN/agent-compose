@@ -73,6 +73,7 @@ type ProjectHandler struct {
 	schedulerRuns    ProjectSchedulerRunRuntime
 	invocations      ProjectSchedulerInvocationRuntime
 	schedulerPrune   ProjectSchedulerPruneRuntime
+	sandboxDirs      schedulers.SandboxDirResolver
 }
 
 func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntimes ...ProjectSchedulerRuntime) *ProjectHandler {
@@ -80,19 +81,40 @@ func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRu
 	if len(schedulerRuntimes) > 0 {
 		schedulerRuntime = schedulerRuntimes[0]
 	}
-	return newProjectHandler(delegate, store, schedulerRuntime, nil)
+	return newProjectHandler(delegate, store, schedulerRuntime, nil, nil)
 }
 
-// NewProjectHandlerWithAgentModels constructs a project handler that enriches project responses with resolved agent models.
-func NewProjectHandlerWithAgentModels(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver) *ProjectHandler {
-	return newProjectHandler(delegate, store, schedulerRuntime, agentModels)
+// WithSandboxDirs injects the sandbox directory resolver ResolveEventMessage
+// needs to reconstruct command.completed scheduler_event messages from
+// sandbox cell artifacts. NewProjectHandler has no dedicated parameter for
+// it (schedulerRuntimes is already the trailing variadic slot), so any
+// caller that needs it — beyond NewProjectHandlerWithAgentModels, which
+// takes it directly — chains this instead of silently falling back to the
+// "artifact not accessible" placeholder for every new command.completed row.
+//
+// Like the package's other With* injectors (WithLifecycleLocks,
+// WithRemovalCoordinator, WithRunTargetResolver), this must be called once,
+// immediately after construction, before the handler is registered with the
+// RPC server. h.sandboxDirs is read without synchronization by every
+// concurrent ListSchedulerEvents/ListProjectSchedulerEvents/
+// StreamProjectSchedulerEvents request; calling this after the handler has
+// started serving traffic is a data race.
+func (h *ProjectHandler) WithSandboxDirs(sandboxDirs schedulers.SandboxDirResolver) *ProjectHandler {
+	h.sandboxDirs = sandboxDirs
+	return h
 }
 
-func newProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver) *ProjectHandler {
+// NewProjectHandlerWithAgentModels constructs a project handler that enriches project responses with resolved agent models
+// and, given sandboxDirs, reconstructs command.completed scheduler_event messages from sandbox cell artifacts.
+func NewProjectHandlerWithAgentModels(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver, sandboxDirs schedulers.SandboxDirResolver) *ProjectHandler {
+	return newProjectHandler(delegate, store, schedulerRuntime, agentModels, sandboxDirs)
+}
+
+func newProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRuntime ProjectSchedulerRuntime, agentModels ProjectAgentModelResolver, sandboxDirs schedulers.SandboxDirResolver) *ProjectHandler {
 	schedulerRuns, _ := schedulerRuntime.(ProjectSchedulerRunRuntime)
 	invocations, _ := schedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := schedulerRuntime.(ProjectSchedulerPruneRuntime)
-	return &ProjectHandler{delegate: delegate, store: store, agentModels: agentModels, schedulerRuntime: schedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune}
+	return &ProjectHandler{delegate: delegate, store: store, agentModels: agentModels, schedulerRuntime: schedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune, sandboxDirs: sandboxDirs}
 }
 
 func (h *ProjectHandler) ValidateProject(ctx context.Context, req *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error) {
@@ -192,6 +214,7 @@ func (h *ProjectHandler) ListSchedulerEvents(ctx context.Context, req *connect.R
 	for _, event := range events {
 		response.Events = append(response.Events, schedulerEventToProto(event, scheduler))
 	}
+	resolveSchedulerEventMessages(ctx, events, response.Events, h.sandboxDirs)
 	return connect.NewResponse(response), nil
 }
 

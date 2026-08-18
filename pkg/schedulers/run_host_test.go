@@ -2,6 +2,7 @@ package schedulers_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -383,6 +384,60 @@ func TestRuntimeHostCommandPersistsRunSandboxLinkBeforeExecution(t *testing.T) {
 	}
 }
 
+func TestRuntimeHostCommandCompletedMessageAlwaysEmpty(t *testing.T) {
+	ctx := context.Background()
+	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-empty-message"}}
+	run := &domain.SchedulerRunSummary{ID: "run-empty-message", SchedulerID: scheduler.Summary.ID, TriggerID: "trigger-empty-message"}
+
+	largeOutput := strings.Repeat("x", 200_000)
+	cases := []struct {
+		name   string
+		result domain.SchedulerCommandResult
+	}{
+		{"small output", domain.SchedulerCommandResult{Output: "ok", Success: true, SandboxID: "sandbox-small", CellID: "cell-small"}},
+		{"large output", domain.SchedulerCommandResult{Output: largeOutput, Success: true, SandboxID: "sandbox-large", CellID: "cell-large"}},
+		{"empty output", domain.SchedulerCommandResult{Success: true, SandboxID: "sandbox-none", CellID: "cell-none"}},
+		{"failed exit code", domain.SchedulerCommandResult{Output: "boom", Success: false, SandboxID: "sandbox-fail", CellID: "cell-fail"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			events := &hostEventsFake{}
+			host := schedulers.NewRuntimeHost(schedulers.RunHostDependencies{
+				Events:          events,
+				Sessions:        &hostSessionsFake{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: tc.result.SandboxID, VMStatus: domain.VMStatusRunning}}},
+				CommandExecutor: &hostCommandExecutorFake{result: tc.result},
+			}, scheduler, triggerExecution(run), schedulers.TriggerEventMetadata{})
+
+			if _, err := host.Command(ctx, domain.SchedulerCommandRequest{Mode: "shell", Command: "echo"}); err != nil {
+				t.Fatalf("Command returned error: %v", err)
+			}
+			event, ok := events.find("scheduler.command.completed")
+			if !ok {
+				t.Fatalf("scheduler.command.completed event not recorded, events = %#v", events.types())
+			}
+			if event.Message != "" {
+				t.Fatalf("message = %q, want empty regardless of output size (§4)", event.Message)
+			}
+
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(event.PayloadJSON), &payload); err != nil {
+				t.Fatalf("unmarshal payload_json: %v", err)
+			}
+			if _, ok := payload["messageTruncated"]; ok {
+				t.Fatalf("payload_json contains messageTruncated, which was never introduced: %#v", payload)
+			}
+			gotBytes, ok := payload["outputBytes"].(float64)
+			if !ok {
+				t.Fatalf("payload_json missing numeric outputBytes: %#v", payload)
+			}
+			if int(gotBytes) != len(tc.result.Output) {
+				t.Fatalf("outputBytes = %v, want %d", gotBytes, len(tc.result.Output))
+			}
+		})
+	}
+}
+
 func TestRuntimeHostCommandDoesNotExecuteWhenRunSandboxLinkFails(t *testing.T) {
 	ctx := context.Background()
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-link-failure"}}
@@ -580,9 +635,15 @@ func (e *hostEventsFake) Add(ctx context.Context, schedulerID, runID, triggerID,
 	return err
 }
 
-func (e *hostEventsFake) AddRecord(_ context.Context, schedulerID, runID, triggerID, eventType, level, message string, _ any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
+func (e *hostEventsFake) AddRecord(_ context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
 	if e.addRecordErr != nil && (e.failType == "" || e.failType == eventType) {
 		return domain.SchedulerEvent{}, e.addRecordErr
+	}
+	payloadJSON := ""
+	if payload != nil {
+		if data, err := json.Marshal(payload); err == nil {
+			payloadJSON = string(data)
+		}
 	}
 	event := domain.SchedulerEvent{
 		ID:                  fmt.Sprintf("event-%d", len(e.items)+1),
@@ -592,6 +653,7 @@ func (e *hostEventsFake) AddRecord(_ context.Context, schedulerID, runID, trigge
 		Type:                eventType,
 		Level:               level,
 		Message:             message,
+		PayloadJSON:         payloadJSON,
 		LinkedSandboxID:     linkedSandboxID,
 		LinkedCellID:        linkedCellID,
 		LinkedAgentThreadID: linkedAgentThreadID,
@@ -608,6 +670,15 @@ func (e *hostEventsFake) contains(eventType string) bool {
 		}
 	}
 	return false
+}
+
+func (e *hostEventsFake) find(eventType string) (domain.SchedulerEvent, bool) {
+	for _, item := range e.items {
+		if item.Type == eventType {
+			return item, true
+		}
+	}
+	return domain.SchedulerEvent{}, false
 }
 
 func (e *hostEventsFake) types() []string {

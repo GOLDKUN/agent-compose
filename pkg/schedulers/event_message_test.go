@@ -1,0 +1,198 @@
+package schedulers_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
+)
+
+type fakeSandboxDirResolver struct {
+	t      *testing.T
+	dirs   map[string]string
+	forbid bool
+}
+
+func (f *fakeSandboxDirResolver) SandboxDir(id string) string {
+	if f.forbid {
+		f.t.Fatalf("SandboxDir(%q) called for an event type that must not do artifact I/O", id)
+	}
+	return f.dirs[id]
+}
+
+func writeCellArtifact(t *testing.T, sandboxDir, cellID, name, content string) {
+	t.Helper()
+	cellDir := filepath.Join(sandboxDir, "state", "cells", cellID)
+	if err := os.MkdirAll(cellDir, 0o755); err != nil {
+		t.Fatalf("mkdir cell dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cellDir, name), []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+}
+
+func TestResolveEventMessageNonCommandTypeReturnsMessageWithoutIO(t *testing.T) {
+	event := domain.SchedulerEvent{Type: "scheduler.run.started", Message: "run started"}
+	resolver := &fakeSandboxDirResolver{t: t, forbid: true}
+
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, resolver)
+	if text != "run started" || !ok {
+		t.Fatalf("ResolveEventMessage = %q,%v want %q,true", text, ok, "run started")
+	}
+}
+
+func TestResolveEventMessageNewRowReadsArtifact(t *testing.T) {
+	dir := t.TempDir()
+	writeCellArtifact(t, dir, "cell-1", "output.txt", "full command output")
+	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": dir}}
+
+	event := domain.SchedulerEvent{
+		Type:            "scheduler.command.completed",
+		Message:         "", // §4: new rows always write an empty message
+		LinkedSandboxID: "sandbox-1",
+		LinkedCellID:    "cell-1",
+	}
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, resolver)
+	if text != "full command output" || !ok {
+		t.Fatalf("ResolveEventMessage = %q,%v want artifact content,true", text, ok)
+	}
+}
+
+func TestResolveEventMessageOutputTxtTakesPriorityOverStdoutStderr(t *testing.T) {
+	dir := t.TempDir()
+	writeCellArtifact(t, dir, "cell-1", "output.txt", "output.txt wins")
+	writeCellArtifact(t, dir, "cell-1", "stdout.txt", "stdout.txt loses")
+	writeCellArtifact(t, dir, "cell-1", "stderr.txt", "stderr.txt loses")
+	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": dir}}
+
+	event := domain.SchedulerEvent{Type: "scheduler.command.completed", LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1"}
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, resolver)
+	if text != "output.txt wins" || !ok {
+		t.Fatalf("ResolveEventMessage = %q,%v want output.txt content to take priority (matches the write-path firstHostNonEmpty order)", text, ok)
+	}
+}
+
+func TestResolveEventMessageFallsBackToStdoutWhenOutputTxtEmpty(t *testing.T) {
+	dir := t.TempDir()
+	writeCellArtifact(t, dir, "cell-1", "output.txt", "")
+	writeCellArtifact(t, dir, "cell-1", "stdout.txt", "stdout content")
+	writeCellArtifact(t, dir, "cell-1", "stderr.txt", "stderr content")
+	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": dir}}
+
+	event := domain.SchedulerEvent{Type: "scheduler.command.completed", LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1"}
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, resolver)
+	if text != "stdout content" || !ok {
+		t.Fatalf("ResolveEventMessage = %q,%v want stdout.txt content when output.txt is empty", text, ok)
+	}
+}
+
+func TestResolveEventMessageLegacyLoaderTypeReadsArtifact(t *testing.T) {
+	dir := t.TempDir()
+	writeCellArtifact(t, dir, "cell-1", "output.txt", "legacy artifact output")
+	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": dir}}
+
+	event := domain.SchedulerEvent{
+		Type:            "loader.command.completed",
+		Message:         "",
+		LinkedSandboxID: "sandbox-1",
+		LinkedCellID:    "cell-1",
+	}
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, resolver)
+	if text != "legacy artifact output" || !ok {
+		t.Fatalf("ResolveEventMessage = %q,%v want artifact content,true", text, ok)
+	}
+}
+
+func TestResolveEventMessageNewRowArtifactUnavailableProducesPlaceholder(t *testing.T) {
+	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": t.TempDir()}} // no cell dir written: sandbox archived / never flushed
+
+	event := domain.SchedulerEvent{
+		Type:            "scheduler.command.completed",
+		Message:         "",
+		PayloadJSON:     `{"outputBytes":4153756}`,
+		LinkedSandboxID: "sandbox-1",
+		LinkedCellID:    "cell-missing",
+	}
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, resolver)
+	if ok {
+		t.Fatalf("artifactAvailable = true, want false when artifact cannot be read")
+	}
+	if !strings.Contains(text, "4153756") {
+		t.Fatalf("placeholder text = %q, want it to include outputBytes from payload_json", text)
+	}
+}
+
+func TestResolveEventMessageHistoricalRowSkipsArtifactReadWhenMessagePresent(t *testing.T) {
+	// The DB message and the sandbox cell artifact are written from the same
+	// in-memory result at the same time, so a non-empty message means this is
+	// a row written before §4 started clearing it — there is nothing for a
+	// fresh artifact read to correct. Pin this with a forbidding resolver so
+	// the test fails loudly if a future change reintroduces the read: even
+	// though a *different* artifact exists on disk (as it never legitimately
+	// would in production), it must never be consulted, let alone win.
+	dir := t.TempDir()
+	writeCellArtifact(t, dir, "cell-1", "output.txt", "an artifact must never be consulted here")
+	resolver := &fakeSandboxDirResolver{t: t, forbid: true, dirs: map[string]string{"sandbox-1": dir}}
+
+	event := domain.SchedulerEvent{
+		Type:            "scheduler.command.completed",
+		Message:         "full output written before this event type started clearing message",
+		LinkedSandboxID: "sandbox-1",
+		LinkedCellID:    "cell-1",
+	}
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, resolver)
+	if !ok {
+		t.Fatalf("artifactAvailable = false, want true (returned DB message without I/O)")
+	}
+	if text != event.Message {
+		t.Fatalf("text = %q, want historical DB message %q unchanged", text, event.Message)
+	}
+}
+
+func TestResolveEventMessageMissingLinkedIDsSkipsIOAndFallsBackToMessage(t *testing.T) {
+	resolver := &fakeSandboxDirResolver{t: t, forbid: true}
+
+	event := domain.SchedulerEvent{Type: "scheduler.command.completed", Message: "no linked sandbox/cell on this row"}
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, resolver)
+	if text != event.Message || !ok {
+		t.Fatalf("ResolveEventMessage = %q,%v want %q,true", text, ok, event.Message)
+	}
+}
+
+func TestEventMessageNeedsArtifactRead(t *testing.T) {
+	cases := []struct {
+		name  string
+		event domain.SchedulerEvent
+		want  bool
+	}{
+		{"non-command type, empty message", domain.SchedulerEvent{Type: "scheduler.run.started", Message: ""}, false},
+		{"non-command type, non-empty message", domain.SchedulerEvent{Type: "scheduler.log", Message: "hi"}, false},
+		{"command.completed, empty message (new row)", domain.SchedulerEvent{Type: "scheduler.command.completed", Message: ""}, true},
+		{"command.completed, non-empty message (historical row)", domain.SchedulerEvent{Type: "scheduler.command.completed", Message: "content"}, false},
+		{"legacy loader.command.completed, empty message", domain.SchedulerEvent{Type: "loader.command.completed", Message: ""}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := schedulers.EventMessageNeedsArtifactRead(tc.event); got != tc.want {
+				t.Fatalf("EventMessageNeedsArtifactRead(%#v) = %v, want %v", tc.event, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveEventMessageNilSandboxDirsFallsBackToMessage(t *testing.T) {
+	event := domain.SchedulerEvent{
+		Type:            "scheduler.command.completed",
+		Message:         "historical content, no resolver wired",
+		LinkedSandboxID: "sandbox-1",
+		LinkedCellID:    "cell-1",
+	}
+	text, ok := schedulers.ResolveEventMessage(context.Background(), event, nil)
+	if text != event.Message || !ok {
+		t.Fatalf("ResolveEventMessage = %q,%v want %q,true", text, ok, event.Message)
+	}
+}

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -78,6 +79,87 @@ func TestStreamProjectSchedulerEventsTailsInDisplayOrder(t *testing.T) {
 		t.Fatalf("event ids/completion = %#v / %#v", eventIDs, completed)
 	}
 	assertSchedulerStreamHeaders(t, stream.ResponseHeader())
+}
+
+func TestStreamProjectSchedulerEventsResolvesCommandCompletedFromArtifact(t *testing.T) {
+	store, _, handler := newSchedulerRunHandlerFixture()
+	sandboxDir := t.TempDir()
+	writeSchedulerCommandCellArtifact(t, sandboxDir, "cell-1", "streamed full output")
+	handler.sandboxDirs = projectHandlerSandboxDirsFake{"sandbox-1": sandboxDir}
+
+	createdAt := time.Unix(800, 0).UTC()
+	store.events = []domain.SchedulerEvent{
+		{
+			ID: "event-1", SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1",
+			Type: "scheduler.command.completed", Message: "",
+			LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1", CreatedAt: createdAt,
+		},
+	}
+	client, closeServer := schedulerStreamTestClient(t, handler)
+	defer closeServer()
+	stream, err := client.StreamProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.StreamProjectSchedulerEventsRequest{
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
+	}))
+	if err != nil {
+		t.Fatalf("StreamProjectSchedulerEvents returned error: %v", err)
+	}
+	var messages []string
+	for stream.Receive() {
+		for _, event := range stream.Msg().GetEvents() {
+			messages = append(messages, event.GetMessage())
+		}
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("StreamProjectSchedulerEvents receive error: %v", err)
+	}
+	if len(messages) != 1 || messages[0] != "streamed full output" {
+		t.Fatalf("messages = %#v, want reconstructed artifact content", messages)
+	}
+}
+
+func TestStreamProjectSchedulerEventsResolvesManyCommandCompletedEventsInOrder(t *testing.T) {
+	store, _, handler := newSchedulerRunHandlerFixture()
+	sandboxDir := t.TempDir()
+	handler.sandboxDirs = projectHandlerSandboxDirsFake{"sandbox-1": sandboxDir}
+
+	const eventCount = 20 // exceeds maxConcurrentEventMessageResolves, exercising the bounded pool
+	createdAt := time.Unix(900, 0).UTC()
+	store.events = make([]domain.SchedulerEvent, 0, eventCount)
+	for i := 0; i < eventCount; i++ {
+		cellID := fmt.Sprintf("cell-%d", i)
+		writeSchedulerCommandCellArtifact(t, sandboxDir, cellID, fmt.Sprintf("output-%d", i))
+		store.events = append(store.events, domain.SchedulerEvent{
+			ID: fmt.Sprintf("event-%d", i), SchedulerID: store.scheduler.ID, RunID: "run-1", TriggerID: "trigger-1",
+			Type: "scheduler.command.completed", Message: "",
+			LinkedSandboxID: "sandbox-1", LinkedCellID: cellID, CreatedAt: createdAt.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	client, closeServer := schedulerStreamTestClient(t, handler)
+	defer closeServer()
+	stream, err := client.StreamProjectSchedulerEvents(context.Background(), connect.NewRequest(&agentcomposev2.StreamProjectSchedulerEventsRequest{
+		Project: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: store.project.ID}},
+	}))
+	if err != nil {
+		t.Fatalf("StreamProjectSchedulerEvents returned error: %v", err)
+	}
+	var messages []string
+	for stream.Receive() {
+		for _, event := range stream.Msg().GetEvents() {
+			messages = append(messages, event.GetMessage())
+		}
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("StreamProjectSchedulerEvents receive error: %v", err)
+	}
+	if len(messages) != eventCount {
+		t.Fatalf("messages count = %d, want %d", len(messages), eventCount)
+	}
+	for i, message := range messages {
+		if want := fmt.Sprintf("output-%d", i); message != want {
+			t.Fatalf("messages[%d] = %q, want %q (concurrent resolution must preserve display order)", i, message, want)
+		}
+	}
 }
 
 func schedulerStreamTestClient(t *testing.T, handler *ProjectHandler) (agentcomposev2connect.ProjectServiceClient, func()) {

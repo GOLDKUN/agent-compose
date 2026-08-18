@@ -310,7 +310,10 @@ func (h *RuntimeHost) Command(ctx context.Context, request domain.SchedulerComma
 	if !result.Success {
 		level = "error"
 	}
-	_ = h.addLinkedSchedulerEvent(ctx, "scheduler.command.completed", level, firstHostNonEmpty(result.Output, result.Stdout, result.Stderr, "scheduler command completed"), CommandEventPayload(request, result), result.SandboxID, result.CellID, "")
+	// message is always empty for this event type: full output lives in the
+	// sandbox cell artifact and is reconstructed on read by ResolveEventMessage
+	// (see docs/design/scheduler_event_storage_design.md §4/§6).
+	_ = h.addLinkedSchedulerEvent(ctx, "scheduler.command.completed", level, "", CommandEventPayload(request, result), result.SandboxID, result.CellID, "")
 	return result, nil
 }
 

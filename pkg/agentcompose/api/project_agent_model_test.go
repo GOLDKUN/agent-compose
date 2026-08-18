@@ -23,7 +23,7 @@ func (s projectAgentModelResolverStub) ResolveProjectAgentModels(context.Context
 
 func TestNewProjectHandlerWithAgentModelsSetsResolver(t *testing.T) {
 	resolver := projectAgentModelResolverStub{}
-	handler := NewProjectHandlerWithAgentModels(nil, nil, nil, resolver)
+	handler := NewProjectHandlerWithAgentModels(nil, nil, nil, resolver, nil)
 
 	if _, ok := handler.agentModels.(projectAgentModelResolverStub); !ok {
 		t.Fatalf("agent model resolver = %#v", handler.agentModels)

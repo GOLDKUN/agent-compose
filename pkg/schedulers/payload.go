@@ -45,6 +45,7 @@ func CommandEventPayload(request domain.SchedulerCommandRequest, result domain.S
 		"success":         result.Success,
 		"stdoutTruncated": result.StdoutTruncated,
 		"stderrTruncated": result.StderrTruncated,
+		"outputBytes":     commandOutputBytes(result),
 		"sandboxId":       result.SandboxID,
 		"cellId":          result.CellID,
 	}
@@ -52,4 +53,22 @@ func CommandEventPayload(request domain.SchedulerCommandRequest, result domain.S
 		payload["command"] = ""
 	}
 	return payload
+}
+
+// commandOutputBytes reports the size of whichever field addLinkedSchedulerEvent
+// would have used as the scheduler_event.message before this event type started
+// clearing it (see docs/design/scheduler_event_storage_design.md §4/§6): the
+// first non-blank of Output/Stdout/Stderr. It backs the "content unavailable"
+// placeholder ResolveEventMessage produces when the artifact can't be read.
+func commandOutputBytes(result domain.SchedulerCommandResult) int {
+	switch {
+	case strings.TrimSpace(result.Output) != "":
+		return len(result.Output)
+	case strings.TrimSpace(result.Stdout) != "":
+		return len(result.Stdout)
+	case strings.TrimSpace(result.Stderr) != "":
+		return len(result.Stderr)
+	default:
+		return 0
+	}
 }

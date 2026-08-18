@@ -82,13 +82,17 @@ func (h *ProjectHandler) sendSchedulerEventPages(ctx context.Context, stream *co
 		if len(events) == 0 {
 			break
 		}
+		matched := make([]domain.SchedulerEvent, 0, len(events))
 		items := make([]*agentcomposev2.SchedulerEvent, 0, len(events))
 		for _, event := range events {
 			scheduler, ok := selection.schedulers[event.SchedulerID]
-			if ok {
-				items = append(items, schedulerEventToProto(event, scheduler))
+			if !ok {
+				continue
 			}
+			matched = append(matched, event)
+			items = append(items, schedulerEventToProto(event, scheduler))
 		}
+		resolveSchedulerEventMessages(ctx, matched, items, h.sandboxDirs)
 		last := events[len(events)-1]
 		after = &last
 		emitted += uint64(len(items))
