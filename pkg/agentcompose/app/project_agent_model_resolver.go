@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -22,21 +23,24 @@ func newProjectAgentModelResolver(config *appconfig.Config, store *configstore.C
 	return &projectAgentModelResolver{config: config, store: store}
 }
 
-func (r *projectAgentModelResolver) ResolveProjectAgentModels(ctx context.Context, project domain.ProjectRecord) (map[string]llms.AgentModelResolution, error) {
+// ResolveProjectAgentModels previews the model each current agent would select.
+// It derives the minimal agent definition (provider, model, env) from the
+// already-loaded project agent records instead of re-loading and re-parsing the
+// whole project spec.
+func (r *projectAgentModelResolver) ResolveProjectAgentModels(ctx context.Context, project domain.ProjectRecord, agents []domain.ProjectAgentRecord) (map[string]llms.AgentModelResolution, error) {
 	if r == nil || r.store == nil || project.CurrentRevision <= 0 {
 		return nil, nil
 	}
-	revision, err := r.store.GetProjectRevision(ctx, project.ID, project.CurrentRevision)
-	if err != nil {
-		return nil, fmt.Errorf("get project revision %s/%d: %w", project.ID, project.CurrentRevision, err)
-	}
-	spec, err := compose.ParseCanonicalJSON([]byte(strings.TrimSpace(revision.SpecJSON)))
-	if err != nil {
-		return nil, fmt.Errorf("decode project revision %s/%d: %w", project.ID, project.CurrentRevision, err)
-	}
-	definitions, err := projects.NewAgentDefinitionsFromSpec(project, project.CurrentRevision, spec)
-	if err != nil {
-		return nil, fmt.Errorf("derive project agent definitions: %w", err)
+	definitions := make([]domain.AgentDefinition, 0, len(agents))
+	for _, agent := range agents {
+		if agent.Revision != project.CurrentRevision {
+			continue
+		}
+		definition, err := agentDefinitionForModelResolution(agent)
+		if err != nil {
+			return nil, err
+		}
+		definitions = append(definitions, definition)
 	}
 	resolved, err := llms.ResolveAgentModels(ctx, r.config, r.store, definitions)
 	if err != nil {
@@ -47,4 +51,24 @@ func (r *projectAgentModelResolver) ResolveProjectAgentModels(ctx context.Contex
 		resolutions[definition.AgentName] = resolved[i]
 	}
 	return resolutions, nil
+}
+
+// agentDefinitionForModelResolution builds the subset of an agent definition
+// that model resolution needs. Provider and model come from the agent record;
+// env items are decoded from the agent's own canonical spec JSON.
+func agentDefinitionForModelResolution(record domain.ProjectAgentRecord) (domain.AgentDefinition, error) {
+	raw := strings.TrimSpace(record.SpecJSON)
+	if raw == "" {
+		raw = "{}"
+	}
+	var spec compose.NormalizedAgentSpec
+	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
+		return domain.AgentDefinition{}, fmt.Errorf("decode project agent %s spec: %w", record.AgentName, err)
+	}
+	return domain.AgentDefinition{
+		AgentName: record.AgentName,
+		Provider:  record.Provider,
+		Model:     record.Model,
+		EnvItems:  projects.SandboxEnvItemsFromCompose(spec.Env),
+	}, nil
 }

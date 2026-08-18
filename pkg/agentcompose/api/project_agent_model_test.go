@@ -17,7 +17,7 @@ type projectAgentModelResolverStub struct {
 	err         error
 }
 
-func (s projectAgentModelResolverStub) ResolveProjectAgentModels(context.Context, domain.ProjectRecord) (map[string]llms.AgentModelResolution, error) {
+func (s projectAgentModelResolverStub) ResolveProjectAgentModels(context.Context, domain.ProjectRecord, []domain.ProjectAgentRecord) (map[string]llms.AgentModelResolution, error) {
 	return s.resolutions, s.err
 }
 
@@ -36,7 +36,7 @@ func TestEnrichProjectAgentModelsMapsResolvedModelAndSource(t *testing.T) {
 		"main":  {Model: "gpt-explicit", Source: llms.AgentModelSourceProject},
 	}}}
 	project := &agentcomposev2.Project{Agents: []*agentcomposev2.ProjectAgent{{AgentName: "coder"}, {AgentName: "main", Model: "gpt-explicit"}}}
-	if err := handler.enrichProjectAgentModels(context.Background(), domain.ProjectRecord{ID: "project"}, project); err != nil {
+	if err := handler.enrichProjectAgentModels(context.Background(), domain.ProjectRecord{ID: "project"}, nil, project); err != nil {
 		t.Fatal(err)
 	}
 	if coder := project.GetAgents()[0]; coder.GetResolvedModel() != "dev/gpt-5.5" || coder.GetModelSource() != agentcomposev2.AgentModelSource_AGENT_MODEL_SOURCE_DAEMON_DEFAULT {
@@ -50,7 +50,7 @@ func TestEnrichProjectAgentModelsMapsResolvedModelAndSource(t *testing.T) {
 func TestEnrichProjectAgentModelsReturnsInternalResolverError(t *testing.T) {
 	wantErr := errors.New("resolution failed")
 	handler := &ProjectHandler{agentModels: projectAgentModelResolverStub{err: wantErr}}
-	err := handler.enrichProjectAgentModels(context.Background(), domain.ProjectRecord{ID: "project"}, &agentcomposev2.Project{})
+	err := handler.enrichProjectAgentModels(context.Background(), domain.ProjectRecord{ID: "project"}, nil, &agentcomposev2.Project{})
 	if connect.CodeOf(err) != connect.CodeInternal || !errors.Is(err, wantErr) {
 		t.Fatalf("error = %v, want internal wrapping %v", err, wantErr)
 	}

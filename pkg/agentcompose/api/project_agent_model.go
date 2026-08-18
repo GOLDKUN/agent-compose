@@ -13,14 +13,14 @@ import (
 
 // ProjectAgentModelResolver supplies read-only model previews for project responses.
 type ProjectAgentModelResolver interface {
-	ResolveProjectAgentModels(context.Context, domain.ProjectRecord) (map[string]llms.AgentModelResolution, error)
+	ResolveProjectAgentModels(context.Context, domain.ProjectRecord, []domain.ProjectAgentRecord) (map[string]llms.AgentModelResolution, error)
 }
 
-func (h *ProjectHandler) enrichProjectAgentModels(ctx context.Context, record domain.ProjectRecord, project *agentcomposev2.Project) error {
+func (h *ProjectHandler) enrichProjectAgentModels(ctx context.Context, record domain.ProjectRecord, agents []domain.ProjectAgentRecord, project *agentcomposev2.Project) error {
 	if h.agentModels == nil || project == nil {
 		return nil
 	}
-	resolutions, err := h.agentModels.ResolveProjectAgentModels(ctx, record)
+	resolutions, err := h.agentModels.ResolveProjectAgentModels(ctx, record, agents)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("resolve project agent models: %w", err))
 	}
