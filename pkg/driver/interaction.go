@@ -288,14 +288,21 @@ func ExecSpecFromRuntimeStartSpec(spec RuntimeStartSpec) ExecSpec {
 	}
 }
 
-func NewExecStreamInteraction(ctx context.Context, runtime SandboxRuntime, session *Sandbox, vmState VMState, spec RuntimeStartSpec) RuntimeInteraction {
+// ExecStreamInteractionRequest describes the sandbox and command to stream-exec.
+type ExecStreamInteractionRequest struct {
+	Session *Sandbox
+	VMState VMState
+	Spec    RuntimeStartSpec
+}
+
+func NewExecStreamInteraction(ctx context.Context, runtime SandboxRuntime, request ExecStreamInteractionRequest) RuntimeInteraction {
 	childCtx, cancel := context.WithCancel(ctx)
 	interaction := &execStreamInteraction{
 		cancel: cancel,
 		done:   make(chan struct{}),
 		output: make(chan RuntimeOutputFrame, 16),
 	}
-	go interaction.run(childCtx, runtime, session, vmState, spec)
+	go interaction.run(childCtx, runtime, request.Session, request.VMState, request.Spec)
 	return interaction
 }
 

@@ -583,10 +583,14 @@ func (r *microsandboxRuntime) ensureDirectoryOnlyGuestSandboxBootstrap(ctx conte
 		sandboxID = session.Summary.ID
 	}
 	if err != nil {
-		return formatDirectoryOnlyGuestSandboxBootstrapError(RuntimeDriverMicrosandbox, sandboxID, sandboxName, result, err)
+		return formatDirectoryOnlyGuestSandboxBootstrapError(directoryOnlyGuestBootstrapErrorContext{
+			Driver: RuntimeDriverMicrosandbox, SandboxID: sandboxID, RuntimeID: sandboxName, Result: result, ExecErr: err,
+		})
 	}
 	if !result.Success {
-		return formatDirectoryOnlyGuestSandboxBootstrapError(RuntimeDriverMicrosandbox, sandboxID, sandboxName, result, nil)
+		return formatDirectoryOnlyGuestSandboxBootstrapError(directoryOnlyGuestBootstrapErrorContext{
+			Driver: RuntimeDriverMicrosandbox, SandboxID: sandboxID, RuntimeID: sandboxName, Result: result,
+		})
 	}
 	return nil
 }

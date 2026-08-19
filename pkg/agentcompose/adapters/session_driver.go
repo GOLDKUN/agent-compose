@@ -288,7 +288,11 @@ func (d *SandboxDriver) revokeReleasedRuntimeTokens(ctx context.Context, sandbox
 }
 
 func (d *SandboxDriver) prepareSandboxStart(ctx context.Context, driver string, session *domain.Sandbox, vmState *domain.VMState) error {
-	prepared, err := driverpkg.PrepareSandboxStart(ctx, d.Config, driver, execution.ToDriverSandbox(session), execution.ToDriverVMState(*vmState))
+	prepared, err := driverpkg.PrepareSandboxStart(ctx, d.Config, driverpkg.SandboxStartTarget{
+		Driver:  driver,
+		Session: execution.ToDriverSandbox(session),
+		VMState: execution.ToDriverVMState(*vmState),
+	})
 	if err != nil {
 		return err
 	}

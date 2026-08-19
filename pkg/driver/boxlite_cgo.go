@@ -574,10 +574,14 @@ func (r *cgoSandboxRuntime) ensureDirectoryOnlyGuestSandboxBootstrap(ctx context
 	}
 	result, err := r.executeBox(ctx, box, directoryOnlyGuestSandboxBootstrapExecSpecForSandbox(r.config, sandbox), nil)
 	if err != nil {
-		return formatDirectoryOnlyGuestSandboxBootstrapError(RuntimeDriverBoxlite, sandboxID, boxID, result, err)
+		return formatDirectoryOnlyGuestSandboxBootstrapError(directoryOnlyGuestBootstrapErrorContext{
+			Driver: RuntimeDriverBoxlite, SandboxID: sandboxID, RuntimeID: boxID, Result: result, ExecErr: err,
+		})
 	}
 	if !result.Success {
-		return formatDirectoryOnlyGuestSandboxBootstrapError(RuntimeDriverBoxlite, sandboxID, boxID, result, nil)
+		return formatDirectoryOnlyGuestSandboxBootstrapError(directoryOnlyGuestBootstrapErrorContext{
+			Driver: RuntimeDriverBoxlite, SandboxID: sandboxID, RuntimeID: boxID, Result: result,
+		})
 	}
 	return nil
 }

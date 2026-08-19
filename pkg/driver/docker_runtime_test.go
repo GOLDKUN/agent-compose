@@ -576,7 +576,7 @@ func TestCleanupDockerContainerAfterEnsureFailureRevertsOnlyOwnedStartup(t *test
 	createdCleaner := &recordingDockerContainerCleaner{}
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := runtime.cleanupDockerContainerAfterEnsureFailure(canceledCtx, createdCleaner, "container-1", true, false, cause)
+	err := runtime.cleanupDockerContainerAfterEnsureFailure(canceledCtx, createdCleaner, dockerEnsureAttemptState{ContainerID: "container-1", Created: true}, cause)
 	if !errors.Is(err, cause) {
 		t.Fatalf("cleanup returned %v, want original cause", err)
 	}
@@ -588,7 +588,7 @@ func TestCleanupDockerContainerAfterEnsureFailureRevertsOnlyOwnedStartup(t *test
 	}
 
 	startedCleaner := &recordingDockerContainerCleaner{}
-	err = runtime.cleanupDockerContainerAfterEnsureFailure(context.Background(), startedCleaner, "container-2", false, true, cause)
+	err = runtime.cleanupDockerContainerAfterEnsureFailure(context.Background(), startedCleaner, dockerEnsureAttemptState{ContainerID: "container-2", Started: true}, cause)
 	if !errors.Is(err, cause) {
 		t.Fatalf("started cleanup returned %v, want original cause", err)
 	}
@@ -600,7 +600,7 @@ func TestCleanupDockerContainerAfterEnsureFailureRevertsOnlyOwnedStartup(t *test
 	}
 
 	untouchedCleaner := &recordingDockerContainerCleaner{}
-	err = runtime.cleanupDockerContainerAfterEnsureFailure(context.Background(), untouchedCleaner, "container-3", false, false, cause)
+	err = runtime.cleanupDockerContainerAfterEnsureFailure(context.Background(), untouchedCleaner, dockerEnsureAttemptState{ContainerID: "container-3"}, cause)
 	if !errors.Is(err, cause) {
 		t.Fatalf("existing cleanup returned %v, want original cause", err)
 	}
@@ -780,14 +780,14 @@ func TestDockerRuntimeSandboxProxyStateUsesContainerNameAndGuestPort(t *testing.
 	}
 	containerInfo := dockerInspectWithJupyterBindings("container-1", "/actual-runtime-ref", 9999, []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: "42000"}})
 
-	hostState, err := runtime.dockerSandboxProxyState(sandbox, VMState{}, state, containerInfo, false)
+	hostState, err := runtime.dockerSandboxProxyState(dockerProxyStateRequest{Sandbox: sandbox, ProxyState: state, ContainerInfo: containerInfo})
 	if err != nil {
 		t.Fatalf("host dockerSandboxProxyState returned error: %v", err)
 	}
 	if hostState.GuestHost != "127.0.0.1" || hostState.HostPort != 42000 {
 		t.Fatalf("host daemon proxy state = %+v, want 127.0.0.1:42000", hostState)
 	}
-	containerState, err := runtime.dockerSandboxProxyState(sandbox, VMState{}, state, containerInfo, true)
+	containerState, err := runtime.dockerSandboxProxyState(dockerProxyStateRequest{Sandbox: sandbox, ProxyState: state, ContainerInfo: containerInfo, ContainerizedDaemon: true})
 	if err != nil {
 		t.Fatalf("container dockerSandboxProxyState returned error: %v", err)
 	}
@@ -822,7 +822,7 @@ func TestDockerRuntimeWaitForJupyterProxyStateRetriesUntilBindingVisible(t *test
 		return dockerInspectWithJupyterBindings("container-1", "/runtime-ref", 8888, []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: "42000"}}), nil
 	}
 
-	containerInfo, proxyState, err := runtime.waitForDockerJupyterProxyState(context.Background(), inspect, sandbox, VMState{}, state, initialInfo, false, time.Second, time.Nanosecond)
+	containerInfo, proxyState, err := runtime.waitForDockerJupyterProxyState(context.Background(), inspect, dockerProxyStateRequest{Sandbox: sandbox, ProxyState: state, ContainerInfo: initialInfo, WaitTimeout: time.Second, PollInterval: time.Nanosecond})
 	if err != nil {
 		t.Fatalf("waitForDockerJupyterProxyState returned error: %v", err)
 	}
@@ -849,7 +849,7 @@ func TestDockerRuntimeWaitForJupyterProxyStateReturnsContextCancellation(t *test
 	_, _, err := runtime.waitForDockerJupyterProxyState(ctx, func(context.Context, string) (containerapi.InspectResponse, error) {
 		t.Fatal("inspect must not run after context cancellation")
 		return containerapi.InspectResponse{}, nil
-	}, sandbox, VMState{}, state, initialInfo, false, time.Second, time.Hour)
+	}, dockerProxyStateRequest{Sandbox: sandbox, ProxyState: state, ContainerInfo: initialInfo, WaitTimeout: time.Second, PollInterval: time.Hour})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("waitForDockerJupyterProxyState err = %v, want context.Canceled", err)
 	}
@@ -871,7 +871,7 @@ func TestDockerRuntimeWaitForJupyterProxyStateReturnsParentDeadline(t *testing.T
 	_, _, err := runtime.waitForDockerJupyterProxyState(ctx, func(context.Context, string) (containerapi.InspectResponse, error) {
 		t.Fatal("inspect must not run after parent context deadline")
 		return containerapi.InspectResponse{}, nil
-	}, sandbox, VMState{}, state, initialInfo, false, time.Second, time.Hour)
+	}, dockerProxyStateRequest{Sandbox: sandbox, ProxyState: state, ContainerInfo: initialInfo, WaitTimeout: time.Second, PollInterval: time.Hour})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("waitForDockerJupyterProxyState err = %v, want context.DeadlineExceeded", err)
 	}
@@ -890,7 +890,7 @@ func TestDockerRuntimeWaitForJupyterProxyStateDoesNotRetryPermanentErrors(t *tes
 	_, _, err := runtime.waitForDockerJupyterProxyState(context.Background(), func(context.Context, string) (containerapi.InspectResponse, error) {
 		t.Fatal("inspect must not run for permanent binding errors")
 		return containerapi.InspectResponse{}, nil
-	}, sandbox, VMState{}, state, initialInfo, false, time.Second, time.Nanosecond)
+	}, dockerProxyStateRequest{Sandbox: sandbox, ProxyState: state, ContainerInfo: initialInfo, WaitTimeout: time.Second, PollInterval: time.Nanosecond})
 	if err == nil || errors.Is(err, errDockerJupyterPortBindingPending) || !strings.Contains(err.Error(), "no valid loopback binding") {
 		t.Fatalf("waitForDockerJupyterProxyState err = %v, want permanent loopback binding error", err)
 	}
@@ -909,7 +909,7 @@ func TestDockerRuntimeWaitForJupyterProxyStateReturnsPendingErrorAfterTimeout(t 
 	_, _, err := runtime.waitForDockerJupyterProxyState(context.Background(), func(context.Context, string) (containerapi.InspectResponse, error) {
 		t.Fatal("inspect must not run when timeout expires before next poll")
 		return containerapi.InspectResponse{}, nil
-	}, sandbox, VMState{}, state, initialInfo, false, time.Nanosecond, time.Hour)
+	}, dockerProxyStateRequest{Sandbox: sandbox, ProxyState: state, ContainerInfo: initialInfo, WaitTimeout: time.Nanosecond, PollInterval: time.Hour})
 	if !errors.Is(err, errDockerJupyterPortBindingPending) || !strings.Contains(err.Error(), "no binding") {
 		t.Fatalf("waitForDockerJupyterProxyState err = %v, want pending binding error", err)
 	}
@@ -928,7 +928,7 @@ func TestDockerRuntimeWaitForJupyterProxyStateReturnsInspectError(t *testing.T) 
 
 	_, _, err := runtime.waitForDockerJupyterProxyState(context.Background(), func(context.Context, string) (containerapi.InspectResponse, error) {
 		return containerapi.InspectResponse{}, inspectErr
-	}, sandbox, VMState{}, state, initialInfo, false, time.Second, time.Nanosecond)
+	}, dockerProxyStateRequest{Sandbox: sandbox, ProxyState: state, ContainerInfo: initialInfo, WaitTimeout: time.Second, PollInterval: time.Nanosecond})
 	if !errors.Is(err, inspectErr) || !strings.Contains(err.Error(), "inspect started docker container container-1") {
 		t.Fatalf("waitForDockerJupyterProxyState err = %v, want inspect error", err)
 	}

@@ -92,14 +92,14 @@ func TestBoxliteNativeExecAttachUnsupported(t *testing.T) {
 
 func TestExecStreamInteractionProjectsLegacyFrames(t *testing.T) {
 	runtime := fakeInteractionRuntime{}
-	interaction := NewExecStreamInteraction(context.Background(), runtime, nil, VMState{}, RuntimeStartSpec{
+	interaction := NewExecStreamInteraction(context.Background(), runtime, ExecStreamInteractionRequest{Spec: RuntimeStartSpec{
 		OperationID: "op-1",
 		Kind:        RuntimeOperationCommand,
 		Command: &RuntimeCommandSpec{
 			Command: "echo",
 			Args:    []string{"ok"},
 		},
-	})
+	}})
 
 	frame, err := interaction.Recv()
 	if err != nil {

@@ -74,10 +74,6 @@ func jupyterKernelspecsURL(proxyState ProxyState) string {
 	return fmt.Sprintf("http://%s%sapi/kernelspecs?token=%s", jupyterConnectAddress(proxyState), jupyterBaseURL(proxyState), url.QueryEscape(proxyState.Token))
 }
 
-func JupyterKernelspecsURL(proxyState ProxyState) string {
-	return jupyterKernelspecsURL(proxyState)
-}
-
 func waitForJupyterProxy(ctx context.Context, proxyState ProxyState) error {
 	urlValue := jupyterKernelspecsURL(proxyState)
 	client := newJupyterReadyHTTPClient(5 * time.Second)

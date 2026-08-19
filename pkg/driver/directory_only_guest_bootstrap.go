@@ -107,26 +107,35 @@ func executeUserCommandAfterBootstrap(bootstrap func() error, execute func() (Ex
 	return execute()
 }
 
-func formatDirectoryOnlyGuestSandboxBootstrapError(driver, sandboxID, runtimeID string, result ExecResult, execErr error) error {
-	parts := []string{"directory-only guest bootstrap failed", "driver=" + strings.TrimSpace(driver)}
-	if sandboxID = strings.TrimSpace(sandboxID); sandboxID != "" {
+// directoryOnlyGuestBootstrapErrorContext describes one bootstrap error occurrence.
+type directoryOnlyGuestBootstrapErrorContext struct {
+	Driver    string
+	SandboxID string
+	RuntimeID string
+	Result    ExecResult
+	ExecErr   error
+}
+
+func formatDirectoryOnlyGuestSandboxBootstrapError(ctx directoryOnlyGuestBootstrapErrorContext) error {
+	parts := []string{"directory-only guest bootstrap failed", "driver=" + strings.TrimSpace(ctx.Driver)}
+	if sandboxID := strings.TrimSpace(ctx.SandboxID); sandboxID != "" {
 		parts = append(parts, "sandbox_id="+sandboxID)
 	}
-	if runtimeID = strings.TrimSpace(runtimeID); runtimeID != "" {
+	if runtimeID := strings.TrimSpace(ctx.RuntimeID); runtimeID != "" {
 		parts = append(parts, "runtime_id="+runtimeID)
 	}
-	if result.ExitCode != 0 {
-		parts = append(parts, fmt.Sprintf("exit_code=%d", result.ExitCode))
+	if ctx.Result.ExitCode != 0 {
+		parts = append(parts, fmt.Sprintf("exit_code=%d", ctx.Result.ExitCode))
 	}
-	if stdout := summarizeBootstrapOutput(result.Stdout); stdout != "" {
+	if stdout := summarizeBootstrapOutput(ctx.Result.Stdout); stdout != "" {
 		parts = append(parts, "stdout="+stdout)
 	}
-	if stderr := summarizeBootstrapOutput(result.Stderr); stderr != "" {
+	if stderr := summarizeBootstrapOutput(ctx.Result.Stderr); stderr != "" {
 		parts = append(parts, "stderr="+stderr)
 	}
 	message := strings.Join(parts, " ")
-	if execErr != nil {
-		return fmt.Errorf("%s: %w", message, execErr)
+	if ctx.ExecErr != nil {
+		return fmt.Errorf("%s: %w", message, ctx.ExecErr)
 	}
 	return fmt.Errorf("%s", message)
 }
