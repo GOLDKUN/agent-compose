@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -71,18 +70,6 @@ type AgentDefinitionListResult struct {
 	TotalCount int
 	HasMore    bool
 	NextOffset int
-}
-
-type AgentCurrentRunSummary struct {
-	RunningSessionCount int
-}
-
-type AgentLatestRunSummary struct {
-	RunType string
-	Status  string
-	RunID   string
-	Title   string
-	At      time.Time
 }
 
 func NormalizeAgentKind(agent string) string {
@@ -174,46 +161,4 @@ func SandboxHasAgentTag(session *Sandbox, agentID string) bool {
 		}
 	}
 	return hasSource && hasAgentID
-}
-
-func AgentRunSummaries(agentID string, sessions []*Sandbox) (AgentCurrentRunSummary, *AgentLatestRunSummary) {
-	current := AgentCurrentRunSummary{}
-	var latest *AgentLatestRunSummary
-	for _, session := range sessions {
-		if !SandboxHasAgentTag(session, agentID) {
-			continue
-		}
-		switch session.Summary.VMStatus {
-		case VMStatusPending, VMStatusRunning:
-			current.RunningSessionCount++
-		}
-		if latest == nil || session.Summary.UpdatedAt.After(latest.At) {
-			latest = &AgentLatestRunSummary{
-				RunType: "work_session",
-				Status:  session.Summary.VMStatus,
-				RunID:   session.Summary.ID,
-				Title:   session.Summary.Title,
-				At:      session.Summary.UpdatedAt,
-			}
-		}
-	}
-	return current, latest
-}
-
-func ValidateAgentWorkspaceValue(workspaceID string, workspace *WorkspaceConfig, lookupErr error) error {
-	if strings.TrimSpace(workspaceID) == "" {
-		return nil
-	}
-	if lookupErr != nil {
-		return lookupErr
-	}
-	if workspace == nil {
-		return fmt.Errorf("workspace config %s not found", strings.TrimSpace(workspaceID))
-	}
-	switch strings.ToLower(strings.TrimSpace(workspace.Type)) {
-	case "file", "git":
-		return nil
-	default:
-		return fmt.Errorf("unsupported agent workspace type %q", workspace.Type)
-	}
 }
