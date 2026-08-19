@@ -40,10 +40,19 @@ func SandboxStoppedEventMessage(sandbox *domain.Sandbox, result StopRuntimeResul
 	return "sandbox stopped and runtime retained"
 }
 
+// StopSandboxRuntimeDeps groups StopSandboxRuntime's fixed dependencies,
+// separate from the sandbox each call applies them to.
+type StopSandboxRuntimeDeps struct {
+	SandboxRoot string
+	Store       StoppedRuntimeStore
+	Driver      SandboxStopDriver
+}
+
 // StopSandboxRuntime applies the snapshotted stopped-runtime policy. The caller
 // owns the per-sandbox lifecycle lock; this function owns the decision about
 // whether the latest runtime start still needs a confirmed driver stop.
-func StopSandboxRuntime(ctx context.Context, sandboxRoot string, store StoppedRuntimeStore, driver SandboxStopDriver, sandbox *domain.Sandbox) (StopRuntimeResult, error) {
+func StopSandboxRuntime(ctx context.Context, deps StopSandboxRuntimeDeps, sandbox *domain.Sandbox) (StopRuntimeResult, error) {
+	sandboxRoot, store, driver := deps.SandboxRoot, deps.Store, deps.Driver
 	if sandbox == nil || store == nil {
 		return StopRuntimeResult{}, fmt.Errorf("stopped runtime lifecycle is not configured")
 	}
@@ -95,13 +104,17 @@ func StopSandboxRuntime(ctx context.Context, sandboxRoot string, store StoppedRu
 	if err := releaser.ReleaseSandboxRuntime(ctx, sandbox); err != nil {
 		sandbox.StoppedRuntime.LastError = err.Error()
 		_ = store.UpdateSandbox(ctx, sandbox)
-		result.RuntimeEvents = append(result.RuntimeEvents, recordStoppedRuntimeEvent(ctx, store, sandbox.Summary.ID, "sandbox.runtime_release_failed", "error", "sandbox stopped but runtime release failed", now))
+		result.RuntimeEvents = append(result.RuntimeEvents, recordStoppedRuntimeEvent(ctx, store, sandbox.Summary.ID, domain.SandboxEvent{
+			Type: "sandbox.runtime_release_failed", Level: "error", Message: "sandbox stopped but runtime release failed", CreatedAt: now,
+		}))
 		return result, fmt.Errorf("release stopped sandbox runtime: %w", err)
 	}
 	if err := MarkSandboxRuntimeReleased(sandboxRoot, sandbox); err != nil {
 		sandbox.StoppedRuntime.LastError = err.Error()
 		_ = store.UpdateSandbox(ctx, sandbox)
-		result.RuntimeEvents = append(result.RuntimeEvents, recordStoppedRuntimeEvent(ctx, store, sandbox.Summary.ID, "sandbox.runtime_release_failed", "error", "sandbox runtime was removed but ownership update failed", now))
+		result.RuntimeEvents = append(result.RuntimeEvents, recordStoppedRuntimeEvent(ctx, store, sandbox.Summary.ID, domain.SandboxEvent{
+			Type: "sandbox.runtime_release_failed", Level: "error", Message: "sandbox runtime was removed but ownership update failed", CreatedAt: now,
+		}))
 		return result, fmt.Errorf("persist released runtime ownership: %w", err)
 	}
 	sandbox.StoppedRuntime.State = domain.StoppedRuntimeStateReleased
@@ -111,7 +124,9 @@ func StopSandboxRuntime(ctx context.Context, sandboxRoot string, store StoppedRu
 		return result, fmt.Errorf("persist released runtime state: %w", err)
 	}
 	result.Released = true
-	result.RuntimeEvents = append(result.RuntimeEvents, recordStoppedRuntimeEvent(ctx, store, sandbox.Summary.ID, "sandbox.runtime_released", "info", "stopped sandbox runtime released", sandbox.StoppedRuntime.ReleasedAt))
+	result.RuntimeEvents = append(result.RuntimeEvents, recordStoppedRuntimeEvent(ctx, store, sandbox.Summary.ID, domain.SandboxEvent{
+		Type: "sandbox.runtime_released", Level: "info", Message: "stopped sandbox runtime released", CreatedAt: sandbox.StoppedRuntime.ReleasedAt,
+	}))
 	return result, nil
 }
 
@@ -127,8 +142,8 @@ func sandboxRuntimeStopRequired(store StoppedRuntimeStore, sandbox *domain.Sandb
 	return latestStartRecorded && !runtimeStopIsCurrent(vmState), nil
 }
 
-func recordStoppedRuntimeEvent(ctx context.Context, store StoppedRuntimeStore, sandboxID, eventType, level, message string, now time.Time) domain.SandboxEvent {
-	event := domain.SandboxEvent{ID: uuid.NewString(), Type: eventType, Level: level, Message: message, CreatedAt: now}
+func recordStoppedRuntimeEvent(ctx context.Context, store StoppedRuntimeStore, sandboxID string, event domain.SandboxEvent) domain.SandboxEvent {
+	event.ID = uuid.NewString()
 	// Event persistence is best effort, matching the surrounding sandbox
 	// lifecycle events. Returning the event still lets live subscribers observe
 	// the transition if the history append cannot be completed.

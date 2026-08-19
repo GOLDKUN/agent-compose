@@ -89,7 +89,7 @@ func (c *SandboxRetentionCleaner) cleanSandbox(ctx context.Context, sandboxID st
 		return matched, removed, nil
 	}
 	if _, err := validateCommittedSandboxArchive(
-		ctx, c.ArchiveRoot, c.SandboxRoot, sandbox.Summary.ID, sandbox.Archive.ID,
+		ctx, c.ArchiveRoot, c.SandboxRoot, sandboxArchiveIdentity{SandboxID: sandbox.Summary.ID, ArchiveID: sandbox.Archive.ID},
 	); err != nil {
 		return matched, removed, fmt.Errorf("verify committed sandbox archive: %w", err)
 	}

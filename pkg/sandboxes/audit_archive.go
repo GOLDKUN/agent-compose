@@ -74,44 +74,56 @@ func (c *SandboxRetentionCleaner) archiveSandbox(ctx context.Context, sandbox *d
 	return nil
 }
 
-func (c *SandboxRetentionCleaner) writeSandboxArchive(ctx context.Context, sandbox *domain.Sandbox) (int64, string, error) {
-	archiveDir, err := c.safeArchiveDir(sandbox.Summary.ID)
+// openSandboxArchiveDirectory ensures the sandbox's archive directory exists,
+// re-validating after creation so a previously missing path cannot resolve
+// through a symlink into the sandbox tree, and returns it opened alongside a
+// directory handle usable for fsync. The caller owns closing directory and
+// directoryHandle.
+func (c *SandboxRetentionCleaner) openSandboxArchiveDirectory(sandbox *domain.Sandbox) (archiveDir string, directory *os.Root, directoryHandle *os.File, err error) {
+	archiveDir, err = c.safeArchiveDir(sandbox.Summary.ID)
 	if err != nil {
-		return 0, "", err
+		return "", nil, nil, err
 	}
 	archiveRoot := filepath.Dir(archiveDir)
 	if err := os.MkdirAll(archiveRoot, 0o700); err != nil {
-		return 0, "", fmt.Errorf("create sandbox archive root: %w", err)
+		return "", nil, nil, fmt.Errorf("create sandbox archive root: %w", err)
 	}
-	// Resolve again after creation so a previously missing path cannot resolve
-	// through a symlink into the sandbox tree.
 	if _, err := c.safeArchiveDir(sandbox.Summary.ID); err != nil {
-		return 0, "", err
+		return "", nil, nil, err
 	}
 	root, err := os.OpenRoot(archiveRoot)
 	if err != nil {
-		return 0, "", fmt.Errorf("open sandbox archive root: %w", err)
+		return "", nil, nil, fmt.Errorf("open sandbox archive root: %w", err)
 	}
 	defer func() { _ = root.Close() }()
 	if err := root.Mkdir(sandbox.Summary.ID, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-		return 0, "", fmt.Errorf("create sandbox archive directory: %w", err)
+		return "", nil, nil, fmt.Errorf("create sandbox archive directory: %w", err)
 	}
 	info, err := root.Lstat(sandbox.Summary.ID)
 	if err != nil {
-		return 0, "", fmt.Errorf("inspect sandbox archive directory: %w", err)
+		return "", nil, nil, fmt.Errorf("inspect sandbox archive directory: %w", err)
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return 0, "", fmt.Errorf("sandbox archive directory %q is not a safe directory", archiveDir)
+		return "", nil, nil, fmt.Errorf("sandbox archive directory %q is not a safe directory", archiveDir)
 	}
-	directory, err := root.OpenRoot(sandbox.Summary.ID)
+	directory, err = root.OpenRoot(sandbox.Summary.ID)
 	if err != nil {
-		return 0, "", fmt.Errorf("open sandbox archive directory: %w", err)
+		return "", nil, nil, fmt.Errorf("open sandbox archive directory: %w", err)
+	}
+	directoryHandle, err = directory.Open(".")
+	if err != nil {
+		_ = directory.Close()
+		return "", nil, nil, fmt.Errorf("open sandbox archive directory handle: %w", err)
+	}
+	return archiveDir, directory, directoryHandle, nil
+}
+
+func (c *SandboxRetentionCleaner) writeSandboxArchive(ctx context.Context, sandbox *domain.Sandbox) (int64, string, error) {
+	archiveDir, directory, directoryHandle, err := c.openSandboxArchiveDirectory(sandbox)
+	if err != nil {
+		return 0, "", err
 	}
 	defer func() { _ = directory.Close() }()
-	directoryHandle, err := directory.Open(".")
-	if err != nil {
-		return 0, "", fmt.Errorf("open sandbox archive directory handle: %w", err)
-	}
 	defer func() { _ = directoryHandle.Close() }()
 	if err := syncDirectoryChain(archiveDir); err != nil {
 		return 0, "", fmt.Errorf("persist sandbox archive directory: %w", err)
@@ -127,7 +139,7 @@ func (c *SandboxRetentionCleaner) writeSandboxArchive(ctx context.Context, sandb
 	}
 	manifestName := sandbox.Archive.ID + ".json"
 	if manifest, committed, err := recoverCommittedSandboxArchive(
-		ctx, directory, directoryHandle, sandbox.Summary.ID, sandbox.Archive.ID,
+		ctx, directory, directoryHandle, sandboxArchiveIdentity{SandboxID: sandbox.Summary.ID, ArchiveID: sandbox.Archive.ID},
 	); err != nil {
 		return 0, "", err
 	} else if committed {
@@ -188,10 +200,9 @@ func recoverCommittedSandboxArchive(
 	ctx context.Context,
 	directory *os.Root,
 	directoryHandle *os.File,
-	sandboxID string,
-	archiveID string,
+	identity sandboxArchiveIdentity,
 ) (sandboxArchiveManifest, bool, error) {
-	manifest, err := validateCommittedSandboxArchiveInDirectory(ctx, directory, sandboxID, archiveID)
+	manifest, err := validateCommittedSandboxArchiveInDirectory(ctx, directory, identity.SandboxID, identity.ArchiveID)
 	if err != nil {
 		return sandboxArchiveManifest{}, false, nil
 	}

@@ -15,14 +15,20 @@ import (
 
 const sandboxArchiveManifestVersion = 1
 
+// sandboxArchiveIdentity names the sandbox and archive a committed-archive
+// operation targets, shared across validate/recover helpers in this file.
+type sandboxArchiveIdentity struct {
+	SandboxID string
+	ArchiveID string
+}
+
 func validateCommittedSandboxArchive(
 	ctx context.Context,
 	archiveRoot string,
 	sandboxRoot string,
-	sandboxID string,
-	archiveID string,
+	identity sandboxArchiveIdentity,
 ) (sandboxArchiveManifest, error) {
-	archiveDir, err := safeSandboxArchiveDir(archiveRoot, sandboxRoot, sandboxID)
+	archiveDir, err := safeSandboxArchiveDir(archiveRoot, sandboxRoot, identity.SandboxID)
 	if err != nil {
 		return sandboxArchiveManifest{}, err
 	}
@@ -32,19 +38,19 @@ func validateCommittedSandboxArchive(
 		return sandboxArchiveManifest{}, fmt.Errorf("open sandbox archive root: %w", err)
 	}
 	defer func() { _ = root.Close() }()
-	info, err := root.Lstat(sandboxID)
+	info, err := root.Lstat(identity.SandboxID)
 	if err != nil {
 		return sandboxArchiveManifest{}, fmt.Errorf("inspect sandbox archive directory: %w", err)
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return sandboxArchiveManifest{}, fmt.Errorf("sandbox archive directory %q is not a safe directory", archiveDir)
 	}
-	directory, err := root.OpenRoot(sandboxID)
+	directory, err := root.OpenRoot(identity.SandboxID)
 	if err != nil {
 		return sandboxArchiveManifest{}, fmt.Errorf("open sandbox archive directory: %w", err)
 	}
 	defer func() { _ = directory.Close() }()
-	return validateCommittedSandboxArchiveInDirectory(ctx, directory, sandboxID, archiveID)
+	return validateCommittedSandboxArchiveInDirectory(ctx, directory, identity.SandboxID, identity.ArchiveID)
 }
 
 func validateCommittedSandboxArchiveInDirectory(
