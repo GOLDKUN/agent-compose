@@ -131,7 +131,14 @@ func (e *RunExecutor) Prepare(ctx context.Context, scheduler domain.Scheduler, t
 		e.updateTriggerEventDelivery(ctx, run)
 		e.notify("scheduler_run_updated")
 		_ = e.deps.Store.UpdateSchedulerLastError(ctx, scheduler.Summary.ID, run.Error)
-		_ = e.addSchedulerEvent(ctx, scheduler.Summary.ID, run.ID, run.TriggerID, "scheduler.run.skipped", "warn", run.Error, nil, "", "", "")
+		_ = e.addSchedulerEvent(ctx, schedulerRunEventInput{
+			SchedulerID: scheduler.Summary.ID,
+			RunID:       run.ID,
+			TriggerID:   run.TriggerID,
+			EventType:   "scheduler.run.skipped",
+			Level:       "warn",
+			Message:     run.Error,
+		})
 		_ = e.writeArtifact(run.ArtifactsDir, "error.txt", run.Error)
 		return PreparedRun{Scheduler: scheduler, Trigger: trigger, Run: run, PayloadJSON: payloadJSON}, nil
 	}
@@ -148,7 +155,15 @@ func (e *RunExecutor) Prepare(ctx context.Context, scheduler domain.Scheduler, t
 	}
 	e.updateTriggerEventDelivery(ctx, run)
 	e.notify("scheduler_run_updated")
-	_ = e.addSchedulerEvent(ctx, scheduler.Summary.ID, run.ID, run.TriggerID, "scheduler.run.started", "info", "scheduler run started", map[string]any{"source": run.TriggerSource}, "", "", "")
+	_ = e.addSchedulerEvent(ctx, schedulerRunEventInput{
+		SchedulerID: scheduler.Summary.ID,
+		RunID:       run.ID,
+		TriggerID:   run.TriggerID,
+		EventType:   "scheduler.run.started",
+		Level:       "info",
+		Message:     "scheduler run started",
+		Payload:     map[string]any{"source": run.TriggerSource},
+	})
 	return PreparedRun{Scheduler: scheduler, Trigger: trigger, Run: run, PayloadJSON: payloadJSON}, nil
 }
 
@@ -175,7 +190,14 @@ func (e *RunExecutor) Execute(ctx context.Context, prepared PreparedRun) (domain
 		host.CleanupCommandSessions(writeCtx)
 	}
 	for _, warning := range execution.Warnings {
-		_ = e.addSchedulerEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "scheduler.deprecated_alias.warning", "warning", warning, nil, "", "", "")
+		_ = e.addSchedulerEvent(writeCtx, schedulerRunEventInput{
+			SchedulerID: prepared.Scheduler.Summary.ID,
+			RunID:       run.ID,
+			TriggerID:   run.TriggerID,
+			EventType:   "scheduler.deprecated_alias.warning",
+			Level:       "warning",
+			Message:     warning,
+		})
 	}
 
 	completedAt := time.Now().UTC()
@@ -186,13 +208,27 @@ func (e *RunExecutor) Execute(ctx context.Context, prepared PreparedRun) (domain
 		run.Error = cancelCause.Error()
 		_ = e.writeArtifact(run.ArtifactsDir, "error.txt", run.Error)
 		_ = e.deps.Store.UpdateSchedulerLastError(writeCtx, prepared.Scheduler.Summary.ID, run.Error)
-		_ = e.addSchedulerEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "scheduler.run.canceled", "warn", run.Error, nil, "", "", "")
+		_ = e.addSchedulerEvent(writeCtx, schedulerRunEventInput{
+			SchedulerID: prepared.Scheduler.Summary.ID,
+			RunID:       run.ID,
+			TriggerID:   run.TriggerID,
+			EventType:   "scheduler.run.canceled",
+			Level:       "warn",
+			Message:     run.Error,
+		})
 	} else if execErr != nil {
 		run.Status = domain.SchedulerRunStatusFailed
 		run.Error = execErr.Error()
 		_ = e.writeArtifact(run.ArtifactsDir, "error.txt", run.Error)
 		_ = e.deps.Store.UpdateSchedulerLastError(writeCtx, prepared.Scheduler.Summary.ID, run.Error)
-		_ = e.addSchedulerEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "scheduler.run.failed", "error", run.Error, nil, "", "", "")
+		_ = e.addSchedulerEvent(writeCtx, schedulerRunEventInput{
+			SchedulerID: prepared.Scheduler.Summary.ID,
+			RunID:       run.ID,
+			TriggerID:   run.TriggerID,
+			EventType:   "scheduler.run.failed",
+			Level:       "error",
+			Message:     run.Error,
+		})
 	} else {
 		run.Status = domain.SchedulerRunStatusSucceeded
 		run.ResultJSON = execution.ResultJSON
@@ -200,7 +236,15 @@ func (e *RunExecutor) Execute(ctx context.Context, prepared PreparedRun) (domain
 			_ = e.writeArtifact(run.ArtifactsDir, "result.json", execution.ResultJSON)
 		}
 		_ = e.deps.Store.UpdateSchedulerLastError(writeCtx, prepared.Scheduler.Summary.ID, "")
-		_ = e.addSchedulerEvent(writeCtx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "scheduler.run.completed", "info", "scheduler run completed", map[string]any{"resultJson": execution.ResultJSON}, "", "", "")
+		_ = e.addSchedulerEvent(writeCtx, schedulerRunEventInput{
+			SchedulerID: prepared.Scheduler.Summary.ID,
+			RunID:       run.ID,
+			TriggerID:   run.TriggerID,
+			EventType:   "scheduler.run.completed",
+			Level:       "info",
+			Message:     "scheduler run completed",
+			Payload:     map[string]any{"resultJson": execution.ResultJSON},
+		})
 	}
 	if err := e.deps.Store.UpdateSchedulerRun(writeCtx, run); err != nil {
 		return domain.SchedulerRunSummary{}, err
@@ -232,7 +276,14 @@ func (e *RunExecutor) Abort(ctx context.Context, prepared PreparedRun, reason st
 	run.Error = reason
 	_ = e.writeArtifact(run.ArtifactsDir, "error.txt", run.Error)
 	_ = e.deps.Store.UpdateSchedulerLastError(ctx, prepared.Scheduler.Summary.ID, run.Error)
-	_ = e.addSchedulerEvent(ctx, prepared.Scheduler.Summary.ID, run.ID, run.TriggerID, "scheduler.run.failed", "error", run.Error, nil, "", "", "")
+	_ = e.addSchedulerEvent(ctx, schedulerRunEventInput{
+		SchedulerID: prepared.Scheduler.Summary.ID,
+		RunID:       run.ID,
+		TriggerID:   run.TriggerID,
+		EventType:   "scheduler.run.failed",
+		Level:       "error",
+		Message:     run.Error,
+	})
 	if err := e.deps.Store.UpdateSchedulerRun(ctx, run); err != nil {
 		slog.Warn("failed to abort prepared scheduler run", "scheduler_id", prepared.Scheduler.Summary.ID, "run_id", run.ID, "error", err)
 	}
@@ -267,11 +318,23 @@ func (e *RunExecutor) leaveRun(schedulerID string) {
 	}
 }
 
-func (e *RunExecutor) addSchedulerEvent(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
+// schedulerRunEventInput groups a single run's scheduler event, including the
+// run identity, for the RunExecutor event-recording helper.
+type schedulerRunEventInput struct {
+	SchedulerID string
+	RunID       string
+	TriggerID   string
+	EventType   string
+	Level       string
+	Message     string
+	Payload     any
+}
+
+func (e *RunExecutor) addSchedulerEvent(ctx context.Context, event schedulerRunEventInput) error {
 	if e.deps.AddSchedulerEvent == nil {
 		return nil
 	}
-	return e.deps.AddSchedulerEvent(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+	return e.deps.AddSchedulerEvent(ctx, event.SchedulerID, event.RunID, event.TriggerID, event.EventType, event.Level, event.Message, event.Payload, "", "", "")
 }
 
 func (e *RunExecutor) updateTriggerEventDelivery(ctx context.Context, run domain.SchedulerRunSummary) {

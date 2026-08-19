@@ -121,6 +121,28 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 	if len(runs) > 0 && artifactPruner == nil {
 		return result, fmt.Errorf("scheduler run artifact pruner is unavailable")
 	}
+	candidates := c.collectSchedulerRunPruneCandidates(runs, artifactPruner, &result)
+	if result.DryRun || len(candidates) == 0 {
+		return result, nil
+	}
+
+	removedDatabase, err := store.DeleteSchedulerRunPruneData(ctx, schedulerRunCandidateKeys(candidates))
+	if err != nil {
+		return result, err
+	}
+	addSchedulerRunPruneDatabaseStats(&result.Removed, removedDatabase.Stats)
+	removedKeys := make(map[SchedulerRunKey]struct{}, len(removedDatabase.RemovedKeys))
+	for _, key := range removedDatabase.RemovedKeys {
+		removedKeys[key] = struct{}{}
+	}
+	removeSchedulerRunPruneArtifacts(artifactPruner, candidates, removedKeys, &result)
+	return result, nil
+}
+
+// collectSchedulerRunPruneCandidates inspects each run's artifacts, skipping
+// runs owned by a busy scheduler, and accumulates matched-artifact stats and
+// warnings into result.
+func (c *Controller) collectSchedulerRunPruneCandidates(runs []domain.SchedulerRunSummary, artifactPruner SchedulerRunArtifactPruner, result *SchedulerRunPruneResult) []schedulerRunPruneCandidate {
 	candidates := make([]schedulerRunPruneCandidate, 0, len(runs))
 	busySchedulers := make(map[string]struct{})
 	invalidArtifacts := 0
@@ -131,6 +153,7 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 			continue
 		}
 		candidate := schedulerRunPruneCandidate{run: run}
+		var err error
 		candidate.artifact, err = artifactPruner.InspectRunArtifacts(run.SchedulerID, run.ID, run.ArtifactsDir)
 		if err != nil {
 			result.SkippedRuns++
@@ -148,19 +171,13 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 		busyRuns := result.SkippedRuns - min(result.SkippedRuns, uint64(invalidArtifacts))
 		result.Warnings = append(result.Warnings, fmt.Sprintf("skipped %d matching run(s) from %d busy scheduler(s)", busyRuns, len(busySchedulers)))
 	}
-	if result.DryRun || len(candidates) == 0 {
-		return result, nil
-	}
+	return candidates
+}
 
-	removedDatabase, err := store.DeleteSchedulerRunPruneData(ctx, schedulerRunCandidateKeys(candidates))
-	if err != nil {
-		return result, err
-	}
-	addSchedulerRunPruneDatabaseStats(&result.Removed, removedDatabase.Stats)
-	removedKeys := make(map[SchedulerRunKey]struct{}, len(removedDatabase.RemovedKeys))
-	for _, key := range removedDatabase.RemovedKeys {
-		removedKeys[key] = struct{}{}
-	}
+// removeSchedulerRunPruneArtifacts removes on-disk artifacts for candidates
+// whose database rows were actually deleted, accumulating removed-artifact
+// stats, residues, and warnings into result.
+func removeSchedulerRunPruneArtifacts(artifactPruner SchedulerRunArtifactPruner, candidates []schedulerRunPruneCandidate, removedKeys map[SchedulerRunKey]struct{}, result *SchedulerRunPruneResult) {
 	for _, candidate := range candidates {
 		key := SchedulerRunKey{SchedulerID: candidate.run.SchedulerID, RunID: candidate.run.ID}
 		if _, removed := removedKeys[key]; !removed {
@@ -186,7 +203,6 @@ func (c *Controller) PruneSchedulerRuns(ctx context.Context, request SchedulerRu
 			result.Removed.ArtifactBytes += removed.Bytes
 		}
 	}
-	return result, nil
 }
 
 func normalizeSchedulerRunPruneFilter(request SchedulerRunPruneRequest, now time.Time) (SchedulerRunPruneFilter, error) {

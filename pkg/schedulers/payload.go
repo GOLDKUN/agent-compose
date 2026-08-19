@@ -21,20 +21,6 @@ func SessionTopicPayload(session *domain.Sandbox, source string) map[string]any 
 	}
 }
 
-func CellTopicPayload(sessionID string, cell domain.NotebookCell, source string) map[string]any {
-	return map[string]any{
-		"sandboxId":     sessionID,
-		"cellId":        cell.ID,
-		"cellType":      cell.Type,
-		"success":       cell.Success,
-		"exitCode":      cell.ExitCode,
-		"agent":         cell.Agent,
-		"agentThreadId": cell.AgentThreadID,
-		"stopReason":    cell.StopReason,
-		"source":        source,
-	}
-}
-
 func CommandEventPayload(request domain.SchedulerCommandRequest, result domain.SchedulerCommandResult) map[string]any {
 	payload := map[string]any{
 		"mode":            strings.TrimSpace(request.Mode),
