@@ -77,10 +77,13 @@ func NewRunCompletionManager(di do.Injector) (*runs.CompletionManager, error) {
 		driver: do.MustInvoke[*adapters.SandboxDriver](di), streams: do.MustInvoke[*sandboxes.StreamBroker](di),
 		locks: do.MustInvoke[*sandboxes.LifecycleLocks](di), capTokens: do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
 	}
-	return runs.NewCompletionManager(
-		do.MustInvoke[*configstore.ConfigStore](di), do.MustInvoke[*sandboxstore.Store](di), stopper,
-		do.MustInvoke[*sandboxes.RemovalCoordinator](di), do.MustInvoke[*slog.Logger](di),
-	), nil
+	return runs.NewCompletionManager(runs.CompletionManagerDeps{
+		Store:     do.MustInvoke[*configstore.ConfigStore](di),
+		Sandboxes: do.MustInvoke[*sandboxstore.Store](di),
+		Lifecycle: stopper,
+		Removal:   do.MustInvoke[*sandboxes.RemovalCoordinator](di),
+		Logger:    do.MustInvoke[*slog.Logger](di),
+	}), nil
 }
 
 type runControllerDelegate struct {

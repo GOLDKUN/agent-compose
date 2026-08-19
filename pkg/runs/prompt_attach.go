@@ -133,7 +133,7 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 	}
 	interaction = driverpkg.GuardRuntimeInteractionInput(interaction)
 	defer func() { _ = interaction.CloseSend() }()
-	projector := newPersistentPromptAttachProjector(context.WithoutCancel(ctx), run, sandbox, logsPath, c.runLogs, c.configDB)
+	projector := newPersistentPromptAttachProjector(context.WithoutCancel(ctx), persistentPromptAttachProjectorDeps{Run: run, Sandbox: sandbox, LogsPath: logsPath, Hub: c.runLogs, EventStore: c.configDB})
 	input := &promptWrapperInput{interaction: interaction}
 	if err := input.Start(agentConfig, c.config, schemaPath); err != nil {
 		transition.ExitCode = 1
@@ -152,7 +152,7 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 	} else {
 		releasePromptTurn(turnReady)
 	}
-	go pumpRunPromptAttachInput(inputCtx, receive, input, turnReady, projector.AppendHumanMessageFrame)
+	go pumpRunPromptAttachInput(inputCtx, receive, promptInputPump{Input: input, TurnReady: turnReady, OnHumanMessage: projector.AppendHumanMessageFrame})
 	var promptTransition *TransitionRequest
 	for {
 		frame, err := interaction.Recv()
@@ -175,7 +175,7 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 					}
 					return *promptTransition, nil
 				}
-				return transitionFromPromptRuntimeResult(run, sandbox, logsPath, result, errorFromRuntimeResult(result)), errorFromRuntimeResult(result)
+				return transitionFromPromptRuntimeResult(run, sandbox, promptRuntimeOutcome{LogsPath: logsPath, Result: result, Err: errorFromRuntimeResult(result)}), errorFromRuntimeResult(result)
 			}
 			transition.ExitCode = 1
 			transition.Error = fmt.Sprintf("agent execution failed: %v", err)
@@ -237,7 +237,7 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 				}
 				return *promptTransition, nil
 			}
-			return transitionFromPromptRuntimeResult(run, sandbox, logsPath, *result, errorFromRuntimeResult(*result)), errorFromRuntimeResult(*result)
+			return transitionFromPromptRuntimeResult(run, sandbox, promptRuntimeOutcome{LogsPath: logsPath, Result: *result, Err: errorFromRuntimeResult(*result)}), errorFromRuntimeResult(*result)
 		case driverpkg.RuntimeOutputError:
 			code := "runtime_error"
 			message := "runtime interaction failed"
@@ -309,50 +309,58 @@ func (w *promptWrapperInput) send(frame map[string]any) error {
 	return w.interaction.Send(driverpkg.RuntimeInputFrame{Type: driverpkg.RuntimeInputStdin, Data: data})
 }
 
-func pumpRunPromptAttachInput(ctx context.Context, receive RunAttachReceiver, input *promptWrapperInput, turnReady <-chan struct{}, onHumanMessage func(string, string) error) {
-	defer func() { _ = input.interaction.CloseSend() }()
+// promptInputPump groups the wrapper input stream, the gate that releases a
+// turn, and the callback notified of each forwarded human message.
+type promptInputPump struct {
+	Input          *promptWrapperInput
+	TurnReady      <-chan struct{}
+	OnHumanMessage func(string, string) error
+}
+
+func pumpRunPromptAttachInput(ctx context.Context, receive RunAttachReceiver, pump promptInputPump) {
+	defer func() { _ = pump.Input.interaction.CloseSend() }()
 	for {
 		req, err := receive()
 		if err != nil {
-			_ = input.EOF()
+			_ = pump.Input.EOF()
 			return
 		}
 		switch req.Kind {
 		case RunAttachInputHumanMessage:
-			if !forwardPromptHumanMessage(ctx, input, turnReady, req.Text, req.ClientFrameID, onHumanMessage) {
+			if !forwardPromptHumanMessage(ctx, pump, req.Text, req.ClientFrameID) {
 				return
 			}
 		case RunAttachInputStdin:
-			if !forwardPromptHumanMessage(ctx, input, turnReady, string(req.Data), req.ClientFrameID, onHumanMessage) {
+			if !forwardPromptHumanMessage(ctx, pump, string(req.Data), req.ClientFrameID) {
 				return
 			}
 		case RunAttachInputStdinEOF:
-			_ = input.EOF()
+			_ = pump.Input.EOF()
 			return
 		case RunAttachInputCancel:
-			_ = input.Cancel(req.Reason)
+			_ = pump.Input.Cancel(req.Reason)
 			return
 		default:
-			_ = input.Cancel("invalid run prompt attach frame")
+			_ = pump.Input.Cancel("invalid run prompt attach frame")
 			return
 		}
 	}
 }
 
-func forwardPromptHumanMessage(ctx context.Context, input *promptWrapperInput, turnReady <-chan struct{}, text, clientFrameID string, onHumanMessage func(string, string) error) bool {
-	if turnReady != nil {
+func forwardPromptHumanMessage(ctx context.Context, pump promptInputPump, text, clientFrameID string) bool {
+	if pump.TurnReady != nil {
 		select {
 		case <-ctx.Done():
 			return false
-		case <-turnReady:
+		case <-pump.TurnReady:
 		}
 	}
-	if onHumanMessage != nil {
-		if err := onHumanMessage(text, clientFrameID); err != nil {
+	if pump.OnHumanMessage != nil {
+		if err := pump.OnHumanMessage(text, clientFrameID); err != nil {
 			return false
 		}
 	}
-	return input.HumanMessage(text) == nil
+	return pump.Input.HumanMessage(text) == nil
 }
 
 func releasePromptTurn(turnReady chan<- struct{}) {

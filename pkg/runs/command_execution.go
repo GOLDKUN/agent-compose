@@ -104,7 +104,7 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.Pr
 		if strings.TrimSpace(result.Output) == "" {
 			result.Output = firstNonEmpty(result.Stderr, result.Stdout, execErr.Error())
 		}
-		transition = transitionFromCommandResult(run, sandbox, commandText, result, execErr)
+		transition = transitionFromCommandResult(run, sandbox, commandOutcome{Command: commandText, Result: result, Err: execErr})
 		transition.LogsPath = logsPath
 		return transition, execErr
 	}
@@ -119,7 +119,7 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.Pr
 		transition.Error = fmt.Sprintf("command execution failed: %v", err)
 		return transition, err
 	}
-	transition = transitionFromCommandResult(run, sandbox, commandText, execution.RuntimeCommandResultToExecResult(commandResult), nil)
+	transition = transitionFromCommandResult(run, sandbox, commandOutcome{Command: commandText, Result: execution.RuntimeCommandResultToExecResult(commandResult)})
 	transition.LogsPath = logsPath
 	return transition, nil
 }

@@ -30,7 +30,7 @@ func TestAttachInputPumpsCloseRuntimeInputOnReceiveError(t *testing.T) {
 		input := &promptWrapperInput{interaction: interaction}
 		pumpRunPromptAttachInput(context.Background(), func() (RunAttachInput, error) {
 			return RunAttachInput{}, receiveErr
-		}, input, nil, nil)
+		}, promptInputPump{Input: input})
 		if interaction.closeCalls != 1 {
 			t.Fatalf("CloseSend calls = %d, want 1", interaction.closeCalls)
 		}
@@ -57,7 +57,7 @@ func TestPromptAttachInputWaitsForCompletedTurnBeforeForwardingQueuedMessages(t 
 			}
 			received <- struct{}{}
 			return req, nil
-		}, input, turnReady, nil)
+		}, promptInputPump{Input: input, TurnReady: turnReady})
 	}()
 
 	requests <- humanMessageAttachRequest("human-2")
@@ -99,7 +99,7 @@ func TestPromptAttachInputCancellationUnblocksTurnWait(t *testing.T) {
 			req := <-requests
 			received <- struct{}{}
 			return req, nil
-		}, input, make(chan struct{}, 1), nil)
+		}, promptInputPump{Input: input, TurnReady: make(chan struct{}, 1)})
 	}()
 
 	requests <- humanMessageAttachRequest("queued")

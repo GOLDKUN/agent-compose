@@ -50,7 +50,7 @@ func TestCompletionManagerPersistsEventsBeforeCleanupAndRetriesFirstResult(t *te
 	timeoutCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stopper := &completionStopperFake{err: errors.New("stop unavailable"), onStop: cancel}
-	manager := runs.NewCompletionManager(store, sandboxes, stopper, nil, nil)
+	manager := runs.NewCompletionManager(runs.CompletionManagerDeps{Store: store, Sandboxes: sandboxes, Lifecycle: stopper})
 
 	staged, err := manager.Complete(timeoutCtx, runs.TransitionRequest{
 		RunID: run.RunID, Status: domain.ProjectRunStatusSucceeded, Output: "exact output", ResultJSON: `{"ok":true}`,
@@ -75,7 +75,9 @@ func TestCompletionManagerPersistsEventsBeforeCleanupAndRetriesFirstResult(t *te
 	}
 
 	stopper.err = nil
-	if err := store.RecordProjectRunCompletionFailure(ctx, run.RunID, journal.LastError, journal.Attempt, time.Now().Add(-time.Second)); err != nil {
+	if err := store.RecordProjectRunCompletionFailure(ctx, domain.ProjectRunCompletionFailure{
+		RunID: run.RunID, Message: journal.LastError, Attempt: journal.Attempt, NextAttemptAt: time.Now().Add(-time.Second),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	completed, err := manager.Complete(ctx, runs.TransitionRequest{RunID: run.RunID, Status: domain.ProjectRunStatusCanceled, Error: "late cancellation"})

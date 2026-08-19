@@ -107,7 +107,7 @@ func TestReconcilePersistedProjectRunsMarksInterruptedRunsFailed(t *testing.T) {
 			t.Fatalf("CreateProjectRun(%s) returned error: %v", run.RunID, err)
 		}
 	}
-	completions := runs.NewCompletionManager(store, nil, nil, nil, nil)
+	completions := runs.NewCompletionManager(runs.CompletionManagerDeps{Store: store})
 	if err := reconcilePersistedProjectRuns(ctx, store, completions, time.Now().Add(2*time.Second)); err != nil {
 		t.Fatalf("reconcilePersistedProjectRuns returned error: %v", err)
 	}

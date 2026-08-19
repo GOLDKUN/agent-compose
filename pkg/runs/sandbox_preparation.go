@@ -24,7 +24,7 @@ import (
 )
 
 func (c *Controller) prepareProjectRun(ctx context.Context, run domain.ProjectRunRecord, requestEnv []*agentcomposev2.EnvVarSpec) (Preparation, error) {
-	return PrepareProjectRun(ctx, c.configDB, projectRunWorkspaceResolver{controller: c}, run, requestEnv)
+	return PrepareProjectRun(ctx, PreparationDeps{Store: c.configDB, Resolver: projectRunWorkspaceResolver{controller: c}}, run, requestEnv)
 }
 
 func resolveRunJupyterOptions(base sandboxstore.CreateSandboxOptions, override *agentcomposev2.RunJupyterSpec) (sandboxstore.CreateSandboxOptions, error) {
@@ -80,7 +80,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 		jupyterOptions.VolumeMounts = volumeMounts
 		volumesResolved = true
 	}
-	stickyConfigHash, err := stickyProjectRunConfigHash(req.StickyBindingConfigHash, run, prepared, driver, guestImage, volumeMounts, jupyterOptions)
+	stickyConfigHash, err := stickyProjectRunConfigHash(req.StickyBindingConfigHash, run, prepared, stickySandboxSpec{Driver: driver, GuestImage: guestImage, VolumeMounts: volumeMounts, Jupyter: jupyterOptions})
 	if err != nil {
 		return SandboxResult{}, fmt.Errorf("hash sticky project sandbox configuration: %w", err)
 	}
@@ -105,7 +105,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 		if !hasBindingStore {
 			return SandboxResult{}, fmt.Errorf("sticky sandbox binding store is required")
 		}
-		sandboxID, binding, bindingWarnings, err := c.resolveStickySchedulerBinding(ctx, bindingStore, stickySchedulerID, stickyTriggerID, stickyConfigHash)
+		sandboxID, binding, bindingWarnings, err := c.resolveStickySchedulerBinding(ctx, bindingStore, stickyBindingKey{SchedulerID: stickySchedulerID, TriggerID: stickyTriggerID, ConfigHash: stickyConfigHash})
 		if err != nil {
 			return SandboxResult{}, err
 		}
@@ -197,7 +197,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			}
 			sandbox.EnvItems = domain.MergeEnvItems(sandbox.EnvItems, capabilityVars)
 			sandbox.Summary.Tags = MergeSandboxTags(sandbox.Summary.Tags, tags)
-			if err := c.startProjectRunSandbox(ctx, sandbox, "sandbox.resumed", "sandbox resumed for project run", trustedHeaders); err != nil {
+			if err := c.startProjectRunSandbox(ctx, sandbox, sandboxStartEvent{Type: "sandbox.resumed", Message: "sandbox resumed for project run"}, trustedHeaders); err != nil {
 				return SandboxResult{Sandbox: sandbox}, err
 			}
 			return SandboxResult{Sandbox: sandbox, Warnings: warnings}, nil
@@ -265,7 +265,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 		_ = c.store.UpdateSandbox(ctx, sandbox)
 		return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, err
 	}
-	if err := c.startProjectRunSandboxRuntime(ctx, sandbox, "sandbox.created", "sandbox started for project run", trustedHeaders); err != nil {
+	if err := c.startProjectRunSandboxRuntime(ctx, sandbox, sandboxStartEvent{Type: "sandbox.created", Message: "sandbox started for project run"}, trustedHeaders); err != nil {
 		return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, err
 	}
 	if stickySchedulerID != "" {
@@ -283,7 +283,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 			if err := c.stopProjectRunSandbox(ctx, sandbox); err != nil {
 				return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, fmt.Errorf("retire unclaimed sticky sandbox: %w", err)
 			}
-			winner, compatible, err := loadCompatibleStickySchedulerBinding(ctx, bindingStore, stickySchedulerID, stickyTriggerID, stickyConfigHash)
+			winner, compatible, err := loadCompatibleStickySchedulerBinding(ctx, bindingStore, stickyBindingKey{SchedulerID: stickySchedulerID, TriggerID: stickyTriggerID, ConfigHash: stickyConfigHash})
 			if err != nil {
 				return SandboxResult{Sandbox: sandbox, Created: true, Warnings: volumeWarnings}, fmt.Errorf("load concurrently claimed sticky sandbox: %w", err)
 			}
@@ -382,7 +382,14 @@ func (c *Controller) applyJupyterOptionsToSandbox(sandbox *domain.Sandbox, optio
 	return c.store.SaveProxyState(sandbox.Summary.ID, proxyState)
 }
 
-func (c *Controller) startProjectRunSandbox(ctx context.Context, sandbox *domain.Sandbox, eventType, eventMessage string, trustedHeaders []domain.TrustedHeader) error {
+// sandboxStartEvent is the sandbox-start event recorded when a project run's
+// sandbox transitions to running, either freshly created or resumed.
+type sandboxStartEvent struct {
+	Type    string
+	Message string
+}
+
+func (c *Controller) startProjectRunSandbox(ctx context.Context, sandbox *domain.Sandbox, event sandboxStartEvent, trustedHeaders []domain.TrustedHeader) error {
 	if sandbox == nil {
 		return fmt.Errorf("sandbox is required")
 	}
@@ -397,7 +404,7 @@ func (c *Controller) startProjectRunSandbox(ctx context.Context, sandbox *domain
 		_ = c.store.UpdateSandbox(ctx, sandbox)
 		return err
 	}
-	return c.startProjectRunSandboxRuntime(ctx, sandbox, eventType, eventMessage, trustedHeaders)
+	return c.startProjectRunSandboxRuntime(ctx, sandbox, event, trustedHeaders)
 }
 
 func (c *Controller) ensureProjectRunSandboxWorkspace(ctx context.Context, sandbox *domain.Sandbox) error {
@@ -426,8 +433,8 @@ func (c *Controller) prepareFreshStartAgentEnvironment(ctx context.Context, sand
 	return c.executor.PrepareSandboxAgentEnvironmentFromTags(ctx, sandbox)
 }
 
-func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox *domain.Sandbox, eventType, eventMessage string, trustedHeaders []domain.TrustedHeader) error {
-	writeCapabilityGuide(ctx, c.cap, c.store, c.streams, sandbox, capabilities.SandboxCapsets(sandbox))
+func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox *domain.Sandbox, event sandboxStartEvent, trustedHeaders []domain.TrustedHeader) error {
+	writeCapabilityGuide(ctx, capabilityGuideDeps{Provider: c.cap, Store: c.store, Streams: c.streams}, sandbox, capabilities.SandboxCapsets(sandbox))
 	if sandbox.Summary.VMStatus != domain.VMStatusRunning {
 		if err := c.driver.StartSandboxVM(ctx, sandbox); err != nil {
 			sandbox.Summary.VMStatus = domain.VMStatusFailed
@@ -440,7 +447,7 @@ func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox 
 	if err := c.store.UpdateSandbox(ctx, sandbox); err != nil {
 		return err
 	}
-	c.publishProjectRunSandboxStarted(ctx, sandbox, eventType, eventMessage)
+	c.publishProjectRunSandboxStarted(ctx, sandbox, event.Type, event.Message)
 	loaded, err := c.store.GetSandbox(ctx, sandbox.Summary.ID)
 	if err != nil {
 		return err

@@ -25,7 +25,7 @@ type PreparationStore interface {
 }
 
 type WorkspaceResolver interface {
-	ResolveProjectRunWorkspace(ctx context.Context, run domain.ProjectRunRecord, project domain.ProjectRecord, projectWorkspace, agentWorkspace *compose.WorkspaceSpec) (*domain.WorkspaceConfig, *domain.SandboxWorkspace, error)
+	ResolveProjectRunWorkspace(ctx context.Context, run domain.ProjectRunRecord, project domain.ProjectRecord, req WorkspaceRequest) (*domain.WorkspaceConfig, *domain.SandboxWorkspace, error)
 }
 
 type Preparation struct {
@@ -41,7 +41,16 @@ type Preparation struct {
 	SandboxOptions   sandboxstore.CreateSandboxOptions
 }
 
-func PrepareProjectRun(ctx context.Context, store PreparationStore, resolver WorkspaceResolver, run domain.ProjectRunRecord, requestEnv []*agentcomposev2.EnvVarSpec) (Preparation, error) {
+// PreparationDeps groups the store and workspace resolver PrepareProjectRun
+// needs to prepare a run.
+type PreparationDeps struct {
+	Store    PreparationStore
+	Resolver WorkspaceResolver
+}
+
+func PrepareProjectRun(ctx context.Context, deps PreparationDeps, run domain.ProjectRunRecord, requestEnv []*agentcomposev2.EnvVarSpec) (Preparation, error) {
+	store := deps.Store
+	resolver := deps.Resolver
 	if store == nil {
 		return Preparation{}, fmt.Errorf("config store is required")
 	}
@@ -97,7 +106,7 @@ func PrepareProjectRun(ctx context.Context, store PreparationStore, resolver Wor
 	if err != nil {
 		return Preparation{}, err
 	}
-	workspaceConfig, workspaceSnapshot, err := resolver.ResolveProjectRunWorkspace(ctx, run, project, projectWorkspace, agentWorkspace)
+	workspaceConfig, workspaceSnapshot, err := resolver.ResolveProjectRunWorkspace(ctx, run, project, WorkspaceRequest{Project: projectWorkspace, Agent: agentWorkspace})
 	if err != nil {
 		return Preparation{}, err
 	}

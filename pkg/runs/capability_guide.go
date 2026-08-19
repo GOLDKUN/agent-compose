@@ -15,9 +15,17 @@ import (
 	"github.com/google/uuid"
 )
 
-func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, store SandboxRuntimeStore, streams *sandboxes.StreamBroker, sandbox *domain.Sandbox, capsetIDs []string) {
+// capabilityGuideDeps groups the dependencies writeCapabilityGuide and
+// recordCapabilityGuideWarning need to render a guide and report failures.
+type capabilityGuideDeps struct {
+	Provider capabilities.Provider
+	Store    SandboxRuntimeStore
+	Streams  *sandboxes.StreamBroker
+}
+
+func writeCapabilityGuide(ctx context.Context, deps capabilityGuideDeps, sandbox *domain.Sandbox, capsetIDs []string) {
 	ids := capabilities.NormalizeCapsetIDs(capsetIDs)
-	if len(ids) == 0 || provider == nil || sandbox == nil {
+	if len(ids) == 0 || deps.Provider == nil || sandbox == nil {
 		return
 	}
 	catalogPath := capabilities.SandboxGuidePath(sandbox)
@@ -27,10 +35,10 @@ func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, s
 	var b strings.Builder
 	rendered := false
 	for _, id := range ids {
-		guide, err := capabilities.CapabilityGuideForScope(ctx, provider, capabilities.GuideScopeFromSandbox(sandbox), id)
+		guide, err := capabilities.CapabilityGuideForScope(ctx, deps.Provider, capabilities.GuideScopeFromSandbox(sandbox), id)
 		if err != nil {
 			slog.Warn("capability guide render skipped", "capset", id, "sandbox_id", sandbox.Summary.ID, "error", err)
-			recordCapabilityGuideWarning(ctx, store, streams, sandbox.Summary.ID, fmt.Sprintf("capability guide render skipped for capset %s", id))
+			recordCapabilityGuideWarning(ctx, deps, sandbox.Summary.ID, fmt.Sprintf("capability guide render skipped for capset %s", id))
 			continue
 		}
 		if rendered {
@@ -43,22 +51,22 @@ func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, s
 		return
 	}
 	content := b.String()
-	if preamble := capabilities.GuidePreamble(capabilities.ProxyTarget(provider)); preamble != "" {
+	if preamble := capabilities.GuidePreamble(capabilities.ProxyTarget(deps.Provider)); preamble != "" {
 		content = preamble + content
 	}
 	if err := os.MkdirAll(filepath.Dir(catalogPath), 0o755); err != nil {
 		slog.Warn("capability guide dir create failed", "sandbox_id", sandbox.Summary.ID, "error", err)
-		recordCapabilityGuideWarning(ctx, store, streams, sandbox.Summary.ID, "capability guide directory create failed")
+		recordCapabilityGuideWarning(ctx, deps, sandbox.Summary.ID, "capability guide directory create failed")
 		return
 	}
 	if err := os.WriteFile(catalogPath, []byte(content), 0o644); err != nil {
 		slog.Warn("capability guide write failed", "sandbox_id", sandbox.Summary.ID, "error", err)
-		recordCapabilityGuideWarning(ctx, store, streams, sandbox.Summary.ID, "capability guide write failed")
+		recordCapabilityGuideWarning(ctx, deps, sandbox.Summary.ID, "capability guide write failed")
 	}
 }
 
-func recordCapabilityGuideWarning(ctx context.Context, store SandboxRuntimeStore, streams *sandboxes.StreamBroker, sandboxID, message string) {
-	if store == nil || strings.TrimSpace(sandboxID) == "" {
+func recordCapabilityGuideWarning(ctx context.Context, deps capabilityGuideDeps, sandboxID, message string) {
+	if deps.Store == nil || strings.TrimSpace(sandboxID) == "" {
 		return
 	}
 	event := domain.SandboxEvent{
@@ -68,11 +76,11 @@ func recordCapabilityGuideWarning(ctx context.Context, store SandboxRuntimeStore
 		Message:   message,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := store.AddEvent(ctx, sandboxID, event); err != nil {
+	if err := deps.Store.AddEvent(ctx, sandboxID, event); err != nil {
 		slog.Warn("capability guide warning event failed", "sandbox_id", sandboxID, "error", err)
 		return
 	}
-	if streams != nil {
-		streams.PublishEventAdded(sandboxID, event)
+	if deps.Streams != nil {
+		deps.Streams.PublishEventAdded(sandboxID, event)
 	}
 }

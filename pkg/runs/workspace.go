@@ -19,19 +19,26 @@ type projectRunWorkspaceResolver struct {
 	controller *Controller
 }
 
-func (r projectRunWorkspaceResolver) ResolveProjectRunWorkspace(ctx context.Context, run domain.ProjectRunRecord, project domain.ProjectRecord, projectWorkspace, agentWorkspace *compose.WorkspaceSpec) (*domain.WorkspaceConfig, *domain.SandboxWorkspace, error) {
-	workspace, err := r.controller.prepareProjectRunWorkspace(ctx, run, project, projectWorkspace, agentWorkspace)
+// WorkspaceRequest is the pair of candidate workspace specs a run can resolve
+// from: the project-level default and an agent-level override.
+type WorkspaceRequest struct {
+	Project *compose.WorkspaceSpec
+	Agent   *compose.WorkspaceSpec
+}
+
+func (r projectRunWorkspaceResolver) ResolveProjectRunWorkspace(ctx context.Context, run domain.ProjectRunRecord, project domain.ProjectRecord, req WorkspaceRequest) (*domain.WorkspaceConfig, *domain.SandboxWorkspace, error) {
+	workspace, err := r.controller.prepareProjectRunWorkspace(ctx, run, project, req)
 	if err != nil || workspace == nil {
 		return workspace, nil, err
 	}
 	return workspace, toSandboxWorkspaceSnapshot(*workspace), nil
 }
 
-func (c *Controller) prepareProjectRunWorkspace(ctx context.Context, run domain.ProjectRunRecord, project domain.ProjectRecord, projectWorkspace, agentWorkspace *compose.WorkspaceSpec) (*domain.WorkspaceConfig, error) {
+func (c *Controller) prepareProjectRunWorkspace(ctx context.Context, run domain.ProjectRunRecord, project domain.ProjectRecord, req WorkspaceRequest) (*domain.WorkspaceConfig, error) {
 	_ = ctx
-	workspace := projectWorkspace
-	if agentWorkspace != nil {
-		workspace = agentWorkspace
+	workspace := req.Project
+	if req.Agent != nil {
+		workspace = req.Agent
 	}
 	if workspace == nil {
 		return nil, nil
