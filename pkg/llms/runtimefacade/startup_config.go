@@ -27,7 +27,7 @@ func EnsureSessionStartupFacadeConfig(ctx context.Context, config *appconfig.Con
 
 	env := make(map[string]string)
 	for _, family := range []string{llms.ProviderFamilyAnthropic, llms.ProviderFamilyOpenAI} {
-		familyEnv, err := ensureStartupFamilyConfig(ctx, config, store, session, family, source, runID, baseURL)
+		familyEnv, err := ensureStartupFamilyConfig(ctx, startupFamilyCall{Config: config, Store: store, Session: session, Family: family, Source: source, RunID: runID, BaseURL: baseURL})
 		if err != nil {
 			return nil, err
 		}
@@ -41,7 +41,19 @@ func EnsureSessionStartupFacadeConfig(ctx context.Context, config *appconfig.Con
 	return env, nil
 }
 
-func ensureStartupFamilyConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, family, source, runID, baseURL string) (map[string]string, error) {
+// startupFamilyCall groups ensureStartupFamilyConfig's inputs.
+type startupFamilyCall struct {
+	Config  *appconfig.Config
+	Store   FacadeStore
+	Session *domain.Sandbox
+	Family  string
+	Source  string
+	RunID   string
+	BaseURL string
+}
+
+func ensureStartupFamilyConfig(ctx context.Context, call startupFamilyCall) (map[string]string, error) {
+	config, store, session, family, source, runID, baseURL := call.Config, call.Store, call.Session, call.Family, call.Source, call.RunID, call.BaseURL
 	provider, available, err := llms.SelectRuntimeFacadeProvider(ctx, store, session.Summary.ID, family)
 	if err != nil {
 		return nil, fmt.Errorf("select %s startup facade provider: %w", family, err)
@@ -50,7 +62,8 @@ func ensureStartupFamilyConfig(ctx context.Context, config *appconfig.Config, st
 	if err != nil {
 		return nil, fmt.Errorf("load %s startup facade environment: %w", family, err)
 	}
-	if !available && !startupFamilyHasInput(ctx, config, store, family, providerEnv) {
+	famEnv := startupFamilyEnv{Config: config, Store: store, Family: family, ProviderEnv: providerEnv}
+	if !available && !startupFamilyHasInput(ctx, famEnv) {
 		return nil, nil
 	}
 	if !available {
@@ -60,7 +73,7 @@ func ensureStartupFamilyConfig(ctx context.Context, config *appconfig.Config, st
 			store,
 			session.Summary.ID,
 			family,
-			startupFamilyModel(ctx, config, store, family, providerEnv),
+			startupFamilyModel(ctx, famEnv),
 			"",
 			providerEnv,
 		)
@@ -97,7 +110,17 @@ func ensureStartupFamilyConfig(ctx context.Context, config *appconfig.Config, st
 	}, nil
 }
 
-func startupFamilyHasInput(ctx context.Context, config *appconfig.Config, store FacadeStore, family string, providerEnv []domain.SandboxEnvVar) bool {
+// startupFamilyEnv groups the config/store plus which provider family and
+// its already-loaded env items, shared by the startup-family helpers below.
+type startupFamilyEnv struct {
+	Config      *appconfig.Config
+	Store       FacadeStore
+	Family      string
+	ProviderEnv []domain.SandboxEnvVar
+}
+
+func startupFamilyHasInput(ctx context.Context, in startupFamilyEnv) bool {
+	config, store, family, providerEnv := in.Config, in.Store, in.Family, in.ProviderEnv
 	if family == llms.ProviderFamilyAnthropic && llms.HasAnthropicEnvProviderInput(providerEnv) {
 		return true
 	}
@@ -129,7 +152,8 @@ func startupGenericInput(ctx context.Context, config *appconfig.Config, store Fa
 	) != ""
 }
 
-func startupFamilyModel(ctx context.Context, config *appconfig.Config, store FacadeStore, family string, providerEnv []domain.SandboxEnvVar) string {
+func startupFamilyModel(ctx context.Context, in startupFamilyEnv) string {
+	config, store, family, providerEnv := in.Config, in.Store, in.Family, in.ProviderEnv
 	if family == llms.ProviderFamilyAnthropic {
 		return firstNonEmpty(
 			llms.SessionAnthropicEnvModel(providerEnv),

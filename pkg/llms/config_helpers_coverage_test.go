@@ -18,10 +18,10 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	root := t.TempDir()
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1", WorkspacePath: filepath.Join(root, "workspace")}}
 	policy := CodexRuntimePolicyFromConfig(nil)
-	if err := WriteCodexRuntimeConfig(session, "gpt", "http://runtime/openai/v1/", APIProtocolChatCompletions, policy); err == nil {
+	if err := WriteCodexRuntimeConfig(session, CodexRuntimeConfig{Model: "gpt", BaseURL: "http://runtime/openai/v1/", WireAPI: APIProtocolChatCompletions, Policy: policy}); err == nil {
 		t.Fatal("WriteCodexRuntimeConfig accepted unsupported Chat Completions")
 	}
-	if err := WriteCodexRuntimeConfig(session, "gpt", "http://runtime/openai/v1/", APIProtocolResponses, policy); err != nil {
+	if err := WriteCodexRuntimeConfig(session, CodexRuntimeConfig{Model: "gpt", BaseURL: "http://runtime/openai/v1/", WireAPI: APIProtocolResponses, Policy: policy}); err != nil {
 		t.Fatalf("WriteCodexRuntimeConfig returned error: %v", err)
 	}
 	codexConfig, err := os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
@@ -38,7 +38,7 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	if err != nil || !strings.Contains(string(openCodeConfig), "@ai-sdk/anthropic") || !strings.Contains(string(openCodeConfig), "AGENT_COMPOSE_SANDBOX_TOKEN") {
 		t.Fatalf("opencode config=%q err=%v", string(openCodeConfig), err)
 	}
-	if err := WriteCodexRuntimeConfig(nil, "gpt", "http://runtime", "", CodexRuntimePolicyFromConfig(nil)); err != nil {
+	if err := WriteCodexRuntimeConfig(nil, CodexRuntimeConfig{Model: "gpt", BaseURL: "http://runtime", Policy: CodexRuntimePolicyFromConfig(nil)}); err != nil {
 		t.Fatalf("nil session codex config returned error: %v", err)
 	}
 	mcps := map[string]compose.NormalizedMCPServerSpec{
@@ -117,9 +117,6 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	}
 	if env := RuntimeEnvMap([]domain.SandboxEnvVar{{Name: "OPENAI_API_KEY", Value: "secret"}, {Name: "VISIBLE", Value: "1"}}); env["VISIBLE"] != "1" || env["OPENAI_API_KEY"] != "" {
 		t.Fatalf("runtime env = %#v", env)
-	}
-	if env := ManagedRuntimeEnvMap([]domain.SandboxEnvVar{{Name: "OPENAI_API_KEY", Value: "secret"}}); env["OPENAI_API_KEY"] != "secret" {
-		t.Fatalf("managed env = %#v", env)
 	}
 	if provider, model, err := SplitOpenCodeModel(" custom/gpt "); err != nil || provider != "custom" || model != "gpt" {
 		t.Fatalf("SplitOpenCodeModel provider=%q model=%q err=%v", provider, model, err)
@@ -278,11 +275,11 @@ func TestClientConfigAndSelectionWorkflows(t *testing.T) {
 
 	models := []Model{{ID: "m1", Name: "gpt-1"}, {ID: "m2", Name: "gpt-2", DefaultModel: true}}
 	providers := []Provider{{ID: "p2", ProviderType: ProviderFamilyOpenAI, Scope: ProviderScopeEnvDefault, Weight: 10}, {ID: "p1", ProviderType: ProviderFamilyOpenAI, Weight: 1}}
-	selected, provider, wireAPI, ok, err := SelectModelAndProvider(ctx, llmCoverageWireStore{ok: true, wireAPI: APIProtocolResponses}, models, providers, "", ProviderFamilyOpenAI, "")
+	selected, provider, wireAPI, ok, err := SelectModelAndProvider(ctx, llmCoverageWireStore{ok: true, wireAPI: APIProtocolResponses}, ModelProviderSelection{Models: models, Providers: providers, ProviderFamily: ProviderFamilyOpenAI})
 	if err != nil || !ok || selected.ID != "m2" || provider.ID != "p2" || wireAPI != APIProtocolResponses {
 		t.Fatalf("selected=%#v provider=%#v wire=%q ok=%v err=%v", selected, provider, wireAPI, ok, err)
 	}
-	if _, _, _, ok, err := SelectModelAndProvider(ctx, llmCoverageWireStore{}, models, providers, "missing", "", ""); err != nil || ok {
+	if _, _, _, ok, err := SelectModelAndProvider(ctx, llmCoverageWireStore{}, ModelProviderSelection{Models: models, Providers: providers, RequestedModel: "missing"}); err != nil || ok {
 		t.Fatalf("expected missing model ok=false err=%v", err)
 	}
 	if priority := ProviderSelectionPriority(ProviderScopeSessionEnv); priority != 0 {

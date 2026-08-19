@@ -69,7 +69,19 @@ func HasConfiguredProviderForFamily(ctx context.Context, store ProviderListStore
 	return false
 }
 
-func EnsureOpenAIEnvProvider(ctx context.Context, store DefaultConfigStore, lookup EnvProviderLookup, providerID, name, scope, requestedModel string, defaultModel bool) (string, error) {
+// EnvProviderRegistration groups the identity/model fields shared by the
+// Ensure*EnvProvider family: which provider/model to register, under which
+// scope, and whether it becomes the default.
+type EnvProviderRegistration struct {
+	ProviderID     string
+	Name           string
+	Scope          string
+	RequestedModel string
+	DefaultModel   bool
+}
+
+func EnsureOpenAIEnvProvider(ctx context.Context, store DefaultConfigStore, lookup EnvProviderLookup, reg EnvProviderRegistration) (string, error) {
+	providerID, name, scope, requestedModel, defaultModel := reg.ProviderID, reg.Name, reg.Scope, reg.RequestedModel, reg.DefaultModel
 	endpoint := firstNonEmpty(lookup("LLM_API_ENDPOINT"), "https://api.openai.com")
 	protocol := NormalizeWireAPI(lookup("LLM_API_PROTOCOL"))
 	if protocol == APIProtocolMessages {
@@ -96,7 +108,16 @@ func EnsureOpenAIEnvProvider(ctx context.Context, store DefaultConfigStore, look
 	}, Model{ID: model, Name: model, DefaultModel: defaultModel, Enabled: true, Scope: scope})
 }
 
-func ensureAnthropicEnvProvider(ctx context.Context, store DefaultConfigStore, lookup EnvProviderLookup, credential anthropicCredential, providerID, name, scope, requestedModel string, defaultModel bool) (string, error) {
+// anthropicEnvProviderInput groups ensureAnthropicEnvProvider's credential
+// and registration inputs.
+type anthropicEnvProviderInput struct {
+	Credential anthropicCredential
+	EnvProviderRegistration
+}
+
+func ensureAnthropicEnvProvider(ctx context.Context, store DefaultConfigStore, lookup EnvProviderLookup, in anthropicEnvProviderInput) (string, error) {
+	credential, reg := in.Credential, in.EnvProviderRegistration
+	providerID, name, scope, requestedModel, defaultModel := reg.ProviderID, reg.Name, reg.Scope, reg.RequestedModel, reg.DefaultModel
 	anthropicEndpoint := lookup("ANTHROPIC_BASE_URL", "ANTHROPIC_API_ENDPOINT")
 	genericEndpoint := lookup("LLM_API_ENDPOINT")
 	anthropicModel := lookup("ANTHROPIC_MODEL", "CLAUDE_MODEL")
@@ -127,29 +148,26 @@ func ensureAnthropicEnvProvider(ctx context.Context, store DefaultConfigStore, l
 	}, Model{ID: model, Name: model, DefaultModel: defaultModel, Enabled: true, Scope: scope})
 }
 
+// AnthropicEnvProviderRequest groups EnsureAnthropicEnvProvider's inputs:
+// caller-selected authentication semantics plus the shared registration
+// fields (which provider/model to register, under which scope).
+type AnthropicEnvProviderRequest struct {
+	AuthHeader string
+	AuthScheme string
+	EnvProviderRegistration
+}
+
 // EnsureAnthropicEnvProvider persists an environment-backed Anthropic
 // provider using caller-selected authentication semantics. Resolver paths use
 // layeredAnthropicCredential so the key and semantics share a source layer.
-func EnsureAnthropicEnvProvider(ctx context.Context, store DefaultConfigStore, lookup EnvProviderLookup, authHeader, authScheme, providerID, name, scope, requestedModel string, defaultModel bool) (string, error) {
+func EnsureAnthropicEnvProvider(ctx context.Context, store DefaultConfigStore, lookup EnvProviderLookup, req AnthropicEnvProviderRequest) (string, error) {
 	credential := anthropicCredential{
 		apiKey: firstNonEmpty(
 			lookup("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
 			lookup("LLM_API_KEY"),
 		),
-		authHeader: authHeader,
-		authScheme: authScheme,
+		authHeader: req.AuthHeader,
+		authScheme: req.AuthScheme,
 	}
-	return ensureAnthropicEnvProvider(ctx, store, lookup, credential, providerID, name, scope, requestedModel, defaultModel)
-}
-
-// AnthropicProviderAuthFromLookup derives Anthropic authentication semantics
-// from a lookup whose values belong to one already-selected source layer.
-func AnthropicProviderAuthFromLookup(lookup EnvProviderLookup) (string, string) {
-	if strings.TrimSpace(lookup("ANTHROPIC_API_KEY")) != "" {
-		return "x-api-key", ""
-	}
-	if strings.TrimSpace(lookup("ANTHROPIC_AUTH_TOKEN")) != "" {
-		return "Authorization", "Bearer"
-	}
-	return "x-api-key", ""
+	return ensureAnthropicEnvProvider(ctx, store, lookup, anthropicEnvProviderInput{Credential: credential, EnvProviderRegistration: req.EnvProviderRegistration})
 }

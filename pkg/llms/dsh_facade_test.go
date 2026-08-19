@@ -32,13 +32,12 @@ func TestEnsureDshFacadeConfigBindsConfiguredProviderToken(t *testing.T) {
 	store.models = []Model{{ID: "model-id", Name: "org/deepseek-v4", Enabled: true}}
 	store.wire["deepseek-catalog\x00model-id"] = APIProtocolResponses
 
-	env, err := EnsureDshFacadeConfig(
-		context.Background(),
-		&appconfig.Config{RuntimeBaseURL: "http://runtime.test/base/"},
-		store,
-		&domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
-		"deepseek-catalog/org/deepseek-v4", "agent", "run-1",
-	)
+	env, err := EnsureDshFacadeConfig(context.Background(), DshFacadeConfigRequest{
+		Config:  &appconfig.Config{RuntimeBaseURL: "http://runtime.test/base/"},
+		Store:   store,
+		Sandbox: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
+		Model:   "deepseek-catalog/org/deepseek-v4", Source: "agent", RunID: "run-1",
+	})
 	if err != nil {
 		t.Fatalf("EnsureDshFacadeConfig returned error: %v", err)
 	}
@@ -72,13 +71,12 @@ func TestEnsureDshFacadeConfigUsesOpenAIFamilyAndPropagatesSaveFailure(t *testin
 	store.wire[ProviderIDDefaultOpenAI+"\x00deepseek-v4"] = APIProtocolChatCompletions
 	store.saveErr = errors.New("save token failed")
 
-	_, err := EnsureDshFacadeConfig(
-		context.Background(),
-		&appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
-		store,
-		&domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
-		"openai/deepseek-v4", "scheduler", "run-2",
-	)
+	_, err := EnsureDshFacadeConfig(context.Background(), DshFacadeConfigRequest{
+		Config:  &appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
+		Store:   store,
+		Sandbox: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
+		Model:   "openai/deepseek-v4", Source: "scheduler", RunID: "run-2",
+	})
 	if !errors.Is(err, store.saveErr) {
 		t.Fatalf("EnsureDshFacadeConfig error = %v", err)
 	}
@@ -96,13 +94,12 @@ func TestEnsureDshFacadeConfigUsesSessionEnvProvider(t *testing.T) {
 		},
 	}
 
-	env, err := EnsureDshFacadeConfig(
-		context.Background(),
-		&appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
-		store,
-		sandbox,
-		"ignored-provider/org/deepseek-v4", "agent", "run-env",
-	)
+	env, err := EnsureDshFacadeConfig(context.Background(), DshFacadeConfigRequest{
+		Config:  &appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
+		Store:   store,
+		Sandbox: sandbox,
+		Model:   "ignored-provider/org/deepseek-v4", Source: "agent", RunID: "run-env",
+	})
 	if err != nil {
 		t.Fatalf("EnsureDshFacadeConfig returned error: %v", err)
 	}
@@ -120,13 +117,12 @@ func TestEnsureDshFacadeConfigUsesSessionEnvProvider(t *testing.T) {
 
 func TestEnsureDshFacadeConfigRejectsUnknownCustomProvider(t *testing.T) {
 	isolateLLMEnv(t)
-	_, err := EnsureDshFacadeConfig(
-		context.Background(),
-		&appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
-		newDshFacadeTestStore(),
-		&domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
-		"unconfigured/deepseek-v4", "agent", "run-1",
-	)
+	_, err := EnsureDshFacadeConfig(context.Background(), DshFacadeConfigRequest{
+		Config:  &appconfig.Config{RuntimeBaseURL: "http://runtime.test"},
+		Store:   newDshFacadeTestStore(),
+		Sandbox: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1"}},
+		Model:   "unconfigured/deepseek-v4", Source: "agent", RunID: "run-1",
+	})
 	if err == nil || !strings.Contains(err.Error(), "is not configured") {
 		t.Fatalf("EnsureDshFacadeConfig error = %v", err)
 	}

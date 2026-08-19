@@ -9,7 +9,18 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func resolveCustomOpenAIFacadeTarget(ctx context.Context, config *appconfig.Config, store LLMResolverStore, sandbox *domain.Sandbox, providerID, model string) (ResolvedTarget, error) {
+// customOpenAIFacadeTargetRequest groups resolveCustomOpenAIFacadeTarget's
+// inputs.
+type customOpenAIFacadeTargetRequest struct {
+	Config     *appconfig.Config
+	Store      LLMResolverStore
+	Sandbox    *domain.Sandbox
+	ProviderID string
+	Model      string
+}
+
+func resolveCustomOpenAIFacadeTarget(ctx context.Context, req customOpenAIFacadeTargetRequest) (ResolvedTarget, error) {
+	config, store, sandbox, providerID, model := req.Config, req.Store, req.Sandbox, req.ProviderID, req.Model
 	envItems, err := SandboxProviderEnvItems(ctx, store, sandbox, ProviderFamilyOpenAI)
 	if err != nil {
 		return ResolvedTarget{}, err
@@ -19,7 +30,9 @@ func resolveCustomOpenAIFacadeTarget(ctx context.Context, config *appconfig.Conf
 		sandboxID = sandbox.Summary.ID
 	}
 	if sandboxID != "" && HasOpenAIEnvProviderInput(envItems) {
-		sessionProviderID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, config, store, sandboxID, model, envItems)
+		sessionProviderID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, store, SessionEnvProviderQuery{
+			Config: config, SessionID: sandboxID, RequestedModel: model, EnvItems: envItems,
+		})
 		if err != nil {
 			return ResolvedTarget{}, err
 		}

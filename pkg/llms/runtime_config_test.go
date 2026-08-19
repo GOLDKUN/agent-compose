@@ -16,7 +16,7 @@ func TestWriteCodexRuntimeConfigRendersRetryPolicy(t *testing.T) {
 	root := t.TempDir()
 	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1", WorkspacePath: filepath.Join(root, "workspace")}}
 	policy := CodexRuntimePolicy{RequestMaxRetries: 0, StreamMaxRetries: 2, StreamIdleTimeout: 1500 * time.Millisecond}
-	if err := WriteCodexRuntimeConfig(sandbox, "gpt-test", "http://runtime/openai/v1/", APIProtocolResponses, policy); err != nil {
+	if err := WriteCodexRuntimeConfig(sandbox, CodexRuntimeConfig{Model: "gpt-test", BaseURL: "http://runtime/openai/v1/", WireAPI: APIProtocolResponses, Policy: policy}); err != nil {
 		t.Fatalf("WriteCodexRuntimeConfig returned error: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(execution.HostSandboxHome(sandbox), ".codex", "config.toml"))

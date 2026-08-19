@@ -28,13 +28,25 @@ func SelectModel(models []Model, requested string) Model {
 	return models[0]
 }
 
-func SelectModelAndProvider(ctx context.Context, store ProviderModelWireAPIStore, models []Model, providers []Provider, requestedModel, providerFamily, providerID string) (Model, Provider, string, bool, error) {
+// ModelProviderSelection groups SelectModelAndProvider's selection inputs:
+// the candidate models/providers and which model/family/provider was
+// requested.
+type ModelProviderSelection struct {
+	Models         []Model
+	Providers      []Provider
+	RequestedModel string
+	ProviderFamily string
+	ProviderID     string
+}
+
+func SelectModelAndProvider(ctx context.Context, store ProviderModelWireAPIStore, sel ModelProviderSelection) (Model, Provider, string, bool, error) {
+	models, providers, requestedModel, providerFamily, providerID := sel.Models, sel.Providers, sel.RequestedModel, sel.ProviderFamily, sel.ProviderID
 	if strings.TrimSpace(requestedModel) != "" {
 		requested := SelectModel(models, requestedModel)
 		if strings.TrimSpace(requested.ID) == "" {
 			return Model{}, Provider{}, "", false, nil
 		}
-		provider, wireAPI, ok, err := SelectProviderForModel(ctx, store, providers, requested.ID, providerFamily, providerID)
+		provider, wireAPI, ok, err := SelectProviderForModel(ctx, store, ProviderForModelSelection{Providers: providers, ModelID: requested.ID, ProviderFamily: providerFamily, ProviderID: providerID})
 		return requested, provider, wireAPI, ok, err
 	}
 	ordered := append([]Model(nil), models...)
@@ -45,7 +57,7 @@ func SelectModelAndProvider(ctx context.Context, store ProviderModelWireAPIStore
 		return ordered[i].ID < ordered[j].ID
 	})
 	for _, model := range ordered {
-		provider, wireAPI, ok, err := SelectProviderForModel(ctx, store, providers, model.ID, providerFamily, providerID)
+		provider, wireAPI, ok, err := SelectProviderForModel(ctx, store, ProviderForModelSelection{Providers: providers, ModelID: model.ID, ProviderFamily: providerFamily, ProviderID: providerID})
 		if err != nil {
 			return Model{}, Provider{}, "", false, err
 		}
@@ -56,12 +68,21 @@ func SelectModelAndProvider(ctx context.Context, store ProviderModelWireAPIStore
 	return Model{}, Provider{}, "", false, nil
 }
 
-func SelectProviderForModel(ctx context.Context, store ProviderModelWireAPIStore, providers []Provider, modelID, providerFamily, providerID string) (Provider, string, bool, error) {
+// ProviderForModelSelection groups SelectProviderForModel's selection inputs.
+type ProviderForModelSelection struct {
+	Providers      []Provider
+	ModelID        string
+	ProviderFamily string
+	ProviderID     string
+}
+
+func SelectProviderForModel(ctx context.Context, store ProviderModelWireAPIStore, sel ProviderForModelSelection) (Provider, string, bool, error) {
 	type candidate struct {
 		provider Provider
 		wireAPI  string
 		priority int
 	}
+	providers, modelID, providerFamily, providerID := sel.Providers, sel.ModelID, sel.ProviderFamily, sel.ProviderID
 	if strings.TrimSpace(providerFamily) != "" {
 		providerFamily = NormalizeProviderType(providerFamily)
 	}

@@ -52,7 +52,14 @@ func TestE2EClaudeModelProviderOverrideSurvivesSandboxReload(t *testing.T) {
 		slices.Contains(sandbox.ProviderEnvOverrideNames, "CLAUDE_CODE_PATH") {
 		t.Fatalf("provider provenance names = %#v", sandbox.ProviderEnvOverrideNames)
 	}
-	requireClaudeFacadeModel(t, ctx, config, configStore, sandbox, "run-before-reload", model)
+	requireClaudeFacadeModel(t, claudeFacadeModelCheck{
+		Ctx:       ctx,
+		Config:    config,
+		Store:     configStore,
+		Sandbox:   sandbox,
+		RunID:     "run-before-reload",
+		WantModel: model,
+	})
 	if err := sandboxStore.UpdateSandbox(ctx, sandbox); err != nil {
 		t.Fatalf("persist sandbox: %v", err)
 	}
@@ -85,7 +92,14 @@ func TestE2EClaudeModelProviderOverrideSurvivesSandboxReload(t *testing.T) {
 		t.Fatal("OpenAI provider environment contains CLAUDE_MODEL")
 	}
 
-	rawToken := requireClaudeFacadeModel(t, ctx, config, configStore, reloaded, "run-after-reload", model)
+	rawToken := requireClaudeFacadeModel(t, claudeFacadeModelCheck{
+		Ctx:       ctx,
+		Config:    config,
+		Store:     configStore,
+		Sandbox:   reloaded,
+		RunID:     "run-after-reload",
+		WantModel: model,
+	})
 	token, err := configStore.GetLLMFacadeToken(ctx, rawToken)
 	if err != nil {
 		t.Fatalf("load facade token: %v", err)
@@ -158,7 +172,14 @@ func TestE2EClaudeKeepsGenericResponsesProviderAcrossSandboxReload(t *testing.T)
 		t.Fatal("generic OpenAI session provider or its credential is missing")
 	}
 
-	rawToken := requireClaudeFacadeModel(t, ctx, config, configStore, sandbox, "run-generic-before-reload", model)
+	rawToken := requireClaudeFacadeModel(t, claudeFacadeModelCheck{
+		Ctx:       ctx,
+		Config:    config,
+		Store:     configStore,
+		Sandbox:   sandbox,
+		RunID:     "run-generic-before-reload",
+		WantModel: model,
+	})
 	requireTokenScope(rawToken)
 	if err := sandboxStore.UpdateSandbox(ctx, sandbox); err != nil {
 		t.Fatalf("persist sandbox: %v", err)
@@ -170,7 +191,14 @@ func TestE2EClaudeKeepsGenericResponsesProviderAcrossSandboxReload(t *testing.T)
 	if len(reloaded.ProviderEnvItems) != 0 || llms.EnvItemValue(reloaded.EnvItems, "LLM_API_KEY") != "" {
 		t.Fatal("reloaded sandbox retained transient generic provider credentials")
 	}
-	rawToken = requireClaudeFacadeModel(t, ctx, config, configStore, reloaded, "run-generic-after-reload", model)
+	rawToken = requireClaudeFacadeModel(t, claudeFacadeModelCheck{
+		Ctx:       ctx,
+		Config:    config,
+		Store:     configStore,
+		Sandbox:   reloaded,
+		RunID:     "run-generic-after-reload",
+		WantModel: model,
+	})
 	requireTokenScope(rawToken)
 }
 
@@ -187,8 +215,18 @@ func e2eRuntimeFacadeConfig(root string) *appconfig.Config {
 	}
 }
 
-func requireClaudeFacadeModel(t *testing.T, ctx context.Context, config *appconfig.Config, store FacadeStore, sandbox *domain.Sandbox, runID, wantModel string) string {
+type claudeFacadeModelCheck struct {
+	Ctx       context.Context
+	Config    *appconfig.Config
+	Store     FacadeStore
+	Sandbox   *domain.Sandbox
+	RunID     string
+	WantModel string
+}
+
+func requireClaudeFacadeModel(t *testing.T, check claudeFacadeModelCheck) string {
 	t.Helper()
+	ctx, config, store, sandbox, runID, wantModel := check.Ctx, check.Config, check.Store, check.Sandbox, check.RunID, check.WantModel
 	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, sandbox, "claude", "", TokenSourceAgent, runID)
 	if err != nil {
 		t.Fatalf("configure Claude facade: %v", err)

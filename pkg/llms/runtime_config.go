@@ -57,12 +57,22 @@ func normalizeCodexRuntimePolicy(policy CodexRuntimePolicy) CodexRuntimePolicy {
 	return policy
 }
 
-func WriteCodexRuntimeConfig(session *domain.Sandbox, model, baseURL, wireAPI string, policy CodexRuntimePolicy) error {
+// CodexRuntimeConfig groups WriteCodexRuntimeConfig's model/endpoint/retry inputs.
+type CodexRuntimeConfig struct {
+	Model   string
+	BaseURL string
+	WireAPI string
+	Policy  CodexRuntimePolicy
+}
+
+func WriteCodexRuntimeConfig(session *domain.Sandbox, cfg CodexRuntimeConfig) error {
 	if session == nil {
 		return nil
 	}
-	model = strings.TrimSpace(model)
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	model := strings.TrimSpace(cfg.Model)
+	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	wireAPI := cfg.WireAPI
+	policy := cfg.Policy
 	if model == "" || baseURL == "" {
 		return nil
 	}

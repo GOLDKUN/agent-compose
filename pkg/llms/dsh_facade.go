@@ -27,14 +27,27 @@ func SplitDshModel(value string) (string, string, error) {
 	return providerID, model, nil
 }
 
+// DshFacadeConfigRequest groups EnsureDshFacadeConfig's inputs: the
+// environment to resolve against (Config/Store/Sandbox) plus the specific
+// call's provider/model selection and token attribution.
+type DshFacadeConfigRequest struct {
+	Config  *appconfig.Config
+	Store   DshFacadeStore
+	Sandbox *domain.Sandbox
+	Model   string
+	Source  string
+	RunID   string
+}
+
 // EnsureDshFacadeConfig resolves DSH's explicit provider/model selection and
 // returns run-scoped facade credentials. Unlike Pi, DSH's llm-deepseek
 // adapter only ever speaks chat completions on the wire (its own upstream
 // protocol is irrelevant: the facade bridges), so the issued token's WireAPI
 // is unconditionally APIProtocolChatCompletions and the guest is always
 // routed to /llm/openai/v1 (see docs/design/dsh_agent_provider_design.md §4.1).
-func EnsureDshFacadeConfig(ctx context.Context, config *appconfig.Config, store DshFacadeStore, sandbox *domain.Sandbox, model, source, runID string) (map[string]string, error) {
-	providerID, modelName, err := SplitDshModel(model)
+func EnsureDshFacadeConfig(ctx context.Context, req DshFacadeConfigRequest) (map[string]string, error) {
+	config, store, sandbox := req.Config, req.Store, req.Sandbox
+	providerID, modelName, err := SplitDshModel(req.Model)
 	if err != nil {
 		return nil, err
 	}
@@ -43,12 +56,12 @@ func EnsureDshFacadeConfig(ctx context.Context, config *appconfig.Config, store 
 		return nil, nil
 	}
 
-	target, err := resolveDshFacadeTarget(ctx, config, store, sandbox, providerID, modelName)
+	target, err := resolveDshFacadeTarget(ctx, dshFacadeTargetInput{Config: config, Store: store, Sandbox: sandbox, ProviderID: providerID, Model: modelName})
 	if err != nil {
 		return nil, err
 	}
 	facadeBaseURL := strings.TrimRight(baseURL, "/") + "/api/runtime/sandboxes/" + sandbox.Summary.ID + "/llm/openai/v1"
-	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, APIProtocolChatCompletions, source, runID)
+	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, APIProtocolChatCompletions, req.Source, req.RunID)
 	if err != nil {
 		return nil, err
 	}
@@ -66,18 +79,28 @@ func EnsureDshFacadeConfig(ctx context.Context, config *appconfig.Config, store 
 	}, nil
 }
 
+// dshFacadeTargetInput groups resolveDshFacadeTarget's inputs.
+type dshFacadeTargetInput struct {
+	Config     *appconfig.Config
+	Store      DshFacadeStore
+	Sandbox    *domain.Sandbox
+	ProviderID string
+	Model      string
+}
+
 // resolveDshFacadeTarget mirrors resolvePiFacadeTarget's branch structure
 // (configured provider id -> family -> custom OpenAI), but DSH has no
 // Anthropic-family route: llm-deepseek always speaks chat completions, so
 // there is no Anthropic branch to mirror.
-func resolveDshFacadeTarget(ctx context.Context, config *appconfig.Config, store DshFacadeStore, sandbox *domain.Sandbox, providerID, model string) (ResolvedTarget, error) {
+func resolveDshFacadeTarget(ctx context.Context, in dshFacadeTargetInput) (ResolvedTarget, error) {
+	config, store, sandbox, providerID, model := in.Config, in.Store, in.Sandbox, in.ProviderID, in.Model
 	sandboxID := sandbox.Summary.ID
 	envItems, err := SandboxProviderEnvItems(ctx, store, sandbox, "")
 	if err != nil {
 		return ResolvedTarget{}, err
 	}
 	if HasSessionEnvProviderInput(envItems) {
-		providerID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, config, store, sandboxID, model, envItems)
+		providerID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, store, SessionEnvProviderQuery{Config: config, SessionID: sandboxID, RequestedModel: model, EnvItems: envItems})
 		if err != nil {
 			return ResolvedTarget{}, err
 		}
@@ -90,6 +113,12 @@ func resolveDshFacadeTarget(ctx context.Context, config *appconfig.Config, store
 	case ProviderFamilyOpenAI, ProviderIDDefaultOpenAI:
 		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, "", envItems)
 	default:
-		return resolveCustomOpenAIFacadeTarget(ctx, config, store, sandbox, providerID, model)
+		return resolveCustomOpenAIFacadeTarget(ctx, customOpenAIFacadeTargetRequest{
+			Config:     config,
+			Store:      store,
+			Sandbox:    sandbox,
+			ProviderID: providerID,
+			Model:      model,
+		})
 	}
 }
