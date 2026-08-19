@@ -20,7 +20,7 @@ func TestEnsureDockerImageEmptyPolicyPassedThrough(t *testing.T) {
 	session := testRuntimeMountSandbox(root)
 	session.Summary.PullPolicy = ""
 
-	_, err := prepareSandboxStartWithResolver(context.Background(), config, RuntimeDriverDocker, session, VMState{}, "", 10*time.Minute, resolver)
+	_, err := prepareSandboxStartWithResolver(context.Background(), config, sandboxStartResolveRequest{Driver: RuntimeDriverDocker, Session: session, PullTimeout: 10 * time.Minute}, resolver)
 	if err != nil {
 		t.Fatalf("empty pullPolicy returned error: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestEnsureDockerImageAlwaysPullPolicyPassedThrough(t *testing.T) {
 	session := testRuntimeMountSandbox(root)
 	session.Summary.PullPolicy = "always"
 
-	state, err := prepareSandboxStartWithResolver(context.Background(), config, RuntimeDriverDocker, session, VMState{}, "always", 10*time.Minute, resolver)
+	state, err := prepareSandboxStartWithResolver(context.Background(), config, sandboxStartResolveRequest{Driver: RuntimeDriverDocker, Session: session, PullPolicy: "always", PullTimeout: 10 * time.Minute}, resolver)
 	if err != nil {
 		t.Fatalf("always pullPolicy returned error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestEnsureDockerImageNeverPullPolicyPassedThrough(t *testing.T) {
 	session := testRuntimeMountSandbox(root)
 	session.Summary.PullPolicy = "never"
 
-	_, err := prepareSandboxStartWithResolver(context.Background(), config, RuntimeDriverDocker, session, VMState{}, "never", 10*time.Minute, resolver)
+	_, err := prepareSandboxStartWithResolver(context.Background(), config, sandboxStartResolveRequest{Driver: RuntimeDriverDocker, Session: session, PullPolicy: "never", PullTimeout: 10 * time.Minute}, resolver)
 	if err != nil {
 		t.Fatalf("never pullPolicy returned error: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestEnsureDockerImageAlwaysFallsBackToLocalOnPullFailure(t *testing.T) {
 	session := testRuntimeMountSandbox(root)
 	session.Summary.PullPolicy = "always"
 
-	_, err := prepareSandboxStartWithResolver(context.Background(), config, RuntimeDriverDocker, session, VMState{}, "always", 10*time.Minute, resolver)
+	_, err := prepareSandboxStartWithResolver(context.Background(), config, sandboxStartResolveRequest{Driver: RuntimeDriverDocker, Session: session, PullPolicy: "always", PullTimeout: 10 * time.Minute}, resolver)
 	if err == nil {
 		t.Fatalf("expected error when ensure returns error, got nil")
 	}
@@ -110,7 +110,7 @@ func TestPullPolicyTimeoutPassedThrough(t *testing.T) {
 	session := testRuntimeMountSandbox(root)
 
 	wantTimeout := 5 * time.Minute
-	_, err := prepareSandboxStartWithResolver(context.Background(), config, RuntimeDriverDocker, session, VMState{}, "", wantTimeout, resolver)
+	_, err := prepareSandboxStartWithResolver(context.Background(), config, sandboxStartResolveRequest{Driver: RuntimeDriverDocker, Session: session, PullTimeout: wantTimeout}, resolver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

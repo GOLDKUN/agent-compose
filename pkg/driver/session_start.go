@@ -12,16 +12,41 @@ import (
 
 const defaultImagePullTimeout = 10 * time.Minute
 
-func PrepareSandboxStart(ctx context.Context, config *appconfig.Config, driver string, session *Sandbox, vmState VMState) (VMState, error) {
+// SandboxStartTarget identifies the sandbox and runtime driver to prepare for start.
+type SandboxStartTarget struct {
+	Driver  string
+	Session *Sandbox
+	VMState VMState
+}
+
+func PrepareSandboxStart(ctx context.Context, config *appconfig.Config, target SandboxStartTarget) (VMState, error) {
 	pullTimeout := config.ImagePullTimeout
 	if pullTimeout <= 0 {
 		pullTimeout = defaultImagePullTimeout
 	}
-	pullPolicy := strings.ToLower(strings.TrimSpace(session.Summary.PullPolicy))
-	return prepareSandboxStartWithResolver(ctx, config, driver, session, vmState, pullPolicy, pullTimeout, dockerFirstRuntimeImageResolver{ensureDocker: ensureDockerImage})
+	pullPolicy := strings.ToLower(strings.TrimSpace(target.Session.Summary.PullPolicy))
+	return prepareSandboxStartWithResolver(ctx, config, sandboxStartResolveRequest{
+		Driver:      target.Driver,
+		Session:     target.Session,
+		VMState:     target.VMState,
+		PullPolicy:  pullPolicy,
+		PullTimeout: pullTimeout,
+	}, dockerFirstRuntimeImageResolver{ensureDocker: ensureDockerImage})
 }
 
-func prepareSandboxStartWithResolver(ctx context.Context, config *appconfig.Config, driver string, session *Sandbox, vmState VMState, pullPolicy string, pullTimeout time.Duration, resolver runtimeImageResolver) (VMState, error) {
+// sandboxStartResolveRequest is SandboxStartTarget plus the resolved pull policy and
+// timeout needed to prepare the sandbox's guest image.
+type sandboxStartResolveRequest struct {
+	Driver      string
+	Session     *Sandbox
+	VMState     VMState
+	PullPolicy  string
+	PullTimeout time.Duration
+}
+
+func prepareSandboxStartWithResolver(ctx context.Context, config *appconfig.Config, request sandboxStartResolveRequest, resolver runtimeImageResolver) (VMState, error) {
+	driver, session, vmState, pullPolicy, pullTimeout :=
+		request.Driver, request.Session, request.VMState, request.PullPolicy, request.PullTimeout
 	if _, err := prepareRuntimeMountManifest(config, session, driver); err != nil {
 		return vmState, err
 	}
@@ -34,7 +59,9 @@ func prepareSandboxStartWithResolver(ctx context.Context, config *appconfig.Conf
 		vmState.Registry = config.ImageRegistry
 		if vmState.Image != "" {
 			slog.Info("agent-compose resolving boxlite guest image", "sandbox_id", session.Summary.ID, "guest_image", vmState.Image)
-			resolvedImage, err := resolver.ResolvePrepareImage(ctx, config, driver, vmState.Image, pullPolicy, pullTimeout)
+			resolvedImage, err := resolver.ResolvePrepareImage(ctx, config, imageResolveRequest{
+				Driver: driver, ImageRef: vmState.Image, PullPolicy: pullPolicy, PullTimeout: pullTimeout,
+			})
 			if err != nil {
 				return vmState, err
 			}
@@ -44,7 +71,9 @@ func prepareSandboxStartWithResolver(ctx context.Context, config *appconfig.Conf
 		vmState.Registry = ""
 		if vmState.Image != "" {
 			slog.Info("agent-compose ensuring docker guest image", "sandbox_id", session.Summary.ID, "guest_image", vmState.Image)
-			resolvedImage, err := resolver.ResolvePrepareImage(ctx, config, driver, vmState.Image, pullPolicy, pullTimeout)
+			resolvedImage, err := resolver.ResolvePrepareImage(ctx, config, imageResolveRequest{
+				Driver: driver, ImageRef: vmState.Image, PullPolicy: pullPolicy, PullTimeout: pullTimeout,
+			})
 			if err != nil {
 				return vmState, err
 			}
@@ -58,30 +87,38 @@ func prepareSandboxStartWithResolver(ctx context.Context, config *appconfig.Conf
 	return vmState, nil
 }
 
+// imageResolveRequest describes the guest image to resolve for one sandbox start.
+type imageResolveRequest struct {
+	Driver      string
+	ImageRef    string
+	PullPolicy  string
+	PullTimeout time.Duration
+}
+
 type runtimeImageResolver interface {
-	ResolvePrepareImage(context.Context, *appconfig.Config, string, string, string, time.Duration) (string, error)
+	ResolvePrepareImage(context.Context, *appconfig.Config, imageResolveRequest) (string, error)
 }
 
 type dockerFirstRuntimeImageResolver struct {
 	ensureDocker func(context.Context, string, string, time.Duration) (string, error)
 }
 
-func (r dockerFirstRuntimeImageResolver) ResolvePrepareImage(ctx context.Context, config *appconfig.Config, driver, imageRef, pullPolicy string, pullTimeout time.Duration) (string, error) {
-	imageRef = strings.TrimSpace(imageRef)
+func (r dockerFirstRuntimeImageResolver) ResolvePrepareImage(ctx context.Context, config *appconfig.Config, request imageResolveRequest) (string, error) {
+	imageRef := strings.TrimSpace(request.ImageRef)
 	if imageRef == "" {
 		return "", nil
 	}
-	switch driver {
+	switch request.Driver {
 	case RuntimeDriverDocker:
 		ensure := r.ensureDocker
 		if ensure == nil {
 			ensure = ensureDockerImage
 		}
-		return ensure(ctx, imageRef, pullPolicy, pullTimeout)
+		return ensure(ctx, imageRef, request.PullPolicy, request.PullTimeout)
 	case RuntimeDriverBoxlite, RuntimeDriverMicrosandbox:
 		return imageRef, nil
 	default:
-		return "", fmt.Errorf("unsupported agent-compose runtime driver %q", driver)
+		return "", fmt.Errorf("unsupported agent-compose runtime driver %q", request.Driver)
 	}
 }
 

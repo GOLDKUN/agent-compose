@@ -96,13 +96,12 @@ func TestBoxLiteBootstrapExecSpecRunsFromRoot(t *testing.T) {
 }
 
 func TestBoxLiteBootstrapErrorIncludesContextAndOutput(t *testing.T) {
-	err := formatDirectoryOnlyGuestSandboxBootstrapError(
-		RuntimeDriverBoxlite,
-		"session-1",
-		"box-1",
-		ExecResult{ExitCode: 17, Stdout: "stdout detail\n", Stderr: "stderr detail\n"},
-		nil,
-	)
+	err := formatDirectoryOnlyGuestSandboxBootstrapError(directoryOnlyGuestBootstrapErrorContext{
+		Driver:    RuntimeDriverBoxlite,
+		SandboxID: "session-1",
+		RuntimeID: "box-1",
+		Result:    ExecResult{ExitCode: 17, Stdout: "stdout detail\n", Stderr: "stderr detail\n"},
+	})
 	message := err.Error()
 	for _, required := range []string{
 		"directory-only guest bootstrap failed",
@@ -142,13 +141,12 @@ func TestMicrosandboxBootstrapExecSpecRunsFromRoot(t *testing.T) {
 }
 
 func TestMicrosandboxBootstrapErrorIncludesContextAndOutput(t *testing.T) {
-	err := formatDirectoryOnlyGuestSandboxBootstrapError(
-		RuntimeDriverMicrosandbox,
-		"session-1",
-		"sandbox-1",
-		ExecResult{ExitCode: 23, Stdout: "stdout detail\n", Stderr: "stderr detail\n"},
-		nil,
-	)
+	err := formatDirectoryOnlyGuestSandboxBootstrapError(directoryOnlyGuestBootstrapErrorContext{
+		Driver:    RuntimeDriverMicrosandbox,
+		SandboxID: "session-1",
+		RuntimeID: "sandbox-1",
+		Result:    ExecResult{ExitCode: 23, Stdout: "stdout detail\n", Stderr: "stderr detail\n"},
+	})
 	message := err.Error()
 	for _, required := range []string{
 		"directory-only guest bootstrap failed",

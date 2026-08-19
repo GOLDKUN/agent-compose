@@ -92,14 +92,14 @@ func TestBoxliteNativeExecAttachUnsupported(t *testing.T) {
 
 func TestExecStreamInteractionProjectsLegacyFrames(t *testing.T) {
 	runtime := fakeInteractionRuntime{}
-	interaction := NewExecStreamInteraction(context.Background(), runtime, nil, VMState{}, RuntimeStartSpec{
+	interaction := NewExecStreamInteraction(context.Background(), runtime, ExecStreamInteractionRequest{Spec: RuntimeStartSpec{
 		OperationID: "op-1",
 		Kind:        RuntimeOperationCommand,
 		Command: &RuntimeCommandSpec{
 			Command: "echo",
 			Args:    []string{"ok"},
 		},
-	})
+	}})
 
 	frame, err := interaction.Recv()
 	if err != nil {
@@ -163,6 +163,7 @@ func (fakeInteractionRuntime) Exec(context.Context, *Sandbox, VMState, ExecSpec)
 	return ExecResult{}, nil
 }
 
+//nolint:revive // test helper/fake signature; explicit positional params keep call sites self-describing
 func (fakeInteractionRuntime) ExecStream(ctx context.Context, session *Sandbox, vmState VMState, spec ExecSpec, stream ExecStreamWriter) (ExecResult, error) {
 	stream(ExecChunk{Text: "hello\n", Stream: StdioStdout})
 	stream(ExecChunk{Text: "warn\n", Stream: StdioStderr})

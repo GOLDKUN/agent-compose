@@ -2,13 +2,7 @@ package driver
 
 import (
 	appconfig "agent-compose/pkg/config"
-
-	"github.com/samber/do/v2"
 )
-
-func NewSandboxRuntime(di do.Injector) (SandboxRuntime, error) {
-	return newSandboxRuntime(do.MustInvoke[*appconfig.Config](di))
-}
 
 func NewBoxliteRuntime(config *appconfig.Config) (SandboxRuntime, error) {
 	return newSandboxRuntime(config)

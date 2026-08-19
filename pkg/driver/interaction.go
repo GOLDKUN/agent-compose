@@ -288,14 +288,21 @@ func ExecSpecFromRuntimeStartSpec(spec RuntimeStartSpec) ExecSpec {
 	}
 }
 
-func NewExecStreamInteraction(ctx context.Context, runtime SandboxRuntime, session *Sandbox, vmState VMState, spec RuntimeStartSpec) RuntimeInteraction {
+// ExecStreamInteractionRequest describes the sandbox and command to stream-exec.
+type ExecStreamInteractionRequest struct {
+	Session *Sandbox
+	VMState VMState
+	Spec    RuntimeStartSpec
+}
+
+func NewExecStreamInteraction(ctx context.Context, runtime SandboxRuntime, request ExecStreamInteractionRequest) RuntimeInteraction {
 	childCtx, cancel := context.WithCancel(ctx)
 	interaction := &execStreamInteraction{
 		cancel: cancel,
 		done:   make(chan struct{}),
 		output: make(chan RuntimeOutputFrame, 16),
 	}
-	go interaction.run(childCtx, runtime, session, vmState, spec)
+	go interaction.run(childCtx, runtime, request.Session, request.VMState, request.Spec)
 	return interaction
 }
 
@@ -335,6 +342,7 @@ func (i *execStreamInteraction) Wait() (RuntimeResult, error) {
 	return i.result, i.err
 }
 
+//nolint:revive // 46 call sites across 10 packages (cmd/agent-compose, pkg/agentcompose, pkg/cleanup, pkg/dashboard, pkg/driver, pkg/runs...); bundling params needs a coordinated interface-wide change, deferred
 func (i *execStreamInteraction) run(ctx context.Context, runtime SandboxRuntime, session *Sandbox, vmState VMState, spec RuntimeStartSpec) {
 	defer close(i.done)
 	defer close(i.output)

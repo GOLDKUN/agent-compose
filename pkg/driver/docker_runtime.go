@@ -184,39 +184,43 @@ func (r *dockerRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmS
 	defer func() { _ = dockerClient.Close() }()
 
 	topology := r.dockerDaemonTopology(ctx, dockerClient)
-	containerInfo, created, err := r.getOrCreateContainer(ctx, dockerClient, sandbox, vmState, proxyState, topology.networkMode)
+	containerInfo, created, err := r.getOrCreateContainer(ctx, dockerClient, dockerContainerCreateRequest{
+		Sandbox: sandbox, VMState: vmState, ProxyState: proxyState, NetworkMode: topology.networkMode,
+	})
 	if err != nil {
 		return SandboxVMInfo{}, err
 	}
 	started := false
 	if containerInfo.State == nil || !containerInfo.State.Running {
 		if err := dockerClient.ContainerStart(ctx, containerInfo.ID, containerapi.StartOptions{}); err != nil {
-			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, fmt.Errorf("start docker container %s: %w", containerInfo.ID, err))
+			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, dockerEnsureAttemptState{ContainerID: containerInfo.ID, Created: created, Started: started}, fmt.Errorf("start docker container %s: %w", containerInfo.ID, err))
 		}
 		started = true
 	}
 	if topology.containerized {
 		if err := ensureDockerContainerNetwork(ctx, dockerClient, containerInfo, string(topology.networkMode)); err != nil {
-			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, err)
+			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, dockerEnsureAttemptState{ContainerID: containerInfo.ID, Created: created, Started: started}, err)
 		}
 	}
 	containerInfo, err = dockerClient.ContainerInspect(ctx, containerInfo.ID)
 	if err != nil {
-		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, fmt.Errorf("inspect started docker container %s: %w", containerInfo.ID, err))
+		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, dockerEnsureAttemptState{ContainerID: containerInfo.ID, Created: created, Started: started}, fmt.Errorf("inspect started docker container %s: %w", containerInfo.ID, err))
 	}
 	containerInfo, proxyState, err = r.waitForDockerJupyterProxyState(
 		ctx,
 		dockerClient.ContainerInspect,
-		sandbox,
-		vmState,
-		proxyState,
-		containerInfo,
-		topology.containerized,
-		dockerJupyterPortBindingWait,
-		dockerJupyterPortBindingPoll,
+		dockerProxyStateRequest{
+			Sandbox:             sandbox,
+			VMState:             vmState,
+			ProxyState:          proxyState,
+			ContainerInfo:       containerInfo,
+			ContainerizedDaemon: topology.containerized,
+			WaitTimeout:         dockerJupyterPortBindingWait,
+			PollInterval:        dockerJupyterPortBindingPoll,
+		},
 	)
 	if err != nil {
-		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, err)
+		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, dockerEnsureAttemptState{ContainerID: containerInfo.ID, Created: created, Started: started}, err)
 	}
 	if !jupyterEnabled(proxyState) {
 		return SandboxVMInfo{BoxID: containerInfo.ID, ProxyState: &proxyState}, nil
@@ -230,12 +234,12 @@ func (r *dockerRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmS
 			return SandboxVMInfo{BoxID: containerInfo.ID, JupyterURL: jupyterDirectURL(proxyState), ProxyState: &proxyState}, nil
 		}
 		if logText := readSandboxJupyterLog(sandbox); logText != "" {
-			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, fmt.Errorf("%w\nGuest log:\n%s", readyErr, logText))
+			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, dockerEnsureAttemptState{ContainerID: containerInfo.ID, Created: created, Started: started}, fmt.Errorf("%w\nGuest log:\n%s", readyErr, logText))
 		}
 		if logText, err := r.readContainerLogs(ctx, dockerClient, containerInfo.ID); err == nil && strings.TrimSpace(logText) != "" {
-			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, fmt.Errorf("%w\nContainer log:\n%s", readyErr, strings.TrimSpace(logText)))
+			return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, dockerEnsureAttemptState{ContainerID: containerInfo.ID, Created: created, Started: started}, fmt.Errorf("%w\nContainer log:\n%s", readyErr, strings.TrimSpace(logText)))
 		}
-		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, containerInfo.ID, created, started, readyErr)
+		return SandboxVMInfo{}, r.cleanupDockerContainerAfterEnsureFailure(ctx, dockerClient, dockerEnsureAttemptState{ContainerID: containerInfo.ID, Created: created, Started: started}, readyErr)
 	}
 
 	return SandboxVMInfo{BoxID: containerInfo.ID, JupyterURL: jupyterDirectURL(proxyState), ProxyState: &proxyState}, nil
@@ -273,20 +277,26 @@ func removeDockerContainerWithStaleMounts(ctx context.Context, remover dockerCon
 	return nil
 }
 
+// dockerEnsureAttemptState describes how far a failed container-ensure attempt progressed.
+type dockerEnsureAttemptState struct {
+	ContainerID string
+	Created     bool
+	Started     bool
+}
+
 func (r *dockerRuntime) cleanupDockerContainerAfterEnsureFailure(
 	ctx context.Context,
 	cleaner dockerContainerFailureCleaner,
-	containerID string,
-	created bool,
-	started bool,
+	attempt dockerEnsureAttemptState,
 	cause error,
 ) error {
-	if (!created && !started) || strings.TrimSpace(containerID) == "" || cause == nil {
+	if (!attempt.Created && !attempt.Started) || strings.TrimSpace(attempt.ContainerID) == "" || cause == nil {
 		return cause
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dockerStopFallbackActionTimeout)
 	defer cancel()
-	if created {
+	containerID := attempt.ContainerID
+	if attempt.Created {
 		if err := cleaner.ContainerRemove(cleanupCtx, containerID, containerapi.RemoveOptions{Force: true}); err != nil && !isDockerNotFound(err) {
 			return fmt.Errorf("%w; cleanup newly created docker container %s: %w", cause, containerID, err)
 		}
@@ -354,11 +364,12 @@ func (r *dockerRuntime) RemoveSandbox(ctx context.Context, sandbox *Sandbox, vmS
 }
 
 func (r *dockerRuntime) Exec(ctx context.Context, sandbox *Sandbox, vmState VMState, spec ExecSpec) (ExecResult, error) {
-	return r.execWithStream(ctx, sandbox, vmState, spec, nil)
+	return r.execWithStream(ctx, dockerExecRequest{Sandbox: sandbox, VMState: vmState, Spec: spec}, nil)
 }
 
+//nolint:revive // 36 call sites across 3 packages (pkg/agentcompose, pkg/driver, pkg/runs); bundling params needs a coordinated interface-wide change, deferred
 func (r *dockerRuntime) ExecStream(ctx context.Context, sandbox *Sandbox, vmState VMState, spec ExecSpec, stream ExecStreamWriter) (ExecResult, error) {
-	return r.execWithStream(ctx, sandbox, vmState, spec, stream)
+	return r.execWithStream(ctx, dockerExecRequest{Sandbox: sandbox, VMState: vmState, Spec: spec}, stream)
 }
 
 func (r *dockerRuntime) InteractionCapabilities() RuntimeInteractionCapabilities {
@@ -431,7 +442,7 @@ func (r *dockerRuntime) OpenInteraction(ctx context.Context, sandbox *Sandbox, v
 		ConsoleSize: dockerConsoleSize(spec.Rows, spec.Cols),
 	})
 	if err != nil {
-		terminationErr := r.terminateDockerExec(childCtx, dockerClient, containerInfo.ID, execResp.ID, execMarker)
+		terminationErr := r.terminateDockerExec(childCtx, dockerClient, dockerExecTarget{ContainerID: containerInfo.ID, ExecID: execResp.ID, Marker: execMarker})
 		cancel()
 		attachErr := fmt.Errorf("attach docker exec for sandbox %s: %w", sandbox.Summary.ID, err)
 		return nil, execTerminationResultError(RuntimeDriverDocker, execResp.ID, attachErr, terminationErr)
@@ -486,7 +497,15 @@ func (r *dockerRuntime) Stats(ctx context.Context, sandbox *Sandbox, vmState VMS
 	return dockerStatsFromResponse(sandbox, vmState, containerInfo, response), nil
 }
 
-func (r *dockerRuntime) execWithStream(ctx context.Context, sandbox *Sandbox, vmState VMState, spec ExecSpec, stream ExecStreamWriter) (ExecResult, error) {
+// dockerExecRequest bundles the target and command for one docker exec/execWithStream call.
+type dockerExecRequest struct {
+	Sandbox *Sandbox
+	VMState VMState
+	Spec    ExecSpec
+}
+
+func (r *dockerRuntime) execWithStream(ctx context.Context, request dockerExecRequest, stream ExecStreamWriter) (ExecResult, error) {
+	sandbox, vmState, spec := request.Sandbox, request.VMState, request.Spec
 	command := strings.TrimSpace(spec.Command)
 	if command == "" {
 		return ExecResult{}, fmt.Errorf("docker exec command is required")
@@ -519,7 +538,7 @@ func (r *dockerRuntime) execWithStream(ctx context.Context, sandbox *Sandbox, vm
 	}
 	attachResp, err := dockerClient.ContainerExecAttach(ctx, execResp.ID, containerapi.ExecAttachOptions{})
 	if err != nil {
-		terminationErr := r.terminateDockerExec(ctx, dockerClient, containerInfo.ID, execResp.ID, execMarker)
+		terminationErr := r.terminateDockerExec(ctx, dockerClient, dockerExecTarget{ContainerID: containerInfo.ID, ExecID: execResp.ID, Marker: execMarker})
 		attachErr := fmt.Errorf("attach docker exec for sandbox %s: %w", sandbox.Summary.ID, err)
 		if ctx.Err() != nil {
 			attachErr = ctx.Err()
@@ -543,19 +562,19 @@ func (r *dockerRuntime) execWithStream(ctx context.Context, sandbox *Sandbox, vm
 	collector.finish()
 	if ctx.Err() != nil {
 		attachResp.Close()
-		terminationErr := r.terminateDockerExec(ctx, dockerClient, containerInfo.ID, execResp.ID, execMarker)
+		terminationErr := r.terminateDockerExec(ctx, dockerClient, dockerExecTarget{ContainerID: containerInfo.ID, ExecID: execResp.ID, Marker: execMarker})
 		return ExecResult{}, execTerminationResultError(RuntimeDriverDocker, execResp.ID, ctx.Err(), terminationErr)
 	}
 	if copyErr != nil && !isDockerStreamClosed(copyErr) {
 		attachResp.Close()
-		terminationErr := r.terminateDockerExec(ctx, dockerClient, containerInfo.ID, execResp.ID, execMarker)
+		terminationErr := r.terminateDockerExec(ctx, dockerClient, dockerExecTarget{ContainerID: containerInfo.ID, ExecID: execResp.ID, Marker: execMarker})
 		return ExecResult{}, execTerminationResultError(RuntimeDriverDocker, execResp.ID, copyErr, terminationErr)
 	}
 
 	execInfo, err := r.waitForExecExit(ctx, dockerClient, execResp.ID)
 	if err != nil {
 		attachResp.Close()
-		terminationErr := r.terminateDockerExec(ctx, dockerClient, containerInfo.ID, execResp.ID, execMarker)
+		terminationErr := r.terminateDockerExec(ctx, dockerClient, dockerExecTarget{ContainerID: containerInfo.ID, ExecID: execResp.ID, Marker: execMarker})
 		return ExecResult{}, execTerminationResultError(RuntimeDriverDocker, execResp.ID, err, terminationErr)
 	}
 	result := ExecResult{
@@ -663,7 +682,7 @@ func (i *dockerCommandInteraction) run() {
 	}
 	if runErr != nil {
 		i.attachResp.Close()
-		terminationErr := i.docker.terminateDockerExec(i.ctx, i.dockerClient, i.containerID, i.execID, i.execMarker)
+		terminationErr := i.docker.terminateDockerExec(i.ctx, i.dockerClient, dockerExecTarget{ContainerID: i.containerID, ExecID: i.execID, Marker: i.execMarker})
 		runErr = execTerminationResultError(RuntimeDriverDocker, i.execID, runErr, terminationErr)
 	}
 
@@ -797,7 +816,16 @@ func (r *dockerRuntime) newClient() (*client.Client, error) {
 	return dockerClient, nil
 }
 
-func (r *dockerRuntime) getOrCreateContainer(ctx context.Context, dockerClient *client.Client, sandbox *Sandbox, vmState VMState, proxyState ProxyState, networkMode containerapi.NetworkMode) (containerapi.InspectResponse, bool, error) {
+// dockerContainerCreateRequest bundles the sandbox target and network context for getOrCreateContainer.
+type dockerContainerCreateRequest struct {
+	Sandbox     *Sandbox
+	VMState     VMState
+	ProxyState  ProxyState
+	NetworkMode containerapi.NetworkMode
+}
+
+func (r *dockerRuntime) getOrCreateContainer(ctx context.Context, dockerClient *client.Client, request dockerContainerCreateRequest) (containerapi.InspectResponse, bool, error) {
+	sandbox, vmState, proxyState, networkMode := request.Sandbox, request.VMState, request.ProxyState, request.NetworkMode
 	appconfig.ApplyDefaultGuestPaths(r.config)
 	mounts, err := r.dockerRuntimeMounts(ctx, dockerClient, sandbox)
 	if err != nil {
@@ -1218,7 +1246,21 @@ func (r *dockerRuntime) findContainer(ctx context.Context, dockerClient *client.
 	return containerInfo, true, nil
 }
 
-func (r *dockerRuntime) dockerSandboxProxyState(sandbox *Sandbox, vmState VMState, proxyState ProxyState, containerInfo containerapi.InspectResponse, containerizedDaemon bool) (ProxyState, error) {
+// dockerProxyStateRequest bundles the sandbox/container context needed to resolve or
+// wait for a docker sandbox's Jupyter proxy state.
+type dockerProxyStateRequest struct {
+	Sandbox             *Sandbox
+	VMState             VMState
+	ProxyState          ProxyState
+	ContainerInfo       containerapi.InspectResponse
+	ContainerizedDaemon bool
+	WaitTimeout         time.Duration
+	PollInterval        time.Duration
+}
+
+func (r *dockerRuntime) dockerSandboxProxyState(request dockerProxyStateRequest) (ProxyState, error) {
+	sandbox, vmState, proxyState, containerInfo, containerizedDaemon :=
+		request.Sandbox, request.VMState, request.ProxyState, request.ContainerInfo, request.ContainerizedDaemon
 	if !proxyState.Enabled {
 		proxyState.GuestHost = ""
 		proxyState.GuestPort = 0
@@ -1243,15 +1285,11 @@ func (r *dockerRuntime) dockerSandboxProxyState(sandbox *Sandbox, vmState VMStat
 func (r *dockerRuntime) waitForDockerJupyterProxyState(
 	ctx context.Context,
 	inspect dockerContainerInspector,
-	sandbox *Sandbox,
-	vmState VMState,
-	proxyState ProxyState,
-	containerInfo containerapi.InspectResponse,
-	containerizedDaemon bool,
-	waitTimeout time.Duration,
-	pollInterval time.Duration,
+	request dockerProxyStateRequest,
 ) (containerapi.InspectResponse, ProxyState, error) {
-	currentState, err := r.dockerSandboxProxyState(sandbox, vmState, proxyState, containerInfo, containerizedDaemon)
+	sandbox, vmState, proxyState, containerInfo, containerizedDaemon, waitTimeout, pollInterval :=
+		request.Sandbox, request.VMState, request.ProxyState, request.ContainerInfo, request.ContainerizedDaemon, request.WaitTimeout, request.PollInterval
+	currentState, err := r.dockerSandboxProxyState(request)
 	if err == nil || !proxyState.Enabled || waitTimeout <= 0 || pollInterval <= 0 {
 		return containerInfo, currentState, err
 	}
@@ -1279,7 +1317,10 @@ func (r *dockerRuntime) waitForDockerJupyterProxyState(
 			if inspectErr != nil {
 				return containerInfo, ProxyState{}, fmt.Errorf("inspect started docker container %s: %w", containerInfo.ID, inspectErr)
 			}
-			currentState, err = r.dockerSandboxProxyState(sandbox, vmState, proxyState, refreshed, containerizedDaemon)
+			currentState, err = r.dockerSandboxProxyState(dockerProxyStateRequest{
+				Sandbox: sandbox, VMState: vmState, ProxyState: proxyState,
+				ContainerInfo: refreshed, ContainerizedDaemon: containerizedDaemon,
+			})
 			if err == nil {
 				return refreshed, currentState, nil
 			}

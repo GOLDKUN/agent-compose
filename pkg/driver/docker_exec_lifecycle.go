@@ -71,14 +71,21 @@ func dockerExecEnvWithMarker(env []string, marker string) []string {
 	return marked
 }
 
-func (r *dockerRuntime) terminateDockerExec(ctx context.Context, dockerClient *client.Client, containerID, execID, marker string) error {
+// dockerExecTarget identifies one docker exec instance to terminate.
+type dockerExecTarget struct {
+	ContainerID string
+	ExecID      string
+	Marker      string
+}
+
+func (r *dockerRuntime) terminateDockerExec(ctx context.Context, dockerClient *client.Client, target dockerExecTarget) error {
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTerminationTimeout)
 	defer cancel()
 
-	control, err := dockerClient.ContainerExecCreate(cleanupCtx, containerID, containerapi.ExecOptions{
+	control, err := dockerClient.ContainerExecCreate(cleanupCtx, target.ContainerID, containerapi.ExecOptions{
 		AttachStdout: true,
 		AttachStderr: true,
-		Cmd:          []string{"sh", "-c", dockerTerminateMarkedExecScript, "agent-compose-exec-cleanup", marker},
+		Cmd:          []string{"sh", "-c", dockerTerminateMarkedExecScript, "agent-compose-exec-cleanup", target.Marker},
 		User:         "0",
 		WorkingDir:   "/",
 	})
@@ -99,12 +106,12 @@ func (r *dockerRuntime) terminateDockerExec(ctx context.Context, dockerClient *c
 	if controlInfo.ExitCode != 0 {
 		return fmt.Errorf("docker exec termination control %s exited with code %d", control.ID, controlInfo.ExitCode)
 	}
-	execInfo, err := r.waitForExecExit(cleanupCtx, dockerClient, execID)
+	execInfo, err := r.waitForExecExit(cleanupCtx, dockerClient, target.ExecID)
 	if err != nil {
 		return err
 	}
 	if execInfo.Running {
-		return fmt.Errorf("docker exec %s is still running after termination", execID)
+		return fmt.Errorf("docker exec %s is still running after termination", target.ExecID)
 	}
 	return nil
 }

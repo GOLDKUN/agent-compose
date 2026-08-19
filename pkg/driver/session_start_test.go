@@ -17,7 +17,9 @@ func TestDockerFirstRuntimeImageResolverSkipsDockerForNonDockerPrepare(t *testin
 		return "", errors.New("docker unavailable")
 	}}
 	for _, driver := range []string{RuntimeDriverBoxlite, RuntimeDriverMicrosandbox} {
-		resolved, err := resolver.ResolvePrepareImage(context.Background(), &appconfig.Config{}, driver, "guest:latest", "", 10*time.Minute)
+		resolved, err := resolver.ResolvePrepareImage(context.Background(), &appconfig.Config{}, imageResolveRequest{
+			Driver: driver, ImageRef: "guest:latest", PullTimeout: 10 * time.Minute,
+		})
 		if err != nil {
 			t.Fatalf("ResolvePrepareImage(%s) returned error: %v", driver, err)
 		}
@@ -38,7 +40,7 @@ func TestPrepareSandboxStartBoxLiteDoesNotFailWhenDockerUnavailable(t *testing.T
 		return "", errors.New("docker unavailable")
 	}}
 
-	state, err := prepareSandboxStartWithResolver(context.Background(), config, RuntimeDriverBoxlite, session, VMState{}, "", 10*time.Minute, resolver)
+	state, err := prepareSandboxStartWithResolver(context.Background(), config, sandboxStartResolveRequest{Driver: RuntimeDriverBoxlite, Session: session, PullTimeout: 10 * time.Minute}, resolver)
 	if err != nil {
 		t.Fatalf("PrepareSandboxStart boxlite returned error: %v", err)
 	}
@@ -62,7 +64,7 @@ func TestPrepareSandboxStartDockerStillRequiresDockerEnsure(t *testing.T) {
 		return "", wantErr
 	}}
 
-	_, err := prepareSandboxStartWithResolver(context.Background(), config, RuntimeDriverDocker, session, VMState{}, "", 10*time.Minute, resolver)
+	_, err := prepareSandboxStartWithResolver(context.Background(), config, sandboxStartResolveRequest{Driver: RuntimeDriverDocker, Session: session, PullTimeout: 10 * time.Minute}, resolver)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("PrepareSandboxStart docker error = %v, want %v", err, wantErr)
 	}
@@ -76,7 +78,7 @@ func TestPrepareSandboxStartDockerUsesResolvedImage(t *testing.T) {
 		return "guest@sha256:resolved", nil
 	}}
 
-	state, err := prepareSandboxStartWithResolver(context.Background(), config, RuntimeDriverDocker, session, VMState{}, "", 10*time.Minute, resolver)
+	state, err := prepareSandboxStartWithResolver(context.Background(), config, sandboxStartResolveRequest{Driver: RuntimeDriverDocker, Session: session, PullTimeout: 10 * time.Minute}, resolver)
 	if err != nil {
 		t.Fatalf("PrepareSandboxStart docker returned error: %v", err)
 	}

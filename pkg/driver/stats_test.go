@@ -24,6 +24,7 @@ func TestUnknownSandboxStatsMarksAllMetricsUnknown(t *testing.T) {
 	}
 }
 
+//nolint:revive // test helper/fake signature; explicit positional params keep call sites self-describing
 func assertMetricValue(t *testing.T, metric MetricValue, status, unit string, value float64) {
 	t.Helper()
 	if metric.Status != status || metric.Unit != unit || metric.Value == nil || *metric.Value != value {
