@@ -114,7 +114,11 @@ func TestControllerRemoveProjectMarksProjectRemovedAndIsIdempotent(t *testing.T)
 	if removed.Project.RemovedAt.IsZero() {
 		t.Fatalf("RemoveProject project was not marked removed: %#v", removed.Project)
 	}
-	assertProjectChange(t, removed.Changes, ChangeActionRemoved, "project", "project-1")
+	assertProjectChange(t, removed.Changes, changeExpectation{
+		Action:       ChangeActionRemoved,
+		ResourceType: "project",
+		ResourceID:   "project-1",
+	})
 	if result, err := store.ListProjects(ctx, domain.ProjectListOptions{}); err != nil || result.TotalCount != 0 {
 		t.Fatalf("ListProjects after remove result=%#v err=%v", result, err)
 	}
@@ -260,10 +264,26 @@ func TestDownProjectSandboxAndSchedulerWorkflows(t *testing.T) {
 	if len(sessionStore.listOptions) != 1 || sessionStore.listOptions[0].ProjectID != "" || sessionStore.listOptions[0].VMStatus != domain.VMStatusRunning {
 		t.Fatalf("sandbox list options = %#v, want all running sandboxes without project prefilter", sessionStore.listOptions)
 	}
-	assertDownChange(t, changes, DownChangeUpdated, "scheduler", "scheduler-1")
-	assertDownChange(t, changes, DownChangeUnchanged, "sandbox", "session-fail")
-	assertDownChange(t, changes, DownChangeUpdated, "sandbox", "session-ok")
-	assertDownChange(t, changes, DownChangeUpdated, "sandbox", "session-legacy")
+	assertDownChange(t, changes, changeExpectation{
+		Action:       DownChangeUpdated,
+		ResourceType: "scheduler",
+		ResourceID:   "scheduler-1",
+	})
+	assertDownChange(t, changes, changeExpectation{
+		Action:       DownChangeUnchanged,
+		ResourceType: "sandbox",
+		ResourceID:   "session-fail",
+	})
+	assertDownChange(t, changes, changeExpectation{
+		Action:       DownChangeUpdated,
+		ResourceType: "sandbox",
+		ResourceID:   "session-ok",
+	})
+	assertDownChange(t, changes, changeExpectation{
+		Action:       DownChangeUpdated,
+		ResourceType: "sandbox",
+		ResourceID:   "session-legacy",
+	})
 	if !DownChangesHaveFailures(changes) || DownChangesHaveFailures(nil) {
 		t.Fatalf("DownChangesHaveFailures(%#v) returned unexpected result", changes)
 	}
@@ -465,14 +485,20 @@ func (m *controllerCoverageVolumeManager) RemoveProjectVolumes(_ context.Context
 	return m.removeErr
 }
 
-func assertProjectChange(t *testing.T, changes []Change, action, resourceType, resourceID string) {
+type changeExpectation struct {
+	Action       string
+	ResourceType string
+	ResourceID   string
+}
+
+func assertProjectChange(t *testing.T, changes []Change, want changeExpectation) {
 	t.Helper()
 	for _, change := range changes {
-		if change.Action == action && change.ResourceType == resourceType && change.ResourceID == resourceID {
+		if change.Action == want.Action && change.ResourceType == want.ResourceType && change.ResourceID == want.ResourceID {
 			return
 		}
 	}
-	t.Fatalf("changes %#v did not contain %s %s %s", changes, action, resourceType, resourceID)
+	t.Fatalf("changes %#v did not contain %s %s %s", changes, want.Action, want.ResourceType, want.ResourceID)
 }
 
 type downCoverageStore struct {
@@ -508,12 +534,12 @@ func (s *downCoverageSessions) ListSandboxes(_ context.Context, options domain.S
 	return domain.SandboxListResult{Sandboxes: s.sessions}, s.err
 }
 
-func assertDownChange(t *testing.T, changes []DownChange, action, resourceType, resourceID string) {
+func assertDownChange(t *testing.T, changes []DownChange, want changeExpectation) {
 	t.Helper()
 	for _, change := range changes {
-		if change.Action == action && change.ResourceType == resourceType && change.ResourceID == resourceID {
+		if change.Action == want.Action && change.ResourceType == want.ResourceType && change.ResourceID == want.ResourceID {
 			return
 		}
 	}
-	t.Fatalf("changes %#v did not contain %s %s %s", changes, action, resourceType, resourceID)
+	t.Fatalf("changes %#v did not contain %s %s %s", changes, want.Action, want.ResourceType, want.ResourceID)
 }

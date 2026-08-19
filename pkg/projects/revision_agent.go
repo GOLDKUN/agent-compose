@@ -21,7 +21,7 @@ func AgentDefinitionFromRevision(project domain.ProjectRecord, revision domain.P
 		if agent.Name != agentName {
 			continue
 		}
-		definition, err := NewAgentDefinitionFromSpec(project, revision.Revision, agent, spec.MCPServers, spec.OctoBusServers)
+		definition, err := NewAgentDefinitionFromSpec(project, revision.Revision, agent, AgentDefinitionProjectRefs{MCPServers: spec.MCPServers, OctoBusServers: spec.OctoBusServers})
 		if err != nil {
 			return domain.AgentDefinition{}, fmt.Errorf("derive project revision agent %s: %w", agentName, err)
 		}

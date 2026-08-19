@@ -18,7 +18,7 @@ func TestNewAgentDefinitionFromSpecPreservesJupyterConfig(t *testing.T) {
 		Jupyter:  &compose.JupyterSpec{Enabled: true, GuestPort: 8888},
 	}
 
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, nil)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: nil, OctoBusServers: nil})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestNewAgentDefinitionFromSpecPreservesStoppedRuntimePolicy(t *testing.T) {
 		Name: "reviewer", Enabled: true, Provider: "codex",
 		Sandbox: &compose.NormalizedSandboxSpec{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove},
 	}
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, nil)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: nil, OctoBusServers: nil})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestNewAgentDefinitionFromSpecKeepsEmptyConfigWithoutJupyter(t *testing.T) 
 	project := domain.ProjectRecord{ID: "project-1", Name: "project"}
 	agent := compose.NormalizedAgentSpec{Name: "reviewer", Enabled: true, Provider: "codex"}
 
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, nil)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: nil, OctoBusServers: nil})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestNewAgentDefinitionFromSpecKeepsStableNameWithPresentationMetadata(t *te
 		Provider:    "codex",
 	}
 
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, nil)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: nil, OctoBusServers: nil})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestProjectRecordsCarryVolumeMountSpecs(t *testing.T) {
 		},
 		Scheduler: &compose.NormalizedSchedulerSpec{Enabled: true, DisplayName: "缓存巡检", Description: "检查缓存状态", Script: "scheduler.agent('hi')"},
 	}
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, nil)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: nil, OctoBusServers: nil})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestDisabledAgentDisablesManagedAgentAndSchedulerRecords(t *testing.T) {
 		Enabled:   false,
 		Scheduler: &compose.NormalizedSchedulerSpec{Enabled: true, Script: "scheduler.agent('hi')"},
 	}
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, nil)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: nil, OctoBusServers: nil})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestNewAgentDefinitionFromSpecPreservesMCPConfig(t *testing.T) {
 	}
 	projectMCPServers := map[string]compose.NormalizedMCPServerSpec{}
 
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, projectMCPServers, nil)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: projectMCPServers, OctoBusServers: nil})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestNewAgentDefinitionFromSpecSelectsReferencedOctoBusServers(t *testing.T)
 		"unused":   {URL: "https://unused.example", Token: "unused-token"},
 	}
 
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, servers)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: nil, OctoBusServers: servers})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestNewAgentDefinitionFromSpecCarriesSkills(t *testing.T) {
 		},
 	}
 
-	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, nil, nil)
+	definition, err := NewAgentDefinitionFromSpec(project, 1, agent, AgentDefinitionProjectRefs{MCPServers: nil, OctoBusServers: nil})
 	if err != nil {
 		t.Fatalf("NewAgentDefinitionFromSpec returned error: %v", err)
 	}

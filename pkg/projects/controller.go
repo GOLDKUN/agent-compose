@@ -297,7 +297,7 @@ func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecyc
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	agentRecords, agentDefinitions, schedulerRecords, schedulerDefinitions, err := c.projectArtifacts(ctx, project, 0, normalized)
+	agentRecords, agentDefinitions, schedulerRecords, _, err := c.projectArtifacts(ctx, project, 0, normalized)
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("%w: apply project %s: %w", ErrInvalidRequest, normalized.Spec.Name, err)
 	}
@@ -307,13 +307,16 @@ func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecyc
 			Revision:     domain.ProjectRevisionRecord{ProjectID: project.ID, SpecHash: normalized.SpecHash},
 			Agents:       agentRecords,
 			Schedulers:   schedulerRecords,
-			Changes:      dryRunChanges(project, agentRecords, agentDefinitions, schedulerRecords, schedulerDefinitions),
+			Changes:      dryRunChanges(project, agentRecords, agentDefinitions, schedulerRecords),
 			Applied:      false,
 			Issues:       append(req.Issues, warnings...),
 			RevisionSpec: normalized.Spec,
 		}, nil
 	}
-	if err := images.EnsureProjectAgentImages(ctx, c.config, c.images, normalized.Spec.Name, agentRecords); err != nil {
+	if err := images.EnsureProjectAgentImages(ctx, c.config, c.images, images.ProjectAgentImagesRequest{
+		ProjectName: normalized.Spec.Name,
+		Agents:      agentRecords,
+	}); err != nil {
 		return ApplyResult{}, fmt.Errorf("%w: apply project %s: %w", ErrUnavailable, normalized.Spec.Name, err)
 	}
 	if err := c.ensureProjectVolumes(ctx, project, normalized.Spec); err != nil {
@@ -345,11 +348,17 @@ func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecyc
 		return ApplyResult{}, fmt.Errorf("apply project %s: reload project: %w", normalized.Spec.Name, err)
 	}
 
-	agentRecords, agentDefinitions, schedulerRecords, schedulerDefinitions, err = c.projectArtifacts(ctx, project, revision.Revision, normalized)
+	agentRecords, agentDefinitions, schedulerRecords, schedulerDefinitions, err := c.projectArtifacts(ctx, project, revision.Revision, normalized)
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("%w: apply project %s: %w", ErrInvalidRequest, normalized.Spec.Name, err)
 	}
-	changes := applyChanges(project, existingProject, projectFound, revision, revisionCreated)
+	changes := applyChanges(applyChangesInput{
+		Project:         project,
+		Existing:        existingProject,
+		Found:           projectFound,
+		Revision:        revision,
+		RevisionCreated: revisionCreated,
+	})
 	agentsUnchanged := true
 	agentActions := make(map[string]string, len(agentRecords))
 	for _, agent := range agentRecords {
@@ -386,7 +395,11 @@ func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecyc
 			Name:         definition.Name,
 		})
 	}
-	schedulerChanges, schedulersUnchanged, err := ReconcileSchedulers(ctx, c.store, project, schedulerRecords, schedulerDefinitions, ReconcileSchedulerOptions{
+	schedulerChanges, schedulersUnchanged, err := ReconcileSchedulers(ctx, c.store, ReconcileSchedulersRequest{
+		Project:     project,
+		Schedulers:  schedulerRecords,
+		Definitions: schedulerDefinitions,
+	}, ReconcileSchedulerOptions{
 		CleanupFailedScheduler: c.cleanupFailedSchedulerReconcile,
 		RefreshSchedulers:      c.refreshSchedulers,
 	})
@@ -609,7 +622,12 @@ func (c *Controller) resolveProjectRef(ctx context.Context, ref ProjectRef, incl
 	} else if ref.kind != projectRefName {
 		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project selector is required", nil)
 	}
-	return resolveProjectByExactMatch(ctx, c.store, query, true, selectorName, projectValue)
+	return resolveProjectByExactMatch(ctx, c.store, exactMatchRequest{
+		Value:          query,
+		IncludeRemoved: true,
+		SelectorName:   selectorName,
+		FieldValue:     projectValue,
+	})
 }
 
 func (c *Controller) projectArtifacts(ctx context.Context, project domain.ProjectRecord, revision int64, normalized NormalizedProject) ([]domain.ProjectAgentRecord, []domain.AgentDefinition, []domain.ProjectSchedulerRecord, []domain.Scheduler, error) {
@@ -779,25 +797,35 @@ func (c *Controller) getProjectAgentIfExists(ctx context.Context, projectID, age
 	return domain.ProjectAgentRecord{}, false, err
 }
 
-func applyChanges(project, existing domain.ProjectRecord, found bool, revision domain.ProjectRevisionRecord, revisionCreated bool) []Change {
+// applyChangesInput describes the before/after state of a project apply used
+// to compute the resulting Change log.
+type applyChangesInput struct {
+	Project         domain.ProjectRecord
+	Existing        domain.ProjectRecord
+	Found           bool
+	Revision        domain.ProjectRevisionRecord
+	RevisionCreated bool
+}
+
+func applyChanges(in applyChangesInput) []Change {
 	projectAction := ChangeActionCreated
-	if found {
+	if in.Found {
 		projectAction = ChangeActionUnchanged
-		if !ProjectRecordUnchanged(existing, project) {
+		if !ProjectRecordUnchanged(in.Existing, in.Project) {
 			projectAction = ChangeActionUpdated
 		}
 	}
 	revisionAction := ChangeActionUnchanged
-	if revisionCreated {
+	if in.RevisionCreated {
 		revisionAction = ChangeActionCreated
 	}
 	return []Change{
-		{Action: projectAction, ResourceType: "project", ResourceID: project.ID, Name: project.Name},
-		{Action: revisionAction, ResourceType: "project_revision", ResourceID: fmt.Sprintf("%s/%d", revision.ProjectID, revision.Revision), Name: revision.SpecHash},
+		{Action: projectAction, ResourceType: "project", ResourceID: in.Project.ID, Name: in.Project.Name},
+		{Action: revisionAction, ResourceType: "project_revision", ResourceID: fmt.Sprintf("%s/%d", in.Revision.ProjectID, in.Revision.Revision), Name: in.Revision.SpecHash},
 	}
 }
 
-func dryRunChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, _ []domain.Scheduler) []Change {
+func dryRunChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord) []Change {
 	changes := []Change{{Action: ChangeActionCreated, ResourceType: "project", ResourceID: project.ID, Name: project.Name}}
 	for _, agent := range agents {
 		changes = append(changes, Change{Action: ChangeActionCreated, ResourceType: "project_agent", ResourceID: agent.ID, Name: agent.AgentName})
