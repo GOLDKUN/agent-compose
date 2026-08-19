@@ -126,6 +126,15 @@ type ProjectRunCompletionRecord struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+// ProjectRunCompletionFailure describes one failed completion attempt to record
+// against a project run, including when the next retry should occur.
+type ProjectRunCompletionFailure struct {
+	RunID         string
+	Message       string
+	Attempt       int
+	NextAttemptAt time.Time
+}
+
 type ProjectRunEventKind string
 
 const (

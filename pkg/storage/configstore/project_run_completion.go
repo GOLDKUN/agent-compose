@@ -82,7 +82,8 @@ func (s *projectStore) ListDueProjectRunCompletions(ctx context.Context, now tim
 	return items, rows.Err()
 }
 
-func (s *projectStore) RecordProjectRunCompletionFailure(ctx context.Context, runID, message string, attempt int, next time.Time) error {
+func (s *projectStore) RecordProjectRunCompletionFailure(ctx context.Context, failure domain.ProjectRunCompletionFailure) error {
+	runID, message, attempt, next := failure.RunID, failure.Message, failure.Attempt, failure.NextAttemptAt
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin record project run completion failure: %w", err)
