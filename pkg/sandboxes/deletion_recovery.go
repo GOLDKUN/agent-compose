@@ -169,7 +169,7 @@ func (r *DeletionRecovery) appendArchivedSandboxes(ctx context.Context, pending 
 				continue
 			}
 			if _, err := validateCommittedSandboxArchive(
-				ctx, r.archiveRoot, r.coordinator.SandboxRoot, sandbox.Summary.ID, sandbox.Archive.ID,
+				ctx, r.archiveRoot, r.coordinator.SandboxRoot, sandboxArchiveIdentity{SandboxID: sandbox.Summary.ID, ArchiveID: sandbox.Archive.ID},
 			); err != nil {
 				warnings = append(warnings, fmt.Sprintf("verify committed archive for sandbox %s: %v", sandbox.Summary.ID, err))
 				continue

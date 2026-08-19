@@ -32,7 +32,7 @@ func TestRecoverCommittedSandboxArchiveRequiresDirectorySync(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, committed, err := recoverCommittedSandboxArchive(
-		context.Background(), directory, failedHandle, sandboxID, archiveID,
+		context.Background(), directory, failedHandle, sandboxArchiveIdentity{SandboxID: sandboxID, ArchiveID: archiveID},
 	); err == nil || !committed {
 		t.Fatalf("closed directory handle recovery = committed %v, error %v", committed, err)
 	}
@@ -43,7 +43,7 @@ func TestRecoverCommittedSandboxArchiveRequiresDirectorySync(t *testing.T) {
 	}
 	defer func() { _ = retryHandle.Close() }()
 	manifest, committed, err := recoverCommittedSandboxArchive(
-		context.Background(), directory, retryHandle, sandboxID, archiveID,
+		context.Background(), directory, retryHandle, sandboxArchiveIdentity{SandboxID: sandboxID, ArchiveID: archiveID},
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -17,7 +17,12 @@ import (
 
 func TestRemovalCoordinatorPersistsAndResumesStages(t *testing.T) {
 	root := t.TempDir()
-	sandbox := removalTestSandbox(t, root, "sandbox-stage", domain.VMStatusRunning, time.Now().Add(-time.Hour))
+	sandbox := removalTestSandbox(t, removalTestSandboxSpec{
+		Root:    root,
+		ID:      "sandbox-stage",
+		Status:  domain.VMStatusRunning,
+		Updated: time.Now().Add(-time.Hour),
+	})
 	store := &removalTestStore{sandboxes: map[string]*domain.Sandbox{sandbox.Summary.ID: sandbox}}
 	runtime := &removalTestRuntime{removeErrors: []error{errors.New("injected remove failure")}}
 	coordinator := &sandboxes.RemovalCoordinator{SandboxRoot: root, Store: store, Runtime: runtime}
@@ -53,8 +58,18 @@ func TestRemovalCoordinatorPersistsAndResumesStages(t *testing.T) {
 
 func TestRemovalCoordinatorRecoveryOnlyProcessesDeletingRecords(t *testing.T) {
 	root := t.TempDir()
-	deleting := removalTestSandbox(t, root, "sandbox-deleting", domain.VMStatusStopped, time.Now())
-	ordinary := removalTestSandbox(t, root, "sandbox-ordinary", domain.VMStatusStopped, time.Now())
+	deleting := removalTestSandbox(t, removalTestSandboxSpec{
+		Root:    root,
+		ID:      "sandbox-deleting",
+		Status:  domain.VMStatusStopped,
+		Updated: time.Now(),
+	})
+	ordinary := removalTestSandbox(t, removalTestSandboxSpec{
+		Root:    root,
+		ID:      "sandbox-ordinary",
+		Status:  domain.VMStatusStopped,
+		Updated: time.Now(),
+	})
 	store := &removalTestStore{sandboxes: map[string]*domain.Sandbox{deleting.Summary.ID: deleting, ordinary.Summary.ID: ordinary}}
 	deletingRecord, _ := sandboxes.ReadOwnershipRecord(root, deleting.Summary.ID)
 	deletingRecord.LifecycleState = "deleting"
@@ -134,7 +149,12 @@ func TestRemovalCoordinatorRejectsInvalidOwnershipRecord(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
-			sandbox := removalTestSandbox(t, root, "sandbox-invalid", domain.VMStatusStopped, time.Now())
+			sandbox := removalTestSandbox(t, removalTestSandboxSpec{
+				Root:    root,
+				ID:      "sandbox-invalid",
+				Status:  domain.VMStatusStopped,
+				Updated: time.Now(),
+			})
 			tt.record(t, root, sandbox.Summary.ID)
 			store := &removalTestStore{sandboxes: map[string]*domain.Sandbox{sandbox.Summary.ID: sandbox}}
 			runtime := &removalTestRuntime{}
@@ -157,8 +177,18 @@ func TestRemovalCoordinatorRejectsInvalidOwnershipRecord(t *testing.T) {
 func TestRemovalCoordinatorPruneSeparatesRecordsAndResidues(t *testing.T) {
 	root := t.TempDir()
 	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
-	owned := removalTestSandbox(t, root, "sandbox-owned", domain.VMStatusStopped, now.Add(-48*time.Hour))
-	foreign := removalTestSandbox(t, root, "sandbox-foreign", domain.VMStatusStopped, now.Add(-48*time.Hour))
+	owned := removalTestSandbox(t, removalTestSandboxSpec{
+		Root:    root,
+		ID:      "sandbox-owned",
+		Status:  domain.VMStatusStopped,
+		Updated: now.Add(-48 * time.Hour),
+	})
+	foreign := removalTestSandbox(t, removalTestSandboxSpec{
+		Root:    root,
+		ID:      "sandbox-foreign",
+		Status:  domain.VMStatusStopped,
+		Updated: now.Add(-48 * time.Hour),
+	})
 	store := &removalTestStore{sandboxes: map[string]*domain.Sandbox{owned.Summary.ID: owned, foreign.Summary.ID: foreign}}
 	residues := &removalTestResidues{items: []sandboxes.RuntimeResidue{
 		{Driver: "docker", RuntimeID: "known-runtime", SandboxID: owned.Summary.ID, UpdatedAt: now.Add(-48 * time.Hour), OwnershipValid: true, Removable: true},
@@ -239,14 +269,21 @@ func TestRemovalCoordinatorSerializesConcurrentResume(t *testing.T) {
 	}
 }
 
-func removalTestSandbox(t *testing.T, root, id, status string, updated time.Time) *domain.Sandbox {
+type removalTestSandboxSpec struct {
+	Root    string
+	ID      string
+	Status  string
+	Updated time.Time
+}
+
+func removalTestSandbox(t *testing.T, spec removalTestSandboxSpec) *domain.Sandbox {
 	t.Helper()
-	dir := filepath.Join(root, id)
+	dir := filepath.Join(spec.Root, spec.ID)
 	if err := os.MkdirAll(filepath.Join(dir, "workspace"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: id, Driver: "docker", VMStatus: status, RuntimeRef: "runtime-" + id, WorkspacePath: filepath.Join(dir, "workspace"), CreatedAt: updated, UpdatedAt: updated}}
-	if err := sandboxes.WriteOwnershipRecord(root, sandboxes.OwnershipRecord{Version: sandboxes.OwnershipRecordVersion, SandboxID: id, Driver: "docker", RuntimeID: sandbox.Summary.RuntimeRef, SandboxPath: dir, LifecycleState: "active"}); err != nil {
+	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: spec.ID, Driver: "docker", VMStatus: spec.Status, RuntimeRef: "runtime-" + spec.ID, WorkspacePath: filepath.Join(dir, "workspace"), CreatedAt: spec.Updated, UpdatedAt: spec.Updated}}
+	if err := sandboxes.WriteOwnershipRecord(spec.Root, sandboxes.OwnershipRecord{Version: sandboxes.OwnershipRecordVersion, SandboxID: spec.ID, Driver: "docker", RuntimeID: sandbox.Summary.RuntimeRef, SandboxPath: dir, LifecycleState: "active"}); err != nil {
 		t.Fatal(err)
 	}
 	return sandbox

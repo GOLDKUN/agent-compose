@@ -430,7 +430,7 @@ func (l Lifecycle) stopLoadedWhileLocked(ctx context.Context, session *domain.Sa
 	if l.Config != nil {
 		sandboxRoot = l.Config.SandboxRoot
 	}
-	result, stopErr := StopSandboxRuntime(ctx, sandboxRoot, l.Store, l.Driver, session)
+	result, stopErr := StopSandboxRuntime(ctx, StopSandboxRuntimeDeps{SandboxRoot: sandboxRoot, Store: l.Store, Driver: l.Driver}, session)
 	if result.Stopped || result.Released {
 		l.publishSandboxUpdated(&session.Summary)
 	}

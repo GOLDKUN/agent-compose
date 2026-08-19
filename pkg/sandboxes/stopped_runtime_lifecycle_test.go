@@ -59,7 +59,7 @@ func TestStopSandboxRuntimeRetainsByDefault(t *testing.T) {
 	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox", VMStatus: domain.VMStatusRunning}}
 	store := &stoppedRuntimeTestStore{sandbox: sandbox}
 	driver := &stoppedRuntimeTestDriver{}
-	result, err := StopSandboxRuntime(context.Background(), "", store, driver, sandbox)
+	result, err := StopSandboxRuntime(context.Background(), StopSandboxRuntimeDeps{SandboxRoot: "", Store: store, Driver: driver}, sandbox)
 	if err != nil || !result.Stopped || result.Released || driver.stopCalls != 1 || driver.releaseCalls != 0 {
 		t.Fatalf("result=%#v stop/release=%d/%d err=%v", result, driver.stopCalls, driver.releaseCalls, err)
 	}
@@ -77,7 +77,7 @@ func TestStopSandboxRuntimePersistsIntentAndReleasesOwnership(t *testing.T) {
 	store := &stoppedRuntimeTestStore{sandbox: sandbox}
 	driver := &stoppedRuntimeTestDriver{store: store, requireIntent: true}
 
-	result, err := StopSandboxRuntime(context.Background(), root, store, driver, sandbox)
+	result, err := StopSandboxRuntime(context.Background(), StopSandboxRuntimeDeps{SandboxRoot: root, Store: store, Driver: driver}, sandbox)
 	if err != nil || !result.Stopped || !result.Released || driver.stopCalls != 1 || driver.releaseCalls != 1 {
 		t.Fatalf("result=%#v stop/release=%d/%d err=%v", result, driver.stopCalls, driver.releaseCalls, err)
 	}
@@ -111,7 +111,7 @@ func TestStopSandboxRuntimeReleaseFailureIsRetryable(t *testing.T) {
 	releaseErr := errors.New("remove failed")
 	driver := &stoppedRuntimeTestDriver{store: store, requireIntent: true, releaseErr: releaseErr}
 
-	result, err := StopSandboxRuntime(context.Background(), root, store, driver, sandbox)
+	result, err := StopSandboxRuntime(context.Background(), StopSandboxRuntimeDeps{SandboxRoot: root, Store: store, Driver: driver}, sandbox)
 	if !errors.Is(err, releaseErr) || sandbox.Summary.VMStatus != domain.VMStatusStopped ||
 		EffectiveStoppedRuntimeState(sandbox) != domain.StoppedRuntimeStateReleasePending || sandbox.StoppedRuntime.LastError == "" {
 		t.Fatalf("sandbox=%#v release=%#v err=%v", sandbox.Summary, sandbox.StoppedRuntime, err)
@@ -123,7 +123,7 @@ func TestStopSandboxRuntimeReleaseFailureIsRetryable(t *testing.T) {
 		t.Fatalf("stopped event message = %q", message)
 	}
 	driver.releaseErr = nil
-	result, err = StopSandboxRuntime(context.Background(), root, store, driver, sandbox)
+	result, err = StopSandboxRuntime(context.Background(), StopSandboxRuntimeDeps{SandboxRoot: root, Store: store, Driver: driver}, sandbox)
 	if err != nil || !result.Released || driver.stopCalls != 1 || driver.releaseCalls != 2 {
 		t.Fatalf("retry result=%#v stop/release=%d/%d err=%v", result, driver.stopCalls, driver.releaseCalls, err)
 	}
@@ -141,7 +141,7 @@ func TestStopSandboxRuntimeStopsAfterUnconfirmedStartAttempt(t *testing.T) {
 	}
 	driver := &stoppedRuntimeTestDriver{}
 
-	result, err := StopSandboxRuntime(context.Background(), "", store, driver, sandbox)
+	result, err := StopSandboxRuntime(context.Background(), StopSandboxRuntimeDeps{SandboxRoot: "", Store: store, Driver: driver}, sandbox)
 	if err != nil || !result.Stopped || driver.stopCalls != 1 || sandbox.Summary.VMStatus != domain.VMStatusStopped {
 		t.Fatalf("result=%#v stopCalls=%d sandbox=%#v err=%v", result, driver.stopCalls, sandbox.Summary, err)
 	}
@@ -153,7 +153,7 @@ func TestStopSandboxRuntimeReturnsVMStateErrorBeforeDriverAction(t *testing.T) {
 	store := &stoppedRuntimeTestStore{sandbox: sandbox, vmErr: stateErr}
 	driver := &stoppedRuntimeTestDriver{}
 
-	_, err := StopSandboxRuntime(context.Background(), "", store, driver, sandbox)
+	_, err := StopSandboxRuntime(context.Background(), StopSandboxRuntimeDeps{SandboxRoot: "", Store: store, Driver: driver}, sandbox)
 	if !errors.Is(err, stateErr) || driver.stopCalls != 0 || driver.releaseCalls != 0 {
 		t.Fatalf("stop/release=%d/%d err=%v", driver.stopCalls, driver.releaseCalls, err)
 	}

@@ -243,12 +243,13 @@ func (c *RemovalCoordinator) Prune(ctx context.Context, req PruneRequest) (Prune
 		}
 	}
 	now := c.now()
+	matcher := sandboxPruneMatcher{req: req, statuses: statuses, now: now}
 	result := PruneResult{DryRun: !req.Force}
 	known := make(map[string]struct{}, len(listed.Sandboxes))
 	for _, sandbox := range listed.Sandboxes {
 		known[sandbox.Summary.ID] = struct{}{}
 		target := targets[sandbox.Summary.ID]
-		if !matchesSandboxPrune(sandbox, target, req, statuses, now) {
+		if !matcher.matches(sandbox, target) {
 			continue
 		}
 		result.Matched = append(result.Matched, PruneCandidate{
@@ -347,23 +348,32 @@ func normalizePruneStatuses(values []string) (map[string]struct{}, error) {
 	return result, nil
 }
 
-func matchesSandboxPrune(sandbox *domain.Sandbox, target SandboxOwnershipTarget, req PruneRequest, statuses map[string]struct{}, now time.Time) bool {
+// sandboxPruneMatcher holds the parts of a Prune call that stay fixed across
+// the sandbox list being scanned (as opposed to the sandbox/target pair,
+// which vary per candidate).
+type sandboxPruneMatcher struct {
+	req      PruneRequest
+	statuses map[string]struct{}
+	now      time.Time
+}
+
+func (m sandboxPruneMatcher) matches(sandbox *domain.Sandbox, target SandboxOwnershipTarget) bool {
 	if sandbox == nil {
 		return false
 	}
-	if _, ok := statuses[strings.ToUpper(strings.TrimSpace(sandbox.Summary.VMStatus))]; !ok {
+	if _, ok := m.statuses[strings.ToUpper(strings.TrimSpace(sandbox.Summary.VMStatus))]; !ok {
 		return false
 	}
-	if req.ProjectID != "" && target.ProjectID != req.ProjectID {
+	if m.req.ProjectID != "" && target.ProjectID != m.req.ProjectID {
 		return false
 	}
-	if req.AgentName != "" && !strings.EqualFold(target.AgentName, req.AgentName) {
+	if m.req.AgentName != "" && !strings.EqualFold(target.AgentName, m.req.AgentName) {
 		return false
 	}
-	if req.Driver != "" && !strings.EqualFold(sandbox.Summary.Driver, req.Driver) {
+	if m.req.Driver != "" && !strings.EqualFold(sandbox.Summary.Driver, m.req.Driver) {
 		return false
 	}
-	return req.OlderThan <= 0 || (!sandbox.Summary.UpdatedAt.IsZero() && now.Sub(sandbox.Summary.UpdatedAt) >= req.OlderThan)
+	return m.req.OlderThan <= 0 || (!sandbox.Summary.UpdatedAt.IsZero() && m.now.Sub(sandbox.Summary.UpdatedAt) >= m.req.OlderThan)
 }
 
 func matchesResiduePrune(residue RuntimeResidue, req PruneRequest, now time.Time) bool {
