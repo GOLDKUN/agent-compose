@@ -259,14 +259,22 @@ func (c *Controller) SetSchedulerTriggerEnabled(ctx context.Context, schedulerID
 	return c.deps.Store.GetScheduler(ctx, schedulerID)
 }
 
-func (c *Controller) RunNow(ctx context.Context, schedulerID, triggerID, payloadJSON string, timeout time.Duration) (domain.SchedulerRunSummary, error) {
-	scheduler, trigger, err := c.LoadSchedulerForRun(ctx, schedulerID, triggerID)
+// RunNowRequest describes a manually triggered scheduler run.
+type RunNowRequest struct {
+	SchedulerID string
+	TriggerID   string
+	PayloadJSON string
+	Timeout     time.Duration
+}
+
+func (c *Controller) RunNow(ctx context.Context, req RunNowRequest) (domain.SchedulerRunSummary, error) {
+	scheduler, trigger, err := c.LoadSchedulerForRun(ctx, req.SchedulerID, req.TriggerID)
 	if err != nil {
 		return domain.SchedulerRunSummary{}, err
 	}
-	runCtx, cancel := context.WithTimeout(c.deps.RootCtx, c.runTimeout(timeout))
+	runCtx, cancel := context.WithTimeout(c.deps.RootCtx, c.runTimeout(req.Timeout))
 	defer cancel()
-	return c.Run(runCtx, scheduler, trigger, payloadJSON, "manual", RunOptions{})
+	return c.Run(runCtx, scheduler, trigger, req.PayloadJSON, "manual", RunOptions{})
 }
 
 func (c *Controller) Run(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {

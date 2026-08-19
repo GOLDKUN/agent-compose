@@ -40,7 +40,13 @@ func TestCommandAndEventHelperWorkflows(t *testing.T) {
 		t.Fatalf("expected sandbox override detection")
 	}
 
-	published, err := NewPublishedTopicEvent("runtime.demo", `{"correlation_id":"corr","parentEventId":"parent","provider":"test","ok":true}`, TriggerEventMetadata{EventID: "trigger-event"}, "scheduler-1", "run-1")
+	published, err := NewPublishedTopicEvent(PublishTopicEventRequest{
+		Topic:       "runtime.demo",
+		PayloadJSON: `{"correlation_id":"corr","parentEventId":"parent","provider":"test","ok":true}`,
+		Trigger:     TriggerEventMetadata{EventID: "trigger-event"},
+		SchedulerID: "scheduler-1",
+		RunID:       "run-1",
+	})
 	if err != nil {
 		t.Fatalf("NewPublishedTopicEvent returned error: %v", err)
 	}
@@ -58,10 +64,10 @@ func TestCommandAndEventHelperWorkflows(t *testing.T) {
 	if err != nil || record.Sequence != 7 {
 		t.Fatalf("nil envelope update record=%#v err=%v", record, err)
 	}
-	if _, err := NewPublishedTopicEvent("bad.topic", `{}`, TriggerEventMetadata{}, "", ""); err == nil {
+	if _, err := NewPublishedTopicEvent(PublishTopicEventRequest{Topic: "bad.topic", PayloadJSON: `{}`}); err == nil {
 		t.Fatalf("expected invalid topic error")
 	}
-	if _, err := NewPublishedTopicEvent("runtime.demo", `[]`, TriggerEventMetadata{}, "", ""); err == nil {
+	if _, err := NewPublishedTopicEvent(PublishTopicEventRequest{Topic: "runtime.demo", PayloadJSON: `[]`}); err == nil {
 		t.Fatalf("expected non-object payload error")
 	}
 	if !IsJSONObject(`{"ok":true}`) || IsJSONObject(`[]`) {

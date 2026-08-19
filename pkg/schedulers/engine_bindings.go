@@ -18,6 +18,23 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 		return nil, err
 	}
 
+	installTimerBindings(jsctx, state, global, schedulerObj)
+	installEventBindings(jsctx, state, schedulerObj)
+	installLogBindings(jsctx, state, schedulerObj)
+	installAgentBinding(jsctx, state, schedulerObj)
+	installCommandBindings(jsctx, state, schedulerObj)
+	installStateBindings(jsctx, state, schedulerObj)
+	installSandboxBindings(jsctx, state, schedulerObj)
+
+	runtimeObj := jsctx.NewObject()
+	runtimeObj.SetPropertyStr("name", jsctx.NewString("scheduler"))
+	schedulerObj.SetPropertyStr("runtime", runtimeObj)
+	return schedulerObj, nil
+}
+
+// installTimerBindings registers setInterval/setTimeout (and their clear*
+// counterparts) on both the JS global scope and the scheduler object.
+func installTimerBindings(jsctx *qjs.Context, state *schedulerExecutionState, global, schedulerObj *qjs.Value) {
 	registerTimer := func(kind string, call *qjs.This) (*qjs.Value, error) {
 		var (
 			id       string
@@ -89,7 +106,11 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 	})
 	global.SetPropertyStr("clearTimeout", clearTimeoutFn)
 	schedulerObj.SetPropertyStr("clearTimeout", clearTimeoutFn.Clone())
+}
 
+// installEventBindings registers scheduler.on/addEventListener and
+// scheduler.cron/schedule.
+func installEventBindings(jsctx *qjs.Context, state *schedulerExecutionState, schedulerObj *qjs.Value) {
 	onFn := jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
 		topic, id, callback, autoID, err := parseEventRegistration(call.Args())
 		if err != nil {
@@ -138,7 +159,10 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 	})
 	schedulerObj.SetPropertyStr("cron", cronFn)
 	schedulerObj.SetPropertyStr("schedule", cronFn.Clone())
+}
 
+// installLogBindings registers scheduler.log and scheduler.event.publish.
+func installLogBindings(jsctx *qjs.Context, state *schedulerExecutionState, schedulerObj *qjs.Value) {
 	logFn := jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
 		if state.host == nil {
 			return jsctx.NewUndefined(), nil
@@ -203,7 +227,10 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 	})
 	eventObj.SetPropertyStr("publish", eventPublishFn)
 	schedulerObj.SetPropertyStr("event", eventObj)
+}
 
+// installAgentBinding registers scheduler.agent.
+func installAgentBinding(jsctx *qjs.Context, state *schedulerExecutionState, schedulerObj *qjs.Value) {
 	agentFn := jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
 		if state.host == nil {
 			return nil, fmt.Errorf("scheduler.agent is unavailable during validation")
@@ -252,7 +279,11 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 		return value, nil
 	})
 	schedulerObj.SetPropertyStr("agent", agentFn)
+}
 
+// installCommandBindings registers scheduler.exec, scheduler.shell, and
+// scheduler.llm.
+func installCommandBindings(jsctx *qjs.Context, state *schedulerExecutionState, schedulerObj *qjs.Value) {
 	execFn := jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
 		if state.host == nil {
 			return nil, fmt.Errorf("scheduler.exec is unavailable during validation")
@@ -333,7 +364,10 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 		return value, nil
 	})
 	schedulerObj.SetPropertyStr("llm", llmFn)
+}
 
+// installStateBindings registers scheduler.state.get/set/delete.
+func installStateBindings(jsctx *qjs.Context, state *schedulerExecutionState, schedulerObj *qjs.Value) {
 	stateObj := jsctx.NewObject()
 	stateGetFn := jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
 		if state.host == nil {
@@ -408,7 +442,10 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 	stateObj.SetPropertyStr("set", stateSetFn)
 	stateObj.SetPropertyStr("delete", stateDeleteFn)
 	schedulerObj.SetPropertyStr("state", stateObj)
+}
 
+// installSandboxBindings registers scheduler.sandbox.* RPC bindings.
+func installSandboxBindings(jsctx *qjs.Context, state *schedulerExecutionState, schedulerObj *qjs.Value) {
 	sandboxObj := jsctx.NewObject()
 	for _, binding := range []struct {
 		jsName     string
@@ -446,9 +483,4 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 		sandboxObj.SetPropertyStr(upperFirstASCII(jsNameCopy), sandboxFn.Clone())
 	}
 	schedulerObj.SetPropertyStr("sandbox", sandboxObj)
-
-	runtimeObj := jsctx.NewObject()
-	runtimeObj.SetPropertyStr("name", jsctx.NewString("scheduler"))
-	schedulerObj.SetPropertyStr("runtime", runtimeObj)
-	return schedulerObj, nil
 }

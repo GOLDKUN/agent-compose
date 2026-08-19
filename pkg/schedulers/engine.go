@@ -117,6 +117,7 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 		seenIDs:       make(map[string]struct{}),
 		warningSet:    make(map[string]struct{}),
 	}
+	defer state.freeCallbacks()
 
 	if _, err = e.installRuntime(jsctx, state); err != nil {
 		return SchedulerExecutionResult{}, err
@@ -124,13 +125,11 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 
 	evalResult, err := jsctx.Eval("scheduler.js", qjs.Code(request.Script), qjs.FlagAsync())
 	if err != nil {
-		state.freeCallbacks()
 		return SchedulerExecutionResult{}, fmt.Errorf("evaluate scheduler script: %w", err)
 	}
 	if evalResult != nil {
 		if evalResult.IsPromise() {
 			if _, err := evalResult.Await(); err != nil {
-				state.freeCallbacks()
 				return SchedulerExecutionResult{}, fmt.Errorf("await scheduler script: %w", err)
 			}
 		}
@@ -150,48 +149,52 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 		Warnings: warnings,
 	}
 	if validateOnly {
-		state.freeCallbacks()
 		return result, nil
 	}
 	if host == nil {
-		state.freeCallbacks()
 		return SchedulerExecutionResult{}, fmt.Errorf("scheduler host is required for execution")
 	}
 
+	resultJSON, err := e.runRequestedHandler(ctx, jsctx, state, request)
+	if err != nil {
+		return SchedulerExecutionResult{}, err
+	}
+	result.ResultJSON = resultJSON
+	result.Warnings = append([]string(nil), state.warnings...)
+	return result, nil
+}
+
+// runRequestedHandler invokes the trigger handler requested by request,
+// awaiting it if it returns a promise, and returns its JSON result if any.
+func (e *QJSSchedulerEngine) runRequestedHandler(ctx context.Context, jsctx *qjs.Context, state *schedulerExecutionState, request SchedulerExecutionRequest) (string, error) {
 	payloadValue, err := payloadValueFromJSON(jsctx, request.PayloadJSON)
 	if err != nil {
-		state.freeCallbacks()
-		return SchedulerExecutionResult{}, err
+		return "", err
 	}
 
 	executed, err := e.executeRequestedHandler(jsctx, state, request.Trigger, payloadValue)
 	if err != nil {
-		state.freeCallbacks()
-		return SchedulerExecutionResult{}, err
+		return "", err
 	}
+	resultJSON := ""
 	if executed != nil {
 		if executed.IsPromise() {
 			awaited, err := executed.Await()
 			if err != nil {
-				state.freeCallbacks()
-				return SchedulerExecutionResult{}, fmt.Errorf("await scheduler handler: %w", err)
+				return "", fmt.Errorf("await scheduler handler: %w", err)
 			}
 			executed = awaited
 		}
 		if jsonResult, ok, err := schedulerResultJSON(state.jsonEncoder, executed); err != nil {
-			state.freeCallbacks()
-			return SchedulerExecutionResult{}, err
+			return "", err
 		} else if ok {
-			result.ResultJSON = jsonResult
+			resultJSON = jsonResult
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		state.freeCallbacks()
-		return SchedulerExecutionResult{}, err
+		return "", err
 	}
-	result.Warnings = append([]string(nil), state.warnings...)
-	state.freeCallbacks()
-	return result, nil
+	return resultJSON, nil
 }
 
 func schedulerEngineMaxExecutionTime(ctx context.Context) int {

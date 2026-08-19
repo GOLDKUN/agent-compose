@@ -22,8 +22,21 @@ type PublishedTopicEvent struct {
 	Envelope map[string]any
 }
 
-func NewPublishedTopicEvent(topic, payloadJSON string, trigger TriggerEventMetadata, schedulerID, runID string) (PublishedTopicEvent, error) {
-	topic = strings.TrimSpace(topic)
+// PublishTopicEventRequest describes a scheduler.event.publish call.
+type PublishTopicEventRequest struct {
+	Topic       string
+	PayloadJSON string
+	Trigger     TriggerEventMetadata
+	SchedulerID string
+	RunID       string
+}
+
+func NewPublishedTopicEvent(req PublishTopicEventRequest) (PublishedTopicEvent, error) {
+	topic := strings.TrimSpace(req.Topic)
+	payloadJSON := req.PayloadJSON
+	trigger := req.Trigger
+	schedulerID := req.SchedulerID
+	runID := req.RunID
 	if err := ValidatePublishTopic(topic); err != nil {
 		return PublishedTopicEvent{}, err
 	}

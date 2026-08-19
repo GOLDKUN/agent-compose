@@ -24,14 +24,21 @@ func (f *fakeSandboxDirResolver) SandboxDir(id string) string {
 	return f.dirs[id]
 }
 
-func writeCellArtifact(t *testing.T, sandboxDir, cellID, name, content string) {
+type cellArtifactWrite struct {
+	SandboxDir string
+	CellID     string
+	Name       string
+	Content    string
+}
+
+func writeCellArtifact(t *testing.T, write cellArtifactWrite) {
 	t.Helper()
-	cellDir := filepath.Join(sandboxDir, "state", "cells", cellID)
+	cellDir := filepath.Join(write.SandboxDir, "state", "cells", write.CellID)
 	if err := os.MkdirAll(cellDir, 0o755); err != nil {
 		t.Fatalf("mkdir cell dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(cellDir, name), []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", name, err)
+	if err := os.WriteFile(filepath.Join(cellDir, write.Name), []byte(write.Content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", write.Name, err)
 	}
 }
 
@@ -47,7 +54,12 @@ func TestResolveEventMessageNonCommandTypeReturnsMessageWithoutIO(t *testing.T) 
 
 func TestResolveEventMessageNewRowReadsArtifact(t *testing.T) {
 	dir := t.TempDir()
-	writeCellArtifact(t, dir, "cell-1", "output.txt", "full command output")
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "output.txt",
+		Content:    "full command output",
+	})
 	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": dir}}
 
 	event := domain.SchedulerEvent{
@@ -64,9 +76,24 @@ func TestResolveEventMessageNewRowReadsArtifact(t *testing.T) {
 
 func TestResolveEventMessageOutputTxtTakesPriorityOverStdoutStderr(t *testing.T) {
 	dir := t.TempDir()
-	writeCellArtifact(t, dir, "cell-1", "output.txt", "output.txt wins")
-	writeCellArtifact(t, dir, "cell-1", "stdout.txt", "stdout.txt loses")
-	writeCellArtifact(t, dir, "cell-1", "stderr.txt", "stderr.txt loses")
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "output.txt",
+		Content:    "output.txt wins",
+	})
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "stdout.txt",
+		Content:    "stdout.txt loses",
+	})
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "stderr.txt",
+		Content:    "stderr.txt loses",
+	})
 	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": dir}}
 
 	event := domain.SchedulerEvent{Type: "scheduler.command.completed", LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1"}
@@ -78,9 +105,23 @@ func TestResolveEventMessageOutputTxtTakesPriorityOverStdoutStderr(t *testing.T)
 
 func TestResolveEventMessageFallsBackToStdoutWhenOutputTxtEmpty(t *testing.T) {
 	dir := t.TempDir()
-	writeCellArtifact(t, dir, "cell-1", "output.txt", "")
-	writeCellArtifact(t, dir, "cell-1", "stdout.txt", "stdout content")
-	writeCellArtifact(t, dir, "cell-1", "stderr.txt", "stderr content")
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "output.txt",
+	})
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "stdout.txt",
+		Content:    "stdout content",
+	})
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "stderr.txt",
+		Content:    "stderr content",
+	})
 	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": dir}}
 
 	event := domain.SchedulerEvent{Type: "scheduler.command.completed", LinkedSandboxID: "sandbox-1", LinkedCellID: "cell-1"}
@@ -92,7 +133,12 @@ func TestResolveEventMessageFallsBackToStdoutWhenOutputTxtEmpty(t *testing.T) {
 
 func TestResolveEventMessageLegacyLoaderTypeReadsArtifact(t *testing.T) {
 	dir := t.TempDir()
-	writeCellArtifact(t, dir, "cell-1", "output.txt", "legacy artifact output")
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "output.txt",
+		Content:    "legacy artifact output",
+	})
 	resolver := &fakeSandboxDirResolver{t: t, dirs: map[string]string{"sandbox-1": dir}}
 
 	event := domain.SchedulerEvent{
@@ -135,7 +181,12 @@ func TestResolveEventMessageHistoricalRowSkipsArtifactReadWhenMessagePresent(t *
 	// though a *different* artifact exists on disk (as it never legitimately
 	// would in production), it must never be consulted, let alone win.
 	dir := t.TempDir()
-	writeCellArtifact(t, dir, "cell-1", "output.txt", "an artifact must never be consulted here")
+	writeCellArtifact(t, cellArtifactWrite{
+		SandboxDir: dir,
+		CellID:     "cell-1",
+		Name:       "output.txt",
+		Content:    "an artifact must never be consulted here",
+	})
 	resolver := &fakeSandboxDirResolver{t: t, forbid: true, dirs: map[string]string{"sandbox-1": dir}}
 
 	event := domain.SchedulerEvent{

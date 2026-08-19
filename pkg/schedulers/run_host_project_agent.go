@@ -69,7 +69,15 @@ func (h *RuntimeHost) ProjectAgent(ctx context.Context, prompt string, request d
 		eventName = "scheduler.agent.failed"
 		result.Text = firstHostNonEmpty(result.Text, run.Error, execErrString(execErr))
 	}
-	_ = h.addLinkedSchedulerEvent(ctx, eventName, level, firstHostNonEmpty(result.Text, fmt.Sprintf("%s completed", result.Agent)), result, result.SandboxID, result.CellID, result.AgentThreadID)
+	_ = h.addLinkedSchedulerEvent(ctx, SchedulerEventInput{
+		EventType:           eventName,
+		Level:               level,
+		Message:             firstHostNonEmpty(result.Text, fmt.Sprintf("%s completed", result.Agent)),
+		Payload:             result,
+		LinkedSandboxID:     result.SandboxID,
+		LinkedCellID:        result.CellID,
+		LinkedAgentThreadID: result.AgentThreadID,
+	})
 	h.publishAgentCompleted(result, &run)
 	if execErr != nil {
 		return result, execErr
