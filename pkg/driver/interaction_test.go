@@ -163,7 +163,6 @@ func (fakeInteractionRuntime) Exec(context.Context, *Sandbox, VMState, ExecSpec)
 	return ExecResult{}, nil
 }
 
-//nolint:revive // test helper/fake signature; explicit positional params keep call sites self-describing
 func (fakeInteractionRuntime) ExecStream(ctx context.Context, session *Sandbox, vmState VMState, spec ExecSpec, stream ExecStreamWriter) (ExecResult, error) {
 	stream(ExecChunk{Text: "hello\n", Stream: StdioStdout})
 	stream(ExecChunk{Text: "warn\n", Stream: StdioStderr})

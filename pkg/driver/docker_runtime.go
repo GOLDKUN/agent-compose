@@ -367,7 +367,6 @@ func (r *dockerRuntime) Exec(ctx context.Context, sandbox *Sandbox, vmState VMSt
 	return r.execWithStream(ctx, dockerExecRequest{Sandbox: sandbox, VMState: vmState, Spec: spec}, nil)
 }
 
-//nolint:revive // 36 call sites across 3 packages (pkg/agentcompose, pkg/driver, pkg/runs); bundling params needs a coordinated interface-wide change, deferred
 func (r *dockerRuntime) ExecStream(ctx context.Context, sandbox *Sandbox, vmState VMState, spec ExecSpec, stream ExecStreamWriter) (ExecResult, error) {
 	return r.execWithStream(ctx, dockerExecRequest{Sandbox: sandbox, VMState: vmState, Spec: spec}, stream)
 }

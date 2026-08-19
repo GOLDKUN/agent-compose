@@ -9,8 +9,6 @@ import (
 
 // SignalGuestRuntime sends a signal to one ready guest runtime through a Docker
 // control exec that is independent of the execution being stopped.
-//
-//nolint:revive // 5 call sites across 2 packages (pkg/agentcompose, pkg/driver); bundling params needs a coordinated interface-wide change, deferred
 func (r *dockerRuntime) SignalGuestRuntime(ctx context.Context, sandbox *Sandbox, vmState VMState, executionID string, signal RuntimeSignal) error {
 	command, err := guestRuntimeSignalCommand(executionID, signal)
 	if err != nil {
