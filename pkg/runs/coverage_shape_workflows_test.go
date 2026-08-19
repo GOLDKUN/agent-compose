@@ -155,7 +155,7 @@ func TestRunsPreparationWorkspaceAndStatusWorkflows(t *testing.T) {
 	}
 	controller := &Controller{config: &appconfig.Config{DataRoot: root}}
 	run := domain.ProjectRunRecord{RunID: "run-1", ProjectID: "project-1", ProjectRevision: 1, ProjectName: "Project", AgentName: "worker", AgentID: "agent-1"}
-	prepared, err := PrepareProjectRun(ctx, store, projectRunWorkspaceResolver{controller: controller}, run, []*agentcomposev2.EnvVarSpec{{Name: "REQUEST_VAR", Value: "request"}})
+	prepared, err := PrepareProjectRun(ctx, PreparationDeps{Store: store, Resolver: projectRunWorkspaceResolver{controller: controller}}, run, []*agentcomposev2.EnvVarSpec{{Name: "REQUEST_VAR", Value: "request"}})
 	if err != nil {
 		t.Fatalf("PrepareProjectRun returned error: %v", err)
 	}
@@ -202,20 +202,20 @@ func TestRunsPreparationWorkspaceAndStatusWorkflows(t *testing.T) {
 	if _, err := projectRunGitWorkspaceConfig(run, &compose.WorkspaceSpec{Provider: "git"}); err == nil {
 		t.Fatalf("expected git workspace url error")
 	}
-	if workspace, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, nil, nil); err != nil || workspace != nil {
+	if workspace, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, WorkspaceRequest{}); err != nil || workspace != nil {
 		t.Fatalf("nil workspace = %#v/%v", workspace, err)
 	}
-	if _, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, nil, &compose.WorkspaceSpec{}); err == nil || !strings.Contains(err.Error(), "provider is required") {
+	if _, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, WorkspaceRequest{Agent: &compose.WorkspaceSpec{}}); err == nil || !strings.Contains(err.Error(), "provider is required") {
 		t.Fatalf("missing provider err=%v", err)
 	}
-	if _, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, nil, &compose.WorkspaceSpec{Provider: "s3"}); err == nil || !strings.Contains(err.Error(), "unsupported") {
+	if _, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, WorkspaceRequest{Agent: &compose.WorkspaceSpec{Provider: "s3"}}); err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("unsupported provider err=%v", err)
 	}
-	localWorkspace, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, nil, &compose.WorkspaceSpec{Provider: "file", Path: "."})
+	localWorkspace, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, WorkspaceRequest{Agent: &compose.WorkspaceSpec{Provider: "file", Path: "."}})
 	if err != nil || localWorkspace == nil || localWorkspace.Type != "file" {
 		t.Fatalf("agent local workspace = %#v/%v", localWorkspace, err)
 	}
-	targetedWorkspace, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, nil, &compose.WorkspaceSpec{Provider: "file", Path: ".", Target: "nested"})
+	targetedWorkspace, err := controller.prepareProjectRunWorkspace(ctx, run, store.project, WorkspaceRequest{Agent: &compose.WorkspaceSpec{Provider: "file", Path: ".", Target: "nested"}})
 	if err != nil || targetedWorkspace == nil {
 		t.Fatalf("targeted local workspace = %#v/%v", targetedWorkspace, err)
 	}
@@ -1216,7 +1216,7 @@ func TestPromptAttachProjectorSeparatesHumanMessageFromStderrTail(t *testing.T) 
 
 func TestPromptAttachProjectorPersistsEachFrameIdempotently(t *testing.T) {
 	store := &projectorEventStore{keys: map[string]struct{}{}}
-	projector := newPersistentPromptAttachProjector(context.Background(), domain.ProjectRunRecord{RunID: "run-events", AgentName: "worker"}, &domain.Sandbox{}, filepath.Join(t.TempDir(), "transcript.txt"), nil, store)
+	projector := newPersistentPromptAttachProjector(context.Background(), persistentPromptAttachProjectorDeps{Run: domain.ProjectRunRecord{RunID: "run-events", AgentName: "worker"}, Sandbox: &domain.Sandbox{}, LogsPath: filepath.Join(t.TempDir(), "transcript.txt"), EventStore: store})
 	if err := projector.AppendHumanMessageFrame("question", "client-frame-1"); err != nil {
 		t.Fatalf("append human frame: %v", err)
 	}
@@ -1251,7 +1251,7 @@ func TestPromptAttachProjectorPersistsEachFrameIdempotently(t *testing.T) {
 
 func TestPromptAttachProjectorProjectsTerminalAgentEventAfterOnlyHumanMessage(t *testing.T) {
 	store := &projectorEventStore{keys: map[string]struct{}{}}
-	projector := newPersistentPromptAttachProjector(context.Background(), domain.ProjectRunRecord{RunID: "run-result-only", AgentName: "worker"}, &domain.Sandbox{}, filepath.Join(t.TempDir(), "transcript.txt"), nil, store)
+	projector := newPersistentPromptAttachProjector(context.Background(), persistentPromptAttachProjectorDeps{Run: domain.ProjectRunRecord{RunID: "run-result-only", AgentName: "worker"}, Sandbox: &domain.Sandbox{}, LogsPath: filepath.Join(t.TempDir(), "transcript.txt"), EventStore: store})
 	if err := projector.AppendHumanMessageFrame("question", "client-frame-1"); err != nil {
 		t.Fatalf("append human frame: %v", err)
 	}
@@ -1269,7 +1269,7 @@ func TestPromptAttachProjectorProjectsTerminalAgentEventAfterOnlyHumanMessage(t 
 
 func TestIntegrationPromptAttachProjectorPersistsAssistantTurnBeforeSkippingTerminalEvent(t *testing.T) {
 	store := &projectorEventStore{keys: map[string]struct{}{}}
-	projector := newPersistentPromptAttachProjector(context.Background(), domain.ProjectRunRecord{RunID: "run-integration-events", AgentName: "worker"}, &domain.Sandbox{}, filepath.Join(t.TempDir(), "transcript.txt"), nil, store)
+	projector := newPersistentPromptAttachProjector(context.Background(), persistentPromptAttachProjectorDeps{Run: domain.ProjectRunRecord{RunID: "run-integration-events", AgentName: "worker"}, Sandbox: &domain.Sandbox{}, LogsPath: filepath.Join(t.TempDir(), "transcript.txt"), EventStore: store})
 	if err := projector.AppendHumanMessageFrame("question", "client-frame-1"); err != nil {
 		t.Fatalf("append human frame: %v", err)
 	}
@@ -2356,15 +2356,15 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 	root := t.TempDir()
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1", WorkspacePath: filepath.Join(root, "sandboxes", "sandbox-1", "workspace")}}
 	run := domain.ProjectRunRecord{RunID: "run-1"}
-	success := transitionFromCommandResult(run, session, "echo ok", domain.ExecResult{Output: "ok\n", ExitCode: 0, Success: true}, nil)
+	success := transitionFromCommandResult(run, session, commandOutcome{Command: "echo ok", Result: domain.ExecResult{Output: "ok\n", ExitCode: 0, Success: true}})
 	if success.ExitCode != 0 || success.Error != "" || success.Output != "ok\n" || success.ArtifactsDir == "" || !strings.Contains(success.ResultJSON, `"success":true`) {
 		t.Fatalf("success transition = %#v", success)
 	}
-	failed := transitionFromCommandResult(run, session, "exit 7", domain.ExecResult{Stderr: "stderr detail\n", Output: "output detail\n", Stdout: "stdout detail\n", ExitCode: 7, Success: false}, nil)
+	failed := transitionFromCommandResult(run, session, commandOutcome{Command: "exit 7", Result: domain.ExecResult{Stderr: "stderr detail\n", Output: "output detail\n", Stdout: "stdout detail\n", ExitCode: 7, Success: false}})
 	if failed.ExitCode != 7 || !strings.Contains(failed.Error, "stderr detail") {
 		t.Fatalf("failed transition = %#v", failed)
 	}
-	execFailed := transitionFromCommandResult(run, session, "boom", domain.ExecResult{ExitCode: 0, Success: false}, errors.New("exec boom"))
+	execFailed := transitionFromCommandResult(run, session, commandOutcome{Command: "boom", Result: domain.ExecResult{ExitCode: 0, Success: false}, Err: errors.New("exec boom")})
 	if execFailed.ExitCode != 1 || !strings.Contains(execFailed.Error, "exec boom") {
 		t.Fatalf("exec failed transition = %#v", execFailed)
 	}
@@ -2418,7 +2418,7 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 	streams := sandboxes.NewStreamBrokerForTest()
 	ch, unsubscribe := streams.Subscribe(session.Summary.ID)
 	defer unsubscribe()
-	writeCapabilityGuide(context.Background(), provider, guideStore, streams, session, capabilities.SandboxCapsets(session))
+	writeCapabilityGuide(context.Background(), capabilityGuideDeps{Provider: provider, Store: guideStore, Streams: streams}, session, capabilities.SandboxCapsets(session))
 	guidePath := capabilities.SandboxGuidePath(session)
 	data, err := os.ReadFile(guidePath)
 	if err != nil {
@@ -2438,8 +2438,8 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 	default:
 		t.Fatalf("missing guide warning stream event")
 	}
-	recordCapabilityGuideWarning(context.Background(), nil, streams, session.Summary.ID, "ignored")
-	recordCapabilityGuideWarning(context.Background(), guideStore, streams, " ", "ignored")
+	recordCapabilityGuideWarning(context.Background(), capabilityGuideDeps{Streams: streams}, session.Summary.ID, "ignored")
+	recordCapabilityGuideWarning(context.Background(), capabilityGuideDeps{Store: guideStore, Streams: streams}, " ", "ignored")
 }
 
 func TestIntegrationRunsControllerHelperEdgeWorkflows(t *testing.T) {

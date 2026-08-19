@@ -45,7 +45,7 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 		fixture.controller.capTokens = indexer
 		sandbox := newProjectRunCapabilitySandbox(t, fixture, domain.VMStatusStopped)
 
-		if err := fixture.controller.startProjectRunSandbox(fixture.ctx, sandbox, "sandbox.resumed", "resumed", nil); err != nil {
+		if err := fixture.controller.startProjectRunSandbox(fixture.ctx, sandbox, sandboxStartEvent{Type: "sandbox.resumed", Message: "resumed"}, nil); err != nil {
 			t.Fatalf("startProjectRunSandbox: %v", err)
 		}
 		if len(indexer.indexed) != 1 {
@@ -71,7 +71,7 @@ func TestProjectRunCapabilityTokenLifecycle(t *testing.T) {
 		fixture.driver.startErr = errors.New("start failed")
 		sandbox := newProjectRunCapabilitySandbox(t, fixture, domain.VMStatusStopped)
 
-		if err := fixture.controller.startProjectRunSandbox(fixture.ctx, sandbox, "sandbox.resumed", "resumed", nil); !errors.Is(err, fixture.driver.startErr) {
+		if err := fixture.controller.startProjectRunSandbox(fixture.ctx, sandbox, sandboxStartEvent{Type: "sandbox.resumed", Message: "resumed"}, nil); !errors.Is(err, fixture.driver.startErr) {
 			t.Fatalf("startProjectRunSandbox error = %v", err)
 		}
 		if len(indexer.indexed) != 0 || len(indexer.revoked) != 0 {

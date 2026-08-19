@@ -46,40 +46,70 @@ func TestStickyProjectRunConfigHashTracksEffectiveSandboxSpec(t *testing.T) {
 		{ID: "volume-v2", Type: "volume", Source: "data", Target: "/workspace/data", HostPath: "/host/v2"},
 		{ID: "volume-cache", Type: "bind", Source: "./cache", Target: "/workspace/cache", HostPath: "/host/cache"},
 	}
-	first, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{})
+	first, err := stickyProjectRunConfigHash(baseHash, run, prepared, stickySandboxSpec{
+		Driver:       "docker",
+		GuestImage:   "guest:v1",
+		VolumeMounts: volumeMounts,
+		Jupyter:      sandboxstore.CreateSandboxOptions{},
+	})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash returned error: %v", err)
 	}
 
 	reordered := prepared
 	reordered.CapsetIDs = []string{"b", "a", "a"}
-	same, err := stickyProjectRunConfigHash(baseHash, run, reordered, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{})
+	same, err := stickyProjectRunConfigHash(baseHash, run, reordered, stickySandboxSpec{
+		Driver:       "docker",
+		GuestImage:   "guest:v1",
+		VolumeMounts: volumeMounts,
+		Jupyter:      sandboxstore.CreateSandboxOptions{},
+	})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash reordered returned error: %v", err)
 	}
 	if same != first {
 		t.Fatalf("capset ordering changed effective hash: got %q want %q", same, first)
 	}
-	retain, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRetain})
+	retain, err := stickyProjectRunConfigHash(baseHash, run, prepared, stickySandboxSpec{
+		Driver:       "docker",
+		GuestImage:   "guest:v1",
+		VolumeMounts: volumeMounts,
+		Jupyter:      sandboxstore.CreateSandboxOptions{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRetain},
+	})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash explicit retain returned error: %v", err)
 	}
 	if retain == first {
 		t.Fatal("explicit retain did not change default remove sticky hash")
 	}
-	remove, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove})
+	remove, err := stickyProjectRunConfigHash(baseHash, run, prepared, stickySandboxSpec{
+		Driver:       "docker",
+		GuestImage:   "guest:v1",
+		VolumeMounts: volumeMounts,
+		Jupyter:      sandboxstore.CreateSandboxOptions{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove},
+	})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash remove returned error: %v", err)
 	}
 	if remove != first {
 		t.Fatalf("explicit remove changed default sticky hash: got %q want %q", remove, first)
 	}
-	jupyterFirst, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{VolumeMounts: volumeMounts})
+	jupyterFirst, err := stickyProjectRunConfigHash(baseHash, run, prepared, stickySandboxSpec{
+		Driver:       "docker",
+		GuestImage:   "guest:v1",
+		VolumeMounts: volumeMounts,
+		Jupyter:      sandboxstore.CreateSandboxOptions{VolumeMounts: volumeMounts},
+	})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash with Jupyter mounts returned error: %v", err)
 	}
 	reorderedMounts := []domain.SandboxVolumeMount{volumeMounts[1], volumeMounts[0]}
-	same, err = stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:v1", reorderedMounts, sandboxstore.CreateSandboxOptions{VolumeMounts: reorderedMounts})
+	same, err = stickyProjectRunConfigHash(baseHash, run, prepared, stickySandboxSpec{
+		Driver:       "docker",
+		GuestImage:   "guest:v1",
+		VolumeMounts: reorderedMounts,
+		Jupyter:      sandboxstore.CreateSandboxOptions{VolumeMounts: reorderedMounts},
+	})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash reordered mounts returned error: %v", err)
 	}
@@ -89,7 +119,12 @@ func TestStickyProjectRunConfigHashTracksEffectiveSandboxSpec(t *testing.T) {
 
 	changed := prepared
 	changed.EnvItems = []domain.SandboxEnvVar{{Name: "BUG_VALUE", Value: "B"}}
-	second, err := stickyProjectRunConfigHash(baseHash, run, changed, "docker", "guest:v1", volumeMounts, sandboxstore.CreateSandboxOptions{})
+	second, err := stickyProjectRunConfigHash(baseHash, run, changed, stickySandboxSpec{
+		Driver:       "docker",
+		GuestImage:   "guest:v1",
+		VolumeMounts: volumeMounts,
+		Jupyter:      sandboxstore.CreateSandboxOptions{},
+	})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash changed returned error: %v", err)
 	}
@@ -107,7 +142,12 @@ func TestStickyProjectRunConfigHashTracksEffectiveSandboxSpec(t *testing.T) {
 		"volume source": {driver: "docker", guestImage: "guest:v1", volumeMounts: []domain.SandboxVolumeMount{{ID: "volume-v2", Type: "volume", Target: "/workspace/data", HostPath: "/host/remapped"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := stickyProjectRunConfigHash(baseHash, run, prepared, args.driver, args.guestImage, args.volumeMounts, sandboxstore.CreateSandboxOptions{})
+			got, err := stickyProjectRunConfigHash(baseHash, run, prepared, stickySandboxSpec{
+				Driver:       args.driver,
+				GuestImage:   args.guestImage,
+				VolumeMounts: args.volumeMounts,
+				Jupyter:      sandboxstore.CreateSandboxOptions{},
+			})
 			if err != nil {
 				t.Fatalf("stickyProjectRunConfigHash returned error: %v", err)
 			}
@@ -139,7 +179,11 @@ func TestResolveStickySchedulerBindingInvalidatesBeforeRuntimeStop(t *testing.T)
 		return nil
 	}
 
-	gotSandboxID, previous, _, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, "scheduler-1", "trigger-1", "sha256:new")
+	gotSandboxID, previous, _, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, stickyBindingKey{
+		SchedulerID: "scheduler-1",
+		TriggerID:   "trigger-1",
+		ConfigHash:  "sha256:new",
+	})
 	if err != nil {
 		t.Fatalf("resolveStickySchedulerBinding returned error: %v", err)
 	}
@@ -165,7 +209,11 @@ func TestResolveStickySchedulerBindingAdoptsLegacyConfigHashWithoutStoppingSandb
 		"scheduler-1/trigger-1": {SchedulerID: "scheduler-1", TriggerID: "trigger-1", SandboxID: sandbox.Summary.ID},
 	}
 
-	gotSandboxID, binding, warnings, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, "scheduler-1", "trigger-1", "sha256:current")
+	gotSandboxID, binding, warnings, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, stickyBindingKey{
+		SchedulerID: "scheduler-1",
+		TriggerID:   "trigger-1",
+		ConfigHash:  "sha256:current",
+	})
 	if err != nil {
 		t.Fatalf("resolveStickySchedulerBinding returned error: %v", err)
 	}
@@ -196,7 +244,11 @@ func TestResolveStickySchedulerBindingDoesNotReuseRetiringLegacyBinding(t *testi
 	}, "sha256:new")
 	fixture.configDB.bindings = map[string]domain.SchedulerBinding{"scheduler-1/trigger-1": retiring}
 
-	gotSandboxID, previous, _, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, "scheduler-1", "trigger-1", "")
+	gotSandboxID, previous, _, err := fixture.controller.resolveStickySchedulerBinding(fixture.ctx, fixture.configDB, stickyBindingKey{
+		SchedulerID: "scheduler-1",
+		TriggerID:   "trigger-1",
+		ConfigHash:  "",
+	})
 	if err != nil {
 		t.Fatalf("resolveStickySchedulerBinding returned error: %v", err)
 	}
@@ -216,7 +268,11 @@ func TestEnsureProjectRunSandboxConcurrentStickyClaimReusesWinner(t *testing.T) 
 	}
 	prepared := Preparation{}
 	baseHash := "sha256:scheduler"
-	configHash, err := stickyProjectRunConfigHash(baseHash, run, prepared, "docker", "guest:latest", nil, sandboxstore.CreateSandboxOptions{})
+	configHash, err := stickyProjectRunConfigHash(baseHash, run, prepared, stickySandboxSpec{
+		Driver:     "docker",
+		GuestImage: "guest:latest",
+		Jupyter:    sandboxstore.CreateSandboxOptions{},
+	})
 	if err != nil {
 		t.Fatalf("stickyProjectRunConfigHash returned error: %v", err)
 	}

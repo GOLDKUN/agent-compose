@@ -27,10 +27,20 @@ type promptAttachProjector struct {
 	humanIndex             uint64
 }
 
-func newPersistentPromptAttachProjector(ctx context.Context, run domain.ProjectRunRecord, sandbox *domain.Sandbox, logsPath string, hub *RunLogHub, store any) *promptAttachProjector {
-	projector := newPromptAttachProjector(run, sandbox, logsPath, hub)
+// persistentPromptAttachProjectorDeps groups the dependencies needed to build
+// a promptAttachProjector that also persists structured events.
+type persistentPromptAttachProjectorDeps struct {
+	Run        domain.ProjectRunRecord
+	Sandbox    *domain.Sandbox
+	LogsPath   string
+	Hub        *RunLogHub
+	EventStore any
+}
+
+func newPersistentPromptAttachProjector(ctx context.Context, deps persistentPromptAttachProjectorDeps) *promptAttachProjector {
+	projector := newPromptAttachProjector(deps.Run, deps.Sandbox, deps.LogsPath, deps.Hub)
 	projector.eventCtx = ctx
-	projector.events, _ = store.(structuredEventStore)
+	projector.events, _ = deps.EventStore.(structuredEventStore)
 	return projector
 }
 
@@ -110,12 +120,12 @@ func (p *promptAttachProjector) projectLine(line []byte) ([]RunAttachOutput, *Tr
 		if err := p.appendLogFinalText(frame.FinalText); err != nil {
 			return nil, nil, err
 		}
-		transition := transitionFromPromptWrapperResult(p.run, p.sandbox, p.logsPath, line, frame.FinalText, frame.StopReason, "")
+		transition := transitionFromPromptWrapperResult(p.run, p.sandbox, promptWrapperOutcome{LogsPath: p.logsPath, Payload: line, FinalText: frame.FinalText, StopReason: frame.StopReason})
 		transition.TerminalEvents = p.terminalTurnEvents(agentTurnProjection{FinalText: frame.FinalText, FinalTextSource: frame.FinalTextSource, Provider: frame.Provider, StopReason: frame.StopReason})
 		return nil, &transition, nil
 	case "error":
 		message := firstNonEmpty(frame.Message, "runtime stream error")
-		transition := transitionFromPromptWrapperResult(p.run, p.sandbox, p.logsPath, line, "", frame.StopReason, message)
+		transition := transitionFromPromptWrapperResult(p.run, p.sandbox, promptWrapperOutcome{LogsPath: p.logsPath, Payload: line, StopReason: frame.StopReason, Message: message})
 		return []RunAttachOutput{runAttachErrorResponse(firstNonEmpty(frame.Code, "runtime_stream_error"), message, true)}, &transition, nil
 	default:
 		return []RunAttachOutput{runAttachAgentEventResponse(firstNonEmpty(frame.Type, "agent_event"), "", string(line))}, nil, nil

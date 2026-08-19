@@ -23,7 +23,7 @@ type CompletionStore interface {
 	StageProjectRunCompletion(context.Context, domain.ProjectRunCompletionRecord, []domain.ProjectRunEventRecord) (domain.ProjectRunCompletionRecord, bool, error)
 	GetProjectRunCompletion(context.Context, string) (domain.ProjectRunCompletionRecord, error)
 	ListDueProjectRunCompletions(context.Context, time.Time, int) ([]domain.ProjectRunCompletionRecord, error)
-	RecordProjectRunCompletionFailure(context.Context, string, string, int, time.Time) error
+	RecordProjectRunCompletionFailure(context.Context, domain.ProjectRunCompletionFailure) error
 	FinalizeProjectRunCompletion(context.Context, domain.ProjectRunRecord, domain.ProjectRunEventRecord) (domain.ProjectRunRecord, error)
 	ProjectRunCompletionForSandbox(context.Context, string) (string, bool, error)
 }
@@ -52,12 +52,23 @@ type CompletionManager struct {
 	started bool
 }
 
-func NewCompletionManager(store CompletionStore, sandboxStore CompletionSandboxStore, lifecycle CompletionSandboxLifecycle, removal SandboxRemoval, logger *slog.Logger) *CompletionManager {
+// CompletionManagerDeps groups CompletionManager's constructor dependencies.
+// Logger is optional; a nil value falls back to slog.Default().
+type CompletionManagerDeps struct {
+	Store     CompletionStore
+	Sandboxes CompletionSandboxStore
+	Lifecycle CompletionSandboxLifecycle
+	Removal   SandboxRemoval
+	Logger    *slog.Logger
+}
+
+func NewCompletionManager(deps CompletionManagerDeps) *CompletionManager {
+	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &CompletionManager{
-		store: store, sandboxes: sandboxStore, lifecycle: lifecycle, removal: removal, logger: logger,
+		store: deps.Store, sandboxes: deps.Sandboxes, lifecycle: deps.Lifecycle, removal: deps.Removal, logger: logger,
 		now: func() time.Time { return time.Now().UTC() }, locks: map[string]*sync.Mutex{}, wake: make(chan struct{}, 1),
 	}
 }
@@ -237,7 +248,9 @@ func (m *CompletionManager) process(ctx context.Context, runID string) (domain.P
 	if err := m.cleanup(ctx, run, completion.CleanupAction); err != nil {
 		attempt := completion.Attempt + 1
 		next := m.nowUTC().Add(completionRetryDelay(attempt))
-		if recordErr := m.store.RecordProjectRunCompletionFailure(context.WithoutCancel(ctx), runID, err.Error(), attempt, next); recordErr != nil {
+		if recordErr := m.store.RecordProjectRunCompletionFailure(context.WithoutCancel(ctx), domain.ProjectRunCompletionFailure{
+			RunID: runID, Message: err.Error(), Attempt: attempt, NextAttemptAt: next,
+		}); recordErr != nil {
 			return run, errors.Join(err, recordErr)
 		}
 		m.logger.Warn("project run sandbox cleanup failed", "run_id", runID, "sandbox_id", run.SandboxID, "action", completion.CleanupAction, "attempt", attempt, "next_attempt_at", next, "error", err)

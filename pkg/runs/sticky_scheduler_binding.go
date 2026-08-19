@@ -61,27 +61,36 @@ func stickyProjectSandboxOptionsFrom(options sandboxstore.CreateSandboxOptions) 
 	}
 }
 
-func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, prepared Preparation, driver, guestImage string, volumeMounts []domain.SandboxVolumeMount, jupyter sandboxstore.CreateSandboxOptions) (string, error) {
+// stickySandboxSpec is the effective sandbox spec folded into a sticky
+// scheduler binding's config hash.
+type stickySandboxSpec struct {
+	Driver       string
+	GuestImage   string
+	VolumeMounts []domain.SandboxVolumeMount
+	Jupyter      sandboxstore.CreateSandboxOptions
+}
+
+func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, prepared Preparation, spec stickySandboxSpec) (string, error) {
 	baseHash = strings.TrimSpace(baseHash)
 	if baseHash == "" {
 		return "", nil
 	}
 	capsetIDs := capabilities.NormalizeCapsetIDs(prepared.CapsetIDs)
 	sort.Strings(capsetIDs)
-	volumeMounts = schedulers.NormalizeStickySandboxVolumeMounts(volumeMounts)
+	volumeMounts := schedulers.NormalizeStickySandboxVolumeMounts(spec.VolumeMounts)
 	payload, err := json.Marshal(stickyProjectRunSandboxConfig{
 		SchedulerConfigHash: baseHash,
 		ProjectID:           run.ProjectID,
 		ProjectRevision:     run.ProjectRevision,
 		AgentName:           run.AgentName,
 		AgentID:             run.AgentID,
-		Driver:              strings.TrimSpace(driver),
-		ImageRef:            strings.TrimSpace(guestImage),
+		Driver:              strings.TrimSpace(spec.Driver),
+		ImageRef:            strings.TrimSpace(spec.GuestImage),
 		EnvItems:            domain.NormalizeEnvItems(prepared.EnvItems),
 		CapsetIDs:           capsetIDs,
 		Workspace:           prepared.Workspace,
 		VolumeMounts:        volumeMounts,
-		Jupyter:             stickyProjectSandboxOptionsFrom(jupyter),
+		Jupyter:             stickyProjectSandboxOptionsFrom(spec.Jupyter),
 	})
 	if err != nil {
 		return "", err
@@ -90,7 +99,16 @@ func stickyProjectRunConfigHash(baseHash string, run domain.ProjectRunRecord, pr
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func (c *Controller) resolveStickySchedulerBinding(ctx context.Context, store stickyBindingStore, schedulerID, triggerID, configHash string) (string, *domain.SchedulerBinding, []string, error) {
+// stickyBindingKey identifies the scheduler binding a sticky sandbox is
+// being resolved or claimed against.
+type stickyBindingKey struct {
+	SchedulerID string
+	TriggerID   string
+	ConfigHash  string
+}
+
+func (c *Controller) resolveStickySchedulerBinding(ctx context.Context, store stickyBindingStore, key stickyBindingKey) (string, *domain.SchedulerBinding, []string, error) {
+	schedulerID, triggerID, configHash := key.SchedulerID, key.TriggerID, key.ConfigHash
 	for range 3 {
 		binding, found, err := store.GetSchedulerBinding(ctx, schedulerID, triggerID)
 		if err != nil {
@@ -159,7 +177,8 @@ func claimLegacyStickySchedulerBindingConfigHash(ctx context.Context, store stic
 	return replacement, claimed, nil
 }
 
-func loadCompatibleStickySchedulerBinding(ctx context.Context, store stickyBindingStore, schedulerID, triggerID, configHash string) (domain.SchedulerBinding, bool, error) {
+func loadCompatibleStickySchedulerBinding(ctx context.Context, store stickyBindingStore, key stickyBindingKey) (domain.SchedulerBinding, bool, error) {
+	schedulerID, triggerID, configHash := key.SchedulerID, key.TriggerID, key.ConfigHash
 	for range 3 {
 		binding, found, err := store.GetSchedulerBinding(ctx, schedulerID, triggerID)
 		if err != nil || !found {

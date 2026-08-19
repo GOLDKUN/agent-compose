@@ -62,8 +62,8 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	if err != nil {
 		t.Fatalf("derive project agent id: %v", err)
 	}
-	revisionV1 := saveProjectWorkspaceRevision(t, ctx, configDB, projectID, "v1")
-	upsertProjectWorkspaceAgent(t, ctx, configDB, project, agentID, revisionV1.Revision)
+	revisionV1 := saveProjectWorkspaceRevision(t, projectWorkspaceStoreHarness{Ctx: ctx, Store: configDB}, projectID, "v1")
+	upsertProjectWorkspaceAgent(t, projectWorkspaceStoreHarness{Ctx: ctx, Store: configDB}, projectWorkspaceAgentSpec{Project: project, AgentID: agentID, Revision: revisionV1.Revision})
 
 	driver := &projectWorkspaceManifestDriver{store: sandboxStore}
 	controller := runs.NewController(runs.ControllerDependencies{
@@ -93,9 +93,21 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	if len(driver.starts) != 1 || driver.starts[0].sandboxID != runA.SandboxID {
 		t.Fatalf("driver starts after run A = %#v", driver.starts)
 	}
-	assertProjectWorkspaceManifestFile(t, driver.starts[0].manifest, "editable.txt", "template v1\n", 0o644)
-	assertProjectWorkspaceManifestFile(t, driver.starts[0].manifest, "deleted.txt", "delete from sandbox\n", 0o640)
-	assertProjectWorkspaceManifestFile(t, driver.starts[0].manifest, "v1-only.txt", "source v1 only\n", 0o600)
+	assertProjectWorkspaceManifestFile(t, driver.starts[0].manifest, projectWorkspaceManifestFileExpectation{
+		Path:    "editable.txt",
+		Content: "template v1\n",
+		Mode:    0o644,
+	})
+	assertProjectWorkspaceManifestFile(t, driver.starts[0].manifest, projectWorkspaceManifestFileExpectation{
+		Path:    "deleted.txt",
+		Content: "delete from sandbox\n",
+		Mode:    0o640,
+	})
+	assertProjectWorkspaceManifestFile(t, driver.starts[0].manifest, projectWorkspaceManifestFileExpectation{
+		Path:    "v1-only.txt",
+		Content: "source v1 only\n",
+		Mode:    0o600,
+	})
 
 	sandboxA, err := sandboxStore.GetSandbox(ctx, runA.SandboxID)
 	if err != nil {
@@ -131,8 +143,16 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 		t.Fatalf("create run A workspace symlink: %v", err)
 	}
 	manifestBeforeReuse := mustProjectWorkspaceManifest(t, workspaceRootA)
-	assertProjectWorkspaceManifestFile(t, manifestBeforeReuse, "editable.txt", "user edit\n", 0o600)
-	assertProjectWorkspaceManifestFile(t, manifestBeforeReuse, "generated/result.txt", "run A output\n", 0o640)
+	assertProjectWorkspaceManifestFile(t, manifestBeforeReuse, projectWorkspaceManifestFileExpectation{
+		Path:    "editable.txt",
+		Content: "user edit\n",
+		Mode:    0o600,
+	})
+	assertProjectWorkspaceManifestFile(t, manifestBeforeReuse, projectWorkspaceManifestFileExpectation{
+		Path:    "generated/result.txt",
+		Content: "run A output\n",
+		Mode:    0o640,
+	})
 	assertProjectWorkspaceManifestMissing(t, manifestBeforeReuse, "deleted.txt")
 	assertProjectWorkspaceManifestSymlink(t, manifestBeforeReuse, "result-link", filepath.Join("generated", "result.txt"))
 
@@ -142,8 +162,8 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 		t.Fatalf("remove v1-only source file: %v", err)
 	}
 	writeProjectWorkspaceFile(t, filepath.Join(sourceRoot, "source-v2.txt"), "new source v2 file\n", 0o644)
-	revisionV2 := saveProjectWorkspaceRevision(t, ctx, configDB, projectID, "v2")
-	upsertProjectWorkspaceAgent(t, ctx, configDB, project, agentID, revisionV2.Revision)
+	revisionV2 := saveProjectWorkspaceRevision(t, projectWorkspaceStoreHarness{Ctx: ctx, Store: configDB}, projectID, "v2")
+	upsertProjectWorkspaceAgent(t, projectWorkspaceStoreHarness{Ctx: ctx, Store: configDB}, projectWorkspaceAgentSpec{Project: project, AgentID: agentID, Revision: revisionV2.Revision})
 	if got := mustProjectWorkspaceManifest(t, snapshotRootA); !reflect.DeepEqual(got, snapshotManifestA) {
 		t.Fatalf("run A source snapshot changed after project source v2 update:\n got: %#v\nwant: %#v", got, snapshotManifestA)
 	}
@@ -220,9 +240,21 @@ func TestIntegrationProjectLocalWorkspaceExistingAndNewSandboxState(t *testing.T
 	if startB.provisioningStatus != domain.SandboxWorkspaceProvisioningStatusReady || startB.readyAt.IsZero() {
 		t.Fatalf("run B driver provisioning = status %q timestamp %v, want ready", startB.provisioningStatus, startB.readyAt)
 	}
-	assertProjectWorkspaceManifestFile(t, startB.manifest, "editable.txt", "template v2\n", 0o644)
-	assertProjectWorkspaceManifestFile(t, startB.manifest, "deleted.txt", "source v2 replacement\n", 0o644)
-	assertProjectWorkspaceManifestFile(t, startB.manifest, "source-v2.txt", "new source v2 file\n", 0o644)
+	assertProjectWorkspaceManifestFile(t, startB.manifest, projectWorkspaceManifestFileExpectation{
+		Path:    "editable.txt",
+		Content: "template v2\n",
+		Mode:    0o644,
+	})
+	assertProjectWorkspaceManifestFile(t, startB.manifest, projectWorkspaceManifestFileExpectation{
+		Path:    "deleted.txt",
+		Content: "source v2 replacement\n",
+		Mode:    0o644,
+	})
+	assertProjectWorkspaceManifestFile(t, startB.manifest, projectWorkspaceManifestFileExpectation{
+		Path:    "source-v2.txt",
+		Content: "new source v2 file\n",
+		Mode:    0o644,
+	})
 	assertProjectWorkspaceManifestMissing(t, startB.manifest, "v1-only.txt")
 	assertProjectWorkspaceManifestMissing(t, startB.manifest, "generated")
 	assertProjectWorkspaceManifestMissing(t, startB.manifest, "generated/result.txt")
@@ -269,9 +301,16 @@ const projectWorkspaceRevisionSpec = `{
   ]
 }`
 
-func saveProjectWorkspaceRevision(t *testing.T, ctx context.Context, store *configstore.ConfigStore, projectID, version string) domain.ProjectRevisionRecord {
+// projectWorkspaceStoreHarness groups the store/context pair shared by this
+// file's project-workspace test helpers.
+type projectWorkspaceStoreHarness struct {
+	Ctx   context.Context
+	Store *configstore.ConfigStore
+}
+
+func saveProjectWorkspaceRevision(t *testing.T, h projectWorkspaceStoreHarness, projectID, version string) domain.ProjectRevisionRecord {
 	t.Helper()
-	revision, created, err := store.SaveProjectRevision(ctx, domain.ProjectRevisionRecord{
+	revision, created, err := h.Store.SaveProjectRevision(h.Ctx, domain.ProjectRevisionRecord{
 		ProjectID: projectID,
 		SpecHash:  "project-local-" + version,
 		SpecJSON:  fmt.Sprintf(projectWorkspaceRevisionSpec, version),
@@ -282,20 +321,26 @@ func saveProjectWorkspaceRevision(t *testing.T, ctx context.Context, store *conf
 	return revision
 }
 
-func upsertProjectWorkspaceAgent(t *testing.T, ctx context.Context, store *configstore.ConfigStore, project domain.ProjectRecord, agentID string, revision int64) {
+type projectWorkspaceAgentSpec struct {
+	Project  domain.ProjectRecord
+	AgentID  string
+	Revision int64
+}
+
+func upsertProjectWorkspaceAgent(t *testing.T, h projectWorkspaceStoreHarness, spec projectWorkspaceAgentSpec) {
 	t.Helper()
-	if _, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{
-		ID:        agentID,
+	if _, err := h.Store.UpsertProjectAgent(h.Ctx, domain.ProjectAgentRecord{
+		ID:        spec.AgentID,
 		Name:      "worker",
-		ProjectID: project.ID,
+		ProjectID: spec.Project.ID,
 		AgentName: "worker",
-		Revision:  revision,
+		Revision:  spec.Revision,
 		Provider:  "codex",
 		Image:     "guest:latest",
 		Driver:    driverpkg.RuntimeDriverDocker,
 		SpecJSON:  `{"name":"worker"}`,
 	}); err != nil {
-		t.Fatalf("upsert project agent revision %d: %v", revision, err)
+		t.Fatalf("upsert project agent revision %d: %v", spec.Revision, err)
 	}
 }
 
@@ -430,18 +475,24 @@ func projectWorkspaceSnapshotRoot(t *testing.T, config *appconfig.Config, worksp
 	return root
 }
 
-func assertProjectWorkspaceManifestFile(t *testing.T, manifest []testutil.WorkspaceManifestEntry, path, content string, mode os.FileMode) {
+type projectWorkspaceManifestFileExpectation struct {
+	Path    string
+	Content string
+	Mode    os.FileMode
+}
+
+func assertProjectWorkspaceManifestFile(t *testing.T, manifest []testutil.WorkspaceManifestEntry, want projectWorkspaceManifestFileExpectation) {
 	t.Helper()
 	for _, entry := range manifest {
-		if entry.Path != path {
+		if entry.Path != want.Path {
 			continue
 		}
-		if entry.Type != testutil.WorkspaceManifestEntryTypeFile || entry.Mode != mode || entry.ContentSHA256 != projectWorkspaceFileSHA256(content) {
-			t.Fatalf("manifest entry %q = %#v, want regular file mode=%v content=%q", path, entry, mode, content)
+		if entry.Type != testutil.WorkspaceManifestEntryTypeFile || entry.Mode != want.Mode || entry.ContentSHA256 != projectWorkspaceFileSHA256(want.Content) {
+			t.Fatalf("manifest entry %q = %#v, want regular file mode=%v content=%q", want.Path, entry, want.Mode, want.Content)
 		}
 		return
 	}
-	t.Fatalf("manifest entry %q is missing: %#v", path, manifest)
+	t.Fatalf("manifest entry %q is missing: %#v", want.Path, manifest)
 }
 
 func assertProjectWorkspaceManifestMissing(t *testing.T, manifest []testutil.WorkspaceManifestEntry, path string) {

@@ -153,7 +153,7 @@ func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coo
 					transition.Error = fmt.Sprintf("command execution failed: %v", waitErr)
 					return transition, waitErr
 				}
-				return transitionFromRuntimeResult(run, sandbox, commandText, logsPath, accumulator.Result(result.ExitCode, result.Success), result, nil), nil
+				return transitionFromRuntimeResult(run, sandbox, runtimeOutcome{Command: commandText, LogsPath: logsPath, Accumulated: accumulator.Result(result.ExitCode, result.Success), Result: result}), nil
 			}
 			transition.ExitCode = 1
 			transition.Error = fmt.Sprintf("command execution failed: %v", err)
@@ -188,7 +188,7 @@ func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coo
 			if result == nil {
 				result = &driverpkg.RuntimeResult{OperationID: run.RunID, Success: true}
 			}
-			return transitionFromRuntimeResult(run, sandbox, commandText, logsPath, accumulator.Result(result.ExitCode, result.Success), *result, errorFromRuntimeResult(*result)), nil
+			return transitionFromRuntimeResult(run, sandbox, runtimeOutcome{Command: commandText, LogsPath: logsPath, Accumulated: accumulator.Result(result.ExitCode, result.Success), Result: *result, Err: errorFromRuntimeResult(*result)}), nil
 		case driverpkg.RuntimeOutputError:
 			code := "runtime_error"
 			message := "runtime interaction failed"

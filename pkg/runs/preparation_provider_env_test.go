@@ -25,7 +25,7 @@ func TestPrepareProjectRunKeepsGlobalEnvOutOfSandboxProviderOverrides(t *testing
 			{Name: "LLM_API_KEY", Value: "global-key", Secret: true},
 		},
 	}
-	prepared, err := PrepareProjectRun(context.Background(), store, nil, domain.ProjectRunRecord{
+	prepared, err := PrepareProjectRun(context.Background(), PreparationDeps{Store: store}, domain.ProjectRunRecord{
 		ProjectID:       "project-1",
 		ProjectRevision: 1,
 		AgentName:       "worker",

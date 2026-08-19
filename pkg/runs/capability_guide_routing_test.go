@@ -47,7 +47,7 @@ func TestProjectRunCapabilityGuideRoutesManagedScopeAndMergesBestEffort(t *testi
 		},
 	}}
 
-	writeCapabilityGuide(context.Background(), provider, nil, nil, sandbox, []string{"legacy", "internal/dev", "public/fail"})
+	writeCapabilityGuide(context.Background(), capabilityGuideDeps{Provider: provider}, sandbox, []string{"legacy", "internal/dev", "public/fail"})
 	guide, err := os.ReadFile(capabilities.SandboxGuidePath(sandbox))
 	if err != nil {
 		t.Fatalf("read merged guide: %v", err)

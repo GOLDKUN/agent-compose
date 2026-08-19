@@ -103,6 +103,12 @@ func (c *Controller) completionManager() (*CompletionManager, error) {
 	if removal == nil {
 		removal = controllerCompletionRemoval{controller: c}
 	}
-	c.completion = NewCompletionManager(store, c.store, controllerCompletionStopper{controller: c}, removal, slog.Default())
+	c.completion = NewCompletionManager(CompletionManagerDeps{
+		Store:     store,
+		Sandboxes: c.store,
+		Lifecycle: controllerCompletionStopper{controller: c},
+		Removal:   removal,
+		Logger:    slog.Default(),
+	})
 	return c.completion, nil
 }
