@@ -189,10 +189,10 @@ func (s *volumeStore) DeleteVolume(ctx context.Context, nameOrID string) error {
 	return nil
 }
 
-func (s *volumeStore) UpsertProjectVolume(ctx context.Context, projectID, key, volumeID string, external bool) error {
+func (s *volumeStore) UpsertProjectVolume(ctx context.Context, projectID, key string, link domain.ProjectVolumeLink) error {
 	projectID = strings.TrimSpace(projectID)
 	key = strings.TrimSpace(key)
-	volumeID = strings.TrimSpace(volumeID)
+	volumeID := strings.TrimSpace(link.VolumeID)
 	if projectID == "" || key == "" || volumeID == "" {
 		return fmt.Errorf("project id, volume key, and volume id are required")
 	}
@@ -200,7 +200,7 @@ func (s *volumeStore) UpsertProjectVolume(ctx context.Context, projectID, key, v
 	_, err := s.db.ExecContext(ctx, `INSERT INTO project_volumes(project_id, volume_key, volume_id, external, created_at, updated_at)
 		VALUES(?, ?, ?, ?, ?, ?)
 		ON CONFLICT(project_id, volume_key) DO UPDATE SET volume_id = excluded.volume_id, external = excluded.external, updated_at = excluded.updated_at`,
-		projectID, key, volumeID, BoolToInt(external), now, now)
+		projectID, key, volumeID, BoolToInt(link.External), now, now)
 	if err != nil {
 		return fmt.Errorf("upsert project volume %s/%s: %w", projectID, key, err)
 	}

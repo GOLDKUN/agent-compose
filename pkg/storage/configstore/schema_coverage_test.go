@@ -451,9 +451,6 @@ func testConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 	if webhook.Name != "GitHub" || webhook.TokenHeader != "x-github-token" {
 		t.Fatalf("webhook source = %#v", webhook)
 	}
-	if !WebhookSourceTopicMatches("webhook.github.push", "webhook.github.") || WebhookSourceTopicMatches("", "webhook.github.") {
-		t.Fatalf("WebhookSourceTopicMatches returned unexpected values")
-	}
 	if enabled, err := store.ListEnabledWebhookSourcesForTopic(ctx, "webhook.github.push"); err != nil || len(enabled) != 1 {
 		t.Fatalf("ListEnabledWebhookSourcesForTopic enabled=%#v err=%v", enabled, err)
 	}

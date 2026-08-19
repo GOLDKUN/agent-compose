@@ -50,13 +50,11 @@ func TestStoreCreateSandboxInitializesWorkspaceProvisioning(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newCoverageStore(t)
-			created := createSandboxForProvisioningTest(
-				t,
-				store,
-				tt.withOptions,
-				tt.workspaceID,
-				tt.workspace,
-			)
+			created := createSandboxForProvisioningTest(t, store, provisioningTestSandboxSpec{
+				WithOptions: tt.withOptions,
+				WorkspaceID: tt.workspaceID,
+				Workspace:   tt.workspace,
+			})
 
 			assertPendingWorkspaceProvisioning(t, "created sandbox", created.WorkspaceProvisioning)
 			assertWorkspacePathState(t, store, created, false)
@@ -72,7 +70,7 @@ func TestStoreCreateSandboxInitializesWorkspaceProvisioning(t *testing.T) {
 
 func TestStoreCreateSandboxWithoutWorkspaceOmitsWorkspaceProvisioning(t *testing.T) {
 	store := newCoverageStore(t)
-	created := createSandboxForProvisioningTest(t, store, false, "", nil)
+	created := createSandboxForProvisioningTest(t, store, provisioningTestSandboxSpec{})
 	if created.WorkspaceProvisioning != nil {
 		t.Fatalf("created sandbox workspace provisioning = %#v, want nil", created.WorkspaceProvisioning)
 	}
@@ -109,14 +107,15 @@ func assertWorkspacePathState(t *testing.T, store *Store, sandbox *Sandbox, want
 	}
 }
 
-func createSandboxForProvisioningTest(
-	t *testing.T,
-	store *Store,
-	withOptions bool,
-	workspaceID string,
-	workspace *SandboxWorkspace,
-) *Sandbox {
+type provisioningTestSandboxSpec struct {
+	WithOptions bool
+	WorkspaceID string
+	Workspace   *SandboxWorkspace
+}
+
+func createSandboxForProvisioningTest(t *testing.T, store *Store, spec provisioningTestSandboxSpec) *Sandbox {
 	t.Helper()
+	withOptions, workspaceID, workspace := spec.WithOptions, spec.WorkspaceID, spec.Workspace
 	ctx := context.Background()
 	if withOptions {
 		created, err := store.CreateSandboxWithOptions(

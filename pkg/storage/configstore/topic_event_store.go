@@ -510,10 +510,6 @@ func webhookSourceTopicMatches(topic, topicPrefix string) bool {
 	return strings.HasSuffix(topicPrefix, ".") && topic == strings.TrimSuffix(topicPrefix, ".")
 }
 
-func WebhookSourceTopicMatches(topic, topicPrefix string) bool {
-	return webhookSourceTopicMatches(topic, topicPrefix)
-}
-
 func (s *eventStore) ListWebhookSources(ctx context.Context) ([]domain.WebhookSource, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, provider, topic_prefix, token_hash, token_header, signature_type, signature_secret, body_limit_bytes, created_at, updated_at
 		FROM webhook_source ORDER BY id ASC`)

@@ -32,7 +32,11 @@ func TestSchedulerRunPruneFiltersAndDeletesDirectRunData(t *testing.T) {
 			t.Fatalf("create run %s: %v", run.ID, err)
 		}
 	}
-	addPruneTestRelations(t, store, "scheduler-a", "run-old-success", "trigger-a")
+	addPruneTestRelations(t, store, pruneTestRelations{
+		SchedulerID: "scheduler-a",
+		RunID:       "run-old-success",
+		TriggerID:   "trigger-a",
+	})
 	if _, err := store.CreateEvent(ctx, domain.TopicEventRecord{
 		ID: "topic-event", Topic: "topic.test", Source: domain.TopicEventSourceSystem,
 		CorrelationID: "correlation-test", PayloadJSON: `{}`, CreatedAt: old,
@@ -71,11 +75,27 @@ func TestSchedulerRunPruneFiltersAndDeletesDirectRunData(t *testing.T) {
 		"event_delivery":     "scheduler_id = 'scheduler-a' AND scheduler_run_id = 'run-old-success'",
 		"event_sandbox_link": "scheduler_id = 'scheduler-a' AND scheduler_run_id = 'run-old-success'",
 	} {
-		assertPruneTestRowCount(t, store, table, where, 0)
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: table,
+			Where: where,
+			Want:  0,
+		})
 	}
-	assertPruneTestRowCount(t, store, "event", "id = 'topic-event'", 1)
-	assertPruneTestRowCount(t, store, "scheduler_run", "run_id = 'run-invocation'", 1)
-	assertPruneTestRowCount(t, store, "scheduler_run", "run_id = 'run-running'", 1)
+	assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+		Table: "event",
+		Where: "id = 'topic-event'",
+		Want:  1,
+	})
+	assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+		Table: "scheduler_run",
+		Where: "run_id = 'run-invocation'",
+		Want:  1,
+	})
+	assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+		Table: "scheduler_run",
+		Where: "run_id = 'run-running'",
+		Want:  1,
+	})
 }
 
 func TestDeleteSchedulerRunPruneDataRollsBackWholeTransaction(t *testing.T) {
@@ -90,7 +110,11 @@ func TestDeleteSchedulerRunPruneDataRollsBackWholeTransaction(t *testing.T) {
 		if err := store.CreateSchedulerRun(ctx, domain.SchedulerRunSummary{ID: runID, SchedulerID: "scheduler-a", TriggerID: "trigger-a", Status: domain.SchedulerRunStatusSucceeded, StartedAt: now, CompletedAt: now}); err != nil {
 			t.Fatalf("create run %s: %v", runID, err)
 		}
-		addPruneTestRelations(t, store, "scheduler-a", runID, "trigger-a")
+		addPruneTestRelations(t, store, pruneTestRelations{
+			SchedulerID: "scheduler-a",
+			RunID:       runID,
+			TriggerID:   "trigger-a",
+		})
 	}
 	if _, err := store.db.ExecContext(ctx, `CREATE TRIGGER block_prune_event BEFORE DELETE ON scheduler_event
 		WHEN OLD.scheduler_run_id = 'run-fail' BEGIN SELECT RAISE(ABORT, 'blocked prune'); END`); err != nil {
@@ -101,10 +125,26 @@ func TestDeleteSchedulerRunPruneDataRollsBackWholeTransaction(t *testing.T) {
 		t.Fatal("DeleteSchedulerRunPruneData returned nil error")
 	}
 	for _, runID := range []string{"run-ok", "run-fail"} {
-		assertPruneTestRowCount(t, store, "scheduler_run", "run_id = '"+runID+"'", 1)
-		assertPruneTestRowCount(t, store, "scheduler_event", "scheduler_run_id = '"+runID+"'", 1)
-		assertPruneTestRowCount(t, store, "event_delivery", "scheduler_run_id = '"+runID+"'", 1)
-		assertPruneTestRowCount(t, store, "event_sandbox_link", "scheduler_run_id = '"+runID+"'", 1)
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: "scheduler_run",
+			Where: "run_id = '" + runID + "'",
+			Want:  1,
+		})
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: "scheduler_event",
+			Where: "scheduler_run_id = '" + runID + "'",
+			Want:  1,
+		})
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: "event_delivery",
+			Where: "scheduler_run_id = '" + runID + "'",
+			Want:  1,
+		})
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: "event_sandbox_link",
+			Where: "scheduler_run_id = '" + runID + "'",
+			Want:  1,
+		})
 	}
 }
 
@@ -122,7 +162,11 @@ func TestDeleteSchedulerRunPruneDataRechecksTerminalTriggerRun(t *testing.T) {
 		if err := store.CreateSchedulerRun(ctx, run); err != nil {
 			t.Fatalf("create run %s: %v", run.ID, err)
 		}
-		addPruneTestRelations(t, store, "scheduler-a", run.ID, run.TriggerID)
+		addPruneTestRelations(t, store, pruneTestRelations{
+			SchedulerID: "scheduler-a",
+			RunID:       run.ID,
+			TriggerID:   run.TriggerID,
+		})
 	}
 	keys := []schedulers.SchedulerRunKey{{SchedulerID: "scheduler-a", RunID: "run-running"}, {SchedulerID: "scheduler-a", RunID: "run-empty-trigger"}}
 	if counted, err := store.CountSchedulerRunPruneData(ctx, keys); err != nil || counted != (schedulers.SchedulerRunPruneDatabaseStats{}) {
@@ -132,10 +176,26 @@ func TestDeleteSchedulerRunPruneDataRechecksTerminalTriggerRun(t *testing.T) {
 		t.Fatalf("removed=%#v err=%v", removed, err)
 	}
 	for _, runID := range []string{"run-running", "run-empty-trigger"} {
-		assertPruneTestRowCount(t, store, "scheduler_run", "run_id = '"+runID+"'", 1)
-		assertPruneTestRowCount(t, store, "scheduler_event", "scheduler_run_id = '"+runID+"'", 1)
-		assertPruneTestRowCount(t, store, "event_delivery", "scheduler_run_id = '"+runID+"'", 1)
-		assertPruneTestRowCount(t, store, "event_sandbox_link", "scheduler_run_id = '"+runID+"'", 1)
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: "scheduler_run",
+			Where: "run_id = '" + runID + "'",
+			Want:  1,
+		})
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: "scheduler_event",
+			Where: "scheduler_run_id = '" + runID + "'",
+			Want:  1,
+		})
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: "event_delivery",
+			Where: "scheduler_run_id = '" + runID + "'",
+			Want:  1,
+		})
+		assertPruneTestRowCount(t, store, pruneTestRowCountCheck{
+			Table: "event_sandbox_link",
+			Where: "scheduler_run_id = '" + runID + "'",
+			Want:  1,
+		})
 	}
 }
 
@@ -152,27 +212,39 @@ func createPruneTestScheduler(t *testing.T, store *ConfigStore, schedulerID stri
 	}
 }
 
-func addPruneTestRelations(t *testing.T, store *ConfigStore, schedulerID, runID, triggerID string) {
+type pruneTestRelations struct {
+	SchedulerID string
+	RunID       string
+	TriggerID   string
+}
+
+func addPruneTestRelations(t *testing.T, store *ConfigStore, rel pruneTestRelations) {
 	t.Helper()
 	ctx := context.Background()
-	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "scheduler-event-" + runID, SchedulerID: schedulerID, RunID: runID, TriggerID: triggerID, Type: "scheduler.run.completed", CreatedAt: time.Now().UTC()}); err != nil {
+	if err := store.AddSchedulerEvent(ctx, domain.SchedulerEvent{ID: "scheduler-event-" + rel.RunID, SchedulerID: rel.SchedulerID, RunID: rel.RunID, TriggerID: rel.TriggerID, Type: "scheduler.run.completed", CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("add scheduler event: %v", err)
 	}
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO event_delivery(event_id, scheduler_id, trigger_id, scheduler_run_id, status, created_at, updated_at) VALUES(?, ?, ?, ?, 'run_succeeded', 1, 1)`, "event-"+runID, schedulerID, triggerID, runID); err != nil {
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO event_delivery(event_id, scheduler_id, trigger_id, scheduler_run_id, status, created_at, updated_at) VALUES(?, ?, ?, ?, 'run_succeeded', 1, 1)`, "event-"+rel.RunID, rel.SchedulerID, rel.TriggerID, rel.RunID); err != nil {
 		t.Fatalf("add event delivery: %v", err)
 	}
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO event_sandbox_link(event_id, sandbox_id, relation, scheduler_id, scheduler_run_id, trigger_id, created_at) VALUES(?, ?, 'used', ?, ?, ?, 1)`, "event-"+runID, "sandbox-"+runID, schedulerID, runID, triggerID); err != nil {
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO event_sandbox_link(event_id, sandbox_id, relation, scheduler_id, scheduler_run_id, trigger_id, created_at) VALUES(?, ?, 'used', ?, ?, ?, 1)`, "event-"+rel.RunID, "sandbox-"+rel.RunID, rel.SchedulerID, rel.RunID, rel.TriggerID); err != nil {
 		t.Fatalf("add event sandbox link: %v", err)
 	}
 }
 
-func assertPruneTestRowCount(t *testing.T, store *ConfigStore, table, where string, want int) {
+type pruneTestRowCountCheck struct {
+	Table string
+	Where string
+	Want  int
+}
+
+func assertPruneTestRowCount(t *testing.T, store *ConfigStore, check pruneTestRowCountCheck) {
 	t.Helper()
 	var count int
-	if err := store.db.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table+" WHERE "+where).Scan(&count); err != nil {
-		t.Fatalf("count %s: %v", table, err)
+	if err := store.db.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+check.Table+" WHERE "+check.Where).Scan(&count); err != nil {
+		t.Fatalf("count %s: %v", check.Table, err)
 	}
-	if count != want {
-		t.Fatalf("%s count=%d, want %d", table, count, want)
+	if count != check.Want {
+		t.Fatalf("%s count=%d, want %d", check.Table, count, check.Want)
 	}
 }

@@ -87,14 +87,14 @@ func renameDuplicateProjects(ctx context.Context, conn migrationConn) error {
 
 func renameDuplicateProject(ctx context.Context, conn migrationConn, project projectNameMigrationRow, newName string) error {
 	if project.currentRevision <= 0 {
-		return updateMigratedProject(ctx, conn, project, newName, 0, "")
+		return updateMigratedProject(ctx, conn, project, migratedProjectRename{NewName: newName})
 	}
 
 	revision, specHash, err := createRenamedProjectRevision(ctx, conn, project, newName)
 	if err != nil {
 		return err
 	}
-	if err := updateMigratedProject(ctx, conn, project, newName, revision, specHash); err != nil {
+	if err := updateMigratedProject(ctx, conn, project, migratedProjectRename{NewName: newName, Revision: revision, SpecHash: specHash}); err != nil {
 		return err
 	}
 	for _, table := range []string{"project_agent", "project_scheduler"} {
@@ -181,7 +181,16 @@ func materializeImplicitProjectVolumeNames(ctx context.Context, conn migrationCo
 	return nil
 }
 
-func updateMigratedProject(ctx context.Context, conn migrationConn, project projectNameMigrationRow, newName string, revision int64, specHash string) error {
+// migratedProjectRename describes the new name (and, if known, the revision it was
+// derived from) to apply to a duplicate-named project during migration.
+type migratedProjectRename struct {
+	NewName  string
+	Revision int64
+	SpecHash string
+}
+
+func updateMigratedProject(ctx context.Context, conn migrationConn, project projectNameMigrationRow, rename migratedProjectRename) error {
+	newName, revision, specHash := rename.NewName, rename.Revision, rename.SpecHash
 	query := `UPDATE project SET name = ? WHERE id = ? AND name = ?`
 	args := []any{newName, project.id, project.name}
 	if revision > 0 {
