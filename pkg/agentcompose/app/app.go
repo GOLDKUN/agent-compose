@@ -251,17 +251,16 @@ func StartBackground(di do.Injector) error {
 	for _, warning := range do.MustInvoke[*adapters.SandboxRPCBridge](di).RecoverStoppedRuntimeReleases(ctx) {
 		slog.Warn("failed to recover stopped runtime release", "warning", warning)
 	}
-	if err := startBackgroundManagers(
-		ctx,
-		do.MustInvoke[*sandboxstore.Store](di),
-		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[*adapters.SandboxRPCBridge](di),
-		do.MustInvoke[*schedulers.Controller](di),
-		do.MustInvoke[*events.Dispatcher](di),
-		do.MustInvoke[*capproxy.Server](di),
-		do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
-		do.MustInvoke[*runs.CompletionManager](di),
-	); err != nil {
+	if err := startBackgroundManagers(ctx, backgroundManagersDeps{
+		Sandboxes:   do.MustInvoke[*sandboxstore.Store](di),
+		ConfigDB:    do.MustInvoke[*configstore.ConfigStore](di),
+		Bridge:      do.MustInvoke[*adapters.SandboxRPCBridge](di),
+		Schedulers:  do.MustInvoke[*schedulers.Controller](di),
+		Events:      do.MustInvoke[*events.Dispatcher](di),
+		CapProxy:    do.MustInvoke[*capproxy.Server](di),
+		CapTokens:   do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
+		Completions: do.MustInvoke[*runs.CompletionManager](di),
+	}); err != nil {
 		return err
 	}
 	if err := do.MustInvoke[*sandboxes.DeletionRecovery](di).Start(ctx); err != nil {
