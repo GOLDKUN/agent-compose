@@ -58,19 +58,19 @@ func TestIntegrationSchedulerStickyResumePreservesReadyFileWorkspace(t *testing.
 	scheduler = createNativeTestScheduler(t, ctx, bridge.configDB, scheduler)
 	request := domain.SchedulerAgentRequest{BindingTriggerID: triggerID}
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(
-		bridge.config,
-		bridge.store,
-		bridge.configDB,
-		bridge.workspaceEnsurer,
-		driver,
-		nil,
-		nil,
-		bridge.streams,
-		publisher,
-		nil,
-		bridge.agentExecutor,
-	)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: bridge.workspaceEnsurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	created, eventType, err := runner.Ensure(ctx, scheduler, request, false)
 	if err != nil {

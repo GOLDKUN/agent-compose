@@ -62,17 +62,31 @@ func TestHistoricalUncompiledRuntimeOperationsPreserveState(t *testing.T) {
 func TestHistoricalUncompiledExecPreflightHasNoArtifactsOrRecords(t *testing.T) {
 	ctx := context.Background()
 	config, store, session, provider := newHistoricalUncompiledRuntimeFixture(t)
-	runner := NewAgentRunner(config, store, nil, nil, provider)
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: nil,
+		Agents:   nil,
+		Runtimes: provider,
+	})
 	executor := NewAgentExecutor(config, store, nil, runner)
 
 	_, _, _, err := executor.ExecuteAgentRequest(ctx, session, execution.ExecuteAgentRequest{Agent: "codex", Message: "hello"})
 	assertRuntimeNotCompiledError(t, err)
-	if _, _, err := runner.ExecuteAgentRun(ctx, session, "codex", "", "", "", "hello", "", nil); err == nil {
+	if _, _, err := runner.ExecuteAgentRun(ctx, AgentRunRequest{
+		Session:           session,
+		Agent:             "codex",
+		AgentDefinitionID: "",
+		Model:             "",
+		RunID:             "",
+		Message:           "hello",
+		OutputSchemaJSON:  "",
+	}, nil); err == nil {
 		t.Fatal("ExecuteAgentRun returned nil error for uncompiled historical runtime")
 	} else {
 		assertRuntimeNotCompiledError(t, err)
 	}
-	scheduler := NewSchedulerCommandExecutor(config, store, nil, provider, nil)
+	scheduler := NewSchedulerCommandExecutor(SchedulerCommandExecutor{Config: config, Store: store, Runtimes: provider})
 	_, err = scheduler.ExecuteSchedulerCommand(ctx, session, domain.SchedulerCommandRequest{Mode: "shell", Script: "echo history"})
 	assertRuntimeNotCompiledError(t, err)
 

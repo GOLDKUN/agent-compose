@@ -44,7 +44,13 @@ func TestAgentExecutorExecuteAgentRequestPersistsCellAndEvents(t *testing.T) {
 		t.Fatalf("UpdateSession returned error: %v", err)
 	}
 	runtime := &fakeAgentRuntime{}
-	runner := NewAgentRunner(config, store, nil, nil, fakeRuntimeProvider{runtime: runtime})
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: nil,
+		Agents:   nil,
+		Runtimes: fakeRuntimeProvider{runtime: runtime},
+	})
 	executor := NewAgentExecutor(config, store, nil, runner)
 
 	cell, userEvent, assistantEvent, err := executor.ExecuteAgentRequest(ctx, session, execution.ExecuteAgentRequest{
@@ -145,7 +151,13 @@ func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 		},
 		result: domain.ExecResult{Stdout: payload, Output: payload, ExitCode: 0, Success: true},
 	}
-	runner := NewAgentRunner(config, store, nil, nil, fakeRuntimeProvider{runtime: runtime})
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: nil,
+		Agents:   nil,
+		Runtimes: fakeRuntimeProvider{runtime: runtime},
+	})
 	executor := NewAgentExecutor(config, store, nil, runner)
 	var chunks []domain.ExecChunk
 
@@ -217,7 +229,13 @@ func TestAgentExecutorPersistsFailedCellWhenStreamCallbackFails(t *testing.T) {
 		streamChunks: []domain.ExecChunk{{Text: "partial output\n", Stream: domain.StdioStdout}},
 		result:       domain.ExecResult{Stdout: "partial output\n", Output: "partial output\n", ExitCode: 0, Success: true},
 	}
-	runner := NewAgentRunner(config, store, nil, nil, fakeRuntimeProvider{runtime: runtime})
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: nil,
+		Agents:   nil,
+		Runtimes: fakeRuntimeProvider{runtime: runtime},
+	})
 	executor := NewAgentExecutor(config, store, nil, runner)
 
 	cell, userEvent, assistantEvent, err := executor.ExecuteAgentRequest(ctx, session, execution.ExecuteAgentRequest{

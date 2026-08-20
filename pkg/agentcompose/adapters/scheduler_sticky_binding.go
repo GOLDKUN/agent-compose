@@ -88,13 +88,8 @@ func (r *SchedulerSandboxRunner) loadOrResumeSchedulerBinding(ctx context.Contex
 	return session, eventType, true, err
 }
 
-func (r *SchedulerSandboxRunner) bindSchedulerSandbox(ctx context.Context, scheduler domain.Scheduler, triggerID, sandboxID, configHash string, expected *domain.SchedulerBinding) (bool, error) {
-	return r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, expected, domain.SchedulerBinding{
-		SchedulerID:       scheduler.Summary.ID,
-		TriggerID:         triggerID,
-		SandboxID:         sandboxID,
-		SandboxConfigHash: configHash,
-	})
+func (r *SchedulerSandboxRunner) bindSchedulerSandbox(ctx context.Context, desired domain.SchedulerBinding, expected *domain.SchedulerBinding) (bool, error) {
+	return r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, expected, desired)
 }
 
 func (r *SchedulerSandboxRunner) claimLegacySchedulerBindingConfigHash(ctx context.Context, binding domain.SchedulerBinding, configHash string) (domain.SchedulerBinding, bool, error) {
@@ -172,7 +167,25 @@ type schedulerAgentSandboxConfig struct {
 	AgentName    string                   `json:"managed_agent_name,omitempty"`
 }
 
-func schedulerRequestSandboxConfigHash(baseHash string, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition, providerEnvItems, envItems []domain.SandboxEnvVar, workspace *domain.SandboxWorkspace, driver, guestImage string, volumeMounts []domain.SandboxVolumeMount) (string, error) {
+// schedulerRequestSandboxConfigHashRequest bundles the request, agent
+// definition, and resolved environment/workspace/volume inputs
+// schedulerRequestSandboxConfigHash hashes into a sticky sandbox config hash.
+type schedulerRequestSandboxConfigHashRequest struct {
+	BaseHash         string
+	Request          domain.SchedulerAgentRequest
+	AgentDefinition  *domain.AgentDefinition
+	ProviderEnvItems []domain.SandboxEnvVar
+	EnvItems         []domain.SandboxEnvVar
+	Workspace        *domain.SandboxWorkspace
+	Driver           string
+	GuestImage       string
+	VolumeMounts     []domain.SandboxVolumeMount
+}
+
+func schedulerRequestSandboxConfigHash(req schedulerRequestSandboxConfigHashRequest) (string, error) {
+	baseHash, request, agentDefinition := req.BaseHash, req.Request, req.AgentDefinition
+	providerEnvItems, envItems, workspace := req.ProviderEnvItems, req.EnvItems, req.Workspace
+	driver, guestImage, volumeMounts := req.Driver, req.GuestImage, req.VolumeMounts
 	var agentConfig *schedulerAgentSandboxConfig
 	if agentDefinition != nil {
 		current, err := projects.NormalizeAgentDefinition(*agentDefinition, true)

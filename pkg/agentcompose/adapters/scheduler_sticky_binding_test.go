@@ -29,12 +29,32 @@ func TestSchedulerRequestSandboxConfigHashIgnoresVolumeMountOrder(t *testing.T) 
 		{ID: "volume-data", Type: domain.VolumeMountTypeVolume, Source: "data", Target: "/workspace/data", HostPath: "/volumes/data", VolumeID: "volume-1"},
 		{ID: "bind-cache", Type: domain.VolumeMountTypeBind, Source: "./cache", Target: "/workspace/cache", HostPath: "/project/cache", ProjectPath: "/project"},
 	}
-	first, err := schedulerRequestSandboxConfigHash("sha256:scheduler", domain.SchedulerAgentRequest{}, nil, nil, nil, nil, "docker", "guest:v1", mounts)
+	first, err := schedulerRequestSandboxConfigHash(schedulerRequestSandboxConfigHashRequest{
+		BaseHash:         "sha256:scheduler",
+		Request:          domain.SchedulerAgentRequest{},
+		AgentDefinition:  nil,
+		ProviderEnvItems: nil,
+		EnvItems:         nil,
+		Workspace:        nil,
+		Driver:           "docker",
+		GuestImage:       "guest:v1",
+		VolumeMounts:     mounts,
+	})
 	if err != nil {
 		t.Fatalf("schedulerRequestSandboxConfigHash returned error: %v", err)
 	}
 	reordered := []domain.SandboxVolumeMount{mounts[1], mounts[0]}
-	second, err := schedulerRequestSandboxConfigHash("sha256:scheduler", domain.SchedulerAgentRequest{}, nil, nil, nil, nil, "docker", "guest:v1", reordered)
+	second, err := schedulerRequestSandboxConfigHash(schedulerRequestSandboxConfigHashRequest{
+		BaseHash:         "sha256:scheduler",
+		Request:          domain.SchedulerAgentRequest{},
+		AgentDefinition:  nil,
+		ProviderEnvItems: nil,
+		EnvItems:         nil,
+		Workspace:        nil,
+		Driver:           "docker",
+		GuestImage:       "guest:v1",
+		VolumeMounts:     reordered,
+	})
 	if err != nil {
 		t.Fatalf("schedulerRequestSandboxConfigHash reordered returned error: %v", err)
 	}
@@ -98,17 +118,17 @@ func TestSchedulerRequestSandboxConfigHashUsesEffectiveAgentConfigInsteadOfProje
 
 func mustSchedulerRequestSandboxConfigHash(t *testing.T, agentDefinition *domain.AgentDefinition) string {
 	t.Helper()
-	hash, err := schedulerRequestSandboxConfigHash(
-		"sha256:scheduler",
-		domain.SchedulerAgentRequest{},
-		agentDefinition,
-		nil,
-		nil,
-		nil,
-		"docker",
-		"guest:v1",
-		nil,
-	)
+	hash, err := schedulerRequestSandboxConfigHash(schedulerRequestSandboxConfigHashRequest{
+		BaseHash:         "sha256:scheduler",
+		Request:          domain.SchedulerAgentRequest{},
+		AgentDefinition:  agentDefinition,
+		ProviderEnvItems: nil,
+		EnvItems:         nil,
+		Workspace:        nil,
+		Driver:           "docker",
+		GuestImage:       "guest:v1",
+		VolumeMounts:     nil,
+	})
 	if err != nil {
 		t.Fatalf("schedulerRequestSandboxConfigHash returned error: %v", err)
 	}

@@ -559,7 +559,7 @@ func TestSandboxRPCBridgeCapabilityGuideRoutesManagedScopeAndMergesBestEffort(t 
 			{Name: domain.AgentSandboxTagID, Value: "agent-1"},
 		},
 	}}
-	writeCapabilityGuide(ctx, bridge.cap, nil, nil, sandbox, []string{"legacy", "internal/dev", "broken/fail"})
+	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: bridge.cap, Session: sandbox, CapsetIDs: []string{"legacy", "internal/dev", "broken/fail"}})
 
 	guide, err := os.ReadFile(capabilities.SandboxGuidePath(sandbox))
 	if err != nil {
@@ -634,21 +634,27 @@ func newTestSandboxRPCBridge(t *testing.T) (*SandboxRPCBridge, *fakeRPCSandboxDr
 	}
 	driver := &fakeRPCSandboxDriver{}
 	streams := sandboxes.NewStreamBrokerForTest()
-	agentExecutor := NewAgentExecutor(config, store, streams, NewAgentRunner(config, store, configDB, configDB, nil))
-	return NewSandboxRPCBridge(
-		config,
-		store,
-		configDB,
-		workspaces.NewProvisioner(config, configDB, store),
-		driver,
-		nil,
-		nil,
-		streams,
-		testCapabilityProvider{},
-		nil,
-		nil,
-		agentExecutor,
-	), driver
+	agentExecutor := NewAgentExecutor(config, store, streams, NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: configDB,
+		Agents:   configDB,
+		Runtimes: nil,
+	}))
+	return NewSandboxRPCBridge(SandboxRPCBridgeDeps{
+		Config:           config,
+		Store:            store,
+		ConfigDB:         configDB,
+		WorkspaceEnsurer: workspaces.NewProvisioner(config, configDB, store),
+		Driver:           driver,
+		Runtimes:         nil,
+		Bus:              nil,
+		Streams:          streams,
+		Cap:              testCapabilityProvider{},
+		CapTokens:        nil,
+		Dashboard:        nil,
+		AgentExecutor:    agentExecutor,
+	}), driver
 }
 
 func TestSandboxRPCBridgeCapabilityGuideFromHTTPProvider(t *testing.T) {

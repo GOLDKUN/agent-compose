@@ -31,23 +31,33 @@ func NewLLMClient(config *appconfig.Config, store *configstore.ConfigStore) *LLM
 }
 
 func (c *LLMClient) Generate(ctx context.Context, prompt, model, outputSchemaJSON string) (llms.GenerateResult, error) {
-	return c.GenerateWithEnv(ctx, prompt, model, outputSchemaJSON, "", nil)
+	return c.GenerateWithEnv(ctx, GenerateWithEnvRequest{Prompt: prompt, Model: model, OutputSchemaJSON: outputSchemaJSON})
 }
 
-func (c *LLMClient) GenerateWithEnv(ctx context.Context, prompt, model, outputSchemaJSON, scopeID string, envItems []domain.SandboxEnvVar) (llms.GenerateResult, error) {
+// GenerateWithEnvRequest bundles the prompt/model inputs and scope/env
+// context GenerateWithEnv needs to resolve an LLM target and generate.
+type GenerateWithEnvRequest struct {
+	Prompt           string
+	Model            string
+	OutputSchemaJSON string
+	ScopeID          string
+	EnvItems         []domain.SandboxEnvVar
+}
+
+func (c *LLMClient) GenerateWithEnv(ctx context.Context, req GenerateWithEnvRequest) (llms.GenerateResult, error) {
 	if c == nil {
 		return llms.GenerateResult{}, fmt.Errorf("llm client is unavailable")
 	}
-	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, c.config, c.store, scopeID, "", model, "", envItems)
+	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, c.config, c.store, req.ScopeID, "", req.Model, "", req.EnvItems)
 	if err != nil {
 		return llms.GenerateResult{}, err
 	}
 	return llms.Generate(ctx, c.client, llms.GenerateRequest{
 		Endpoint:         target.Endpoint,
 		Protocol:         target.WireAPI,
-		Prompt:           prompt,
+		Prompt:           req.Prompt,
 		Model:            firstNonEmpty(target.Model.ID, target.Model.Name),
-		OutputSchemaJSON: outputSchemaJSON,
+		OutputSchemaJSON: req.OutputSchemaJSON,
 		Headers:          target.Headers,
 		MaxOutputTokens:  firstPositive(target.MaxOutputTokens, configuredMaxOutputTokens(c.config)),
 	})

@@ -320,7 +320,13 @@ func TestSandboxDriverFreshStartFailureRevokesPreparedAgentToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
-	runner := NewAgentRunner(config, store, configDB, configDB, nil)
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: configDB,
+		Agents:   configDB,
+		Runtimes: nil,
+	})
 	if err := runner.PrepareSandboxAgentEnvironment(ctx, session, execution.AgentConfig{Provider: "codex", Model: "gpt-test"}, nil); err != nil {
 		t.Fatalf("PrepareSandboxAgentEnvironment returned error: %v", err)
 	}
@@ -391,7 +397,13 @@ func TestSandboxDriverReleasedRuntimeRecreationFailureRevokesPreparedAgentToken(
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
 	session.StoppedRuntime = &domain.StoppedRuntime{State: domain.StoppedRuntimeStateReleased, ReleasedAt: time.Now().UTC()}
-	runner := NewAgentRunner(config, store, configDB, configDB, nil)
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: configDB,
+		Agents:   configDB,
+		Runtimes: nil,
+	})
 	if err := runner.PrepareSandboxAgentEnvironment(ctx, session, execution.AgentConfig{Provider: "codex", Model: "gpt-test"}, nil); err != nil {
 		t.Fatalf("PrepareSandboxAgentEnvironment returned error: %v", err)
 	}
@@ -458,7 +470,13 @@ func TestSandboxDriverFailedRunningSandboxCheckKeepsPreparedAgentToken(t *testin
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
-	runner := NewAgentRunner(config, store, configDB, configDB, nil)
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: configDB,
+		Agents:   configDB,
+		Runtimes: nil,
+	})
 	if err := runner.PrepareSandboxAgentEnvironment(ctx, session, execution.AgentConfig{Provider: "codex", Model: "gpt-test"}, nil); err != nil {
 		t.Fatalf("PrepareSandboxAgentEnvironment returned error: %v", err)
 	}
@@ -515,7 +533,13 @@ func TestSandboxDriverPostStartPersistenceFailureKeepsPreparedAgentToken(t *test
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
 	}
-	runner := NewAgentRunner(config, store, configDB, configDB, nil)
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: configDB,
+		Agents:   configDB,
+		Runtimes: nil,
+	})
 	if err := runner.PrepareSandboxAgentEnvironment(ctx, session, execution.AgentConfig{Provider: "codex", Model: "gpt-test"}, nil); err != nil {
 		t.Fatalf("PrepareSandboxAgentEnvironment returned error: %v", err)
 	}

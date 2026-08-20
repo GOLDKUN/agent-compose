@@ -83,7 +83,19 @@ func TestSchedulerSandboxRunnerEnsureResolvesInlineGitWorkspace(t *testing.T) {
 	bridge, driver := newTestSandboxRPCBridge(t)
 	ensurer := &recordingSchedulerWorkspaceEnsurer{}
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: ensurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "scheduler-inline-git",
@@ -132,7 +144,19 @@ func TestSchedulerSandboxRunnerEnsureResolvesInlineFileWorkspace(t *testing.T) {
 	bridge, driver := newTestSandboxRPCBridge(t)
 	ensurer := &recordingSchedulerWorkspaceEnsurer{}
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: ensurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	projectSource := t.TempDir()
 	if err := os.WriteFile(filepath.Join(projectSource, "hello.txt"), []byte("hello from source\n"), 0o644); err != nil {
@@ -192,7 +216,19 @@ func TestSchedulerSandboxRunnerConcurrentInlineFileWorkspaceMaterializationIsSer
 	bridge, driver := newTestSandboxRPCBridge(t)
 	ensurer := &recordingSchedulerWorkspaceEnsurer{}
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: ensurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	projectSource := t.TempDir()
 	for dir := 0; dir < 8; dir++ {
@@ -298,7 +334,19 @@ func TestSchedulerSandboxRunnerConcurrentEnsureSerializesFileWorkspaceReadAgains
 	bridge, driver := newTestSandboxRPCBridge(t)
 	provisioner := workspaces.NewProvisioner(bridge.config, bridge.configDB, bridge.store)
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, provisioner, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: provisioner,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	projectSource := t.TempDir()
 	const dirCount, fileCount = 6, 30
@@ -406,7 +454,19 @@ func TestSchedulerSandboxRunnerEnsureReleasesFileWorkspaceLockOnEnsurerPanic(t *
 		return nil
 	}}
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: ensurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	projectSource := t.TempDir()
 	if err := os.WriteFile(filepath.Join(projectSource, "hello.txt"), []byte("hello\n"), 0o644); err != nil {

@@ -20,8 +20,33 @@ func TestWorkspaceEnsurerConstructorDependencies(t *testing.T) {
 	t.Parallel()
 
 	ensurer := &constructorWorkspaceEnsurer{}
-	bridge := NewSandboxRPCBridge(nil, nil, nil, ensurer, nil, nil, nil, nil, nil, nil, nil, nil)
-	runner := NewSchedulerSandboxRunner(nil, nil, nil, ensurer, nil, nil, nil, nil, nil, nil, nil)
+	bridge := NewSandboxRPCBridge(SandboxRPCBridgeDeps{
+		Config:           nil,
+		Store:            nil,
+		ConfigDB:         nil,
+		WorkspaceEnsurer: ensurer,
+		Driver:           nil,
+		Runtimes:         nil,
+		Bus:              nil,
+		Streams:          nil,
+		Cap:              nil,
+		CapTokens:        nil,
+		Dashboard:        nil,
+		AgentExecutor:    nil,
+	})
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           nil,
+		Store:            nil,
+		ConfigDB:         nil,
+		WorkspaceEnsurer: ensurer,
+		Driver:           nil,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          nil,
+		Publisher:        nil,
+		CapTokens:        nil,
+		AgentExecutor:    nil,
+	})
 
 	if bridge.workspaceEnsurer != ensurer {
 		t.Fatalf("SandboxRPCBridge workspace ensurer = %p, want %p", bridge.workspaceEnsurer, ensurer)

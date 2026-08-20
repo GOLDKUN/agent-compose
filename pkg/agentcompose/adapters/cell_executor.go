@@ -29,15 +29,91 @@ func NewCellExecutor(config *appconfig.Config, store *sandboxstore.Store, runtim
 	return &CellExecutor{config: config, store: store, runtimes: runtimes, streams: streams}
 }
 
+// CellExecutionRequest bundles the session, cell content, and output stream
+// executeCell needs.
+type CellExecutionRequest struct {
+	Session  *domain.Sandbox
+	CellType string
+	Source   string
+	Stream   execution.CellExecutionStream
+}
+
 func (e *CellExecutor) ExecuteCell(ctx context.Context, session *domain.Sandbox, cellType, source string) (domain.NotebookCell, error) {
-	return e.executeCell(ctx, session, cellType, source, execution.CellExecutionStream{})
+	return e.executeCell(ctx, CellExecutionRequest{Session: session, CellType: cellType, Source: source})
 }
 
-func (e *CellExecutor) ExecuteCellStream(ctx context.Context, session *domain.Sandbox, cellType, source string, stream execution.CellExecutionStream) (domain.NotebookCell, error) {
-	return e.executeCell(ctx, session, cellType, source, stream)
+func (e *CellExecutor) ExecuteCellStream(ctx context.Context, req CellExecutionRequest) (domain.NotebookCell, error) {
+	return e.executeCell(ctx, req)
 }
 
-func (e *CellExecutor) executeCell(ctx context.Context, session *domain.Sandbox, cellType, source string, stream execution.CellExecutionStream) (domain.NotebookCell, error) {
+// preparedCellExecution is the resolved runtime/state and the initial,
+// already-published cell prepareCellExecution assembles before executeCell
+// runs the command.
+type preparedCellExecution struct {
+	VMState     domain.VMState
+	Runtime     SandboxRuntime
+	CellID      string
+	HostCellDir string
+	Command     string
+	Args        []string
+	StartedCell domain.NotebookCell
+}
+
+// prepareCellExecution resolves the sandbox's VM state and runtime, creates
+// the host cell state dir, writes the cell script, and publishes the started
+// cell (invoking req.Stream.OnStart first, if set).
+func (e *CellExecutor) prepareCellExecution(ctx context.Context, req CellExecutionRequest) (preparedCellExecution, error) {
+	session, cellType, source, stream := req.Session, req.CellType, req.Source, req.Stream
+	vmState, err := e.store.GetVMState(session.Summary.ID)
+	if err != nil {
+		return preparedCellExecution{}, err
+	}
+	runtime, err := e.runtimes.ForSession(session)
+	if err != nil {
+		return preparedCellExecution{}, err
+	}
+
+	cellID := uuid.NewString()
+	hostCellDir := filepath.Join(filepath.Dir(session.Summary.WorkspacePath), "state", "cells", cellID)
+	if err := os.MkdirAll(hostCellDir, 0o755); err != nil {
+		return preparedCellExecution{}, fmt.Errorf("create cell state dir: %w", err)
+	}
+
+	guestCellDir := filepath.Join(e.config.GuestStateRoot, "cells", cellID)
+	scriptName, command, args := execution.CellExecSpec(cellType, guestCellDir)
+	hostScriptPath := filepath.Join(hostCellDir, scriptName)
+	if err := os.WriteFile(hostScriptPath, []byte(source), 0o644); err != nil {
+		return preparedCellExecution{}, fmt.Errorf("write cell script: %w", err)
+	}
+
+	startedCell := domain.NotebookCell{
+		ID:        cellID,
+		Type:      cellType,
+		Source:    source,
+		CreatedAt: time.Now().UTC(),
+		Running:   true,
+	}
+	if stream.OnStart != nil {
+		if err := stream.OnStart(startedCell); err != nil {
+			return preparedCellExecution{}, err
+		}
+	}
+	if e.streams != nil {
+		e.streams.PublishCellStarted(session.Summary.ID, startedCell)
+	}
+	return preparedCellExecution{
+		VMState:     vmState,
+		Runtime:     runtime,
+		CellID:      cellID,
+		HostCellDir: hostCellDir,
+		Command:     command,
+		Args:        args,
+		StartedCell: startedCell,
+	}, nil
+}
+
+func (e *CellExecutor) executeCell(ctx context.Context, req CellExecutionRequest) (domain.NotebookCell, error) {
+	session, cellType, source, stream := req.Session, req.CellType, req.Source, req.Stream
 	appconfig.ApplyDefaultGuestPaths(e.config)
 	source = strings.TrimSpace(source)
 	if source == "" {
@@ -54,44 +130,12 @@ func (e *CellExecutor) executeCell(ctx context.Context, session *domain.Sandbox,
 	execCtx, execCancel := context.WithCancel(ctx)
 	defer execCancel()
 
-	vmState, err := e.store.GetVMState(session.Summary.ID)
+	prepared, err := e.prepareCellExecution(ctx, CellExecutionRequest{Session: session, CellType: cellType, Source: source, Stream: stream})
 	if err != nil {
 		return domain.NotebookCell{}, err
 	}
-	runtime, err := e.runtimes.ForSession(session)
-	if err != nil {
-		return domain.NotebookCell{}, err
-	}
-
-	cellID := uuid.NewString()
-	hostCellDir := filepath.Join(filepath.Dir(session.Summary.WorkspacePath), "state", "cells", cellID)
-	if err := os.MkdirAll(hostCellDir, 0o755); err != nil {
-		return domain.NotebookCell{}, fmt.Errorf("create cell state dir: %w", err)
-	}
-
-	guestCellDir := filepath.Join(e.config.GuestStateRoot, "cells", cellID)
-	scriptName, command, args := execution.CellExecSpec(cellType, guestCellDir)
-	hostScriptPath := filepath.Join(hostCellDir, scriptName)
-	if err := os.WriteFile(hostScriptPath, []byte(source), 0o644); err != nil {
-		return domain.NotebookCell{}, fmt.Errorf("write cell script: %w", err)
-	}
-
-	startedAt := time.Now().UTC()
-	startedCell := domain.NotebookCell{
-		ID:        cellID,
-		Type:      cellType,
-		Source:    source,
-		CreatedAt: startedAt,
-		Running:   true,
-	}
-	if stream.OnStart != nil {
-		if err := stream.OnStart(startedCell); err != nil {
-			return domain.NotebookCell{}, err
-		}
-	}
-	if e.streams != nil {
-		e.streams.PublishCellStarted(session.Summary.ID, startedCell)
-	}
+	vmState, runtime, cellID, hostCellDir := prepared.VMState, prepared.Runtime, prepared.CellID, prepared.HostCellDir
+	command, args, startedAt := prepared.Command, prepared.Args, prepared.StartedCell.CreatedAt
 
 	var streamErrMu sync.Mutex
 	var streamErr error
