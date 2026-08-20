@@ -432,7 +432,7 @@ func NewAgentExecutor(di do.Injector) (*adapters.AgentExecutor, error) {
 }
 
 func NewSchedulerCommandExecutor(di do.Injector) (*adapters.SchedulerCommandExecutor, error) {
-	return adapters.NewSchedulerCommandExecutor(adapters.SchedulerCommandExecutor{
+	return adapters.NewSchedulerCommandExecutor(adapters.SchedulerCommandExecutorDeps{
 		Config:   do.MustInvoke[*appconfig.Config](di),
 		Store:    do.MustInvoke[*sandboxstore.Store](di),
 		ConfigDB: do.MustInvoke[*configstore.ConfigStore](di),
