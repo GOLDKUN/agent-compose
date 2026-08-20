@@ -54,18 +54,12 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.Pr
 		return transition, err
 	}
 	guestArtifactsDir := filepath.Join(c.config.GuestStateRoot, "runs", run.RunID)
-	runtimeRequest := execution.RuntimeCommandRequestPayloadFromCommand(
-		c.config,
-		"shell",
-		"",
-		nil,
-		commandText,
-		c.config.GuestWorkspacePath,
-		execEnvMap(req.Env),
-		0,
-		0,
-		guestArtifactsDir,
-	)
+	runtimeRequest := execution.RuntimeCommandRequestPayloadFromCommand(c.config, execution.RuntimeCommandRequest{
+		Mode:   "shell",
+		Script: commandText,
+		Cwd:    c.config.GuestWorkspacePath,
+		Env:    execEnvMap(req.Env),
+	}, guestArtifactsDir)
 	if err := execution.WriteJSONArtifact(filepath.Join(artifactsDir, "command-request.json"), runtimeRequest); err != nil {
 		transition.ExitCode = 1
 		transition.Error = fmt.Sprintf("command execution failed: %v", err)

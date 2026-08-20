@@ -25,26 +25,41 @@ type RuntimeCommandRequest struct {
 }
 
 func RuntimeCommandRequestPayload(config *appconfig.Config, request domain.SchedulerCommandRequest, guestCellDir string) RuntimeCommandRequest {
-	return RuntimeCommandRequestPayloadFromCommand(config, request.Mode, request.Command, request.Args, request.Script, request.Cwd, request.Env, request.TimeoutMs, request.MaxOutputBytes, guestCellDir)
+	return RuntimeCommandRequestPayloadFromCommand(config, RuntimeCommandRequest{
+		Mode:           request.Mode,
+		Command:        request.Command,
+		Args:           request.Args,
+		Script:         request.Script,
+		Cwd:            request.Cwd,
+		Env:            request.Env,
+		TimeoutMs:      request.TimeoutMs,
+		MaxOutputBytes: request.MaxOutputBytes,
+	}, guestCellDir)
 }
 
-func RuntimeCommandRequestPayloadFromCommand(config *appconfig.Config, mode, command string, args []string, script, cwd string, env map[string]string, timeoutMs, maxOutputBytes int64, guestArtifactDir string) RuntimeCommandRequest {
+// RuntimeCommandRequestPayloadFromCommand normalizes req's fields (mode
+// lowercased, cwd defaulted, max output bytes defaulted) and stamps
+// guestArtifactDir. req's own ArtifactDir field is unused - it is always the
+// caller's guest execution/cell state dir, passed separately since it isn't
+// naturally part of the source command spec.
+func RuntimeCommandRequestPayloadFromCommand(config *appconfig.Config, req RuntimeCommandRequest, guestArtifactDir string) RuntimeCommandRequest {
 	appconfig.ApplyDefaultGuestPaths(config)
+	maxOutputBytes := req.MaxOutputBytes
 	if maxOutputBytes <= 0 {
 		maxOutputBytes = DefaultSchedulerCommandMaxOutputBytes
 	}
-	cwd = strings.TrimSpace(cwd)
+	cwd := strings.TrimSpace(req.Cwd)
 	if cwd == "" {
 		cwd = config.GuestWorkspacePath
 	}
 	return RuntimeCommandRequest{
-		Mode:           strings.ToLower(strings.TrimSpace(mode)),
-		Command:        command,
-		Args:           append([]string(nil), args...),
-		Script:         script,
+		Mode:           strings.ToLower(strings.TrimSpace(req.Mode)),
+		Command:        req.Command,
+		Args:           append([]string(nil), req.Args...),
+		Script:         req.Script,
 		Cwd:            cwd,
-		Env:            env,
-		TimeoutMs:      timeoutMs,
+		Env:            req.Env,
+		TimeoutMs:      req.TimeoutMs,
 		MaxOutputBytes: maxOutputBytes,
 		ArtifactDir:    guestArtifactDir,
 	}

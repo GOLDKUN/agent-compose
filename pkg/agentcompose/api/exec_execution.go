@@ -55,18 +55,15 @@ func (h *ExecHandler) prepareExecCommand(sandbox *domain.Sandbox, req *agentcomp
 		return execPreparation{}, connect.NewError(connect.CodeInternal, fmt.Errorf("create exec artifact dir: %w", err))
 	}
 	guestExecDir := filepath.Join(h.config.GuestStateRoot, "exec", execID)
-	runtimeRequest := execution.RuntimeCommandRequestPayloadFromCommand(
-		h.config,
-		"exec",
-		strings.TrimSpace(req.GetCommand().GetCommand()),
-		req.GetCommand().GetArgs(),
-		"",
-		cwd,
-		ExecEnvMap(req.GetEnv()),
-		int64(req.GetTimeoutMs()),
-		int64(req.GetMaxOutputBytes()),
-		guestExecDir,
-	)
+	runtimeRequest := execution.RuntimeCommandRequestPayloadFromCommand(h.config, execution.RuntimeCommandSpec{
+		Mode:           "exec",
+		Command:        strings.TrimSpace(req.GetCommand().GetCommand()),
+		Args:           req.GetCommand().GetArgs(),
+		Cwd:            cwd,
+		Env:            ExecEnvMap(req.GetEnv()),
+		TimeoutMs:      int64(req.GetTimeoutMs()),
+		MaxOutputBytes: int64(req.GetMaxOutputBytes()),
+	}, guestExecDir)
 	if err := execution.WriteJSONArtifact(filepath.Join(hostExecDir, "command-request.json"), runtimeRequest); err != nil {
 		return execPreparation{}, connect.NewError(connect.CodeInternal, fmt.Errorf("write exec command request artifact: %w", err))
 	}
