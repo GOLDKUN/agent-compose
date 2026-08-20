@@ -164,32 +164,9 @@ func applyLayerTarArchive(ctx context.Context, src io.Reader, dstDir string) err
 			continue
 		}
 
-		base := filepath.Base(relPath)
-		dir := filepath.Dir(relPath)
-		if base == ".wh..wh..opq" {
-			if dir == "." {
-				dir = ""
-			}
-			if err := clearRootFSDirectory(dstDir, dir); err != nil {
-				return fmt.Errorf("apply opaque whiteout for %s: %w", header.Name, err)
-			}
-			continue
-		}
-		if strings.HasPrefix(base, ".wh.") {
-			target := strings.TrimPrefix(base, ".wh.")
-			if target == "" {
-				continue
-			}
-			targetRel := filepath.Join(dir, target)
-			if dir == "." {
-				targetRel = target
-			}
-			targetPath, err := safeRootFSPath(dstDir, targetRel)
+		if handled, err := applyLayerWhiteout(dstDir, header, relPath); handled {
 			if err != nil {
-				return fmt.Errorf("apply whiteout for %s: %w", header.Name, err)
-			}
-			if err := os.RemoveAll(targetPath); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove whiteout target %s: %w", targetRel, err)
+				return err
 			}
 			continue
 		}
@@ -201,58 +178,122 @@ func applyLayerTarArchive(ctx context.Context, src io.Reader, dstDir string) err
 		if err := ensureSafeParentDir(dstDir, relPath); err != nil {
 			return fmt.Errorf("prepare parent for %s: %w", header.Name, err)
 		}
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := ensureNoSymlinkAt(targetPath); err != nil {
-				return fmt.Errorf("create dir %s: %w", relPath, err)
-			}
-			if err := os.MkdirAll(targetPath, header.FileInfo().Mode().Perm()); err != nil {
-				return fmt.Errorf("create dir %s: %w", relPath, err)
-			}
-		case tar.TypeReg, 0:
-			if err := os.RemoveAll(targetPath); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove existing file %s: %w", relPath, err)
-			}
-			file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, header.FileInfo().Mode().Perm())
-			if err != nil {
-				return fmt.Errorf("create file %s: %w", relPath, err)
-			}
-			if _, err := io.Copy(file, reader); err != nil {
-				_ = file.Close()
-				return fmt.Errorf("write file %s: %w", relPath, err)
-			}
-			if err := file.Close(); err != nil {
-				return fmt.Errorf("close file %s: %w", relPath, err)
-			}
-		case tar.TypeSymlink:
-			if err := os.RemoveAll(targetPath); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove existing symlink path %s: %w", relPath, err)
-			}
-			if err := os.Symlink(header.Linkname, targetPath); err != nil {
-				return fmt.Errorf("create symlink %s -> %s: %w", relPath, header.Linkname, err)
-			}
-		case tar.TypeLink:
-			linkRel, err := cleanLayerPath(header.Linkname)
-			if err != nil || linkRel == "" {
-				return fmt.Errorf("invalid hardlink target %q: %w", header.Linkname, err)
-			}
-			linkPath, err := safeRootFSPath(dstDir, linkRel)
-			if err != nil {
-				return fmt.Errorf("resolve hardlink target %s: %w", header.Linkname, err)
-			}
-			if err := os.RemoveAll(targetPath); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove existing hardlink path %s: %w", relPath, err)
-			}
-			if err := os.Link(linkPath, targetPath); err != nil {
-				return fmt.Errorf("create hardlink %s -> %s: %w", relPath, linkRel, err)
-			}
-		case tar.TypeXGlobalHeader, tar.TypeXHeader, tar.TypeGNULongLink, tar.TypeGNULongName:
-			continue
-		default:
-			return fmt.Errorf("unsupported tar entry type %q for %s", string(header.Typeflag), relPath)
+		if err := applyLayerTarEntry(layerTarEntry{
+			Reader:     reader,
+			Header:     header,
+			DstDir:     dstDir,
+			RelPath:    relPath,
+			TargetPath: targetPath,
+		}); err != nil {
+			return err
 		}
 	}
+}
+
+// applyLayerWhiteout applies AUFS/overlay whiteout semantics for a tar entry
+// if it represents one (an opaque-dir marker ".wh..wh..opq" or a regular
+// ".wh.<name>" delete marker). handled is true if the entry was a whiteout,
+// meaning the caller should continue to the next tar entry rather than
+// materializing it as a file.
+func applyLayerWhiteout(dstDir string, header *tar.Header, relPath string) (handled bool, err error) {
+	base := filepath.Base(relPath)
+	dir := filepath.Dir(relPath)
+	if base == ".wh..wh..opq" {
+		if dir == "." {
+			dir = ""
+		}
+		if err := clearRootFSDirectory(dstDir, dir); err != nil {
+			return true, fmt.Errorf("apply opaque whiteout for %s: %w", header.Name, err)
+		}
+		return true, nil
+	}
+	if strings.HasPrefix(base, ".wh.") {
+		target := strings.TrimPrefix(base, ".wh.")
+		if target == "" {
+			return true, nil
+		}
+		targetRel := filepath.Join(dir, target)
+		if dir == "." {
+			targetRel = target
+		}
+		targetPath, err := safeRootFSPath(dstDir, targetRel)
+		if err != nil {
+			return true, fmt.Errorf("apply whiteout for %s: %w", header.Name, err)
+		}
+		if err := os.RemoveAll(targetPath); err != nil && !os.IsNotExist(err) {
+			return true, fmt.Errorf("remove whiteout target %s: %w", targetRel, err)
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// layerTarEntry bundles the tar reader/header and resolved paths
+// applyLayerTarEntry needs to materialize one non-whiteout tar entry onto
+// disk.
+type layerTarEntry struct {
+	Reader     *tar.Reader
+	Header     *tar.Header
+	DstDir     string
+	RelPath    string
+	TargetPath string
+}
+
+// applyLayerTarEntry materializes a single tar entry (dir, regular file,
+// symlink, or hardlink) at entry.TargetPath.
+func applyLayerTarEntry(entry layerTarEntry) error {
+	header, relPath, targetPath := entry.Header, entry.RelPath, entry.TargetPath
+	switch header.Typeflag {
+	case tar.TypeDir:
+		if err := ensureNoSymlinkAt(targetPath); err != nil {
+			return fmt.Errorf("create dir %s: %w", relPath, err)
+		}
+		if err := os.MkdirAll(targetPath, header.FileInfo().Mode().Perm()); err != nil {
+			return fmt.Errorf("create dir %s: %w", relPath, err)
+		}
+	case tar.TypeReg, 0:
+		if err := os.RemoveAll(targetPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove existing file %s: %w", relPath, err)
+		}
+		file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, header.FileInfo().Mode().Perm())
+		if err != nil {
+			return fmt.Errorf("create file %s: %w", relPath, err)
+		}
+		if _, err := io.Copy(file, entry.Reader); err != nil {
+			_ = file.Close()
+			return fmt.Errorf("write file %s: %w", relPath, err)
+		}
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("close file %s: %w", relPath, err)
+		}
+	case tar.TypeSymlink:
+		if err := os.RemoveAll(targetPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove existing symlink path %s: %w", relPath, err)
+		}
+		if err := os.Symlink(header.Linkname, targetPath); err != nil {
+			return fmt.Errorf("create symlink %s -> %s: %w", relPath, header.Linkname, err)
+		}
+	case tar.TypeLink:
+		linkRel, err := cleanLayerPath(header.Linkname)
+		if err != nil || linkRel == "" {
+			return fmt.Errorf("invalid hardlink target %q: %w", header.Linkname, err)
+		}
+		linkPath, err := safeRootFSPath(entry.DstDir, linkRel)
+		if err != nil {
+			return fmt.Errorf("resolve hardlink target %s: %w", header.Linkname, err)
+		}
+		if err := os.RemoveAll(targetPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove existing hardlink path %s: %w", relPath, err)
+		}
+		if err := os.Link(linkPath, targetPath); err != nil {
+			return fmt.Errorf("create hardlink %s -> %s: %w", relPath, linkRel, err)
+		}
+	case tar.TypeXGlobalHeader, tar.TypeXHeader, tar.TypeGNULongLink, tar.TypeGNULongName:
+		return nil
+	default:
+		return fmt.Errorf("unsupported tar entry type %q for %s", string(header.Typeflag), relPath)
+	}
+	return nil
 }
 
 func cleanLayerPath(value string) (string, error) {

@@ -18,6 +18,86 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 )
 
+// remoteImageDescriptor is the remote image and the metadata Pull needs to
+// append it to the local OCI layout and cache index.
+type remoteImageDescriptor struct {
+	Image          v1.Image
+	ManifestDigest v1.Hash
+	ConfigDigest   v1.Hash
+	MediaType      string
+	SizeBytes      int64
+	ConfigFile     *v1.ConfigFile
+}
+
+// remoteImageFetch bundles the parsed reference, platform, and progress
+// channel fetchRemoteImageDescriptor needs to resolve a remote image.
+type remoteImageFetch struct {
+	Reference    string
+	Ref          name.Reference
+	Platform     Platform
+	V1Platform   v1.Platform
+	ProgressCh   chan v1.Update
+	ProgressDone <-chan []ProgressEvent
+}
+
+// fetchRemoteImageDescriptor resolves the remote image referenced by
+// fetch.Ref and reads back the manifest/config metadata Pull persists. On
+// error it drains fetch.ProgressCh via finishProgress so the caller can still
+// report partial progress alongside the wrapped error.
+func (c *Cache) fetchRemoteImageDescriptor(ctx context.Context, fetch remoteImageFetch) (remoteImageDescriptor, []ProgressEvent, error) {
+	progressCh, progressDone := fetch.ProgressCh, fetch.ProgressDone
+	remoteOptions := []remote.Option{
+		remote.WithContext(ctx),
+		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithPlatform(fetch.V1Platform),
+		remote.WithProgress(progressCh),
+	}
+
+	img, err := remote.Image(fetch.Ref, remoteOptions...)
+	if err != nil {
+		progress := finishProgress(progressCh, progressDone)
+		return remoteImageDescriptor{}, progress, mapPullError("pull", fetch.Reference, fetch.Platform, err)
+	}
+	if err := ctx.Err(); err != nil {
+		progress := finishProgress(progressCh, progressDone)
+		return remoteImageDescriptor{}, progress, NewError(ErrorKindUnavailable, "pull", fetch.Reference, err)
+	}
+
+	manifestDigest, err := img.Digest()
+	if err != nil {
+		progress := finishProgress(progressCh, progressDone)
+		return remoteImageDescriptor{}, progress, NewError(ErrorKindUnavailable, "pull", fetch.Reference, err)
+	}
+	configDigest, err := img.ConfigName()
+	if err != nil {
+		progress := finishProgress(progressCh, progressDone)
+		return remoteImageDescriptor{}, progress, NewError(ErrorKindUnavailable, "pull", fetch.Reference, err)
+	}
+	mediaType, err := img.MediaType()
+	if err != nil {
+		progress := finishProgress(progressCh, progressDone)
+		return remoteImageDescriptor{}, progress, NewError(ErrorKindUnavailable, "pull", fetch.Reference, err)
+	}
+	sizeBytes, err := img.Size()
+	if err != nil {
+		progress := finishProgress(progressCh, progressDone)
+		return remoteImageDescriptor{}, progress, NewError(ErrorKindUnavailable, "pull", fetch.Reference, err)
+	}
+	configFile, err := img.ConfigFile()
+	if err != nil {
+		progress := finishProgress(progressCh, progressDone)
+		return remoteImageDescriptor{}, progress, NewError(ErrorKindUnavailable, "pull", fetch.Reference, err)
+	}
+	return remoteImageDescriptor{
+		Image:          img,
+		ManifestDigest: manifestDigest,
+		ConfigDigest:   configDigest,
+		MediaType:      string(mediaType),
+		SizeBytes:      sizeBytes,
+		ConfigFile:     configFile,
+	}, nil, nil
+}
+
 func (c *Cache) Pull(ctx context.Context, req PullRequest) (PullResult, error) {
 	if err := ctx.Err(); err != nil {
 		return PullResult{}, NewError(ErrorKindUnavailable, "pull", req.Reference, err)
@@ -31,48 +111,19 @@ func (c *Cache) Pull(ctx context.Context, req PullRequest) (PullResult, error) {
 
 	progressCh := make(chan v1.Update, 64)
 	progressDone := collectProgress(progressCh)
-	remoteOptions := []remote.Option{
-		remote.WithContext(ctx),
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
-		remote.WithPlatform(v1Platform),
-		remote.WithProgress(progressCh),
-	}
 
-	img, err := remote.Image(ref, remoteOptions...)
+	descriptor, progress, err := c.fetchRemoteImageDescriptor(ctx, remoteImageFetch{
+		Reference:    req.Reference,
+		Ref:          ref,
+		Platform:     platform,
+		V1Platform:   v1Platform,
+		ProgressCh:   progressCh,
+		ProgressDone: progressDone,
+	})
 	if err != nil {
-		progress := finishProgress(progressCh, progressDone)
-		return PullResult{Progress: progress}, mapPullError("pull", req.Reference, platform, err)
+		return PullResult{Progress: progress}, err
 	}
-	if err := ctx.Err(); err != nil {
-		progress := finishProgress(progressCh, progressDone)
-		return PullResult{Progress: progress}, NewError(ErrorKindUnavailable, "pull", req.Reference, err)
-	}
-
-	manifestDigest, err := img.Digest()
-	if err != nil {
-		progress := finishProgress(progressCh, progressDone)
-		return PullResult{Progress: progress}, NewError(ErrorKindUnavailable, "pull", req.Reference, err)
-	}
-	configDigest, err := img.ConfigName()
-	if err != nil {
-		progress := finishProgress(progressCh, progressDone)
-		return PullResult{Progress: progress}, NewError(ErrorKindUnavailable, "pull", req.Reference, err)
-	}
-	mediaType, err := img.MediaType()
-	if err != nil {
-		progress := finishProgress(progressCh, progressDone)
-		return PullResult{Progress: progress}, NewError(ErrorKindUnavailable, "pull", req.Reference, err)
-	}
-	sizeBytes, err := img.Size()
-	if err != nil {
-		progress := finishProgress(progressCh, progressDone)
-		return PullResult{Progress: progress}, NewError(ErrorKindUnavailable, "pull", req.Reference, err)
-	}
-	configFile, err := img.ConfigFile()
-	if err != nil {
-		progress := finishProgress(progressCh, progressDone)
-		return PullResult{Progress: progress}, NewError(ErrorKindUnavailable, "pull", req.Reference, err)
-	}
+	img, manifestDigest, configFile, sizeBytes := descriptor.Image, descriptor.ManifestDigest, descriptor.ConfigFile, descriptor.SizeBytes
 	metadataPlatform := platformFromConfig(configFile, platform)
 
 	unlock, err := c.Lock()
@@ -98,9 +149,9 @@ func (c *Cache) Pull(ctx context.Context, req PullRequest) (PullResult, error) {
 	image, err := NewImageMetadata(MetadataInput{
 		RequestedRef:    req.Reference,
 		ManifestDigest:  manifestDigest.String(),
-		ConfigDigest:    configDigest.String(),
+		ConfigDigest:    descriptor.ConfigDigest.String(),
 		Platform:        metadataPlatform,
-		MediaType:       string(mediaType),
+		MediaType:       descriptor.MediaType,
 		Labels:          configFile.Config.Labels,
 		Env:             configFile.Config.Env,
 		SizeBytes:       sizeBytes,
@@ -126,7 +177,7 @@ func (c *Cache) Pull(ctx context.Context, req PullRequest) (PullResult, error) {
 		return PullResult{Progress: progress}, err
 	}
 
-	progress := finishProgress(progressCh, progressDone)
+	progress = finishProgress(progressCh, progressDone)
 	progress = append(progress, ProgressEvent{
 		Message:      "pulled",
 		CurrentBytes: sizeBytes,
