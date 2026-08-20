@@ -124,6 +124,31 @@ func TestCapabilityConnectErrorPrefersOctoBusCode(t *testing.T) {
 			err:  &capability.OctoBusError{HTTPStatus: http.StatusNotFound, Code: "ABORTED", Message: "transaction conflict"},
 			want: connect.CodeAborted,
 		},
+		{
+			name: "unavailable code overrides http fallback",
+			err:  &capability.OctoBusError{HTTPStatus: http.StatusNotFound, Code: "UNAVAILABLE", Message: "upstream unavailable"},
+			want: connect.CodeUnavailable,
+		},
+		{
+			name: "internal code overrides http fallback",
+			err:  &capability.OctoBusError{HTTPStatus: http.StatusNotFound, Code: "INTERNAL", Message: "upstream internal error"},
+			want: connect.CodeInternal,
+		},
+		{
+			name: "out of range code overrides http fallback",
+			err:  &capability.OctoBusError{HTTPStatus: http.StatusNotFound, Code: "OUT_OF_RANGE", Message: "value out of range"},
+			want: connect.CodeOutOfRange,
+		},
+		{
+			name: "data loss code overrides http fallback",
+			err:  &capability.OctoBusError{HTTPStatus: http.StatusNotFound, Code: "DATA_LOSS", Message: "upstream data loss"},
+			want: connect.CodeDataLoss,
+		},
+		{
+			name: "unknown code overrides http fallback",
+			err:  &capability.OctoBusError{HTTPStatus: http.StatusNotFound, Code: "UNKNOWN", Message: "unknown upstream error"},
+			want: connect.CodeUnknown,
+		},
 	}
 
 	for _, tc := range tests {

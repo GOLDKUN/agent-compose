@@ -55,6 +55,16 @@ func octoBusConnectCode(err *capability.OctoBusError) connect.Code {
 		return connect.CodeAlreadyExists
 	case "CANCELED", "CANCELLED":
 		return connect.CodeCanceled
+	case "UNAVAILABLE":
+		return connect.CodeUnavailable
+	case "INTERNAL":
+		return connect.CodeInternal
+	case "OUT_OF_RANGE":
+		return connect.CodeOutOfRange
+	case "DATA_LOSS":
+		return connect.CodeDataLoss
+	case "UNKNOWN":
+		return connect.CodeUnknown
 	}
 	switch err.HTTPStatus {
 	case http.StatusBadRequest:
