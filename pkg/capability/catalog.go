@@ -71,7 +71,15 @@ func NormalizeCatalog(raw octobusCatalogResponse) (Catalog, error) {
 	methods := map[string]*Method{}
 	for _, item := range raw.GRPC {
 		key := methodKey(item.ServiceID, item.InstanceID, item.MethodFullName)
-		method := ensureMethod(methods, key, item.ServiceID, item.InstanceID, item.RuntimeMode, item.MethodFullName, item.RequestMessageFullName, item.ResponseMessageFullName, item.BackendInstanceStatus)
+		method := ensureMethod(methods, key, methodIdentity{
+			ServiceID:               item.ServiceID,
+			InstanceID:              item.InstanceID,
+			RuntimeMode:             item.RuntimeMode,
+			MethodFullName:          item.MethodFullName,
+			RequestMessageFullName:  item.RequestMessageFullName,
+			ResponseMessageFullName: item.ResponseMessageFullName,
+			BackendInstanceStatus:   item.BackendInstanceStatus,
+		})
 		method.Endpoints = append(method.Endpoints, Endpoint{
 			Protocol:   ProtocolGRPC,
 			MethodPath: item.MethodPath,
@@ -80,7 +88,15 @@ func NormalizeCatalog(raw octobusCatalogResponse) (Catalog, error) {
 	}
 	for _, item := range raw.MCP {
 		key := methodKey(item.ServiceID, item.InstanceID, item.MethodFullName)
-		method := ensureMethod(methods, key, item.ServiceID, item.InstanceID, item.RuntimeMode, item.MethodFullName, item.RequestMessageFullName, item.ResponseMessageFullName, item.BackendInstanceStatus)
+		method := ensureMethod(methods, key, methodIdentity{
+			ServiceID:               item.ServiceID,
+			InstanceID:              item.InstanceID,
+			RuntimeMode:             item.RuntimeMode,
+			MethodFullName:          item.MethodFullName,
+			RequestMessageFullName:  item.RequestMessageFullName,
+			ResponseMessageFullName: item.ResponseMessageFullName,
+			BackendInstanceStatus:   item.BackendInstanceStatus,
+		})
 		method.Endpoints = append(method.Endpoints, Endpoint{
 			Protocol: ProtocolMCP,
 			Endpoint: item.Endpoint,
@@ -89,7 +105,15 @@ func NormalizeCatalog(raw octobusCatalogResponse) (Catalog, error) {
 	}
 	for _, item := range raw.ConnectRPC {
 		key := methodKey(item.ServiceID, item.InstanceID, item.MethodFullName)
-		method := ensureMethod(methods, key, item.ServiceID, item.InstanceID, item.RuntimeMode, item.MethodFullName, item.RequestMessageFullName, item.ResponseMessageFullName, item.BackendInstanceStatus)
+		method := ensureMethod(methods, key, methodIdentity{
+			ServiceID:               item.ServiceID,
+			InstanceID:              item.InstanceID,
+			RuntimeMode:             item.RuntimeMode,
+			MethodFullName:          item.MethodFullName,
+			RequestMessageFullName:  item.RequestMessageFullName,
+			ResponseMessageFullName: item.ResponseMessageFullName,
+			BackendInstanceStatus:   item.BackendInstanceStatus,
+		})
 		method.Endpoints = append(method.Endpoints, Endpoint{
 			Protocol:     ProtocolConnect,
 			Endpoint:     item.Endpoint,
@@ -120,18 +144,30 @@ func NormalizeCatalog(raw octobusCatalogResponse) (Catalog, error) {
 	return out, nil
 }
 
-func ensureMethod(methods map[string]*Method, key, serviceID, instanceID, runtimeMode, methodFullName, requestName, responseName, backendStatus string) *Method {
+// methodIdentity holds the fields shared by octobusGRPCItem, octobusMCPItem,
+// and octobusConnectRPCItem that identify a Method across protocols.
+type methodIdentity struct {
+	ServiceID               string
+	InstanceID              string
+	RuntimeMode             string
+	MethodFullName          string
+	RequestMessageFullName  string
+	ResponseMessageFullName string
+	BackendInstanceStatus   string
+}
+
+func ensureMethod(methods map[string]*Method, key string, identity methodIdentity) *Method {
 	if method, ok := methods[key]; ok {
 		return method
 	}
 	methods[key] = &Method{
-		ServiceID:               serviceID,
-		InstanceID:              instanceID,
-		RuntimeMode:             runtimeMode,
-		MethodFullName:          methodFullName,
-		RequestMessageFullName:  requestName,
-		ResponseMessageFullName: responseName,
-		BackendInstanceStatus:   backendStatus,
+		ServiceID:               identity.ServiceID,
+		InstanceID:              identity.InstanceID,
+		RuntimeMode:             identity.RuntimeMode,
+		MethodFullName:          identity.MethodFullName,
+		RequestMessageFullName:  identity.RequestMessageFullName,
+		ResponseMessageFullName: identity.ResponseMessageFullName,
+		BackendInstanceStatus:   identity.BackendInstanceStatus,
 	}
 	return methods[key]
 }
