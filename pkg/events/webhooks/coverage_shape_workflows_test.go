@@ -50,7 +50,15 @@ func TestWebhookHelpersAndQueueCoverageWorkflows(t *testing.T) {
 	if ExtractCorrelationID(req, body) != "corr-header" || ExtractIdempotencyKey(req) != "delivery-1" || ExtractDeliveryID(req) != "delivery-1" {
 		t.Fatalf("request id helpers failed")
 	}
-	payload := BuildPayload(req, "event-1", 7, "webhook.github.push", "corr", "idem", domain.WebhookSource{ID: "github", Provider: "github"}, body)
+	payload := BuildPayload(req, WebhookPayloadRequest{
+		EventID:        "event-1",
+		Sequence:       7,
+		Topic:          "webhook.github.push",
+		CorrelationID:  "corr",
+		IdempotencyKey: "idem",
+		Source:         domain.WebhookSource{ID: "github", Provider: "github"},
+		Body:           body,
+	})
 	if payload["eventId"] != "event-1" || payload["provider"] != "github" || len(QueryValuesToMap(req)) != 2 {
 		t.Fatalf("payload = %#v", payload)
 	}

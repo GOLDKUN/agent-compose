@@ -164,26 +164,38 @@ func webhookPayloadHeaders(r *http.Request) map[string]string {
 	return out
 }
 
-func BuildPayload(r *http.Request, eventID string, sequence int64, topic, correlationID, idempotencyKey string, source domain.WebhookSource, body map[string]any) map[string]any {
+// WebhookPayloadRequest describes the event metadata BuildPayload assembles
+// alongside the inbound HTTP request into a delivery payload.
+type WebhookPayloadRequest struct {
+	EventID        string
+	Sequence       int64
+	Topic          string
+	CorrelationID  string
+	IdempotencyKey string
+	Source         domain.WebhookSource
+	Body           map[string]any
+}
+
+func BuildPayload(r *http.Request, req WebhookPayloadRequest) map[string]any {
 	payload := map[string]any{
-		"eventId":        eventID,
-		"sequence":       sequence,
+		"eventId":        req.EventID,
+		"sequence":       req.Sequence,
 		"source":         domain.TopicEventSourceWebhook,
-		"provider":       firstNonEmpty(source.Provider, ProviderFromTopic(topic)),
-		"intent":         IntentFromBody(body),
+		"provider":       firstNonEmpty(req.Source.Provider, ProviderFromTopic(req.Topic)),
+		"intent":         IntentFromBody(req.Body),
 		"method":         r.Method,
 		"path":           r.URL.Path,
-		"topic":          topic,
-		"correlationId":  correlationID,
-		"idempotencyKey": idempotencyKey,
+		"topic":          req.Topic,
+		"correlationId":  req.CorrelationID,
+		"idempotencyKey": req.IdempotencyKey,
 		"deliveryId":     ExtractDeliveryID(r),
 		"remoteAddr":     r.RemoteAddr,
 		"headers":        webhookPayloadHeaders(r),
 		"query":          QueryValuesToMap(r),
-		"body":           body,
+		"body":           req.Body,
 	}
-	if source.ID != "" {
-		payload["webhookSourceId"] = source.ID
+	if req.Source.ID != "" {
+		payload["webhookSourceId"] = req.Source.ID
 	}
 	return payload
 }

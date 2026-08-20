@@ -16,10 +16,15 @@ func TestDaemonTrustedHeadersReachWebhookPayload(t *testing.T) {
 	app := echo.New()
 	app.Use(newDaemonTrustedHeadersMiddleware())
 	app.POST("/api/webhooks/:topic", func(c echo.Context) error {
-		payload := webhooks.BuildPayload(
-			c.Request(), "event-1", 1, c.Param("topic"), "correlation-1", "idempotency-1",
-			domain.WebhookSource{}, map[string]any{"intent": "push"},
-		)
+		payload := webhooks.BuildPayload(c.Request(), webhooks.WebhookPayloadRequest{
+			EventID:        "event-1",
+			Sequence:       1,
+			Topic:          c.Param("topic"),
+			CorrelationID:  "correlation-1",
+			IdempotencyKey: "idempotency-1",
+			Source:         domain.WebhookSource{},
+			Body:           map[string]any{"intent": "push"},
+		})
 		return c.JSON(http.StatusAccepted, payload)
 	})
 

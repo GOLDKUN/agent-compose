@@ -90,73 +90,114 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	if h.store() == nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "webhook store is required"})
 	}
-	topic := strings.TrimSpace(c.Param("topic"))
-	if err := ValidateExternalTopic(topic); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-	}
-	sources, bodyLimit, handled, err := h.webhookSources(c, topic)
+	resolved, handled, err := h.resolveWebhookEvent(c)
 	if handled {
 		return err
 	}
+	return h.storeWebhookEvent(c, resolved)
+}
+
+// resolvedWebhookEvent carries the topic, source, and decoded body that
+// survived validation and authorization, ready to be built into a stored
+// event.
+type resolvedWebhookEvent struct {
+	Topic          string
+	Source         domain.WebhookSource
+	Body           map[string]any
+	CompactBody    string
+	IdempotencyKey string
+}
+
+// resolveWebhookEvent validates, authorizes, and decodes the inbound webhook
+// request. If handled is true, the caller must return err as-is (a response
+// has already been written, whether that's an error or an accepted/idempotent
+// duplicate).
+func (h routeHandler) resolveWebhookEvent(c echo.Context) (resolvedWebhookEvent, bool, error) {
+	topic := strings.TrimSpace(c.Param("topic"))
+	if err := ValidateExternalTopic(topic); err != nil {
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	sources, bodyLimit, handled, err := h.webhookSources(c, topic)
+	if handled {
+		return resolvedWebhookEvent{}, true, err
+	}
 	bodyFormat := detectRequestBodyFormat(c.Request())
 	if bodyFormat == requestBodyFormatUnsupported {
-		return c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "content-type must be application/json or application/x-www-form-urlencoded"})
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "content-type must be application/json or application/x-www-form-urlencoded"})
 	}
 	rawBody, err := ReadBody(c.Request(), bodyLimit)
 	if err != nil {
 		if errors.Is(err, domain.ErrBodyTooLarge) {
-			return c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "request body is too large"})
+			return resolvedWebhookEvent{}, true, c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "request body is too large"})
 		}
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "failed to read request body"})
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": "failed to read request body"})
 	}
 	source, handled, err := h.authorizeWebhookRequest(c, sources, rawBody)
 	if handled {
-		return err
+		return resolvedWebhookEvent{}, true, err
 	}
 	if limit := h.sourceBodyLimit(source); limit > 0 && int64(len(rawBody)) > limit {
-		return c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "request body is too large"})
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "request body is too large"})
 	}
 	githubMode, err := domain.GitHubWebhookModeForSource(source)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid webhook source configuration"})
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid webhook source configuration"})
 	}
 	if githubMode != domain.GitHubWebhookModeGeneric {
 		var ok bool
 		topic, ok = githubTopic(c.Request())
 		if !ok {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid or missing X-GitHub-Event header"})
+			return resolvedWebhookEvent{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid or missing X-GitHub-Event header"})
 		}
 	}
 	if bodyFormat == requestBodyFormatForm && githubMode == domain.GitHubWebhookModeGeneric {
-		return c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "application/x-www-form-urlencoded is supported only for GitHub webhooks"})
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusUnsupportedMediaType, map[string]string{"error": "application/x-www-form-urlencoded is supported only for GitHub webhooks"})
 	}
 	decodedBody := rawBody
 	if bodyFormat == requestBodyFormatForm {
 		decodedBody, err = decodeGitHubFormPayload(rawBody)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return resolvedWebhookEvent{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
 	}
 	body, compactBody, err := DecodeJSONObject(decodedBody)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 	idempotencyKey := ExtractIdempotencyKey(c.Request())
 	if existing, ok, err := h.store().FindEventByIdempotencyKey(c.Request().Context(), topic, idempotencyKey); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook event"})
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook event"})
 	} else if ok {
 		if ExistingBodyHash(existing.PayloadJSON) != events.PayloadSHA256(compactBody) {
-			return c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
+			return resolvedWebhookEvent{}, true, c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
 		}
-		return c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
+		return resolvedWebhookEvent{}, true, c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
 	}
+	return resolvedWebhookEvent{
+		Topic:          topic,
+		Source:         source,
+		Body:           body,
+		CompactBody:    compactBody,
+		IdempotencyKey: idempotencyKey,
+	}, false, nil
+}
 
+// storeWebhookEvent builds the delivery payload for a resolved webhook event,
+// persists it, and writes the HTTP response.
+func (h routeHandler) storeWebhookEvent(c echo.Context, resolved resolvedWebhookEvent) error {
 	eventID := h.newEventID()
-	correlationID := ExtractCorrelationID(c.Request(), body)
+	correlationID := ExtractCorrelationID(c.Request(), resolved.Body)
 	if correlationID == "" {
 		correlationID = eventID
 	}
-	payload := BuildPayload(c.Request(), eventID, 0, topic, correlationID, idempotencyKey, source, body)
+	payload := BuildPayload(c.Request(), WebhookPayloadRequest{
+		EventID:        eventID,
+		Topic:          resolved.Topic,
+		CorrelationID:  correlationID,
+		IdempotencyKey: resolved.IdempotencyKey,
+		Source:         resolved.Source,
+		Body:           resolved.Body,
+	})
 	payloadJSON, err := h.marshalJSONCompact(payload)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to encode webhook payload"})
@@ -164,12 +205,12 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 	payloadHash := events.PayloadSHA256(payloadJSON)
 	created, err := h.store().CreateEvent(c.Request().Context(), domain.TopicEventRecord{
 		ID:             eventID,
-		Topic:          topic,
+		Topic:          resolved.Topic,
 		Source:         domain.TopicEventSourceWebhook,
-		Provider:       firstNonEmpty(source.Provider, ProviderFromTopic(topic)),
-		Intent:         IntentFromBody(body),
+		Provider:       firstNonEmpty(resolved.Source.Provider, ProviderFromTopic(resolved.Topic)),
+		Intent:         IntentFromBody(resolved.Body),
 		CorrelationID:  correlationID,
-		IdempotencyKey: idempotencyKey,
+		IdempotencyKey: resolved.IdempotencyKey,
 		DeliveryID:     ExtractDeliveryID(c.Request()),
 		PayloadHash:    payloadHash,
 		PayloadJSON:    payloadJSON,
@@ -180,10 +221,10 @@ func (h routeHandler) handleWebhook(c echo.Context) error {
 		var conflict *domain.TopicEventIdempotencyConflictError
 		if errors.As(err, &conflict) {
 			existing := conflict.Existing
-			if strings.TrimSpace(existing.ID) == "" || strings.TrimSpace(existing.Topic) != topic {
+			if strings.TrimSpace(existing.ID) == "" || strings.TrimSpace(existing.Topic) != resolved.Topic {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "invalid conflicting webhook event"})
 			}
-			if ExistingBodyHash(existing.PayloadJSON) == events.PayloadSHA256(compactBody) {
+			if ExistingBodyHash(existing.PayloadJSON) == events.PayloadSHA256(resolved.CompactBody) {
 				return c.JSON(http.StatusAccepted, acceptedResponseFor(existing))
 			}
 			return c.JSON(http.StatusConflict, idempotencyConflictResponseFor(existing))
