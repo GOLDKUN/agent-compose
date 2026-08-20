@@ -233,7 +233,7 @@ func Normalize(spec *ProjectSpec, options NormalizeOptions) (*NormalizedProjectS
 			return nil, err
 		}
 		agent := spec.Agents[agentName]
-		normalizedAgent, err := normalizeAgent(agentName, agent, options, normalized.Volumes, normalized.Workspaces, normalized.MCPServers, normalized.OctoBusServers)
+		normalizedAgent, err := normalizeAgent(agentName, agent, options, normalized)
 		if err != nil {
 			return nil, err
 		}
@@ -255,7 +255,7 @@ func NormalizeFile(path string) (*NormalizedProjectSpec, error) {
 	return normalized, nil
 }
 
-func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, projectVolumes map[string]NormalizedVolumeSpec, projectWorkspaces map[string]WorkspaceSpec, projectMCPServers map[string]NormalizedMCPServerSpec, projectOctoBusServers map[string]NormalizedOctoBusServerSpec) (NormalizedAgentSpec, error) {
+func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, project *NormalizedProjectSpec) (NormalizedAgentSpec, error) {
 	enabled := true
 	if agent.Enabled != nil {
 		enabled = *agent.Enabled
@@ -276,7 +276,7 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
-	agentMCPServers, err := normalizeAgentMCPEntries(joinPath("agents", name), agent.MCPServers, projectMCPServers, options)
+	agentMCPServers, err := normalizeAgentMCPEntries(joinPath("agents", name), agent.MCPServers, project.MCPServers, options)
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
@@ -284,7 +284,7 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
-	volumes, err := normalizeVolumeMountSpecs(joinPath("agents", name)+".volumes", agent.Volumes, projectVolumes)
+	volumes, err := normalizeVolumeMountSpecs(joinPath("agents", name)+".volumes", agent.Volumes, project.Volumes)
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
@@ -296,7 +296,7 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
-	workspace, err := resolveAgentWorkspace(joinPath("agents", name)+".workspace", agent.Workspace, projectWorkspaces, options)
+	workspace, err := resolveAgentWorkspace(joinPath("agents", name)+".workspace", agent.Workspace, project.Workspaces, options)
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
@@ -305,7 +305,7 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 		return NormalizedAgentSpec{}, err
 	}
 	capsetIDs := normalizeStringList(agent.CapsetIDs)
-	if err := validateAgentCapsetReferences(joinPath("agents", name)+".capset_ids", capsetIDs, projectOctoBusServers); err != nil {
+	if err := validateAgentCapsetReferences(joinPath("agents", name)+".capset_ids", capsetIDs, project.OctoBusServers); err != nil {
 		return NormalizedAgentSpec{}, err
 	}
 	return NormalizedAgentSpec{
@@ -629,46 +629,54 @@ func normalizeSkillSpecs(path string, values []SkillSpec, options NormalizeOptio
 	return normalized, nil
 }
 
-func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) (NormalizedSkillSpec, error) {
+// interpolateSkillSourceFields interpolates each raw SkillSpec field and
+// assembles them into a normalized sources.Source, ready for credential
+// normalization and provider-specific validation.
+func interpolateSkillSourceFields(path string, value SkillSpec, options NormalizeOptions) (string, sources.Source, error) {
 	name, err := interpolateEnvValue(path+".name", strings.TrimSpace(value.Name), options)
 	if err != nil {
-		return NormalizedSkillSpec{}, err
+		return "", sources.Source{}, err
 	}
 	provider, err := interpolateEnvValue(path+".provider", strings.TrimSpace(value.Provider), options)
 	if err != nil {
-		return NormalizedSkillSpec{}, err
+		return "", sources.Source{}, err
 	}
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	urlValue, err := interpolateEnvValue(path+".url", strings.TrimSpace(value.URL), options)
 	if err != nil {
-		return NormalizedSkillSpec{}, err
+		return "", sources.Source{}, err
 	}
 	pathValue, err := interpolateEnvValue(path+".path", strings.TrimSpace(value.Path), options)
 	if err != nil {
-		return NormalizedSkillSpec{}, err
+		return "", sources.Source{}, err
 	}
 	ref, err := interpolateEnvValue(path+".ref", strings.TrimSpace(value.Ref), options)
 	if err != nil {
-		return NormalizedSkillSpec{}, err
+		return "", sources.Source{}, err
 	}
 	format, err := interpolateEnvValue(path+".format", strings.TrimSpace(value.Format), options)
 	if err != nil {
-		return NormalizedSkillSpec{}, err
+		return "", sources.Source{}, err
 	}
 	format = strings.ToLower(strings.TrimSpace(format))
-	username := strings.TrimSpace(value.Username)
-	password := strings.TrimSpace(value.Password)
-	token := strings.TrimSpace(value.Token)
-	commonSource := sources.Source{
+	source := sources.Source{
 		Provider: provider,
 		URL:      urlValue,
 		Ref:      ref,
 		Path:     pathValue,
 		Format:   format,
-		Username: username,
-		Password: password,
-		Token:    token,
+		Username: strings.TrimSpace(value.Username),
+		Password: strings.TrimSpace(value.Password),
+		Token:    strings.TrimSpace(value.Token),
 	}.Normalized()
+	return name, source, nil
+}
+
+func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) (NormalizedSkillSpec, error) {
+	name, commonSource, err := interpolateSkillSourceFields(path, value, options)
+	if err != nil {
+		return NormalizedSkillSpec{}, err
+	}
 	commonSource, err = normalizeSourceCredentials(path, commonSource, options)
 	if err != nil {
 		return NormalizedSkillSpec{}, err
@@ -678,7 +686,7 @@ func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) 
 	}
 	switch commonSource.Provider {
 	case sources.ProviderGit:
-		if strings.TrimSpace(urlValue) == "" {
+		if commonSource.URL == "" {
 			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".url", Message: "git skill url is required"}
 		}
 		if commonSource.Format != "" {
@@ -688,7 +696,7 @@ func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) 
 		if commonSource.URL != "" {
 			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".url", Message: "file skill does not support url"}
 		}
-		if strings.TrimSpace(pathValue) == "" {
+		if commonSource.Path == "" {
 			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".path", Message: "file skill path is required"}
 		}
 		if commonSource.Ref != "" {
