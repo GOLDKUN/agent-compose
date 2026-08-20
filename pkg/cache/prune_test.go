@@ -50,10 +50,10 @@ func TestPruneItemsDryRunDoesNotRemove(t *testing.T) {
 		mustCacheItem(t, "referenced", StatusReferenced),
 	}
 	calls := 0
-	result, err := PruneItems(context.Background(), items, PruneRequest{}, time.Now(), func(context.Context, Item) error {
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: items, Now: time.Now(), Remove: func(context.Context, Item) error {
 		calls++
 		return nil
-	})
+	}}, PruneRequest{})
 	if err != nil {
 		t.Fatalf("PruneItems returned error: %v", err)
 	}
@@ -80,10 +80,10 @@ func TestPruneItemsForceKeepsRequiredReferences(t *testing.T) {
 		mustCacheItem(t, "active", StatusActive),
 	}
 	var removed []string
-	result, err := PruneItems(context.Background(), items, PruneRequest{Force: true}, time.Now(), func(_ context.Context, item Item) error {
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: items, Now: time.Now(), Remove: func(_ context.Context, item Item) error {
 		removed = append(removed, item.CacheID)
 		return nil
-	})
+	}}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems returned error: %v", err)
 	}
@@ -98,10 +98,10 @@ func TestPruneItemsForceKeepsRequiredReferences(t *testing.T) {
 
 func TestPruneItemsRequiredReferenceCannotBeForced(t *testing.T) {
 	item := mustCacheItem(t, "referenced", StatusReferenced)
-	result, err := PruneItems(context.Background(), []Item{item}, PruneRequest{Force: true}, time.Now(), func(context.Context, Item) error {
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: []Item{item}, Now: time.Now(), Remove: func(context.Context, Item) error {
 		t.Fatal("remover should not be called")
 		return nil
-	})
+	}}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems returned error: %v", err)
 	}
@@ -113,12 +113,12 @@ func TestPruneItemsRequiredReferenceCannotBeForced(t *testing.T) {
 func TestPruneItemsContinuesAfterRemoveError(t *testing.T) {
 	first := mustCacheItem(t, "first", StatusUnused)
 	second := mustCacheItem(t, "second", StatusUnused)
-	result, err := PruneItems(context.Background(), []Item{first, second}, PruneRequest{Force: true}, time.Now(), func(_ context.Context, item Item) error {
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: []Item{first, second}, Now: time.Now(), Remove: func(_ context.Context, item Item) error {
 		if item.CacheID == first.CacheID {
 			return errors.New("disk busy")
 		}
 		return nil
-	})
+	}}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems returned error: %v", err)
 	}
@@ -136,10 +136,10 @@ func TestPruneItemsContinuesAfterRemoveError(t *testing.T) {
 func TestRemoveItem(t *testing.T) {
 	item := mustCacheItem(t, "unused", StatusUnused)
 	calls := 0
-	result, err := RemoveItem(context.Background(), []Item{item}, RemoveRequest{CacheID: item.CacheID}, time.Now(), func(context.Context, Item) error {
+	result, err := RemoveItem(context.Background(), ItemRemovalContext{Items: []Item{item}, Now: time.Now(), Remove: func(context.Context, Item) error {
 		calls++
 		return nil
-	})
+	}}, RemoveRequest{CacheID: item.CacheID})
 	if err != nil {
 		t.Fatalf("RemoveItem dry-run returned error: %v", err)
 	}
@@ -147,10 +147,10 @@ func TestRemoveItem(t *testing.T) {
 		t.Fatalf("dry-run result = %#v calls=%d", result, calls)
 	}
 
-	result, err = RemoveItem(context.Background(), []Item{item}, RemoveRequest{CacheID: item.CacheID, Force: true}, time.Now(), func(context.Context, Item) error {
+	result, err = RemoveItem(context.Background(), ItemRemovalContext{Items: []Item{item}, Now: time.Now(), Remove: func(context.Context, Item) error {
 		calls++
 		return nil
-	})
+	}}, RemoveRequest{CacheID: item.CacheID, Force: true})
 	if err != nil {
 		t.Fatalf("RemoveItem force returned error: %v", err)
 	}
@@ -160,21 +160,21 @@ func TestRemoveItem(t *testing.T) {
 }
 
 func TestRemoveItemInvalidNotFoundAndProtected(t *testing.T) {
-	if _, err := RemoveItem(context.Background(), nil, RemoveRequest{CacheID: "../bad"}, time.Now(), nil); !errors.Is(err, ErrInvalidCacheID) {
+	if _, err := RemoveItem(context.Background(), ItemRemovalContext{Items: nil, Now: time.Now(), Remove: nil}, RemoveRequest{CacheID: "../bad"}); !errors.Is(err, ErrInvalidCacheID) {
 		t.Fatalf("invalid id error = %v, want ErrInvalidCacheID", err)
 	}
 
 	item := mustCacheItem(t, "unused", StatusUnused)
 	missing := mustCacheItem(t, "missing", StatusUnused)
-	if _, err := RemoveItem(context.Background(), []Item{item}, RemoveRequest{CacheID: missing.CacheID}, time.Now(), nil); !errors.Is(err, ErrCacheNotFound) {
+	if _, err := RemoveItem(context.Background(), ItemRemovalContext{Items: []Item{item}, Now: time.Now(), Remove: nil}, RemoveRequest{CacheID: missing.CacheID}); !errors.Is(err, ErrCacheNotFound) {
 		t.Fatalf("missing error = %v, want ErrCacheNotFound", err)
 	}
 
 	active := mustCacheItem(t, "active", StatusActive)
-	result, err := RemoveItem(context.Background(), []Item{active}, RemoveRequest{CacheID: active.CacheID, Force: true}, time.Now(), func(context.Context, Item) error {
+	result, err := RemoveItem(context.Background(), ItemRemovalContext{Items: []Item{active}, Now: time.Now(), Remove: func(context.Context, Item) error {
 		t.Fatal("remover should not be called for active item")
 		return nil
-	})
+	}}, RemoveRequest{CacheID: active.CacheID, Force: true})
 	if err != nil {
 		t.Fatalf("active RemoveItem returned error: %v", err)
 	}

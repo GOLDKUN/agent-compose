@@ -51,7 +51,7 @@ func (c *Controller) PruneCaches(ctx context.Context, req PruneRequest) (Result,
 	if err != nil {
 		return Result{}, err
 	}
-	result, err := PruneItems(ctx, items, req, c.now(), sourceRemoveFunc(sources))
+	result, err := PruneItems(ctx, ItemRemovalContext{Items: items, Now: c.now(), Remove: sourceRemoveFunc(sources)}, req)
 	if err != nil {
 		return result, err
 	}
@@ -69,7 +69,7 @@ func (c *Controller) RemoveCache(ctx context.Context, req RemoveRequest) (Result
 		return Result{Warnings: warnings}, err
 	}
 	req.CacheID = resolved
-	result, err := RemoveItem(ctx, items, req, c.now(), sourceRemoveFunc(sources))
+	result, err := RemoveItem(ctx, ItemRemovalContext{Items: items, Now: c.now(), Remove: sourceRemoveFunc(sources)}, req)
 	if err != nil {
 		return result, err
 	}
