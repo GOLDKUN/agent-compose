@@ -338,7 +338,7 @@ func TestSchedulerSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateVolume returned error: %v", err)
 	}
-	if err := bridge.configDB.UpsertProjectVolume(ctx, "project-1", "request-cache", projectVolume.ID, false); err != nil {
+	if err := bridge.configDB.UpsertProjectVolume(ctx, "project-1", "request-cache", domain.ProjectVolumeLink{VolumeID: projectVolume.ID}); err != nil {
 		t.Fatalf("UpsertProjectVolume returned error: %v", err)
 	}
 	scheduler := domain.Scheduler{
