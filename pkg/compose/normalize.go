@@ -733,7 +733,7 @@ func validateSkillSource(path string, commonSource *sources.Source, options Norm
 		}
 		commonSource.Path = normalizeFileSkillPath(commonSource.Path, options)
 	case sources.ProviderHTTP:
-		if commonSource.URL == "" {
+		if strings.TrimSpace(commonSource.URL) == "" {
 			return &ValidationError{Path: path + ".url", Message: "http skill url is required"}
 		}
 		if commonSource.Ref != "" {
