@@ -119,10 +119,213 @@ func NewConfig(di do.Injector) (*Config, error) {
 		dataRoot = defaultDataRoot()
 	}
 
-	dbPath := filepath.Join(dataRoot, "data.db")
+	sources, err := loadConfigSources(logger, dataRoot)
+	if err != nil {
+		return nil, err
+	}
+	warnPublicHTTPListen(logger, sources.DaemonHTTP.HttpListen)
 
-	dbName := "agent_compose"
+	normalized, err := normalizeConfigPaths(configPathsToNormalize{
+		DataRoot:              dataRoot,
+		SandboxRoot:           sources.Sandbox.Root,
+		SandboxArchiveRoot:    sources.Cleanup.SandboxArchiveRoot,
+		BoxliteHome:           sources.Drivers.BoxliteHome,
+		BoxliteRuntimeDir:     sources.Drivers.BoxliteRuntimeDir,
+		DockerHome:            sources.Drivers.DockerHome,
+		DockerHostSandboxRoot: sources.Drivers.DockerHostSandboxRoot,
+		MicrosandboxHome:      sources.Drivers.MicrosandboxHome,
+		MicrosandboxMSBPath:   sources.Drivers.MicrosandboxMSBPath,
+		MicrosandboxLibPath:   sources.Drivers.MicrosandboxLibPath,
+		ImageCacheRoot:        sources.Images.ImageCacheRoot,
+		BoxRootfsPath:         sources.Images.BoxRootfsPath,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureConfigDirsExist(normalized); err != nil {
+		return nil, err
+	}
 
+	return buildConfig(sources, normalized), nil
+}
+
+// configSources bundles every environment-derived config group NewConfig
+// assembles into the final *Config.
+type configSources struct {
+	Database        databaseConfig
+	Sandbox         sandboxRootConfigValues
+	DaemonHTTP      daemonHTTPConfig
+	LLM             llmEnvConfig
+	Timeouts        runtimeTimeoutsConfig
+	Drivers         driverHomesConfig
+	Images          imageEnvConfig
+	Resources       sandboxResourceConfig
+	Cleanup         cleanupConfigValues
+	GuestPaths      *Config
+	SandboxTimeouts sandboxTimeoutsConfig
+	HTTPLimits      httpLimitsConfig
+}
+
+func loadConfigSources(logger *slog.Logger, dataRoot string) (configSources, error) {
+	database, err := loadDatabaseConfig(logger, dataRoot)
+	if err != nil {
+		return configSources{}, err
+	}
+	sandbox, err := loadSandboxRootConfig(logger, dataRoot)
+	if err != nil {
+		return configSources{}, err
+	}
+	daemonHTTP, err := loadDaemonHTTPConfig()
+	if err != nil {
+		return configSources{}, err
+	}
+	drivers, err := loadDriverHomesConfig(logger, dataRoot)
+	if err != nil {
+		return configSources{}, err
+	}
+	images, err := loadImageEnvConfig(dataRoot)
+	if err != nil {
+		return configSources{}, err
+	}
+	resources, err := loadSandboxResourceConfig(logger)
+	if err != nil {
+		return configSources{}, err
+	}
+	cleanup, err := loadCleanupConfig(dataRoot)
+	if err != nil {
+		return configSources{}, err
+	}
+	guestPaths := &Config{
+		GuestWorkspacePath: os.Getenv("GUEST_WORKSPACE"),
+		GuestStateRoot:     os.Getenv("GUEST_STATE_ROOT"),
+		GuestRuntimeRoot:   os.Getenv("GUEST_RUNTIME_ROOT"),
+		GuestLogRoot:       os.Getenv("GUEST_LOG_ROOT"),
+	}
+	ApplyDefaultGuestPaths(guestPaths)
+	sandboxTimeouts, err := loadSandboxTimeoutsConfig(logger)
+	if err != nil {
+		return configSources{}, err
+	}
+	return configSources{
+		Database:        database,
+		Sandbox:         sandbox,
+		DaemonHTTP:      daemonHTTP,
+		LLM:             loadLLMEnvConfig(logger),
+		Timeouts:        loadRuntimeTimeoutsConfig(logger),
+		Drivers:         drivers,
+		Images:          images,
+		Resources:       resources,
+		Cleanup:         cleanup,
+		GuestPaths:      guestPaths,
+		SandboxTimeouts: sandboxTimeouts,
+		HTTPLimits:      loadHTTPLimitsConfig(logger),
+	}, nil
+}
+
+func ensureConfigDirsExist(normalized configPathsToNormalize) error {
+	dirs := map[string]string{
+		"DATA_ROOT":         normalized.DataRoot,
+		"SANDBOX_ROOT":      normalized.SandboxRoot,
+		"BOXLITE_HOME":      normalized.BoxliteHome,
+		"DOCKER_HOME":       normalized.DockerHome,
+		"IMAGE_CACHE_ROOT":  normalized.ImageCacheRoot,
+		"MICROSANDBOX_HOME": normalized.MicrosandboxHome,
+	}
+	for name, dir := range dirs {
+		if err := ensureDirExists(dir); err != nil {
+			return fmt.Errorf("ensure %s exists: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func buildConfig(sources configSources, normalized configPathsToNormalize) *Config {
+	database, sandbox, daemonHTTP := sources.Database, sources.Sandbox, sources.DaemonHTTP
+	llm, timeouts, drivers := sources.LLM, sources.Timeouts, sources.Drivers
+	images, resources, cleanup := sources.Images, sources.Resources, sources.Cleanup
+	guestPaths, sandboxTimeouts, httpLimits := sources.GuestPaths, sources.SandboxTimeouts, sources.HTTPLimits
+	return &Config{
+		DbAddr:                     database.DbAddr,
+		DbName:                     database.DbName,
+		DbTimeout:                  database.DbTimeout,
+		SQLiteMaxOpenConns:         database.SQLiteMaxOpenConns,
+		DataRoot:                   normalized.DataRoot,
+		SandboxRoot:                normalized.SandboxRoot,
+		SandboxRootExplicit:        sandbox.Explicit,
+		HttpListen:                 daemonHTTP.HttpListen,
+		DaemonAuthToken:            daemonHTTP.DaemonAuthToken,
+		AgentComposeSocket:         daemonHTTP.AgentComposeSocket,
+		AgentComposeHost:           daemonHTTP.AgentComposeHost,
+		WebhookBodyLimitBytes:      httpLimits.WebhookBodyLimitBytes,
+		WebhookQueueRulesJSON:      httpLimits.WebhookQueueRulesJSON,
+		WebhookQueueDefaultWorkers: httpLimits.WebhookQueueDefaultWorkers,
+		WorkspaceUploadLimitBytes:  httpLimits.WorkspaceUploadLimitBytes,
+		LLMAPIEndpoint:             llm.LLMAPIEndpoint,
+		LLMAPIProtocol:             llm.LLMAPIProtocol,
+		LLMAPIKey:                  llm.LLMAPIKey,
+		LLMModel:                   llm.LLMModel,
+		LLMTimeout:                 llm.LLMTimeout,
+		LLMMaxOutputTokens:         llm.LLMMaxOutputTokens,
+		CodexRequestMaxRetries:     llm.CodexRequestMaxRetries,
+		CodexStreamMaxRetries:      llm.CodexStreamMaxRetries,
+		CodexStreamIdleTimeout:     llm.CodexStreamIdleTimeout,
+		RuntimeBaseURL:             llm.RuntimeBaseURL,
+		AgentTimeout:               timeouts.AgentTimeout,
+		SchedulerRunTimeout:        timeouts.SchedulerRunTimeout,
+		RuntimeDriver:              drivers.RuntimeDriver,
+		BoxliteHome:                normalized.BoxliteHome,
+		BoxliteRuntimeDir:          normalized.BoxliteRuntimeDir,
+		DockerHome:                 normalized.DockerHome,
+		DockerHostSandboxRoot:      normalized.DockerHostSandboxRoot,
+		DockerDefaultImage:         images.DockerDefaultImage,
+		MicrosandboxHome:           normalized.MicrosandboxHome,
+		MicrosandboxMSBPath:        normalized.MicrosandboxMSBPath,
+		MicrosandboxLibPath:        normalized.MicrosandboxLibPath,
+		MicrosandboxDefaultImage:   images.MicrosandboxDefaultImage,
+		MicrosandboxInsecure:       images.MicrosandboxInsecure,
+		DefaultImage:               images.DefaultImage,
+		BoxRootfsPath:              normalized.BoxRootfsPath,
+		ImageRegistry:              images.ImageRegistry,
+		ImageStoreMode:             images.ImageStoreMode,
+		ImageCacheRoot:             normalized.ImageCacheRoot,
+		ImageInsecureRegistries:    images.ImageInsecureRegistries,
+		SandboxCPUs:                resources.SandboxCPUs,
+		SandboxMemoryMiB:           resources.SandboxMemoryMiB,
+		SandboxDiskSizeGB:          resources.SandboxDiskSizeGB,
+		CacheTTL:                   resources.CacheTTL,
+		CleanupInterval:            cleanup.CleanupInterval,
+		WorkspaceCleanupTTL:        cleanup.WorkspaceCleanupTTL,
+		SandboxRetentionTTL:        cleanup.SandboxRetentionTTL,
+		SandboxArchiveRoot:         normalized.SandboxArchiveRoot,
+		ImageCacheCleanupTTL:       cleanup.ImageCacheCleanupTTL,
+		ImagePullTimeout:           timeouts.ImagePullTimeout,
+		GuestWorkspacePath:         guestPaths.GuestWorkspacePath,
+		GuestHomePath:              guestPaths.GuestHomePath,
+		GuestStateRoot:             guestPaths.GuestStateRoot,
+		GuestRuntimeRoot:           guestPaths.GuestRuntimeRoot,
+		GuestLogRoot:               guestPaths.GuestLogRoot,
+		JupyterGuestPort:           sandboxTimeouts.JupyterGuestPort,
+		SandboxStartTimeout:        sandboxTimeouts.StartTimeout,
+		SandboxStopTimeout:         sandboxTimeouts.StopTimeout,
+		SandboxGracefulStopTimeout: sandboxTimeouts.GracefulStopTimeout,
+		JupyterReadyTimeout:        sandboxTimeouts.JupyterReadyTimeout,
+		JupyterProxyBasePath:       sandboxTimeouts.JupyterProxyBase,
+		CapGRPCListen:              strings.TrimSpace(os.Getenv("CAP_GRPC_LISTEN")),
+		CapGRPCTarget:              strings.TrimSpace(os.Getenv("CAP_GRPC_TARGET")),
+		Version:                    BuildVersion,
+	}
+}
+
+// databaseConfig holds the sqlite connection settings NewConfig derives from
+// the environment.
+type databaseConfig struct {
+	DbAddr             string
+	DbName             string
+	DbTimeout          time.Duration
+	SQLiteMaxOpenConns int
+}
+
+func loadDatabaseConfig(logger *slog.Logger, dataRoot string) (databaseConfig, error) {
 	dbTimeout := 16 * time.Second
 	if raw := os.Getenv("DB_TIMEOUT"); raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
@@ -134,19 +337,35 @@ func NewConfig(di do.Injector) (*Config, error) {
 	}
 	sqliteMaxOpenConns, err := sqliteMaxOpenConnsFromEnvironment()
 	if err != nil {
-		return nil, err
+		return databaseConfig{}, err
 	}
+	return databaseConfig{
+		DbAddr:             filepath.Join(dataRoot, "data.db"),
+		DbName:             "agent_compose",
+		DbTimeout:          dbTimeout,
+		SQLiteMaxOpenConns: sqliteMaxOpenConns,
+	}, nil
+}
 
+// sandboxRootConfigValues is the resolved sandbox storage root, along with
+// whether it was set explicitly (vs. defaulted or migrated from the legacy
+// sessions root).
+type sandboxRootConfigValues struct {
+	Explicit bool
+	Root     string
+}
+
+func loadSandboxRootConfig(logger *slog.Logger, dataRoot string) (sandboxRootConfigValues, error) {
 	sandboxRootExplicit := strings.TrimSpace(os.Getenv("SANDBOX_ROOT")) != "" || strings.TrimSpace(os.Getenv("SESSION_ROOT")) != ""
 	sandboxRoot, err := envWithLegacy(logger, "SANDBOX_ROOT", "SESSION_ROOT")
 	if err != nil {
-		return nil, err
+		return sandboxRootConfigValues{}, err
 	}
 	sandboxRoot = strings.TrimSpace(sandboxRoot)
 	if sandboxRoot == "" {
 		legacyRoot := filepath.Join(dataRoot, "sessions")
 		if nonEmpty, inspectErr := pathHasEntries(legacyRoot); inspectErr != nil {
-			return nil, fmt.Errorf("inspect legacy sessions root %s: %w", legacyRoot, inspectErr)
+			return sandboxRootConfigValues{}, fmt.Errorf("inspect legacy sessions root %s: %w", legacyRoot, inspectErr)
 		} else if nonEmpty {
 			sandboxRoot = legacyRoot
 			logger.Warn("using deprecated sessions storage root", "path", legacyRoot, "replacement", filepath.Join(dataRoot, "sandboxes"))
@@ -154,25 +373,60 @@ func NewConfig(di do.Injector) (*Config, error) {
 			sandboxRoot = filepath.Join(dataRoot, "sandboxes")
 		}
 	}
+	return sandboxRootConfigValues{Explicit: sandboxRootExplicit, Root: sandboxRoot}, nil
+}
 
+// daemonHTTPConfig holds the daemon's own listen/auth settings, as opposed to
+// the LLM or scheduler HTTP endpoints it talks to.
+type daemonHTTPConfig struct {
+	HttpListen         string
+	DaemonAuthToken    string
+	AgentComposeSocket string
+	AgentComposeHost   string
+}
+
+func loadDaemonHTTPConfig() (daemonHTTPConfig, error) {
 	httpListen := strings.TrimSpace(os.Getenv("HTTP_LISTEN"))
 	if httpListen != "" {
 		if err := validateTCPListenAddress("HTTP_LISTEN", httpListen); err != nil {
-			return nil, err
+			return daemonHTTPConfig{}, err
 		}
 	}
 	daemonAuthToken := strings.TrimSpace(os.Getenv("AGENT_COMPOSE_AUTH_TOKEN"))
 	agentComposeSocket, err := resolveAgentComposeSocket(os.Getenv("AGENT_COMPOSE_SOCKET"))
 	if err != nil {
-		return nil, err
+		return daemonHTTPConfig{}, err
 	}
 	agentComposeHost := strings.TrimSpace(os.Getenv("AGENT_COMPOSE_HOST"))
 	if agentComposeHost != "" {
 		if err := validateAgentComposeHost(agentComposeHost); err != nil {
-			return nil, err
+			return daemonHTTPConfig{}, err
 		}
 	}
+	return daemonHTTPConfig{
+		HttpListen:         httpListen,
+		DaemonAuthToken:    daemonAuthToken,
+		AgentComposeSocket: agentComposeSocket,
+		AgentComposeHost:   agentComposeHost,
+	}, nil
+}
 
+// llmEnvConfig holds the LLM endpoint/credentials and the Codex runtime
+// retry/timeout settings derived from it.
+type llmEnvConfig struct {
+	LLMAPIEndpoint         string
+	LLMAPIProtocol         string
+	LLMAPIKey              string
+	LLMModel               string
+	LLMMaxOutputTokens     int
+	RuntimeBaseURL         string
+	LLMTimeout             time.Duration
+	CodexRequestMaxRetries uint64
+	CodexStreamMaxRetries  uint64
+	CodexStreamIdleTimeout time.Duration
+}
+
+func loadLLMEnvConfig(logger *slog.Logger) llmEnvConfig {
 	llmAPIEndpoint := os.Getenv("LLM_API_ENDPOINT")
 	llmAPIProtocol := strings.ToLower(strings.TrimSpace(os.Getenv("LLM_API_PROTOCOL")))
 	llmAPIKey := getenvFirst("LLM_API_KEY", "OPENAI_API_KEY")
@@ -190,6 +444,29 @@ func NewConfig(di do.Injector) (*Config, error) {
 		}
 	}
 	codexRuntime := loadCodexRuntimeConfig(logger, llmTimeout)
+	return llmEnvConfig{
+		LLMAPIEndpoint:         llmAPIEndpoint,
+		LLMAPIProtocol:         llmAPIProtocol,
+		LLMAPIKey:              llmAPIKey,
+		LLMModel:               llmModel,
+		LLMMaxOutputTokens:     llmMaxOutputTokens,
+		RuntimeBaseURL:         runtimeBaseURL,
+		LLMTimeout:             llmTimeout,
+		CodexRequestMaxRetries: codexRuntime.requestMaxRetries,
+		CodexStreamMaxRetries:  codexRuntime.streamMaxRetries,
+		CodexStreamIdleTimeout: codexRuntime.streamIdleTimeout,
+	}
+}
+
+// runtimeTimeoutsConfig holds the agent/image-pull/scheduler-run timeouts
+// that gate how long the daemon waits on runtime operations.
+type runtimeTimeoutsConfig struct {
+	AgentTimeout        time.Duration
+	ImagePullTimeout    time.Duration
+	SchedulerRunTimeout time.Duration
+}
+
+func loadRuntimeTimeoutsConfig(logger *slog.Logger) runtimeTimeoutsConfig {
 	agentTimeout := DefaultAgentTimeout
 	if raw := os.Getenv("AGENT_TIMEOUT"); raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
@@ -229,13 +506,34 @@ func NewConfig(di do.Injector) (*Config, error) {
 			schedulerRunTimeout = parsed
 		}
 	}
+	return runtimeTimeoutsConfig{
+		AgentTimeout:        agentTimeout,
+		ImagePullTimeout:    imagePullTimeout,
+		SchedulerRunTimeout: schedulerRunTimeout,
+	}
+}
+
+// driverHomesConfig holds the selected runtime driver and each backend's
+// home/lib paths before path normalization.
+type driverHomesConfig struct {
+	RuntimeDriver         string
+	BoxliteHome           string
+	BoxliteRuntimeDir     string
+	DockerHome            string
+	DockerHostSandboxRoot string
+	MicrosandboxHome      string
+	MicrosandboxMSBPath   string
+	MicrosandboxLibPath   string
+}
+
+func loadDriverHomesConfig(logger *slog.Logger, dataRoot string) (driverHomesConfig, error) {
 	runtimeDriver := os.Getenv("RUNTIME_DRIVER")
 	if runtimeDriver == "" {
 		runtimeDriver = RuntimeDriverDocker
 	}
 	runtimeDriver = resolveRuntimeDriver(runtimeDriver)
 	if err := validateRuntimeDriver(runtimeDriver); err != nil {
-		return nil, err
+		return driverHomesConfig{}, err
 	}
 
 	boxliteHome := os.Getenv("BOXLITE_HOME")
@@ -254,7 +552,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 	}
 	dockerHostSandboxRoot, err := envWithLegacy(logger, "DOCKER_HOST_SANDBOX_ROOT", "DOCKER_HOST_SESSION_ROOT")
 	if err != nil {
-		return nil, err
+		return driverHomesConfig{}, err
 	}
 
 	microsandboxHome := getenvFirst("MICROSANDBOX_HOME", "MSB_HOME")
@@ -271,6 +569,33 @@ func NewConfig(di do.Injector) (*Config, error) {
 		microsandboxLibPath = filepath.Join(".", "build", "microsandbox", "lib", "libmicrosandbox_go_ffi.so")
 	}
 
+	return driverHomesConfig{
+		RuntimeDriver:         runtimeDriver,
+		BoxliteHome:           boxliteHome,
+		BoxliteRuntimeDir:     boxliteRuntimeDir,
+		DockerHome:            dockerHome,
+		DockerHostSandboxRoot: dockerHostSandboxRoot,
+		MicrosandboxHome:      microsandboxHome,
+		MicrosandboxMSBPath:   microsandboxMSBPath,
+		MicrosandboxLibPath:   microsandboxLibPath,
+	}, nil
+}
+
+// imageEnvConfig holds the default guest images and image cache/registry
+// settings.
+type imageEnvConfig struct {
+	DefaultImage             string
+	MicrosandboxDefaultImage string
+	DockerDefaultImage       string
+	MicrosandboxInsecure     []string
+	BoxRootfsPath            string
+	ImageRegistry            string
+	ImageStoreMode           string
+	ImageCacheRoot           string
+	ImageInsecureRegistries  []string
+}
+
+func loadImageEnvConfig(dataRoot string) (imageEnvConfig, error) {
 	defaultImage := os.Getenv("DEFAULT_IMAGE")
 	if defaultImage == "" {
 		defaultImage = "debian:bookworm-slim"
@@ -297,7 +622,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		imageStoreMode = ImageStoreModeAuto
 	}
 	if err := validateImageStoreMode(imageStoreMode); err != nil {
-		return nil, err
+		return imageEnvConfig{}, err
 	}
 	imageCacheRoot := os.Getenv("IMAGE_CACHE_ROOT")
 	if imageCacheRoot == "" {
@@ -305,36 +630,77 @@ func NewConfig(di do.Injector) (*Config, error) {
 	}
 	imageInsecureRegistries := splitAndTrimEnv(os.Getenv("IMAGE_INSECURE_REGISTRIES"))
 
+	return imageEnvConfig{
+		DefaultImage:             defaultImage,
+		MicrosandboxDefaultImage: microsandboxDefaultImage,
+		DockerDefaultImage:       dockerDefaultImage,
+		MicrosandboxInsecure:     microsandboxInsecure,
+		BoxRootfsPath:            boxRootfsPath,
+		ImageRegistry:            imageRegistry,
+		ImageStoreMode:           imageStoreMode,
+		ImageCacheRoot:           imageCacheRoot,
+		ImageInsecureRegistries:  imageInsecureRegistries,
+	}, nil
+}
+
+// sandboxResourceConfig holds the default sandbox VM sizing and the image
+// cache TTL.
+type sandboxResourceConfig struct {
+	SandboxCPUs       uint8
+	SandboxMemoryMiB  uint32
+	SandboxDiskSizeGB int32
+	CacheTTL          time.Duration
+}
+
+func loadSandboxResourceConfig(logger *slog.Logger) (sandboxResourceConfig, error) {
 	sandboxCPUs := positiveUint8Env(logger, "SANDBOX_CPUS", DefaultSandboxCPUs)
 	sandboxMemoryMiB := positiveMemoryMiBEnv(logger, "SANDBOX_MEMORY_MIB", DefaultSandboxMemoryMiB)
 	sandboxDiskSizeGB := positiveDiskSizeGBEnv(logger, "SANDBOX_DISK_SIZE_GB", DefaultSandboxDiskSizeGB)
 	cacheTTL := 7 * 24 * time.Hour
 	cacheTTLRaw, err := envWithLegacy(logger, "CACHE_TTL", "BOX_CACHE_TTL")
 	if err != nil {
-		return nil, err
+		return sandboxResourceConfig{}, err
 	}
 	if raw := strings.TrimSpace(cacheTTLRaw); raw != "" {
 		parsed, parseErr := time.ParseDuration(raw)
 		if parseErr != nil {
-			return nil, fmt.Errorf("parse CACHE_TTL %q: %w", raw, parseErr)
+			return sandboxResourceConfig{}, fmt.Errorf("parse CACHE_TTL %q: %w", raw, parseErr)
 		}
 		if parsed < 0 {
-			return nil, fmt.Errorf("CACHE_TTL must not be negative")
+			return sandboxResourceConfig{}, fmt.Errorf("CACHE_TTL must not be negative")
 		}
 		cacheTTL = parsed
 	}
+	return sandboxResourceConfig{
+		SandboxCPUs:       sandboxCPUs,
+		SandboxMemoryMiB:  sandboxMemoryMiB,
+		SandboxDiskSizeGB: sandboxDiskSizeGB,
+		CacheTTL:          cacheTTL,
+	}, nil
+}
 
+// cleanupConfigValues holds the automatic cleanup interval and each
+// resource's retention TTL.
+type cleanupConfigValues struct {
+	CleanupInterval      time.Duration
+	WorkspaceCleanupTTL  time.Duration
+	SandboxRetentionTTL  time.Duration
+	SandboxArchiveRoot   string
+	ImageCacheCleanupTTL time.Duration
+}
+
+func loadCleanupConfig(dataRoot string) (cleanupConfigValues, error) {
 	cleanupInterval, err := cleanupDurationEnv("CLEANUP_INTERVAL", time.Hour)
 	if err != nil {
-		return nil, err
+		return cleanupConfigValues{}, err
 	}
 	workspaceCleanupTTL, err := cleanupDurationEnv("WORKSPACE_CLEANUP_TTL", 0)
 	if err != nil {
-		return nil, err
+		return cleanupConfigValues{}, err
 	}
 	sandboxRetentionTTL, err := cleanupDurationEnv("SANDBOX_RETENTION_TTL", 0)
 	if err != nil {
-		return nil, err
+		return cleanupConfigValues{}, err
 	}
 	sandboxArchiveRoot := strings.TrimSpace(os.Getenv("SANDBOX_ARCHIVE_ROOT"))
 	if sandboxArchiveRoot == "" {
@@ -342,20 +708,32 @@ func NewConfig(di do.Injector) (*Config, error) {
 	}
 	imageCacheCleanupTTL, err := cleanupDurationEnv("IMAGE_CACHE_CLEANUP_TTL", 0)
 	if err != nil {
-		return nil, err
+		return cleanupConfigValues{}, err
 	}
 	if (workspaceCleanupTTL > 0 || sandboxRetentionTTL > 0 || imageCacheCleanupTTL > 0) && cleanupInterval <= 0 {
-		return nil, fmt.Errorf("CLEANUP_INTERVAL must be positive when automatic cleanup is enabled")
+		return cleanupConfigValues{}, fmt.Errorf("CLEANUP_INTERVAL must be positive when automatic cleanup is enabled")
 	}
+	return cleanupConfigValues{
+		CleanupInterval:      cleanupInterval,
+		WorkspaceCleanupTTL:  workspaceCleanupTTL,
+		SandboxRetentionTTL:  sandboxRetentionTTL,
+		SandboxArchiveRoot:   sandboxArchiveRoot,
+		ImageCacheCleanupTTL: imageCacheCleanupTTL,
+	}, nil
+}
 
-	guestPaths := &Config{
-		GuestWorkspacePath: os.Getenv("GUEST_WORKSPACE"),
-		GuestStateRoot:     os.Getenv("GUEST_STATE_ROOT"),
-		GuestRuntimeRoot:   os.Getenv("GUEST_RUNTIME_ROOT"),
-		GuestLogRoot:       os.Getenv("GUEST_LOG_ROOT"),
-	}
-	ApplyDefaultGuestPaths(guestPaths)
+// sandboxTimeoutsConfig holds the sandbox lifecycle timeouts and the
+// Jupyter guest port/proxy settings.
+type sandboxTimeoutsConfig struct {
+	StartTimeout        time.Duration
+	StopTimeout         time.Duration
+	GracefulStopTimeout time.Duration
+	JupyterGuestPort    int
+	JupyterReadyTimeout time.Duration
+	JupyterProxyBase    string
+}
 
+func loadSandboxTimeoutsConfig(logger *slog.Logger) (sandboxTimeoutsConfig, error) {
 	jupyterGuestPort := 8888
 	if raw := os.Getenv("JUPYTER_GUEST_PORT"); raw != "" {
 		var parsed int
@@ -368,7 +746,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 
 	startTimeout := 30 * time.Minute
 	if raw, err := envWithLegacy(logger, "SANDBOX_START_TIMEOUT", "SESSION_START_TIMEOUT"); err != nil {
-		return nil, err
+		return sandboxTimeoutsConfig{}, err
 	} else if raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
 			logger.Warn("failed to parse SANDBOX_START_TIMEOUT", "value", raw, "error", err)
@@ -379,7 +757,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 
 	stopTimeout := 30 * time.Second
 	if raw, err := envWithLegacy(logger, "SANDBOX_STOP_TIMEOUT", "SESSION_STOP_TIMEOUT"); err != nil {
-		return nil, err
+		return sandboxTimeoutsConfig{}, err
 	} else if raw != "" {
 		if parsed, err := time.ParseDuration(raw); err != nil {
 			logger.Warn("failed to parse SANDBOX_STOP_TIMEOUT", "value", raw, "error", err)
@@ -409,6 +787,38 @@ func NewConfig(di do.Injector) (*Config, error) {
 		}
 	}
 
+	jupyterProxyBase := strings.TrimSpace(os.Getenv("JUPYTER_PROXY_BASE"))
+	if jupyterProxyBase == "" {
+		jupyterProxyBase = "/jupyter"
+	}
+	if !strings.HasPrefix(jupyterProxyBase, "/") {
+		jupyterProxyBase = "/" + jupyterProxyBase
+	}
+	jupyterProxyBase = strings.TrimRight(jupyterProxyBase, "/")
+	if jupyterProxyBase == "" {
+		jupyterProxyBase = "/jupyter"
+	}
+
+	return sandboxTimeoutsConfig{
+		StartTimeout:        startTimeout,
+		StopTimeout:         stopTimeout,
+		GracefulStopTimeout: gracefulStopTimeout,
+		JupyterGuestPort:    jupyterGuestPort,
+		JupyterReadyTimeout: jupyterReadyTimeout,
+		JupyterProxyBase:    jupyterProxyBase,
+	}, nil
+}
+
+// httpLimitsConfig holds the webhook/workspace-upload body size and queue
+// worker limits.
+type httpLimitsConfig struct {
+	WebhookBodyLimitBytes      int64
+	WebhookQueueRulesJSON      string
+	WebhookQueueDefaultWorkers int
+	WorkspaceUploadLimitBytes  int64
+}
+
+func loadHTTPLimitsConfig(logger *slog.Logger) httpLimitsConfig {
 	webhookBodyLimitBytes := int64(1 << 20)
 	if raw := os.Getenv("WEBHOOK_BODY_LIMIT_BYTES"); raw != "" {
 		var parsed int64
@@ -437,126 +847,55 @@ func NewConfig(di do.Injector) (*Config, error) {
 			workspaceUploadLimitBytes = parsed
 		}
 	}
-
-	warnPublicHTTPListen(logger, httpListen)
-
-	jupyterProxyBase := strings.TrimSpace(os.Getenv("JUPYTER_PROXY_BASE"))
-	if jupyterProxyBase == "" {
-		jupyterProxyBase = "/jupyter"
-	}
-	if !strings.HasPrefix(jupyterProxyBase, "/") {
-		jupyterProxyBase = "/" + jupyterProxyBase
-	}
-	jupyterProxyBase = strings.TrimRight(jupyterProxyBase, "/")
-	if jupyterProxyBase == "" {
-		jupyterProxyBase = "/jupyter"
-	}
-
-	dataRoot = mustAbs(dataRoot)
-	sandboxRoot = mustAbs(sandboxRoot)
-	sandboxArchiveRoot = mustAbs(sandboxArchiveRoot)
-	if err := validateSandboxArchiveRoot(sandboxRoot, sandboxArchiveRoot); err != nil {
-		return nil, err
-	}
-	boxliteHome = mustAbs(boxliteHome)
-	boxliteRuntimeDir = mustAbs(boxliteRuntimeDir)
-	dockerHome = mustAbs(dockerHome)
-	dockerHostSandboxRoot, err = normalizeDockerHostSandboxRoot(dockerHostSandboxRoot)
-	if err != nil {
-		return nil, err
-	}
-	microsandboxHome = mustAbs(microsandboxHome)
-	microsandboxMSBPath = mustAbs(microsandboxMSBPath)
-	microsandboxLibPath = mustAbs(microsandboxLibPath)
-	imageCacheRoot = mustAbs(imageCacheRoot)
-	if boxRootfsPath != "" {
-		boxRootfsPath = mustAbs(boxRootfsPath)
-	}
-
-	dirs := map[string]string{
-		"DATA_ROOT":         dataRoot,
-		"SANDBOX_ROOT":      sandboxRoot,
-		"BOXLITE_HOME":      boxliteHome,
-		"DOCKER_HOME":       dockerHome,
-		"IMAGE_CACHE_ROOT":  imageCacheRoot,
-		"MICROSANDBOX_HOME": microsandboxHome,
-	}
-	for name, dir := range dirs {
-		if err := ensureDirExists(dir); err != nil {
-			return nil, fmt.Errorf("ensure %s exists: %w", name, err)
-		}
-	}
-
-	return &Config{
-		DbAddr:                     dbPath,
-		DbName:                     dbName,
-		DbTimeout:                  dbTimeout,
-		SQLiteMaxOpenConns:         sqliteMaxOpenConns,
-		DataRoot:                   dataRoot,
-		SandboxRoot:                sandboxRoot,
-		SandboxRootExplicit:        sandboxRootExplicit,
-		HttpListen:                 httpListen,
-		DaemonAuthToken:            daemonAuthToken,
-		AgentComposeSocket:         agentComposeSocket,
-		AgentComposeHost:           agentComposeHost,
+	return httpLimitsConfig{
 		WebhookBodyLimitBytes:      webhookBodyLimitBytes,
 		WebhookQueueRulesJSON:      webhookQueueRulesJSON,
 		WebhookQueueDefaultWorkers: webhookQueueDefaultWorkers,
 		WorkspaceUploadLimitBytes:  workspaceUploadLimitBytes,
-		LLMAPIEndpoint:             llmAPIEndpoint,
-		LLMAPIProtocol:             llmAPIProtocol,
-		LLMAPIKey:                  llmAPIKey,
-		LLMModel:                   llmModel,
-		LLMTimeout:                 llmTimeout,
-		LLMMaxOutputTokens:         llmMaxOutputTokens,
-		CodexRequestMaxRetries:     codexRuntime.requestMaxRetries,
-		CodexStreamMaxRetries:      codexRuntime.streamMaxRetries,
-		CodexStreamIdleTimeout:     codexRuntime.streamIdleTimeout,
-		RuntimeBaseURL:             runtimeBaseURL,
-		AgentTimeout:               agentTimeout,
-		SchedulerRunTimeout:        schedulerRunTimeout,
-		RuntimeDriver:              runtimeDriver,
-		BoxliteHome:                boxliteHome,
-		BoxliteRuntimeDir:          boxliteRuntimeDir,
-		DockerHome:                 dockerHome,
-		DockerHostSandboxRoot:      dockerHostSandboxRoot,
-		DockerDefaultImage:         dockerDefaultImage,
-		MicrosandboxHome:           microsandboxHome,
-		MicrosandboxMSBPath:        microsandboxMSBPath,
-		MicrosandboxLibPath:        microsandboxLibPath,
-		MicrosandboxDefaultImage:   microsandboxDefaultImage,
-		MicrosandboxInsecure:       microsandboxInsecure,
-		DefaultImage:               defaultImage,
-		BoxRootfsPath:              boxRootfsPath,
-		ImageRegistry:              imageRegistry,
-		ImageStoreMode:             imageStoreMode,
-		ImageCacheRoot:             imageCacheRoot,
-		ImageInsecureRegistries:    imageInsecureRegistries,
-		SandboxCPUs:                sandboxCPUs,
-		SandboxMemoryMiB:           sandboxMemoryMiB,
-		SandboxDiskSizeGB:          sandboxDiskSizeGB,
-		CacheTTL:                   cacheTTL,
-		CleanupInterval:            cleanupInterval,
-		WorkspaceCleanupTTL:        workspaceCleanupTTL,
-		SandboxRetentionTTL:        sandboxRetentionTTL,
-		SandboxArchiveRoot:         sandboxArchiveRoot,
-		ImageCacheCleanupTTL:       imageCacheCleanupTTL,
-		ImagePullTimeout:           imagePullTimeout,
-		GuestWorkspacePath:         guestPaths.GuestWorkspacePath,
-		GuestHomePath:              guestPaths.GuestHomePath,
-		GuestStateRoot:             guestPaths.GuestStateRoot,
-		GuestRuntimeRoot:           guestPaths.GuestRuntimeRoot,
-		GuestLogRoot:               guestPaths.GuestLogRoot,
-		JupyterGuestPort:           jupyterGuestPort,
-		SandboxStartTimeout:        startTimeout,
-		SandboxStopTimeout:         stopTimeout,
-		SandboxGracefulStopTimeout: gracefulStopTimeout,
-		JupyterReadyTimeout:        jupyterReadyTimeout,
-		JupyterProxyBasePath:       jupyterProxyBase,
-		CapGRPCListen:              strings.TrimSpace(os.Getenv("CAP_GRPC_LISTEN")),
-		CapGRPCTarget:              strings.TrimSpace(os.Getenv("CAP_GRPC_TARGET")),
-		Version:                    BuildVersion,
-	}, nil
+	}
+}
+
+// configPathsToNormalize bundles the filesystem paths NewConfig resolves to
+// absolute form (and, for a couple of them, extra normalization) once every
+// env-derived value is known.
+type configPathsToNormalize struct {
+	DataRoot              string
+	SandboxRoot           string
+	SandboxArchiveRoot    string
+	BoxliteHome           string
+	BoxliteRuntimeDir     string
+	DockerHome            string
+	DockerHostSandboxRoot string
+	MicrosandboxHome      string
+	MicrosandboxMSBPath   string
+	MicrosandboxLibPath   string
+	ImageCacheRoot        string
+	BoxRootfsPath         string
+}
+
+func normalizeConfigPaths(paths configPathsToNormalize) (configPathsToNormalize, error) {
+	paths.DataRoot = mustAbs(paths.DataRoot)
+	paths.SandboxRoot = mustAbs(paths.SandboxRoot)
+	paths.SandboxArchiveRoot = mustAbs(paths.SandboxArchiveRoot)
+	if err := validateSandboxArchiveRoot(paths.SandboxRoot, paths.SandboxArchiveRoot); err != nil {
+		return configPathsToNormalize{}, err
+	}
+	paths.BoxliteHome = mustAbs(paths.BoxliteHome)
+	paths.BoxliteRuntimeDir = mustAbs(paths.BoxliteRuntimeDir)
+	paths.DockerHome = mustAbs(paths.DockerHome)
+	dockerHostSandboxRoot, err := normalizeDockerHostSandboxRoot(paths.DockerHostSandboxRoot)
+	if err != nil {
+		return configPathsToNormalize{}, err
+	}
+	paths.DockerHostSandboxRoot = dockerHostSandboxRoot
+	paths.MicrosandboxHome = mustAbs(paths.MicrosandboxHome)
+	paths.MicrosandboxMSBPath = mustAbs(paths.MicrosandboxMSBPath)
+	paths.MicrosandboxLibPath = mustAbs(paths.MicrosandboxLibPath)
+	paths.ImageCacheRoot = mustAbs(paths.ImageCacheRoot)
+	if paths.BoxRootfsPath != "" {
+		paths.BoxRootfsPath = mustAbs(paths.BoxRootfsPath)
+	}
+	return paths, nil
 }
 
 func cleanupDurationEnv(name string, defaultValue time.Duration) (time.Duration, error) {
