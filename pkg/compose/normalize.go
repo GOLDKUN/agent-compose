@@ -681,46 +681,8 @@ func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) 
 	if err != nil {
 		return NormalizedSkillSpec{}, err
 	}
-	if commonSource.Provider == "" {
-		return NormalizedSkillSpec{}, &ValidationError{Path: path + ".provider", Message: "skill provider is required"}
-	}
-	switch commonSource.Provider {
-	case sources.ProviderGit:
-		if commonSource.URL == "" {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".url", Message: "git skill url is required"}
-		}
-		if commonSource.Format != "" {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".format", Message: "git skill does not support format"}
-		}
-	case sources.ProviderFile:
-		if commonSource.URL != "" {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".url", Message: "file skill does not support url"}
-		}
-		if commonSource.Path == "" {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".path", Message: "file skill path is required"}
-		}
-		if commonSource.Ref != "" {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".ref", Message: "file skill does not support ref"}
-		}
-		if commonSource.Format != "" && commonSource.Format != sources.FormatZIP {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".format", Message: fmt.Sprintf("file skill format %q is not supported", commonSource.Format)}
-		}
-		if commonSource.HasAuthentication() {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path, Message: "file skill does not support authentication"}
-		}
-		commonSource.Path = normalizeFileSkillPath(commonSource.Path, options)
-	case sources.ProviderHTTP:
-		if commonSource.URL == "" {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".url", Message: "http skill url is required"}
-		}
-		if commonSource.Ref != "" {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".ref", Message: "http skill does not support ref"}
-		}
-		if commonSource.Format != sources.FormatZIP {
-			return NormalizedSkillSpec{}, &ValidationError{Path: path + ".format", Message: "http skill format must be zip"}
-		}
-	default:
-		return NormalizedSkillSpec{}, &ValidationError{Path: path + ".provider", Message: fmt.Sprintf("skill provider %q is not supported", commonSource.Provider)}
+	if err := validateSkillSource(path, &commonSource, options); err != nil {
+		return NormalizedSkillSpec{}, err
 	}
 	if name == "" {
 		name = inferSkillName(commonSource.URL, commonSource.Path)
@@ -739,6 +701,51 @@ func normalizeSkillSpec(path string, value SkillSpec, options NormalizeOptions) 
 		Password: commonSource.Password,
 		Token:    commonSource.Token,
 	}, nil
+}
+
+func validateSkillSource(path string, commonSource *sources.Source, options NormalizeOptions) error {
+	if commonSource.Provider == "" {
+		return &ValidationError{Path: path + ".provider", Message: "skill provider is required"}
+	}
+	switch commonSource.Provider {
+	case sources.ProviderGit:
+		if strings.TrimSpace(commonSource.URL) == "" {
+			return &ValidationError{Path: path + ".url", Message: "git skill url is required"}
+		}
+		if commonSource.Format != "" {
+			return &ValidationError{Path: path + ".format", Message: "git skill does not support format"}
+		}
+	case sources.ProviderFile:
+		if commonSource.URL != "" {
+			return &ValidationError{Path: path + ".url", Message: "file skill does not support url"}
+		}
+		if strings.TrimSpace(commonSource.Path) == "" {
+			return &ValidationError{Path: path + ".path", Message: "file skill path is required"}
+		}
+		if commonSource.Ref != "" {
+			return &ValidationError{Path: path + ".ref", Message: "file skill does not support ref"}
+		}
+		if commonSource.Format != "" && commonSource.Format != sources.FormatZIP {
+			return &ValidationError{Path: path + ".format", Message: fmt.Sprintf("file skill format %q is not supported", commonSource.Format)}
+		}
+		if commonSource.HasAuthentication() {
+			return &ValidationError{Path: path, Message: "file skill does not support authentication"}
+		}
+		commonSource.Path = normalizeFileSkillPath(commonSource.Path, options)
+	case sources.ProviderHTTP:
+		if strings.TrimSpace(commonSource.URL) == "" {
+			return &ValidationError{Path: path + ".url", Message: "http skill url is required"}
+		}
+		if commonSource.Ref != "" {
+			return &ValidationError{Path: path + ".ref", Message: "http skill does not support ref"}
+		}
+		if commonSource.Format != sources.FormatZIP {
+			return &ValidationError{Path: path + ".format", Message: "http skill format must be zip"}
+		}
+	default:
+		return &ValidationError{Path: path + ".provider", Message: fmt.Sprintf("skill provider %q is not supported", commonSource.Provider)}
+	}
+	return nil
 }
 
 func workspaceSource(value WorkspaceSpec) sources.Source {
