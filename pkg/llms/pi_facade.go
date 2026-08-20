@@ -39,7 +39,7 @@ func EnsurePiFacadeConfig(ctx context.Context, config *appconfig.Config, store P
 		return nil, nil
 	}
 
-	target, err := resolvePiFacadeTarget(ctx, config, store, sandbox, providerID, modelName)
+	target, err := resolvePiFacadeTarget(ctx, piFacadeTargetInput{Config: config, Store: store, Sandbox: sandbox, ProviderID: providerID, Model: modelName})
 	if err != nil {
 		return nil, err
 	}
@@ -73,14 +73,24 @@ func EnsurePiFacadeConfig(ctx context.Context, config *appconfig.Config, store P
 	return env, nil
 }
 
-func resolvePiFacadeTarget(ctx context.Context, config *appconfig.Config, store PiFacadeStore, sandbox *domain.Sandbox, providerID, model string) (ResolvedTarget, error) {
+// piFacadeTargetInput groups resolvePiFacadeTarget's inputs.
+type piFacadeTargetInput struct {
+	Config     *appconfig.Config
+	Store      PiFacadeStore
+	Sandbox    *domain.Sandbox
+	ProviderID string
+	Model      string
+}
+
+func resolvePiFacadeTarget(ctx context.Context, in piFacadeTargetInput) (ResolvedTarget, error) {
+	config, store, sandbox, providerID, model := in.Config, in.Store, in.Sandbox, in.ProviderID, in.Model
 	sandboxID := sandbox.Summary.ID
 	envItems, err := SandboxProviderEnvItems(ctx, store, sandbox, "")
 	if err != nil {
 		return ResolvedTarget{}, err
 	}
 	if HasSessionEnvProviderInput(envItems) {
-		return resolvePiEnvFacadeTarget(ctx, config, store, sandboxID, providerID, model, envItems)
+		return resolvePiEnvFacadeTarget(ctx, piEnvFacadeTargetInput{Config: config, Store: store, SandboxID: sandboxID, RequestedProviderID: providerID, Model: model, EnvItems: envItems})
 	}
 	if HasEnabledLLMProviderID(ctx, store, providerID) {
 		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, "", model, providerID, envItems)
@@ -91,20 +101,37 @@ func resolvePiFacadeTarget(ctx context.Context, config *appconfig.Config, store 
 	case ProviderFamilyOpenAI, ProviderIDDefaultOpenAI:
 		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, "", envItems)
 	default:
-		return resolveCustomOpenAIFacadeTarget(ctx, config, store, sandbox, providerID, model)
+		return resolveCustomOpenAIFacadeTarget(ctx, customOpenAIFacadeTargetRequest{
+			Config:     config,
+			Store:      store,
+			Sandbox:    sandbox,
+			ProviderID: providerID,
+			Model:      model,
+		})
 	}
 }
 
-func resolvePiEnvFacadeTarget(ctx context.Context, config *appconfig.Config, store PiFacadeStore, sandboxID, requestedProviderID, model string, envItems []domain.SandboxEnvVar) (ResolvedTarget, error) {
-	family := piEnvProviderFamily(ctx, store, requestedProviderID, envItems)
+// piEnvFacadeTargetInput groups resolvePiEnvFacadeTarget's inputs.
+type piEnvFacadeTargetInput struct {
+	Config              *appconfig.Config
+	Store               PiFacadeStore
+	SandboxID           string
+	RequestedProviderID string
+	Model               string
+	EnvItems            []domain.SandboxEnvVar
+}
+
+func resolvePiEnvFacadeTarget(ctx context.Context, in piEnvFacadeTargetInput) (ResolvedTarget, error) {
+	config, store, sandboxID, model, envItems := in.Config, in.Store, in.SandboxID, in.Model, in.EnvItems
+	family := piEnvProviderFamily(ctx, store, in.RequestedProviderID, envItems)
 	if family == ProviderFamilyAnthropic {
-		providerID, err := ensureSessionAnthropicEnvProviderWithConfig(ctx, config, store, sandboxID, model, envItems)
+		providerID, err := ensureSessionAnthropicEnvProviderWithConfig(ctx, store, SessionEnvProviderQuery{Config: config, SessionID: sandboxID, RequestedModel: model, EnvItems: envItems})
 		if err != nil {
 			return ResolvedTarget{}, err
 		}
 		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, family, model, providerID, envItems)
 	}
-	providerID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, config, store, sandboxID, model, envItems)
+	providerID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, store, SessionEnvProviderQuery{Config: config, SessionID: sandboxID, RequestedModel: model, EnvItems: envItems})
 	if err != nil {
 		return ResolvedTarget{}, err
 	}

@@ -51,23 +51,38 @@ func EnsureSessionAgentRuntimeConfig(ctx context.Context, config *appconfig.Conf
 		env, err := llms.EnsureCodexFacadeConfig(ctx, config, store, session, model, source, runID)
 		return AgentRuntimeConfig{Env: env}, err
 	case "claude":
-		env, err := ensureSessionClaudeConfig(ctx, config, store, session, model, source, runID)
+		env, err := ensureSessionClaudeConfig(ctx, sessionFacadeCall{Config: config, Store: store, Session: session, Model: model, Source: source, RunID: runID})
 		return AgentRuntimeConfig{Env: env}, err
 	case "opencode":
-		env, err := ensureSessionOpenCodeConfig(ctx, config, store, session, model, source, runID)
+		env, err := ensureSessionOpenCodeConfig(ctx, sessionFacadeCall{Config: config, Store: store, Session: session, Model: model, Source: source, RunID: runID})
 		return AgentRuntimeConfig{Env: env, Model: strings.TrimSpace(env["OPENCODE_MODEL"])}, err
 	case "pi":
 		env, err := llms.EnsurePiFacadeConfig(ctx, config, store, session, model, source, runID)
 		return AgentRuntimeConfig{Env: env}, err
 	case "dsh":
-		env, err := llms.EnsureDshFacadeConfig(ctx, config, store, session, model, source, runID)
+		env, err := llms.EnsureDshFacadeConfig(ctx, llms.DshFacadeConfigRequest{
+			Config: config, Store: store, Sandbox: session, Model: model, Source: source, RunID: runID,
+		})
 		return AgentRuntimeConfig{Env: env}, err
 	default:
 		return AgentRuntimeConfig{}, nil
 	}
 }
 
-func ensureSessionClaudeConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, model, source, runID string) (map[string]string, error) {
+// sessionFacadeCall groups the environment (Config/Store/Session) and
+// per-call attribution (Model/Source/RunID) shared by the session facade
+// config helpers below.
+type sessionFacadeCall struct {
+	Config  *appconfig.Config
+	Store   FacadeStore
+	Session *domain.Sandbox
+	Model   string
+	Source  string
+	RunID   string
+}
+
+func ensureSessionClaudeConfig(ctx context.Context, call sessionFacadeCall) (map[string]string, error) {
+	config, store, session, model, source, runID := call.Config, call.Store, call.Session, call.Model, call.Source, call.RunID
 	baseURL := llms.GuestRuntimeBaseURL(config, session)
 	if strings.TrimSpace(baseURL) == "" {
 		return nil, nil
@@ -111,8 +126,8 @@ func ensureSessionClaudeConfig(ctx context.Context, config *appconfig.Config, st
 	return env, nil
 }
 
-func ensureSessionOpenCodeConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, model, source, runID string) (map[string]string, error) {
-	return llms.EnsureOpenCodeFacadeConfig(ctx, config, store, session, model, source, runID)
+func ensureSessionOpenCodeConfig(ctx context.Context, call sessionFacadeCall) (map[string]string, error) {
+	return llms.EnsureOpenCodeFacadeConfig(ctx, call.Config, call.Store, call.Session, call.Model, call.Source, call.RunID)
 }
 
 func isOptionalConfigError(err error) bool {
@@ -120,10 +135,6 @@ func isOptionalConfigError(err error) bool {
 		return false
 	}
 	return errors.Is(err, domain.ErrRequired) || errors.Is(err, domain.ErrFailedPrecondition)
-}
-
-func IsOptionalConfigError(err error) bool {
-	return isOptionalConfigError(err)
 }
 
 func HasAnthropicProviderKey(ctx context.Context, config *appconfig.Config, store FacadeStore) bool {

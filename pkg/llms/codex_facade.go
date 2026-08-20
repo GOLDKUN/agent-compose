@@ -47,7 +47,7 @@ func EnsureCodexFacadeConfig(ctx context.Context, config *appconfig.Config, stor
 		return nil, err
 	}
 	openAIBaseURL := strings.TrimRight(baseURL, "/") + "/api/runtime/sandboxes/" + sandbox.Summary.ID + "/llm/openai/v1"
-	if err := WriteCodexRuntimeConfig(sandbox, target.Model.Name, openAIBaseURL, APIProtocolResponses, CodexRuntimePolicyFromConfig(config)); err != nil {
+	if err := WriteCodexRuntimeConfig(sandbox, CodexRuntimeConfig{Model: target.Model.Name, BaseURL: openAIBaseURL, WireAPI: APIProtocolResponses, Policy: CodexRuntimePolicyFromConfig(config)}); err != nil {
 		return nil, err
 	}
 	return map[string]string{

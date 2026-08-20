@@ -35,7 +35,7 @@ func TestBuildResolvedTargetDropsForbiddenPerModelHeaders(t *testing.T) {
 	}
 	model := Model{ID: "model-1", Name: "model-1"}
 
-	target, err := BuildResolvedTarget(context.Background(), store, provider, model, "")
+	target, err := BuildResolvedTarget(context.Background(), store, ResolvedTargetInput{Provider: provider, Model: model})
 	if err != nil {
 		t.Fatalf("BuildResolvedTarget returned error: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestBuildResolvedTargetDropsForbiddenPerModelHeaderCaseAndWhitespaceVariant
 			}
 			model := Model{ID: "model-1", Name: "model-1"}
 
-			target, err := BuildResolvedTarget(context.Background(), store, provider, model, "")
+			target, err := BuildResolvedTarget(context.Background(), store, ResolvedTargetInput{Provider: provider, Model: model})
 			if err != nil {
 				t.Fatalf("BuildResolvedTarget returned error: %v", err)
 			}

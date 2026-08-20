@@ -146,17 +146,30 @@ func Generate(ctx context.Context, client *http.Client, req GenerateRequest) (Ge
 	}
 	switch NormalizeWireAPI(req.Protocol) {
 	case APIProtocolChatCompletions:
-		return generateChatCompletions(ctx, client, endpoint, prompt, model, req.OutputSchemaJSON, req.Headers, req.MaxOutputTokens)
+		return generateChatCompletions(ctx, generateCallParams{Client: client, Endpoint: endpoint, Prompt: prompt, Model: model, OutputSchemaJSON: req.OutputSchemaJSON, Headers: req.Headers, MaxOutputTokens: req.MaxOutputTokens})
 	case APIProtocolResponses:
-		return generateResponses(ctx, client, endpoint, prompt, model, req.OutputSchemaJSON, req.Headers, req.MaxOutputTokens)
+		return generateResponses(ctx, generateCallParams{Client: client, Endpoint: endpoint, Prompt: prompt, Model: model, OutputSchemaJSON: req.OutputSchemaJSON, Headers: req.Headers, MaxOutputTokens: req.MaxOutputTokens})
 	case APIProtocolMessages:
-		return generateMessages(ctx, client, endpoint, prompt, model, req.OutputSchemaJSON, req.Headers, req.MaxOutputTokens)
+		return generateMessages(ctx, generateCallParams{Client: client, Endpoint: endpoint, Prompt: prompt, Model: model, OutputSchemaJSON: req.OutputSchemaJSON, Headers: req.Headers, MaxOutputTokens: req.MaxOutputTokens})
 	default:
 		return GenerateResult{}, fmt.Errorf("unsupported llm api protocol %q", NormalizeWireAPI(req.Protocol))
 	}
 }
 
-func generateMessages(ctx context.Context, client *http.Client, endpoint, prompt, model, outputSchemaJSON string, headers http.Header, maxOutputTokens int) (GenerateResult, error) {
+// generateCallParams groups the wire-call inputs shared by generateMessages,
+// generateResponses, and generateChatCompletions.
+type generateCallParams struct {
+	Client           *http.Client
+	Endpoint         string
+	Prompt           string
+	Model            string
+	OutputSchemaJSON string
+	Headers          http.Header
+	MaxOutputTokens  int
+}
+
+func generateMessages(ctx context.Context, p generateCallParams) (GenerateResult, error) {
+	client, endpoint, prompt, model, outputSchemaJSON, headers, maxOutputTokens := p.Client, p.Endpoint, p.Prompt, p.Model, p.OutputSchemaJSON, p.Headers, p.MaxOutputTokens
 	if maxOutputTokens <= 0 {
 		maxOutputTokens = 4096
 	}
@@ -215,7 +228,8 @@ func generateMessages(ctx context.Context, client *http.Client, endpoint, prompt
 	return GenerateResult{Text: text, Model: firstNonEmpty(strings.TrimSpace(parsed.Model), model), ResponseID: strings.TrimSpace(parsed.ID), FinishReason: strings.TrimSpace(parsed.StopReason)}, nil
 }
 
-func generateResponses(ctx context.Context, client *http.Client, endpoint, prompt, model, outputSchemaJSON string, headers http.Header, maxOutputTokens int) (GenerateResult, error) {
+func generateResponses(ctx context.Context, p generateCallParams) (GenerateResult, error) {
+	client, endpoint, prompt, model, outputSchemaJSON, headers, maxOutputTokens := p.Client, p.Endpoint, p.Prompt, p.Model, p.OutputSchemaJSON, p.Headers, p.MaxOutputTokens
 	request := apiRequest{Model: model, Input: prompt, MaxOutputTokens: maxOutputTokens}
 	if schema := strings.TrimSpace(outputSchemaJSON); schema != "" {
 		if !json.Valid([]byte(schema)) {
@@ -277,7 +291,8 @@ func generateResponses(ctx context.Context, client *http.Client, endpoint, promp
 
 // generateChatCompletions calls an OpenAI-compatible Chat Completions backend
 // for unary prompt-to-response text generation.
-func generateChatCompletions(ctx context.Context, client *http.Client, endpoint, prompt, model, outputSchemaJSON string, headers http.Header, maxOutputTokens int) (GenerateResult, error) {
+func generateChatCompletions(ctx context.Context, p generateCallParams) (GenerateResult, error) {
+	client, endpoint, prompt, model, outputSchemaJSON, headers, maxOutputTokens := p.Client, p.Endpoint, p.Prompt, p.Model, p.OutputSchemaJSON, p.Headers, p.MaxOutputTokens
 	messages := []chatCompletionsMessage{{Role: "user", Content: prompt}}
 	request := chatCompletionsRequest{Model: model, Messages: messages, MaxCompletionTokens: maxOutputTokens}
 	if schema := strings.TrimSpace(outputSchemaJSON); schema != "" {

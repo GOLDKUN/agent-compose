@@ -98,10 +98,10 @@ func ResolveAgentModel(ctx context.Context, config *appconfig.Config, store Agen
 		return resolution, nil
 	}
 	if hasConfiguredProviderForFamily(providers, providerFamily) {
-		return selectConfiguredDefaultModel(ctx, store, providers, models, providerFamily)
+		return selectConfiguredDefaultModel(ctx, defaultModelSelection{Store: store, Providers: providers, Models: models, ProviderFamily: providerFamily})
 	}
 
-	resolution, ok, err = selectStoredDefaultModel(ctx, store, providers, models, providerFamily)
+	resolution, ok, err = selectStoredDefaultModel(ctx, defaultModelSelection{Store: store, Providers: providers, Models: models, ProviderFamily: providerFamily})
 	if err != nil {
 		return AgentModelResolution{}, err
 	}
@@ -159,8 +159,17 @@ func hasConfiguredProviderForFamily(providers []Provider, providerFamily string)
 	return false
 }
 
-func selectConfiguredDefaultModel(ctx context.Context, store AgentModelResolutionStore, providers []Provider, models []Model, providerFamily string) (AgentModelResolution, error) {
-	resolution, ok, err := selectStoredDefaultModel(ctx, store, providers, models, providerFamily)
+// defaultModelSelection groups the shared inputs for selectConfiguredDefaultModel
+// and selectStoredDefaultModel.
+type defaultModelSelection struct {
+	Store          AgentModelResolutionStore
+	Providers      []Provider
+	Models         []Model
+	ProviderFamily string
+}
+
+func selectConfiguredDefaultModel(ctx context.Context, sel defaultModelSelection) (AgentModelResolution, error) {
+	resolution, ok, err := selectStoredDefaultModel(ctx, sel)
 	if err != nil {
 		return AgentModelResolution{}, err
 	}
@@ -189,11 +198,12 @@ func selectCatalogDefaultModel(ctx context.Context, store AgentModelResolutionSt
 	return AgentModelResolution{}, false, nil
 }
 
-func selectStoredDefaultModel(ctx context.Context, store AgentModelResolutionStore, providers []Provider, models []Model, providerFamily string) (AgentModelResolution, bool, error) {
+func selectStoredDefaultModel(ctx context.Context, sel defaultModelSelection) (AgentModelResolution, bool, error) {
+	store, providers, models, providerFamily := sel.Store, sel.Providers, sel.Models, sel.ProviderFamily
 	if store == nil || len(providers) == 0 || len(models) == 0 {
 		return AgentModelResolution{}, false, nil
 	}
-	model, _, _, ok, err := SelectModelAndProvider(ctx, store, models, providers, "", providerFamily, "")
+	model, _, _, ok, err := SelectModelAndProvider(ctx, store, ModelProviderSelection{Models: models, Providers: providers, ProviderFamily: providerFamily})
 	if err != nil {
 		return AgentModelResolution{}, false, fmt.Errorf("select default agent model: %w", err)
 	}

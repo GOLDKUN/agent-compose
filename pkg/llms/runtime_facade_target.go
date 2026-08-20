@@ -49,7 +49,7 @@ func resolveRuntimeLLMProviderTarget(ctx context.Context, store runtimeLLMProvid
 		}
 	}
 
-	target, err := BuildResolvedTarget(ctx, store, provider, Model{ID: requestedModel, Name: requestedModel, Enabled: true}, wireAPI)
+	target, err := BuildResolvedTarget(ctx, store, ResolvedTargetInput{Provider: provider, Model: Model{ID: requestedModel, Name: requestedModel, Enabled: true}, WireAPI: wireAPI})
 	if err != nil {
 		return ResolvedTarget{}, false, err
 	}

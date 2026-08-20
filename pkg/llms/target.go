@@ -11,10 +11,18 @@ type ProviderModelConfigStore interface {
 	LLMProviderModelConfig(ctx context.Context, providerID, modelID string) (ProviderModelConfig, bool, error)
 }
 
+// ResolvedTargetInput groups BuildResolvedTarget's provider/model/wireAPI selection.
+type ResolvedTargetInput struct {
+	Provider Provider
+	Model    Model
+	WireAPI  string
+}
+
 // BuildResolvedTarget applies provider defaults followed by per-model catalog
 // overrides when the selected model has metadata.
-func BuildResolvedTarget(ctx context.Context, store ProviderModelWireAPIStore, provider Provider, model Model, wireAPI string) (ResolvedTarget, error) {
-	wireAPI = firstNonEmptyTrimmed(wireAPI, provider.DefaultWireAPI)
+func BuildResolvedTarget(ctx context.Context, store ProviderModelWireAPIStore, in ResolvedTargetInput) (ResolvedTarget, error) {
+	provider, model := in.Provider, in.Model
+	wireAPI := firstNonEmptyTrimmed(in.WireAPI, provider.DefaultWireAPI)
 	config := ProviderModelConfig{}
 	if configStore, ok := store.(ProviderModelConfigStore); ok {
 		resolved, found, err := configStore.LLMProviderModelConfig(ctx, provider.ID, model.ID)

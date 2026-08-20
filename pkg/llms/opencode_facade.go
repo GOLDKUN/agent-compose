@@ -15,6 +15,21 @@ type OpenCodeFacadeStore interface {
 	SaveLLMFacadeToken(context.Context, FacadeToken) error
 }
 
+// openCodeFacadeCall groups the environment (Config/Store/Sandbox) and
+// per-call attribution (Source/RunID) shared by every OpenCode facade
+// resolution helper below, plus whichever of ProviderID/Model/Target the
+// specific step needs.
+type openCodeFacadeCall struct {
+	Config     *appconfig.Config
+	Store      OpenCodeFacadeStore
+	Sandbox    *domain.Sandbox
+	ProviderID string
+	Model      string
+	Target     ResolvedTarget
+	Source     string
+	RunID      string
+}
+
 // EnsureOpenCodeFacadeConfig resolves an OpenCode provider/model pair, writes
 // its guest runtime config, and returns the managed facade environment.
 func EnsureOpenCodeFacadeConfig(ctx context.Context, config *appconfig.Config, store OpenCodeFacadeStore, sandbox *domain.Sandbox, model, source, runID string) (map[string]string, error) {
@@ -29,25 +44,27 @@ func EnsureOpenCodeFacadeConfig(ctx context.Context, config *appconfig.Config, s
 	if providerID == "opencode" {
 		return nil, nil
 	}
+	call := openCodeFacadeCall{Config: config, Store: store, Sandbox: sandbox, ProviderID: providerID, Model: modelName, Source: source, RunID: runID}
 	if HasEnabledLLMProviderID(ctx, store, providerID) {
-		return ensureOpenCodeConfiguredFacadeConfig(ctx, config, store, sandbox, providerID, modelName, source, runID)
+		return ensureOpenCodeConfiguredFacadeConfig(ctx, call)
 	}
 	switch providerID {
 	case ProviderFamilyAnthropic:
-		return ensureOpenCodeAnthropicFacadeConfig(ctx, config, store, sandbox, modelName, source, runID)
+		return ensureOpenCodeAnthropicFacadeConfig(ctx, call)
 	case ProviderFamilyOpenAI:
-		return ensureOpenCodeOpenAIFacadeConfig(ctx, config, store, sandbox, modelName, source, runID)
+		return ensureOpenCodeOpenAIFacadeConfig(ctx, call)
 	default:
-		return ensureOpenCodeCustomFacadeConfig(ctx, config, store, sandbox, providerID, modelName, source, runID)
+		return ensureOpenCodeCustomFacadeConfig(ctx, call)
 	}
 }
 
-func ensureOpenCodeConfiguredFacadeConfig(ctx context.Context, config *appconfig.Config, store OpenCodeFacadeStore, sandbox *domain.Sandbox, providerID, model, source, runID string) (map[string]string, error) {
+func ensureOpenCodeConfiguredFacadeConfig(ctx context.Context, call openCodeFacadeCall) (map[string]string, error) {
+	config, store, sandbox := call.Config, call.Store, call.Sandbox
 	providerEnv, err := SandboxProviderEnvItems(ctx, store, sandbox, "")
 	if err != nil {
 		return nil, err
 	}
-	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandbox.Summary.ID, "", model, providerID, providerEnv)
+	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandbox.Summary.ID, "", call.Model, call.ProviderID, providerEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +75,7 @@ func ensureOpenCodeConfiguredFacadeConfig(ctx context.Context, config *appconfig
 			return nil, err
 		}
 		if HasOpenAIEnvProviderInput(familyEnv) {
-			return ensureOpenCodeOpenAIFacadeConfig(ctx, config, store, sandbox, model, source, runID)
+			return ensureOpenCodeOpenAIFacadeConfig(ctx, call)
 		}
 	case ProviderFamilyAnthropic:
 		familyEnv, err := SandboxProviderEnvItems(ctx, store, sandbox, ProviderFamilyAnthropic)
@@ -66,13 +83,15 @@ func ensureOpenCodeConfiguredFacadeConfig(ctx context.Context, config *appconfig
 			return nil, err
 		}
 		if HasAnthropicEnvProviderInput(familyEnv) {
-			return ensureOpenCodeAnthropicFacadeConfig(ctx, config, store, sandbox, model, source, runID)
+			return ensureOpenCodeAnthropicFacadeConfig(ctx, call)
 		}
 	}
-	return ensureOpenCodeResolvedFacadeConfig(ctx, config, store, sandbox, target, source, runID)
+	call.Target = target
+	return ensureOpenCodeResolvedFacadeConfig(ctx, call)
 }
 
-func ensureOpenCodeResolvedFacadeConfig(ctx context.Context, config *appconfig.Config, store OpenCodeFacadeStore, sandbox *domain.Sandbox, target ResolvedTarget, source, runID string) (map[string]string, error) {
+func ensureOpenCodeResolvedFacadeConfig(ctx context.Context, call openCodeFacadeCall) (map[string]string, error) {
+	config, store, sandbox, target, source, runID := call.Config, call.Store, call.Sandbox, call.Target, call.Source, call.RunID
 	baseURL := GuestRuntimeBaseURL(config, sandbox)
 	providerFamily := NormalizeProviderType(target.Provider.ProviderType)
 	if providerFamily == ProviderFamilyAnthropic {
@@ -119,7 +138,8 @@ func ensureOpenCodeResolvedFacadeConfig(ctx context.Context, config *appconfig.C
 	return env, nil
 }
 
-func ensureOpenCodeAnthropicFacadeConfig(ctx context.Context, config *appconfig.Config, store OpenCodeFacadeStore, sandbox *domain.Sandbox, model, source, runID string) (map[string]string, error) {
+func ensureOpenCodeAnthropicFacadeConfig(ctx context.Context, call openCodeFacadeCall) (map[string]string, error) {
+	config, store, sandbox, model, source, runID := call.Config, call.Store, call.Sandbox, call.Model, call.Source, call.RunID
 	providerEnv, err := SandboxProviderEnvItems(ctx, store, sandbox, ProviderFamilyAnthropic)
 	if err != nil {
 		return nil, err
@@ -154,7 +174,8 @@ func ensureOpenCodeAnthropicFacadeConfig(ctx context.Context, config *appconfig.
 	}, nil
 }
 
-func ensureOpenCodeOpenAIFacadeConfig(ctx context.Context, config *appconfig.Config, store OpenCodeFacadeStore, sandbox *domain.Sandbox, model, source, runID string) (map[string]string, error) {
+func ensureOpenCodeOpenAIFacadeConfig(ctx context.Context, call openCodeFacadeCall) (map[string]string, error) {
+	config, store, sandbox, model, source, runID := call.Config, call.Store, call.Sandbox, call.Model, call.Source, call.RunID
 	providerEnv, err := SandboxProviderEnvItems(ctx, store, sandbox, ProviderFamilyOpenAI)
 	if err != nil {
 		return nil, err
@@ -181,8 +202,15 @@ func ensureOpenCodeOpenAIFacadeConfig(ctx context.Context, config *appconfig.Con
 	return env, nil
 }
 
-func ensureOpenCodeCustomFacadeConfig(ctx context.Context, config *appconfig.Config, store OpenCodeFacadeStore, sandbox *domain.Sandbox, providerID, model, source, runID string) (map[string]string, error) {
-	target, err := resolveCustomOpenAIFacadeTarget(ctx, config, store, sandbox, providerID, model)
+func ensureOpenCodeCustomFacadeConfig(ctx context.Context, call openCodeFacadeCall) (map[string]string, error) {
+	config, store, sandbox, providerID, model, source, runID := call.Config, call.Store, call.Sandbox, call.ProviderID, call.Model, call.Source, call.RunID
+	target, err := resolveCustomOpenAIFacadeTarget(ctx, customOpenAIFacadeTargetRequest{
+		Config:     config,
+		Store:      store,
+		Sandbox:    sandbox,
+		ProviderID: providerID,
+		Model:      model,
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -764,10 +764,10 @@ func testConfigStoreLLMBootstrapResolveCoverage(t *testing.T, ctx context.Contex
 	if anthropicTarget.Provider.ProviderType != llms.ProviderFamilyAnthropic || anthropicTarget.WireAPI != llms.APIProtocolMessages || anthropicTarget.Model.ID != "claude-test" {
 		t.Fatalf("Anthropic target = %#v", anthropicTarget)
 	}
-	sessionAnthropicID, err := llms.EnsureSessionAnthropicEnvProvider(ctx, anthropicStore, "session-2", "claude-session", []domain.SandboxEnvVar{
+	sessionAnthropicID, err := llms.EnsureSessionAnthropicEnvProvider(ctx, anthropicStore, llms.SessionEnvProviderQuery{SessionID: "session-2", RequestedModel: "claude-session", EnvItems: []domain.SandboxEnvVar{
 		{Name: "ANTHROPIC_API_KEY", Value: "session-anthropic-key", Secret: true},
 		{Name: "ANTHROPIC_MODEL", Value: "claude-session"},
-	})
+	}})
 	if err != nil || sessionAnthropicID == "" {
 		t.Fatalf("EnsureSessionAnthropicEnvProvider id=%q err=%v", sessionAnthropicID, err)
 	}

@@ -24,7 +24,9 @@ func TestOpenAIEnvProviderUsesProtocolInsteadOfEndpointShape(t *testing.T) {
 				"LLM_API_KEY":      "generic-key",
 				"LLM_MODEL":        "test-model",
 			}
-			id, err := EnsureOpenAIEnvProvider(context.Background(), store, mapLookup(values), "openai-env", "openai-env", ProviderScopeSessionEnv, "", false)
+			id, err := EnsureOpenAIEnvProvider(context.Background(), store, mapLookup(values), EnvProviderRegistration{
+				ProviderID: "openai-env", Name: "openai-env", Scope: ProviderScopeSessionEnv,
+			})
 			if err != nil {
 				t.Fatalf("EnsureOpenAIEnvProvider() error = %v", err)
 			}
@@ -48,7 +50,12 @@ func TestAnthropicEnvProviderUsesGenericBaseURLForExplicitFamily(t *testing.T) {
 		"LLM_API_KEY":      "generic-key",
 		"LLM_MODEL":        "test-model",
 	}
-	id, err := EnsureAnthropicEnvProvider(context.Background(), store, mapLookup(values), "x-api-key", "", "anthropic-env", "anthropic-env", ProviderScopeSessionEnv, "", false)
+	id, err := EnsureAnthropicEnvProvider(context.Background(), store, mapLookup(values), AnthropicEnvProviderRequest{
+		AuthHeader: "x-api-key",
+		EnvProviderRegistration: EnvProviderRegistration{
+			ProviderID: "anthropic-env", Name: "anthropic-env", Scope: ProviderScopeSessionEnv,
+		},
+	})
 	if err != nil {
 		t.Fatalf("EnsureAnthropicEnvProvider() error = %v", err)
 	}
