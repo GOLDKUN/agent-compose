@@ -45,20 +45,36 @@ type SandboxRPCBridge struct {
 	lifecycleLocks   *sandboxes.LifecycleLocks
 }
 
-func NewSandboxRPCBridge(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, workspaceEnsurer workspaces.WorkspaceEnsurer, driver sandboxes.SandboxDriver, runtimes RuntimeProvider, bus *schedulers.Bus, streams *sandboxes.StreamBroker, cap capabilities.Provider, capTokens *CapabilitySandboxResolver, dashboard *dashboard.Hub, agentExecutor *AgentExecutor, locks ...*sandboxes.LifecycleLocks) *SandboxRPCBridge {
+// SandboxRPCBridgeDeps bundles NewSandboxRPCBridge's required dependencies.
+type SandboxRPCBridgeDeps struct {
+	Config           *appconfig.Config
+	Store            *sandboxstore.Store
+	ConfigDB         *configstore.ConfigStore
+	WorkspaceEnsurer workspaces.WorkspaceEnsurer
+	Driver           sandboxes.SandboxDriver
+	Runtimes         RuntimeProvider
+	Bus              *schedulers.Bus
+	Streams          *sandboxes.StreamBroker
+	Cap              capabilities.Provider
+	CapTokens        *CapabilitySandboxResolver
+	Dashboard        *dashboard.Hub
+	AgentExecutor    *AgentExecutor
+}
+
+func NewSandboxRPCBridge(deps SandboxRPCBridgeDeps, locks ...*sandboxes.LifecycleLocks) *SandboxRPCBridge {
 	bridge := &SandboxRPCBridge{
-		config:           config,
-		store:            store,
-		configDB:         configDB,
-		workspaceEnsurer: workspaceEnsurer,
-		driver:           driver,
-		runtimes:         runtimes,
-		bus:              bus,
-		streams:          streams,
-		cap:              cap,
-		capTokens:        capTokens,
-		dashboard:        dashboard,
-		agentExecutor:    agentExecutor,
+		config:           deps.Config,
+		store:            deps.Store,
+		configDB:         deps.ConfigDB,
+		workspaceEnsurer: deps.WorkspaceEnsurer,
+		driver:           deps.Driver,
+		runtimes:         deps.Runtimes,
+		bus:              deps.Bus,
+		streams:          deps.Streams,
+		cap:              deps.Cap,
+		capTokens:        deps.CapTokens,
+		dashboard:        deps.Dashboard,
+		agentExecutor:    deps.AgentExecutor,
 	}
 	if len(locks) > 0 {
 		bridge.lifecycleLocks = locks[0]
@@ -165,16 +181,31 @@ func (b *SandboxRPCBridge) createSandbox(ctx context.Context, req sandboxRPCCrea
 	return b.createSandboxWithAgent(ctx, req, source, schedulers.SandboxCreationContext{})
 }
 
-func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandboxRPCCreateRequest, source string, creation schedulers.SandboxCreationContext) (*domain.Sandbox, error) {
+// resolvedSandboxCreateAgentConfig is the agent config, tags, env items, and
+// workspace/driver/image resolveSandboxCreateAgentConfig derives before
+// createSandboxWithAgent creates the sandbox.
+type resolvedSandboxCreateAgentConfig struct {
+	AgentConfig       execution.AgentConfig
+	AgentDefinition   *domain.AgentDefinition
+	ProviderEnvItems  []domain.SandboxEnvVar
+	EnvItems          []domain.SandboxEnvVar
+	Tags              []domain.SandboxTag
+	WorkspaceSnapshot *domain.SandboxWorkspace
+	WorkspaceID       string
+	Driver            string
+	GuestImage        string
+}
+
+func (b *SandboxRPCBridge) resolveSandboxCreateAgentConfig(ctx context.Context, req sandboxRPCCreateRequest, creation schedulers.SandboxCreationContext) (resolvedSandboxCreateAgentConfig, error) {
 	agentConfig := execution.AgentConfig{Provider: domain.NormalizeAgentKind(creation.Provider)}
 	var agentDefinition *domain.AgentDefinition
 	if agentID := strings.TrimSpace(creation.AgentDefinitionID); agentID != "" {
 		definition, err := b.configDB.GetAgentDefinition(ctx, agentID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("resolve sandbox agent definition %s: %w", agentID, err))
+			return resolvedSandboxCreateAgentConfig{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("resolve sandbox agent definition %s: %w", agentID, err))
 		}
 		if !definition.Enabled {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("sandbox agent definition %s is disabled", agentID))
+			return resolvedSandboxCreateAgentConfig{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("sandbox agent definition %s is disabled", agentID))
 		}
 		agentDefinition = &definition
 		agentConfig = execution.AgentConfigFromDefinition(definition, domain.DefaultAgentProvider)
@@ -187,7 +218,7 @@ func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandb
 	providerEnvItems := append([]domain.SandboxEnvVar(nil), req.EnvItems...)
 	globalEnvItems, err := b.configDB.ListGlobalEnv(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return resolvedSandboxCreateAgentConfig{}, connect.NewError(connect.CodeInternal, err)
 	}
 	if agentDefinition != nil {
 		providerEnvItems = domain.MergeEnvItems(agentDefinition.EnvItems, providerEnvItems)
@@ -208,20 +239,39 @@ func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandb
 	if workspaceID != "" {
 		workspaceConfig, err := b.configDB.GetWorkspaceConfig(ctx, workspaceID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return resolvedSandboxCreateAgentConfig{}, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 		workspaceSnapshot = toSandboxWorkspaceSnapshot(workspaceConfig)
 	}
 
 	driver, err := driverpkg.ResolveSandboxRuntimeDriver(req.Driver, b.config.RuntimeDriver)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return resolvedSandboxCreateAgentConfig{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if err := driverpkg.ValidateCompiledRuntimeDriver(driver); err != nil {
-		return nil, api.ConnectErrorForDomain(classifyRuntimeProviderError(err))
+		return resolvedSandboxCreateAgentConfig{}, api.ConnectErrorForDomain(classifyRuntimeProviderError(err))
 	}
 	guestImage := driverpkg.ResolveSandboxGuestImage(req.GuestImage, driverpkg.DefaultGuestImageForDriver(b.config, driver))
-	session, err := b.store.CreateSandboxWithOptions(ctx, req.Title, req.BaseWorkspace, driver, guestImage, workspaceID, source, workspaceSnapshot, envItems, tags, sandboxstore.CreateSandboxOptions{
+	return resolvedSandboxCreateAgentConfig{
+		AgentConfig:       agentConfig,
+		AgentDefinition:   agentDefinition,
+		ProviderEnvItems:  providerEnvItems,
+		EnvItems:          envItems,
+		Tags:              tags,
+		WorkspaceSnapshot: workspaceSnapshot,
+		WorkspaceID:       workspaceID,
+		Driver:            driver,
+		GuestImage:        guestImage,
+	}, nil
+}
+
+func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandboxRPCCreateRequest, source string, creation schedulers.SandboxCreationContext) (*domain.Sandbox, error) {
+	cfg, err := b.resolveSandboxCreateAgentConfig(ctx, req, creation)
+	if err != nil {
+		return nil, err
+	}
+	agentConfig, agentDefinition, providerEnvItems := cfg.AgentConfig, cfg.AgentDefinition, cfg.ProviderEnvItems
+	session, err := b.store.CreateSandboxWithOptions(ctx, req.Title, req.BaseWorkspace, cfg.Driver, cfg.GuestImage, cfg.WorkspaceID, source, cfg.WorkspaceSnapshot, cfg.EnvItems, cfg.Tags, sandboxstore.CreateSandboxOptions{
 		StoppedRuntimePolicy: stoppedRuntimePolicyFromAgentDefinition(agentDefinition),
 	})
 	if err != nil {
@@ -233,7 +283,7 @@ func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandb
 		_ = b.store.UpdateSandbox(ctx, session)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	writeCapabilityGuide(ctx, b.cap, b.store, b.streams, session, req.CapsetIDs)
+	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: b.cap, Store: b.store, Streams: b.streams, Session: session, CapsetIDs: req.CapsetIDs})
 	if b.agentExecutor == nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = b.store.UpdateSandbox(ctx, session)
@@ -429,7 +479,7 @@ func (b *SandboxRPCBridge) sessionLifecycle() sandboxes.Lifecycle {
 			dashboard: b.dashboard,
 		},
 		GuideWriter: func(ctx context.Context, session *domain.Sandbox, capsetIDs []string) {
-			writeCapabilityGuide(ctx, b.cap, b.store, b.streams, session, capsetIDs)
+			writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: b.cap, Store: b.store, Streams: b.streams, Session: session, CapsetIDs: capsetIDs})
 		},
 		PrepareAgentEnvironment: b.agentExecutor.PrepareSandboxAgentEnvironmentFromTags,
 		Locks:                   b.lifecycleLocks,
@@ -484,8 +534,20 @@ func (n sandboxLifecycleNotifier) NotifyDashboard(reason string) {
 	}
 }
 
-func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, store *sandboxstore.Store, streams *sandboxes.StreamBroker, session *domain.Sandbox, capsetIDs []string) {
-	ids := capabilities.NormalizeCapsetIDs(capsetIDs)
+// writeCapabilityGuideRequest bundles the provider, sandbox, capsets, and
+// warning-logging dependencies writeCapabilityGuide needs.
+type writeCapabilityGuideRequest struct {
+	Provider  capabilities.Provider
+	Store     *sandboxstore.Store
+	Streams   *sandboxes.StreamBroker
+	Session   *domain.Sandbox
+	CapsetIDs []string
+}
+
+func writeCapabilityGuide(ctx context.Context, req writeCapabilityGuideRequest) {
+	provider, session := req.Provider, req.Session
+	warnDeps := capabilityGuideWarningRequest{Store: req.Store, Streams: req.Streams}
+	ids := capabilities.NormalizeCapsetIDs(req.CapsetIDs)
 	if len(ids) == 0 || provider == nil || session == nil {
 		return
 	}
@@ -499,7 +561,8 @@ func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, s
 		guide, err := capabilities.CapabilityGuideForScope(ctx, provider, capabilities.GuideScopeFromSandbox(session), id)
 		if err != nil {
 			slog.Warn("capability guide render skipped", "capset", id, "sandbox_id", session.Summary.ID, "error", err)
-			recordCapabilityGuideWarning(ctx, store, streams, session.Summary.ID, fmt.Sprintf("capability guide render skipped for capset %s", id))
+			warnDeps.SessionID, warnDeps.Message = session.Summary.ID, fmt.Sprintf("capability guide render skipped for capset %s", id)
+			recordCapabilityGuideWarning(ctx, warnDeps)
 			continue
 		}
 		if rendered {
@@ -517,32 +580,44 @@ func writeCapabilityGuide(ctx context.Context, provider capabilities.Provider, s
 	}
 	if err := os.MkdirAll(filepath.Dir(catalogPath), 0o755); err != nil {
 		slog.Warn("capability guide dir create failed", "sandbox_id", session.Summary.ID, "error", err)
-		recordCapabilityGuideWarning(ctx, store, streams, session.Summary.ID, "capability guide directory create failed")
+		warnDeps.SessionID, warnDeps.Message = session.Summary.ID, "capability guide directory create failed"
+		recordCapabilityGuideWarning(ctx, warnDeps)
 		return
 	}
 	if err := os.WriteFile(catalogPath, []byte(content), 0o644); err != nil {
 		slog.Warn("capability guide write failed", "sandbox_id", session.Summary.ID, "error", err)
-		recordCapabilityGuideWarning(ctx, store, streams, session.Summary.ID, "capability guide write failed")
+		warnDeps.SessionID, warnDeps.Message = session.Summary.ID, "capability guide write failed"
+		recordCapabilityGuideWarning(ctx, warnDeps)
 	}
 }
 
-func recordCapabilityGuideWarning(ctx context.Context, store *sandboxstore.Store, streams *sandboxes.StreamBroker, sessionID, message string) {
-	if store == nil || strings.TrimSpace(sessionID) == "" {
+// capabilityGuideWarningRequest bundles the store/streams dependencies and
+// event details recordCapabilityGuideWarning needs to record a capability
+// guide failure as a sandbox event.
+type capabilityGuideWarningRequest struct {
+	Store     *sandboxstore.Store
+	Streams   *sandboxes.StreamBroker
+	SessionID string
+	Message   string
+}
+
+func recordCapabilityGuideWarning(ctx context.Context, req capabilityGuideWarningRequest) {
+	if req.Store == nil || strings.TrimSpace(req.SessionID) == "" {
 		return
 	}
 	event := domain.SandboxEvent{
 		ID:        uuid.NewString(),
 		Type:      "capability.guide.warning",
 		Level:     "warning",
-		Message:   message,
+		Message:   req.Message,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := store.AddEvent(ctx, sessionID, event); err != nil {
-		slog.Warn("capability guide warning event failed", "sandbox_id", sessionID, "error", err)
+	if err := req.Store.AddEvent(ctx, req.SessionID, event); err != nil {
+		slog.Warn("capability guide warning event failed", "sandbox_id", req.SessionID, "error", err)
 		return
 	}
-	if streams != nil {
-		streams.PublishEventAdded(sessionID, event)
+	if req.Streams != nil {
+		req.Streams.PublishEventAdded(req.SessionID, event)
 	}
 }
 

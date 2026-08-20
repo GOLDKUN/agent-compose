@@ -95,7 +95,13 @@ func TestAgentRunnerPrepareSandboxAgentEnvironmentUsesOnlyCurrentAgent(t *testin
 		SystemPrompt: "Use the configured agent identity",
 		ConfigJSON:   string(payload),
 	}
-	runner := NewAgentRunner(config, store, configDB, fakeAgentDefinitionStore{agent: *definition}, nil)
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: configDB,
+		Agents:   fakeAgentDefinitionStore{agent: *definition},
+		Runtimes: nil,
+	})
 	if err := runner.PrepareSandboxAgentEnvironmentFromTags(ctx, session); err != nil {
 		t.Fatalf("PrepareSandboxAgentEnvironmentFromTags returned error: %v", err)
 	}
@@ -144,7 +150,13 @@ func TestAgentRunnerPrepareSandboxAgentEnvironmentFromTagsRejectsInvalidDefiniti
 
 	t.Run("definition lookup failure", func(t *testing.T) {
 		lookupErr := errors.New("definition unavailable")
-		runner := NewAgentRunner(nil, nil, nil, fakeAgentDefinitionStore{err: lookupErr}, nil)
+		runner := NewAgentRunner(AgentRunnerDeps{
+			Config:   nil,
+			Store:    nil,
+			ConfigDB: nil,
+			Agents:   fakeAgentDefinitionStore{err: lookupErr},
+			Runtimes: nil,
+		})
 		err := runner.PrepareSandboxAgentEnvironmentFromTags(context.Background(), session)
 		if !errors.Is(err, lookupErr) {
 			t.Fatalf("PrepareSandboxAgentEnvironmentFromTags error = %v, want %v", err, lookupErr)
@@ -152,7 +164,13 @@ func TestAgentRunnerPrepareSandboxAgentEnvironmentFromTagsRejectsInvalidDefiniti
 	})
 
 	t.Run("disabled definition", func(t *testing.T) {
-		runner := NewAgentRunner(nil, nil, nil, fakeAgentDefinitionStore{agent: domain.AgentDefinition{ID: "agent-1", Enabled: false}}, nil)
+		runner := NewAgentRunner(AgentRunnerDeps{
+			Config:   nil,
+			Store:    nil,
+			ConfigDB: nil,
+			Agents:   fakeAgentDefinitionStore{agent: domain.AgentDefinition{ID: "agent-1", Enabled: false}},
+			Runtimes: nil,
+		})
 		err := runner.PrepareSandboxAgentEnvironmentFromTags(context.Background(), session)
 		if err == nil || !strings.Contains(err.Error(), "is disabled") {
 			t.Fatalf("PrepareSandboxAgentEnvironmentFromTags error = %v, want disabled definition", err)
@@ -235,8 +253,22 @@ func TestAgentRunnerRetainsFacadeTokenOnlyWhenExecTerminationIsUnconfirmed(t *te
 				t.Fatalf("SaveVMState returned error: %v", err)
 			}
 			runtime := &fakeAgentRuntime{err: tt.runtimeErr}
-			runner := NewAgentRunner(config, store, configDB, nil, fakeRuntimeProvider{runtime: runtime})
-			_, _, err = runner.ExecuteAgentRun(context.Background(), session, "claude", "", "", "run-1", "wait", "", nil)
+			runner := NewAgentRunner(AgentRunnerDeps{
+				Config:   config,
+				Store:    store,
+				ConfigDB: configDB,
+				Agents:   nil,
+				Runtimes: fakeRuntimeProvider{runtime: runtime},
+			})
+			_, _, err = runner.ExecuteAgentRun(context.Background(), AgentRunRequest{
+				Session:           session,
+				Agent:             "claude",
+				AgentDefinitionID: "",
+				Model:             "",
+				RunID:             "run-1",
+				Message:           "wait",
+				OutputSchemaJSON:  "",
+			}, nil)
 			if !errors.Is(err, tt.runtimeErr) {
 				t.Fatalf("ExecuteAgentRun error = %v, want %v", err, tt.runtimeErr)
 			}
@@ -292,13 +324,27 @@ func TestAgentRunnerExecuteAgentRunWritesSystemPromptAndParsesResult(t *testing.
 	if err := os.WriteFile(filepath.Join(skillSource, "SKILL.md"), []byte("---\nname: pdf\ndescription: PDF skill\n---\n"), 0o644); err != nil {
 		t.Fatalf("write skill source: %v", err)
 	}
-	runner := NewAgentRunner(config, store, nil, fakeAgentDefinitionStore{agent: domain.AgentDefinition{
-		ID:           "agent-1",
-		SystemPrompt: "Reply only in Chinese",
-		Skills:       []domain.AgentSkill{{Name: "pdf", Provider: "file", Path: skillSource}},
-	}}, fakeRuntimeProvider{runtime: runtime})
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: nil,
+		Agents: fakeAgentDefinitionStore{agent: domain.AgentDefinition{
+			ID:           "agent-1",
+			SystemPrompt: "Reply only in Chinese",
+			Skills:       []domain.AgentSkill{{Name: "pdf", Provider: "file", Path: skillSource}},
+		}},
+		Runtimes: fakeRuntimeProvider{runtime: runtime},
+	})
 
-	result, parsed, err := runner.ExecuteAgentRun(ctx, session, "codex", "agent-1", "", "", "hello", "", nil)
+	result, parsed, err := runner.ExecuteAgentRun(ctx, AgentRunRequest{
+		Session:           session,
+		Agent:             "codex",
+		AgentDefinitionID: "agent-1",
+		Model:             "",
+		RunID:             "",
+		Message:           "hello",
+		OutputSchemaJSON:  "",
+	}, nil)
 	if err != nil {
 		t.Fatalf("ExecuteAgentRun returned error: %v", err)
 	}
@@ -351,13 +397,27 @@ func TestAgentRunnerExecuteAgentRunFallsBackToDefinitionModel(t *testing.T) {
 		t.Fatalf("UpdateSession returned error: %v", err)
 	}
 	runtime := &fakeAgentRuntime{}
-	runner := NewAgentRunner(config, store, nil, fakeAgentDefinitionStore{agent: domain.AgentDefinition{
-		ID:       "agent-1",
-		Provider: "opencode",
-		Model:    "openai/qwen3-coder-plus",
-	}}, fakeRuntimeProvider{runtime: runtime})
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: nil,
+		Agents: fakeAgentDefinitionStore{agent: domain.AgentDefinition{
+			ID:       "agent-1",
+			Provider: "opencode",
+			Model:    "openai/qwen3-coder-plus",
+		}},
+		Runtimes: fakeRuntimeProvider{runtime: runtime},
+	})
 
-	if _, _, err := runner.ExecuteAgentRun(ctx, session, "opencode", "agent-1", "", "", "hello", "", nil); err != nil {
+	if _, _, err := runner.ExecuteAgentRun(ctx, AgentRunRequest{
+		Session:           session,
+		Agent:             "opencode",
+		AgentDefinitionID: "agent-1",
+		Model:             "",
+		RunID:             "",
+		Message:           "hello",
+		OutputSchemaJSON:  "",
+	}, nil); err != nil {
 		t.Fatalf("ExecuteAgentRun returned error: %v", err)
 	}
 	if len(runtime.specs) != 1 {
@@ -413,9 +473,23 @@ func TestAgentRunnerExecuteAgentRunUsesResolvedOpenCodeFacadeModel(t *testing.T)
 		t.Fatalf("UpdateSandbox returned error: %v", err)
 	}
 	runtime := &fakeAgentRuntime{}
-	runner := NewAgentRunner(config, store, configDB, nil, fakeRuntimeProvider{runtime: runtime})
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: configDB,
+		Agents:   nil,
+		Runtimes: fakeRuntimeProvider{runtime: runtime},
+	})
 
-	if _, _, err := runner.ExecuteAgentRun(ctx, session, "opencode", "", "baizhi/deepseek-v4-flash", "run-1", "hello", "", nil); err != nil {
+	if _, _, err := runner.ExecuteAgentRun(ctx, AgentRunRequest{
+		Session:           session,
+		Agent:             "opencode",
+		AgentDefinitionID: "",
+		Model:             "baizhi/deepseek-v4-flash",
+		RunID:             "run-1",
+		Message:           "hello",
+		OutputSchemaJSON:  "",
+	}, nil); err != nil {
 		t.Fatalf("ExecuteAgentRun returned error: %v", err)
 	}
 	if len(runtime.specs) != 1 {
@@ -457,9 +531,23 @@ func TestAgentRunnerExecuteAgentRunContinuesWhenDefinitionLookupFails(t *testing
 		t.Fatalf("UpdateSession returned error: %v", err)
 	}
 	runtime := &fakeAgentRuntime{}
-	runner := NewAgentRunner(config, store, nil, fakeAgentDefinitionStore{err: errors.New("store unavailable")}, fakeRuntimeProvider{runtime: runtime})
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   config,
+		Store:    store,
+		ConfigDB: nil,
+		Agents:   fakeAgentDefinitionStore{err: errors.New("store unavailable")},
+		Runtimes: fakeRuntimeProvider{runtime: runtime},
+	})
 
-	result, parsed, err := runner.ExecuteAgentRun(ctx, session, "codex", "agent-1", "", "", "hello", "", nil)
+	result, parsed, err := runner.ExecuteAgentRun(ctx, AgentRunRequest{
+		Session:           session,
+		Agent:             "codex",
+		AgentDefinitionID: "agent-1",
+		Model:             "",
+		RunID:             "",
+		Message:           "hello",
+		OutputSchemaJSON:  "",
+	}, nil)
 	if err != nil {
 		t.Fatalf("ExecuteAgentRun returned error: %v", err)
 	}
@@ -498,7 +586,13 @@ func TestAgentRunnerResolveAgentSystemPromptBranches(t *testing.T) {
 		{Name: domain.AgentSandboxTagID, Value: "agent-tagged"},
 		{Name: domain.AgentSandboxTagSource, Value: domain.AgentSandboxTagSourceVal},
 	}}}
-	runner := NewAgentRunner(nil, nil, nil, fakeAgentDefinitionStore{agent: domain.AgentDefinition{SystemPrompt: "  tagged prompt  "}}, nil)
+	runner := NewAgentRunner(AgentRunnerDeps{
+		Config:   nil,
+		Store:    nil,
+		ConfigDB: nil,
+		Agents:   fakeAgentDefinitionStore{agent: domain.AgentDefinition{SystemPrompt: "  tagged prompt  "}},
+		Runtimes: nil,
+	})
 	if prompt, err := runner.ResolveAgentSystemPrompt(ctx, session, ""); err != nil || prompt != "tagged prompt" {
 		t.Fatalf("tagged prompt = %q err=%v", prompt, err)
 	}
@@ -509,7 +603,13 @@ func TestAgentRunnerResolveAgentSystemPromptBranches(t *testing.T) {
 	if prompt, err := (*AgentRunner)(nil).ResolveAgentSystemPrompt(ctx, session, "agent-tagged"); err != nil || prompt != "" {
 		t.Fatalf("nil runner prompt = %q err=%v", prompt, err)
 	}
-	if prompt, err := NewAgentRunner(nil, nil, nil, nil, nil).ResolveAgentSystemPrompt(ctx, session, "agent-tagged"); err != nil || prompt != "" {
+	if prompt, err := NewAgentRunner(AgentRunnerDeps{
+		Config:   nil,
+		Store:    nil,
+		ConfigDB: nil,
+		Agents:   nil,
+		Runtimes: nil,
+	}).ResolveAgentSystemPrompt(ctx, session, "agent-tagged"); err != nil || prompt != "" {
 		t.Fatalf("nil store prompt = %q err=%v", prompt, err)
 	}
 	if prompt, err := runner.ResolveAgentSystemPrompt(ctx, nil, "agent-tagged"); err != nil || prompt != "" {

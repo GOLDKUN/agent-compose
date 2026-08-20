@@ -27,7 +27,19 @@ func TestSchedulerSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {
 	bridge.config.LLMModel = "gpt-scheduler-retry"
 	bridge.config.LLMAPIProtocol = "responses"
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: bridge.workspaceEnsurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	running, err := bridge.store.CreateSandbox(ctx, "running", "", driverpkg.RuntimeDriverBoxlite, "", "", "scheduler", nil, nil, nil)
 	if err != nil {
@@ -108,7 +120,19 @@ func TestSchedulerSandboxRunnerReleasedRuntimeResumePreparesAgentEnvironment(t *
 	bridge.config.LLMAPIKey = "provider-key"
 	bridge.config.LLMModel = "gpt-scheduler-retry"
 	bridge.config.LLMAPIProtocol = "responses"
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: bridge.workspaceEnsurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        nil,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	released, err := bridge.store.CreateSandbox(ctx, "released", "", driverpkg.RuntimeDriverBoxlite, "", "", "scheduler", nil, nil, []domain.SandboxTag{
 		{Name: domain.AgentSandboxTagProvider, Value: "codex"},
@@ -148,7 +172,19 @@ func TestSchedulerSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *te
 	publisher := &schedulerSessionPublisherFake{}
 	resolver := NewCapabilitySandboxResolver(bridge.store)
 	resolver.initialized = true
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, publisher, resolver, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: bridge.workspaceEnsurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        resolver,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 
 	const capabilityToken = "capability-token"
 	sandbox, err := bridge.store.CreateSandbox(ctx, "release failure", "", driverpkg.RuntimeDriverBoxlite, "", "", "scheduler", nil,
@@ -205,7 +241,19 @@ func TestSchedulerSandboxRunnerRuntimeReleaseFailureFinalizesConfirmedStop(t *te
 func TestSchedulerSandboxRunnerRejectsUnsupportedStickyResumeBeforeSideEffects(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: bridge.workspaceEnsurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        nil,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	session, err := bridge.store.CreateSandbox(ctx, "historical sticky", "", driverpkg.RuntimeDriverMicrosandbox, "", "", "scheduler", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSandbox returned error: %v", err)
@@ -247,7 +295,19 @@ func TestSchedulerSandboxRunnerRejectsUncompiledDriverBeforePersistence(t *testi
 			ctx := context.Background()
 			bridge, sandboxDriver := newTestSandboxRPCBridge(t)
 			publisher := &schedulerSessionPublisherFake{}
-			runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, sandboxDriver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+			runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+				Config:           bridge.config,
+				Store:            bridge.store,
+				ConfigDB:         bridge.configDB,
+				WorkspaceEnsurer: bridge.workspaceEnsurer,
+				Driver:           sandboxDriver,
+				Cap:              nil,
+				VolumeResolver:   nil,
+				Streams:          bridge.streams,
+				Publisher:        publisher,
+				CapTokens:        nil,
+				AgentExecutor:    bridge.agentExecutor,
+			})
 			scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
 				ID:            "scheduler-uncompiled-" + runtimeDriver,
 				Name:          "Uncompiled " + runtimeDriver,
@@ -328,7 +388,19 @@ func TestSchedulerSandboxRunnerResolvesVolumeMounts(t *testing.T) {
 		}},
 		warnings: []string{"volume target /cache overlaps test path"},
 	}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, resolver, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: bridge.workspaceEnsurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   resolver,
+		Streams:          bridge.streams,
+		Publisher:        nil,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	projectRoot := t.TempDir()
 	projectPath := filepath.Join(projectRoot, "agent-compose.yml")
 	if _, err := bridge.configDB.UpsertProject(ctx, domain.ProjectRecord{ID: "project-1", Name: "project", SourcePath: projectPath}); err != nil {

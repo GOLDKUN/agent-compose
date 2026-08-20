@@ -84,7 +84,19 @@ func TestSchedulerSandboxRunnerEnsureUsesWorkspaceEnsurerBeforeGuideAndDriver(t 
 		}
 	}
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, bridge.cap, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: ensurer,
+		Driver:           driver,
+		Cap:              bridge.cap,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "scheduler-create",
 		Name:          "Scheduler Create",
@@ -142,7 +154,19 @@ func TestSchedulerSandboxRunnerEnsureWorkspaceEnsurerErrorShortCircuitsDriver(t 
 		return []byte("unexpected guide"), nil
 	}}
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: ensurer,
+		Driver:           driver,
+		Cap:              capabilityProvider,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "scheduler-ensure-error",
 		Name:          "Scheduler Ensure Error",
@@ -197,7 +221,19 @@ func TestSchedulerSandboxRunnerEnsureRuntimeFailurePreservesReadyProvisioning(t 
 	}}
 	startErr := errors.New("scheduler runtime start failed")
 	driver.startErr = startErr
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: ensurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        nil,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "scheduler-runtime-error",
 		Name:          "Scheduler Runtime Error",
@@ -280,7 +316,19 @@ func TestSchedulerSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 			}
 		}
 		publisher := &schedulerSessionPublisherFake{}
-		runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+		runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+			Config:           bridge.config,
+			Store:            bridge.store,
+			ConfigDB:         bridge.configDB,
+			WorkspaceEnsurer: ensurer,
+			Driver:           driver,
+			Cap:              capabilityProvider,
+			VolumeResolver:   nil,
+			Streams:          bridge.streams,
+			Publisher:        publisher,
+			CapTokens:        nil,
+			AgentExecutor:    bridge.agentExecutor,
+		})
 
 		resumed, eventType, err := runner.LoadOrResume(ctx, stopped.Summary.ID)
 		if err != nil {
@@ -333,7 +381,19 @@ func TestSchedulerSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 			return nil, nil
 		}}
 		publisher := &schedulerSessionPublisherFake{}
-		runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, capabilityProvider, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+		runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+			Config:           bridge.config,
+			Store:            bridge.store,
+			ConfigDB:         bridge.configDB,
+			WorkspaceEnsurer: ensurer,
+			Driver:           driver,
+			Cap:              capabilityProvider,
+			VolumeResolver:   nil,
+			Streams:          bridge.streams,
+			Publisher:        publisher,
+			CapTokens:        nil,
+			AgentExecutor:    bridge.agentExecutor,
+		})
 
 		_, _, err = runner.LoadOrResume(ctx, stopped.Summary.ID)
 		if !errors.Is(err, ensureErr) {
@@ -371,7 +431,19 @@ func TestSchedulerSandboxRunnerLoadOrResumeUsesWorkspaceEnsurer(t *testing.T) {
 		}}
 		startErr := errors.New("resume runtime start failed")
 		driver.startErr = startErr
-		runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+		runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+			Config:           bridge.config,
+			Store:            bridge.store,
+			ConfigDB:         bridge.configDB,
+			WorkspaceEnsurer: ensurer,
+			Driver:           driver,
+			Cap:              nil,
+			VolumeResolver:   nil,
+			Streams:          bridge.streams,
+			Publisher:        nil,
+			CapTokens:        nil,
+			AgentExecutor:    bridge.agentExecutor,
+		})
 
 		_, _, err = runner.LoadOrResume(ctx, stopped.Summary.ID)
 		if !errors.Is(err, startErr) {
@@ -425,7 +497,19 @@ func TestSchedulerSandboxRunnerStickyRunningMatchingConfigSkipsEnsurerAndPreserv
 	request := domain.SchedulerAgentRequest{Agent: "codex", BindingTriggerID: "sticky-trigger"}
 	ensurer := &recordingSchedulerWorkspaceEnsurer{err: errors.New("running sticky path must not ensure workspace")}
 	publisher := &schedulerSessionPublisherFake{}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, ensurer, driver, nil, nil, bridge.streams, publisher, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: ensurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        publisher,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	baseConfigHash, err := schedulerSandboxConfigHash(scheduler)
 	if err != nil {
 		t.Fatalf("schedulerSandboxConfigHash returned error: %v", err)
@@ -435,7 +519,17 @@ func TestSchedulerSandboxRunnerStickyRunningMatchingConfigSkipsEnsurerAndPreserv
 		t.Fatalf("ResolveSchedulerAgentDefinition returned error: %v", err)
 	}
 	guestImage := runner.guestImage(request, scheduler, agentDefinition, driverpkg.RuntimeDriverDocker)
-	configHash, err := schedulerRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, nil, nil, originalSnapshot, driverpkg.RuntimeDriverDocker, guestImage, nil)
+	configHash, err := schedulerRequestSandboxConfigHash(schedulerRequestSandboxConfigHashRequest{
+		BaseHash:         baseConfigHash,
+		Request:          request,
+		AgentDefinition:  agentDefinition,
+		ProviderEnvItems: nil,
+		EnvItems:         nil,
+		Workspace:        originalSnapshot,
+		Driver:           driverpkg.RuntimeDriverDocker,
+		GuestImage:       guestImage,
+		VolumeMounts:     nil,
+	})
 	if err != nil {
 		t.Fatalf("schedulerRequestSandboxConfigHash returned error: %v", err)
 	}
@@ -486,7 +580,19 @@ func TestSchedulerSandboxRunnerAdoptsLegacyStickyBindingWithoutStoppingSandbox(t
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			bridge, driver := newTestSandboxRPCBridge(t)
-			runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingSchedulerWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+			runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+				Config:           bridge.config,
+				Store:            bridge.store,
+				ConfigDB:         bridge.configDB,
+				WorkspaceEnsurer: &recordingSchedulerWorkspaceEnsurer{},
+				Driver:           driver,
+				Cap:              nil,
+				VolumeResolver:   nil,
+				Streams:          bridge.streams,
+				Publisher:        nil,
+				CapTokens:        nil,
+				AgentExecutor:    bridge.agentExecutor,
+			})
 			scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{ID: "legacy-scheduler", SandboxPolicy: domain.SchedulerSandboxPolicySticky}}
 			scheduler = createNativeTestScheduler(t, ctx, bridge.configDB, scheduler)
 			const triggerID = "legacy-trigger"
@@ -524,7 +630,19 @@ func TestSchedulerSandboxRunnerAdoptsLegacyStickyBindingWithoutStoppingSandbox(t
 func TestSchedulerSandboxRunnerConcurrentStickyClaimReusesWinner(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingSchedulerWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: &recordingSchedulerWorkspaceEnsurer{},
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        nil,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:                "scheduler-concurrent-sticky",
 		Name:              "Concurrent Sticky",
@@ -543,7 +661,17 @@ func TestSchedulerSandboxRunnerConcurrentStickyClaimReusesWinner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("schedulerSandboxConfigHash returned error: %v", err)
 	}
-	configHash, err := schedulerRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, nil, nil, nil, driverpkg.RuntimeDriverDocker, guestImage, nil)
+	configHash, err := schedulerRequestSandboxConfigHash(schedulerRequestSandboxConfigHashRequest{
+		BaseHash:         baseConfigHash,
+		Request:          request,
+		AgentDefinition:  agentDefinition,
+		ProviderEnvItems: nil,
+		EnvItems:         nil,
+		Workspace:        nil,
+		Driver:           driverpkg.RuntimeDriverDocker,
+		GuestImage:       guestImage,
+		VolumeMounts:     nil,
+	})
 	if err != nil {
 		t.Fatalf("schedulerRequestSandboxConfigHash returned error: %v", err)
 	}
@@ -602,7 +730,19 @@ func TestSchedulerSandboxRunnerStickyWorkspaceConfigChangeCreatesReplacement(t *
 	if err != nil {
 		t.Fatalf("CreateWorkspaceConfig returned error: %v", err)
 	}
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingSchedulerWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, &schedulerSessionPublisherFake{}, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: &recordingSchedulerWorkspaceEnsurer{},
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        &schedulerSessionPublisherFake{},
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	scheduler := domain.Scheduler{Summary: domain.SchedulerSummary{
 		ID:            "scheduler-sticky-workspace-update",
 		Name:          "Scheduler Sticky Workspace Update",
@@ -642,19 +782,19 @@ func TestSchedulerSandboxRunnerStickyRunningConfigChangeCreatesReplacement(t *te
 		},
 	}
 	capTokens := NewCapabilitySandboxResolver(bridge.store)
-	runner := NewSchedulerSandboxRunner(
-		bridge.config,
-		bridge.store,
-		bridge.configDB,
-		&recordingSchedulerWorkspaceEnsurer{},
-		driver,
-		capabilityProvider,
-		nil,
-		bridge.streams,
-		&schedulerSessionPublisherFake{},
-		capTokens,
-		bridge.agentExecutor,
-	)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: &recordingSchedulerWorkspaceEnsurer{},
+		Driver:           driver,
+		Cap:              capabilityProvider,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        &schedulerSessionPublisherFake{},
+		CapTokens:        capTokens,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	scheduler := domain.Scheduler{
 		Summary: domain.SchedulerSummary{
 			ID:            "scheduler-sticky-update",
@@ -726,7 +866,19 @@ func TestSchedulerSandboxRunnerStickyRunningConfigChangeCreatesReplacement(t *te
 func TestSchedulerSandboxRunnerStickyStoppedConfigChangeDoesNotResume(t *testing.T) {
 	ctx := context.Background()
 	bridge, driver := newTestSandboxRPCBridge(t)
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, &recordingSchedulerWorkspaceEnsurer{}, driver, nil, nil, bridge.streams, &schedulerSessionPublisherFake{}, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: &recordingSchedulerWorkspaceEnsurer{},
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        &schedulerSessionPublisherFake{},
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	scheduler := domain.Scheduler{
 		Summary: domain.SchedulerSummary{
 			ID:            "scheduler-sticky-stopped-update",

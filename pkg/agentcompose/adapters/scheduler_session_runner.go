@@ -45,8 +45,24 @@ type SchedulerSandboxRunner struct {
 	inlineWorkspaceLocks *sandboxes.LifecycleLocks
 }
 
-func NewSchedulerSandboxRunner(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, workspaceEnsurer workspaces.WorkspaceEnsurer, driver sandboxes.SandboxDriver, cap capabilities.Provider, volumeResolver SchedulerVolumeResolver, streams *sandboxes.StreamBroker, publisher schedulers.ControllerPublisher, capTokens *CapabilitySandboxResolver, agentExecutor *AgentExecutor, locks ...*sandboxes.LifecycleLocks) *SchedulerSandboxRunner {
-	runner := &SchedulerSandboxRunner{Config: config, Store: store, ConfigDB: configDB, workspaceEnsurer: workspaceEnsurer, Driver: driver, Cap: cap, Volumes: volumeResolver, Streams: streams, Publisher: publisher, CapTokens: capTokens, AgentExecutor: agentExecutor, inlineWorkspaceLocks: sandboxes.NewLifecycleLocks()}
+// SchedulerSandboxRunnerDeps bundles NewSchedulerSandboxRunner's required
+// dependencies.
+type SchedulerSandboxRunnerDeps struct {
+	Config           *appconfig.Config
+	Store            *sandboxstore.Store
+	ConfigDB         *configstore.ConfigStore
+	WorkspaceEnsurer workspaces.WorkspaceEnsurer
+	Driver           sandboxes.SandboxDriver
+	Cap              capabilities.Provider
+	VolumeResolver   SchedulerVolumeResolver
+	Streams          *sandboxes.StreamBroker
+	Publisher        schedulers.ControllerPublisher
+	CapTokens        *CapabilitySandboxResolver
+	AgentExecutor    *AgentExecutor
+}
+
+func NewSchedulerSandboxRunner(deps SchedulerSandboxRunnerDeps, locks ...*sandboxes.LifecycleLocks) *SchedulerSandboxRunner {
+	runner := &SchedulerSandboxRunner{Config: deps.Config, Store: deps.Store, ConfigDB: deps.ConfigDB, workspaceEnsurer: deps.WorkspaceEnsurer, Driver: deps.Driver, Cap: deps.Cap, Volumes: deps.VolumeResolver, Streams: deps.Streams, Publisher: deps.Publisher, CapTokens: deps.CapTokens, AgentExecutor: deps.AgentExecutor, inlineWorkspaceLocks: sandboxes.NewLifecycleLocks()}
 	if len(locks) > 0 {
 		runner.LifecycleLocks = locks[0]
 	}
@@ -90,10 +106,29 @@ func (r *SchedulerSandboxRunner) stopLifecycle() sandboxes.Lifecycle {
 	}
 }
 
-func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, titleOverridesSession bool) (*domain.Sandbox, string, error) {
+// resolvedSchedulerSandboxConfig is the sandbox configuration
+// resolveSchedulerSandboxConfig derives from a scheduler + agent request,
+// ready to reuse an existing sticky binding or create a new sandbox.
+type resolvedSchedulerSandboxConfig struct {
+	AgentDefinition   *domain.AgentDefinition
+	EffectivePolicy   string
+	ForceNew          bool
+	ProviderEnvItems  []domain.SandboxEnvVar
+	EnvItems          []domain.SandboxEnvVar
+	AgentConfig       execution.AgentConfig
+	WorkspaceSnapshot *domain.SandboxWorkspace
+	WorkspaceID       string
+	Driver            string
+	GuestImage        string
+	VolumeMounts      []domain.SandboxVolumeMount
+	VolumeWarnings    []string
+	ConfigHash        string
+}
+
+func (r *SchedulerSandboxRunner) resolveSchedulerSandboxConfig(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, titleOverridesSession bool) (resolvedSchedulerSandboxConfig, error) {
 	agentDefinition, err := r.ResolveSchedulerAgentDefinition(ctx, scheduler)
 	if err != nil {
-		return nil, "", err
+		return resolvedSchedulerSandboxConfig{}, err
 	}
 	effectivePolicy := schedulers.NormalizeSandboxPolicy(scheduler.Summary.SandboxPolicy)
 	if strings.TrimSpace(schedulers.AgentSandboxPolicy(request)) != "" {
@@ -103,7 +138,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 	forceNew := effectivePolicy == domain.SchedulerSandboxPolicyNew || hasOverrides
 	globalEnvItems, err := r.ConfigDB.ListGlobalEnv(ctx)
 	if err != nil {
-		return nil, "", err
+		return resolvedSchedulerSandboxConfig{}, err
 	}
 	var providerEnvItems []domain.SandboxEnvVar
 	if agentDefinition != nil {
@@ -129,46 +164,66 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 	workspaceID := r.workspaceID(scheduler, request, agentDefinition)
 	workspaceSnapshot, workspaceID, err := r.resolveWorkspaceSnapshot(ctx, request, agentDefinition, workspaceID)
 	if err != nil {
-		return nil, "", err
+		return resolvedSchedulerSandboxConfig{}, err
 	}
 	driver, err := r.driver(request, scheduler, agentDefinition)
 	if err != nil {
-		return nil, "", err
+		return resolvedSchedulerSandboxConfig{}, err
 	}
 	if err := validateSchedulerRuntimeDriverCompiled(driver); err != nil {
-		return nil, "", err
+		return resolvedSchedulerSandboxConfig{}, err
 	}
 	guestImage := r.guestImage(request, scheduler, agentDefinition, driver)
 	volumeMounts, volumeWarnings, err := r.resolveVolumeMounts(ctx, scheduler, request, agentDefinition)
 	if err != nil {
-		return nil, "", err
+		return resolvedSchedulerSandboxConfig{}, err
 	}
 	baseConfigHash, err := schedulerSandboxConfigHash(scheduler)
 	if err != nil {
-		return nil, "", err
+		return resolvedSchedulerSandboxConfig{}, err
 	}
-	configHash, err := schedulerRequestSandboxConfigHash(baseConfigHash, request, agentDefinition, providerEnvItems, envItems, workspaceSnapshot, driver, guestImage, volumeMounts)
+	configHash, err := schedulerRequestSandboxConfigHash(schedulerRequestSandboxConfigHashRequest{
+		BaseHash:         baseConfigHash,
+		Request:          request,
+		AgentDefinition:  agentDefinition,
+		ProviderEnvItems: providerEnvItems,
+		EnvItems:         envItems,
+		Workspace:        workspaceSnapshot,
+		Driver:           driver,
+		GuestImage:       guestImage,
+		VolumeMounts:     volumeMounts,
+	})
 	if err != nil {
-		return nil, "", err
+		return resolvedSchedulerSandboxConfig{}, err
 	}
-	var previousBinding *domain.SchedulerBinding
-	if !forceNew {
-		if session, eventType, reused, binding, err := r.reuseCompatibleSchedulerBinding(ctx, scheduler, request.BindingTriggerID, configHash); err != nil {
-			return nil, "", err
-		} else if reused {
-			return session, eventType, nil
-		} else {
-			previousBinding = binding
-		}
-	}
+	return resolvedSchedulerSandboxConfig{
+		AgentDefinition:   agentDefinition,
+		EffectivePolicy:   effectivePolicy,
+		ForceNew:          forceNew,
+		ProviderEnvItems:  providerEnvItems,
+		EnvItems:          envItems,
+		AgentConfig:       agentConfig,
+		WorkspaceSnapshot: workspaceSnapshot,
+		WorkspaceID:       workspaceID,
+		Driver:            driver,
+		GuestImage:        guestImage,
+		VolumeMounts:      volumeMounts,
+		VolumeWarnings:    volumeWarnings,
+		ConfigHash:        configHash,
+	}, nil
+}
 
+// createSchedulerSandbox creates the sandbox for a resolved scheduler sandbox
+// config: builds tags/title, creates the sandbox, persists provider env items
+// and pull policy, and records any volume-resolution warnings.
+func (r *SchedulerSandboxRunner) createSchedulerSandbox(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, cfg resolvedSchedulerSandboxConfig) (*domain.Sandbox, error) {
 	capabilityVars, capabilityTags := capabilities.BuildGatewaySandboxVars(capabilities.ProxyTarget(r.Cap), scheduler.Summary.CapsetIDs)
-	envItems = domain.MergeEnvItems(envItems, capabilityVars)
+	envItems := domain.MergeEnvItems(cfg.EnvItems, capabilityVars)
 	tags := []domain.SandboxTag{
 		{Name: "origin", Value: "scheduler"},
 		{Name: "scheduler_id", Value: scheduler.Summary.ID},
 		{Name: "scheduler_name", Value: scheduler.Summary.Name},
-		{Name: domain.AgentSandboxTagProvider, Value: agentConfig.Provider},
+		{Name: domain.AgentSandboxTagProvider, Value: cfg.AgentConfig.Provider},
 	}
 	if strings.TrimSpace(scheduler.Summary.ProjectID) != "" {
 		projectID := strings.TrimSpace(scheduler.Summary.ProjectID)
@@ -180,6 +235,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 	}
 	tags = append(tags, capabilityTags...)
 	title := firstNonEmpty(strings.TrimSpace(request.Title), strings.TrimSpace(scheduler.Summary.Name), schedulers.DefaultName(time.Now().UTC()))
+	agentDefinition := cfg.AgentDefinition
 	if agentDefinition != nil {
 		tags = append(tags,
 			domain.SandboxTag{Name: domain.AgentSandboxTagSource, Value: domain.AgentSandboxTagSourceVal},
@@ -187,22 +243,47 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 			domain.SandboxTag{Name: domain.AgentSandboxTagName, Value: agentDefinition.Name},
 		)
 	}
-	session, err := r.Store.CreateSandboxWithOptions(ctx, title, "", driver, guestImage, workspaceID, domain.SandboxTypeScript+":"+scheduler.Summary.ID, workspaceSnapshot, envItems, tags, sandboxstore.CreateSandboxOptions{
+	session, err := r.Store.CreateSandboxWithOptions(ctx, title, "", cfg.Driver, cfg.GuestImage, cfg.WorkspaceID, domain.SandboxTypeScript+":"+scheduler.Summary.ID, cfg.WorkspaceSnapshot, envItems, tags, sandboxstore.CreateSandboxOptions{
 		JupyterEnabled:       request.JupyterEnabled,
-		VolumeMounts:         volumeMounts,
+		VolumeMounts:         cfg.VolumeMounts,
 		StoppedRuntimePolicy: stoppedRuntimePolicyFromAgentDefinition(agentDefinition),
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	llms.SetSandboxProviderEnvItems(session, providerEnvItems)
+	llms.SetSandboxProviderEnvItems(session, cfg.ProviderEnvItems)
 	if request.PullPolicy != "" {
 		session.Summary.PullPolicy = request.PullPolicy
 		if err := r.Store.UpdateSandbox(ctx, session); err != nil {
-			return nil, "", fmt.Errorf("persist sandbox pull policy: %w", err)
+			return nil, fmt.Errorf("persist sandbox pull policy: %w", err)
 		}
 	}
-	r.recordVolumeWarnings(ctx, session.Summary.ID, volumeWarnings)
+	r.recordVolumeWarnings(ctx, session.Summary.ID, cfg.VolumeWarnings)
+	return session, nil
+}
+
+func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, titleOverridesSession bool) (*domain.Sandbox, string, error) {
+	cfg, err := r.resolveSchedulerSandboxConfig(ctx, scheduler, request, titleOverridesSession)
+	if err != nil {
+		return nil, "", err
+	}
+	var previousBinding *domain.SchedulerBinding
+	if !cfg.ForceNew {
+		if session, eventType, reused, binding, err := r.reuseCompatibleSchedulerBinding(ctx, scheduler, request.BindingTriggerID, cfg.ConfigHash); err != nil {
+			return nil, "", err
+		} else if reused {
+			return session, eventType, nil
+		} else {
+			previousBinding = binding
+		}
+	}
+
+	session, err := r.createSchedulerSandbox(ctx, scheduler, request, cfg)
+	if err != nil {
+		return nil, "", err
+	}
+	workspaceSnapshot, agentDefinition, agentConfig := cfg.WorkspaceSnapshot, cfg.AgentDefinition, cfg.AgentConfig
+	effectivePolicy, forceNew, configHash := cfg.EffectivePolicy, cfg.ForceNew, cfg.ConfigHash
 	ensureErr := func() error {
 		unlock := r.fileWorkspaceReadLock(workspaceSnapshot)
 		defer unlock()
@@ -213,7 +294,7 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		_ = r.Store.UpdateSandbox(ctx, session)
 		return nil, "", ensureErr
 	}
-	writeCapabilityGuide(ctx, r.Cap, r.Store, r.Streams, session, scheduler.Summary.CapsetIDs)
+	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: r.Cap, Store: r.Store, Streams: r.Streams, Session: session, CapsetIDs: scheduler.Summary.CapsetIDs})
 	if r.AgentExecutor == nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = r.Store.UpdateSandbox(ctx, session)
@@ -242,7 +323,12 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		r.Streams.PublishEventAdded(session.Summary.ID, event)
 	}
 	if effectivePolicy == domain.SchedulerSandboxPolicySticky && !forceNew {
-		claimed, err := r.bindSchedulerSandbox(ctx, scheduler, request.BindingTriggerID, session.Summary.ID, configHash, previousBinding)
+		claimed, err := r.bindSchedulerSandbox(ctx, domain.SchedulerBinding{
+			SchedulerID:       scheduler.Summary.ID,
+			TriggerID:         request.BindingTriggerID,
+			SandboxID:         session.Summary.ID,
+			SandboxConfigHash: configHash,
+		}, previousBinding)
 		if err != nil {
 			_ = r.Shutdown(ctx, session.Summary.ID)
 			return nil, "", fmt.Errorf("persist scheduler sticky sandbox binding: %w", err)
@@ -321,7 +407,7 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 			return nil, "", err
 		}
 	}
-	writeCapabilityGuide(ctx, r.Cap, r.Store, r.Streams, session, capabilities.SandboxCapsets(session))
+	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: r.Cap, Store: r.Store, Streams: r.Streams, Session: session, CapsetIDs: capabilities.SandboxCapsets(session)})
 	if err := r.Driver.StartSandboxVM(ctx, session); err != nil {
 		return nil, "", err
 	}

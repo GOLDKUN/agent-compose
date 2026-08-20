@@ -42,8 +42,17 @@ func facadeStoreFor(configDB *configstore.ConfigStore) runtimefacade.FacadeStore
 	return configDB
 }
 
-func NewAgentRunner(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, agents AgentDefinitionStore, runtimes RuntimeProvider) *AgentRunner {
-	return &AgentRunner{config: config, store: store, configDB: configDB, agents: agents, runtimes: runtimes}
+// AgentRunnerDeps bundles NewAgentRunner's dependencies.
+type AgentRunnerDeps struct {
+	Config   *appconfig.Config
+	Store    *sandboxstore.Store
+	ConfigDB *configstore.ConfigStore
+	Agents   AgentDefinitionStore
+	Runtimes RuntimeProvider
+}
+
+func NewAgentRunner(deps AgentRunnerDeps) *AgentRunner {
+	return &AgentRunner{config: deps.Config, store: deps.Store, configDB: deps.ConfigDB, agents: deps.Agents, runtimes: deps.Runtimes}
 }
 
 func (r *AgentRunner) ValidateSessionRuntime(session *domain.Sandbox) error {
@@ -51,7 +60,21 @@ func (r *AgentRunner) ValidateSessionRuntime(session *domain.Sandbox) error {
 	return err
 }
 
-func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandbox, agent, agentDefinitionID, model, runID, message, outputSchemaJSON string, stream domain.ExecStreamWriter) (domain.ExecResult, domain.AgentRunResult, error) {
+// AgentRunRequest bundles the session and run identifiers/inputs
+// ExecuteAgentRun needs, as opposed to stream, the output callback.
+type AgentRunRequest struct {
+	Session           *domain.Sandbox
+	Agent             string
+	AgentDefinitionID string
+	Model             string
+	RunID             string
+	Message           string
+	OutputSchemaJSON  string
+}
+
+func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, req AgentRunRequest, stream domain.ExecStreamWriter) (domain.ExecResult, domain.AgentRunResult, error) {
+	session, agent, agentDefinitionID := req.Session, req.Agent, req.AgentDefinitionID
+	model, runID, message, outputSchemaJSON := req.Model, req.RunID, req.Message, req.OutputSchemaJSON
 	if session.Summary.VMStatus != domain.VMStatusRunning {
 		return domain.ExecResult{}, domain.AgentRunResult{}, fmt.Errorf("session is not running")
 	}
@@ -99,7 +122,14 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, session *domain.Sandb
 	if strings.TrimSpace(runtimeConfig.Model) != "" {
 		runtimeModel = strings.TrimSpace(runtimeConfig.Model)
 	}
-	spec := BuildAgentExecSpec(r.config, session, agent, runtimeModel, promptPath, schemaPath, skillNames)
+	spec := BuildAgentExecSpec(r.config, AgentExecSpecRequest{
+		Session:    session,
+		Agent:      agent,
+		Model:      runtimeModel,
+		PromptPath: promptPath,
+		SchemaPath: schemaPath,
+		SkillNames: skillNames,
+	})
 	managedEnv := runtimeConfig.Env
 	retainFacadeToken := false
 	if len(managedEnv) > 0 {
@@ -314,7 +344,20 @@ func (r *AgentRunner) resolveAgentDefinition(ctx context.Context, session *domai
 	return &agentDef, nil
 }
 
-func BuildAgentExecSpec(config *appconfig.Config, session *domain.Sandbox, agent, model, promptPath, schemaPath string, skillNames []string) domain.ExecSpec {
+// AgentExecSpecRequest bundles the session and prompt/schema/skill inputs
+// BuildAgentExecSpec needs to build the guest exec command for an agent run.
+type AgentExecSpecRequest struct {
+	Session    *domain.Sandbox
+	Agent      string
+	Model      string
+	PromptPath string
+	SchemaPath string
+	SkillNames []string
+}
+
+func BuildAgentExecSpec(config *appconfig.Config, req AgentExecSpecRequest) domain.ExecSpec {
+	session, agent, model := req.Session, req.Agent, req.Model
+	promptPath, schemaPath, skillNames := req.PromptPath, req.SchemaPath, req.SkillNames
 	appconfig.ApplyDefaultGuestPaths(config)
 	agentHome := config.GuestHomePath
 	env := execution.BuildSandboxExecEnv(config, session, agentHome)

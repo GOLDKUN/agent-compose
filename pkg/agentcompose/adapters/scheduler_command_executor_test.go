@@ -122,7 +122,7 @@ func TestSchedulerCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t 
 	streams := sandboxes.NewStreamBrokerForTest()
 	ch, unsubscribe := streams.Subscribe(session.Summary.ID)
 	defer unsubscribe()
-	executor := NewSchedulerCommandExecutor(config, store, nil, fakeRuntimeProvider{runtime: fakeSchedulerCommandRuntime{}}, streams)
+	executor := NewSchedulerCommandExecutor(SchedulerCommandExecutorDeps{Config: config, Store: store, Runtimes: fakeRuntimeProvider{runtime: fakeSchedulerCommandRuntime{}}, Streams: streams})
 
 	result, err := executor.ExecuteSchedulerCommand(ctx, session, domain.SchedulerCommandRequest{
 		Mode:   "shell",
@@ -204,7 +204,7 @@ func TestSchedulerCommandExecutorRebuildsAndOwnsCommandFacadeTokens(t *testing.T
 			}
 
 			runtime := &capturingSchedulerCommandRuntime{err: tt.runtimeErr}
-			executor := NewSchedulerCommandExecutor(config, store, configDB, fakeRuntimeProvider{runtime: runtime}, sandboxes.NewStreamBrokerForTest())
+			executor := NewSchedulerCommandExecutor(SchedulerCommandExecutorDeps{Config: config, Store: store, ConfigDB: configDB, Runtimes: fakeRuntimeProvider{runtime: runtime}, Streams: sandboxes.NewStreamBrokerForTest()})
 			result, err := executor.ExecuteSchedulerCommand(ctx, session, domain.SchedulerCommandRequest{
 				Mode:   "shell",
 				Script: "echo scheduler",

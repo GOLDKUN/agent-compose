@@ -206,7 +206,15 @@ func (e *AgentExecutor) ExecuteAgentRequest(ctx context.Context, session *domain
 	}
 
 	execSession := cloneSessionForAgentExecution(session, request.ProviderEnvItems)
-	execResult, result, err := e.runner.ExecuteAgentRun(execCtx, execSession, agent, request.AgentDefinitionID, model, request.RunID, message, request.OutputSchemaJSON, streamWriter)
+	execResult, result, err := e.runner.ExecuteAgentRun(execCtx, AgentRunRequest{
+		Session:           execSession,
+		Agent:             agent,
+		AgentDefinitionID: request.AgentDefinitionID,
+		Model:             model,
+		RunID:             request.RunID,
+		Message:           message,
+		OutputSchemaJSON:  request.OutputSchemaJSON,
+	}, streamWriter)
 	streamErrMu.Lock()
 	deferredStreamErr := streamErr
 	streamErrMu.Unlock()

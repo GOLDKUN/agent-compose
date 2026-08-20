@@ -412,13 +412,13 @@ func NewCellExecutor(di do.Injector) (*adapters.CellExecutor, error) {
 }
 
 func NewAgentRunner(di do.Injector) (*adapters.AgentRunner, error) {
-	return adapters.NewAgentRunner(
-		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sandboxstore.Store](di),
-		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[adapters.RuntimeProvider](di),
-	), nil
+	return adapters.NewAgentRunner(adapters.AgentRunnerDeps{
+		Config:   do.MustInvoke[*appconfig.Config](di),
+		Store:    do.MustInvoke[*sandboxstore.Store](di),
+		ConfigDB: do.MustInvoke[*configstore.ConfigStore](di),
+		Agents:   do.MustInvoke[*configstore.ConfigStore](di),
+		Runtimes: do.MustInvoke[adapters.RuntimeProvider](di),
+	}), nil
 }
 
 func NewAgentExecutor(di do.Injector) (*adapters.AgentExecutor, error) {
@@ -431,49 +431,47 @@ func NewAgentExecutor(di do.Injector) (*adapters.AgentExecutor, error) {
 }
 
 func NewSchedulerCommandExecutor(di do.Injector) (*adapters.SchedulerCommandExecutor, error) {
-	return adapters.NewSchedulerCommandExecutor(
-		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sandboxstore.Store](di),
-		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[adapters.RuntimeProvider](di),
-		do.MustInvoke[*sandboxes.StreamBroker](di),
-	), nil
+	return adapters.NewSchedulerCommandExecutor(adapters.SchedulerCommandExecutorDeps{
+		Config:   do.MustInvoke[*appconfig.Config](di),
+		Store:    do.MustInvoke[*sandboxstore.Store](di),
+		ConfigDB: do.MustInvoke[*configstore.ConfigStore](di),
+		Runtimes: do.MustInvoke[adapters.RuntimeProvider](di),
+		Streams:  do.MustInvoke[*sandboxes.StreamBroker](di),
+	}), nil
 }
 
 func NewSchedulerSandboxRunner(di do.Injector) (*adapters.SchedulerSandboxRunner, error) {
-	return adapters.NewSchedulerSandboxRunner(
-		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sandboxstore.Store](di),
-		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[workspaces.WorkspaceEnsurer](di),
-		do.MustInvoke[*adapters.SandboxDriver](di),
-		do.MustInvoke[capabilities.Provider](di),
-		do.MustInvoke[*volumes.Manager](di),
-		do.MustInvoke[*sandboxes.StreamBroker](di),
-		do.MustInvoke[*schedulers.Bus](di),
-		do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
-		do.MustInvoke[*adapters.AgentExecutor](di),
-		do.MustInvoke[*sandboxes.LifecycleLocks](di),
-	), nil
+	return adapters.NewSchedulerSandboxRunner(adapters.SchedulerSandboxRunnerDeps{
+		Config:           do.MustInvoke[*appconfig.Config](di),
+		Store:            do.MustInvoke[*sandboxstore.Store](di),
+		ConfigDB:         do.MustInvoke[*configstore.ConfigStore](di),
+		WorkspaceEnsurer: do.MustInvoke[workspaces.WorkspaceEnsurer](di),
+		Driver:           do.MustInvoke[*adapters.SandboxDriver](di),
+		Cap:              do.MustInvoke[capabilities.Provider](di),
+		VolumeResolver:   do.MustInvoke[*volumes.Manager](di),
+		Streams:          do.MustInvoke[*sandboxes.StreamBroker](di),
+		Publisher:        do.MustInvoke[*schedulers.Bus](di),
+		CapTokens:        do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
+		AgentExecutor:    do.MustInvoke[*adapters.AgentExecutor](di),
+	}, do.MustInvoke[*sandboxes.LifecycleLocks](di)), nil
 }
 
 func NewSandboxRPCBridge(di do.Injector) (*adapters.SandboxRPCBridge, error) {
 	dashboard, _ := do.Invoke[*dashboard.Hub](di)
-	return adapters.NewSandboxRPCBridge(
-		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sandboxstore.Store](di),
-		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[workspaces.WorkspaceEnsurer](di),
-		do.MustInvoke[*adapters.SandboxDriver](di),
-		do.MustInvoke[adapters.RuntimeProvider](di),
-		do.MustInvoke[*schedulers.Bus](di),
-		do.MustInvoke[*sandboxes.StreamBroker](di),
-		do.MustInvoke[capabilities.Provider](di),
-		do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
-		dashboard,
-		do.MustInvoke[*adapters.AgentExecutor](di),
-		do.MustInvoke[*sandboxes.LifecycleLocks](di),
-	), nil
+	return adapters.NewSandboxRPCBridge(adapters.SandboxRPCBridgeDeps{
+		Config:           do.MustInvoke[*appconfig.Config](di),
+		Store:            do.MustInvoke[*sandboxstore.Store](di),
+		ConfigDB:         do.MustInvoke[*configstore.ConfigStore](di),
+		WorkspaceEnsurer: do.MustInvoke[workspaces.WorkspaceEnsurer](di),
+		Driver:           do.MustInvoke[*adapters.SandboxDriver](di),
+		Runtimes:         do.MustInvoke[adapters.RuntimeProvider](di),
+		Bus:              do.MustInvoke[*schedulers.Bus](di),
+		Streams:          do.MustInvoke[*sandboxes.StreamBroker](di),
+		Cap:              do.MustInvoke[capabilities.Provider](di),
+		CapTokens:        do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
+		Dashboard:        dashboard,
+		AgentExecutor:    do.MustInvoke[*adapters.AgentExecutor](di),
+	}, do.MustInvoke[*sandboxes.LifecycleLocks](di)), nil
 }
 
 func NewDatabase(di do.Injector) (*storagesqlite.Database, error) {

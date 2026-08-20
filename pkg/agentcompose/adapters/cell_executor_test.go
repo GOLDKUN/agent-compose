@@ -97,14 +97,19 @@ func TestCellExecutorExecuteCellPersistsCellAndEvent(t *testing.T) {
 
 	var started bool
 	var chunks []domain.ExecChunk
-	streamed, err := executor.ExecuteCellStream(ctx, session, execution.CellTypePython, "print('hello')", execution.CellExecutionStream{
-		OnStart: func(cell domain.NotebookCell) error {
-			started = cell.Running && cell.Type == execution.CellTypePython
-			return nil
-		},
-		OnChunk: func(_ string, chunk domain.ExecChunk) error {
-			chunks = append(chunks, chunk)
-			return nil
+	streamed, err := executor.ExecuteCellStream(ctx, CellExecutionRequest{
+		Session:  session,
+		CellType: execution.CellTypePython,
+		Source:   "print('hello')",
+		Stream: execution.CellExecutionStream{
+			OnStart: func(cell domain.NotebookCell) error {
+				started = cell.Running && cell.Type == execution.CellTypePython
+				return nil
+			},
+			OnChunk: func(_ string, chunk domain.ExecChunk) error {
+				chunks = append(chunks, chunk)
+				return nil
+			},
 		},
 	})
 	if err != nil || !streamed.Success || !started || len(chunks) != 1 {
@@ -115,16 +120,26 @@ func TestCellExecutorExecuteCellPersistsCellAndEvent(t *testing.T) {
 		t.Fatalf("streamed cells=%#v err=%v", cells, err)
 	}
 
-	if _, err := executor.ExecuteCellStream(ctx, session, execution.CellTypeShell, "echo hello", execution.CellExecutionStream{
-		OnStart: func(domain.NotebookCell) error {
-			return errors.New("start callback failed")
+	if _, err := executor.ExecuteCellStream(ctx, CellExecutionRequest{
+		Session:  session,
+		CellType: execution.CellTypeShell,
+		Source:   "echo hello",
+		Stream: execution.CellExecutionStream{
+			OnStart: func(domain.NotebookCell) error {
+				return errors.New("start callback failed")
+			},
 		},
 	}); err == nil {
 		t.Fatalf("ExecuteCellStream start callback returned nil error")
 	}
-	if _, err := executor.ExecuteCellStream(ctx, session, execution.CellTypeShell, "echo hello", execution.CellExecutionStream{
-		OnChunk: func(string, domain.ExecChunk) error {
-			return errors.New("chunk callback failed")
+	if _, err := executor.ExecuteCellStream(ctx, CellExecutionRequest{
+		Session:  session,
+		CellType: execution.CellTypeShell,
+		Source:   "echo hello",
+		Stream: execution.CellExecutionStream{
+			OnChunk: func(string, domain.ExecChunk) error {
+				return errors.New("chunk callback failed")
+			},
 		},
 	}); err == nil {
 		t.Fatalf("ExecuteCellStream chunk callback returned nil error")

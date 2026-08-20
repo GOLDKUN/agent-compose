@@ -31,8 +31,18 @@ type SchedulerCommandExecutor struct {
 	Streams  *sandboxes.StreamBroker
 }
 
-func NewSchedulerCommandExecutor(config *appconfig.Config, store *sandboxstore.Store, configDB *configstore.ConfigStore, runtimes RuntimeProvider, streams *sandboxes.StreamBroker) *SchedulerCommandExecutor {
-	return &SchedulerCommandExecutor{Config: config, Store: store, ConfigDB: configDB, Runtimes: runtimes, Streams: streams}
+// SchedulerCommandExecutorDeps bundles NewSchedulerCommandExecutor's
+// dependencies.
+type SchedulerCommandExecutorDeps struct {
+	Config   *appconfig.Config
+	Store    *sandboxstore.Store
+	ConfigDB *configstore.ConfigStore
+	Runtimes RuntimeProvider
+	Streams  *sandboxes.StreamBroker
+}
+
+func NewSchedulerCommandExecutor(deps SchedulerCommandExecutorDeps) *SchedulerCommandExecutor {
+	return &SchedulerCommandExecutor{Config: deps.Config, Store: deps.Store, ConfigDB: deps.ConfigDB, Runtimes: deps.Runtimes, Streams: deps.Streams}
 }
 
 func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {

@@ -31,7 +31,19 @@ func TestSchedulerSandboxRunnerEnvironmentPrecedence(t *testing.T) {
 		},
 	})
 
-	runner := NewSchedulerSandboxRunner(bridge.config, bridge.store, bridge.configDB, bridge.workspaceEnsurer, driver, nil, nil, bridge.streams, nil, nil, bridge.agentExecutor)
+	runner := NewSchedulerSandboxRunner(SchedulerSandboxRunnerDeps{
+		Config:           bridge.config,
+		Store:            bridge.store,
+		ConfigDB:         bridge.configDB,
+		WorkspaceEnsurer: bridge.workspaceEnsurer,
+		Driver:           driver,
+		Cap:              nil,
+		VolumeResolver:   nil,
+		Streams:          bridge.streams,
+		Publisher:        nil,
+		CapTokens:        nil,
+		AgentExecutor:    bridge.agentExecutor,
+	})
 	scheduler := domain.Scheduler{
 		Summary: domain.SchedulerSummary{
 			ID:            "scheduler-env-precedence",
