@@ -69,8 +69,17 @@ func HasRequiredReferences(refs []Reference) bool {
 	return false
 }
 
-func PruneItems(ctx context.Context, items []Item, req PruneRequest, now time.Time, remove RemoveFunc) (Result, error) {
-	matched, err := FilterItems(items, req.Filter, now)
+// ItemRemovalContext bundles the item list, current time, and removal
+// callback PruneItems and RemoveItem need, as opposed to req, which
+// describes what to filter/remove.
+type ItemRemovalContext struct {
+	Items  []Item
+	Now    time.Time
+	Remove RemoveFunc
+}
+
+func PruneItems(ctx context.Context, removal ItemRemovalContext, req PruneRequest) (Result, error) {
+	matched, err := FilterItems(removal.Items, req.Filter, removal.Now)
 	if err != nil {
 		return Result{}, err
 	}
@@ -85,10 +94,10 @@ func PruneItems(ctx context.Context, items []Item, req PruneRequest, now time.Ti
 		if result.DryRun {
 			continue
 		}
-		if remove == nil {
+		if removal.Remove == nil {
 			return result, ErrRemoveUnavailable
 		}
-		if err := remove(ctx, item); err != nil {
+		if err := removal.Remove(ctx, item); err != nil {
 			item.Removable = false
 			item.BlockedReasons = AppendWarnings(item.BlockedReasons, "remove failed")
 			result.Skipped = append(result.Skipped, item)
@@ -100,20 +109,20 @@ func PruneItems(ctx context.Context, items []Item, req PruneRequest, now time.Ti
 	return result, nil
 }
 
-func RemoveItem(ctx context.Context, items []Item, req RemoveRequest, now time.Time, remove RemoveFunc) (Result, error) {
-	cacheID, err := ResolveCacheID(items, req.CacheID)
+func RemoveItem(ctx context.Context, removal ItemRemovalContext, req RemoveRequest) (Result, error) {
+	cacheID, err := ResolveCacheID(removal.Items, req.CacheID)
 	if err != nil {
 		return Result{}, err
 	}
 	if _, err := ParseCacheID(cacheID); err != nil {
 		return Result{}, err
 	}
-	result, err := PruneItems(ctx, items, PruneRequest{
+	result, err := PruneItems(ctx, removal, PruneRequest{
 		Filter: Filter{
 			CacheID: cacheID,
 		},
 		Force: req.Force,
-	}, now, remove)
+	})
 	if err != nil {
 		return result, err
 	}

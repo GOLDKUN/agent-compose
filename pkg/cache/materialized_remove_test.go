@@ -20,7 +20,7 @@ func TestMaterializedPruneSkipsReferencedByDefault(t *testing.T) {
 	layout := requireItem(t, items, layoutPath)
 	layout.References[0].Policy = ReferencePolicyRequired
 
-	result, err := PruneItems(context.Background(), []Item{layout}, PruneRequest{Force: true}, time.Now(), MaterializedRemover{Cache: cache}.Remove)
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: []Item{layout}, Now: time.Now(), Remove: MaterializedRemover{Cache: cache}.Remove}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems returned error: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestMaterializedPruneAdvisoryReferenceDeletesLayoutAndReadyOnly(t *testing.
 	items := scanMaterializedItems(t, cache)
 	layout := requireItem(t, items, layoutPath)
 
-	result, err := PruneItems(context.Background(), []Item{layout}, PruneRequest{Force: true}, time.Now(), MaterializedRemover{Cache: cache}.Remove)
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: []Item{layout}, Now: time.Now(), Remove: MaterializedRemover{Cache: cache}.Remove}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems returned error: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestMaterializedRemoveRootFSDeletesRootFSReady(t *testing.T) {
 	items := scanMaterializedItems(t, cache)
 	rootfs := requireItem(t, items, rootfsPath)
 
-	result, err := PruneItems(context.Background(), []Item{rootfs}, PruneRequest{Force: true}, time.Now(), MaterializedRemover{Cache: cache}.Remove)
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: []Item{rootfs}, Now: time.Now(), Remove: MaterializedRemover{Cache: cache}.Remove}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems returned error: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestMaterializedRemoveTempDirDoesNotDeleteSiblings(t *testing.T) {
 	items := scanMaterializedItems(t, cache)
 	tmp := requireItem(t, items, tmpPath)
 
-	result, err := PruneItems(context.Background(), []Item{tmp}, PruneRequest{Force: true}, time.Now(), MaterializedRemover{Cache: cache}.Remove)
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: []Item{tmp}, Now: time.Now(), Remove: MaterializedRemover{Cache: cache}.Remove}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems returned error: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestMaterializedRemoveOrphanedAndExpiredItems(t *testing.T) {
 		t.Fatalf("mkdir orphan: %v", err)
 	}
 	orphan := requireItem(t, scanMaterializedItems(t, cache), orphanPath)
-	result, err := PruneItems(context.Background(), []Item{orphan}, PruneRequest{Force: true}, time.Now(), MaterializedRemover{Cache: cache}.Remove)
+	result, err := PruneItems(context.Background(), ItemRemovalContext{Items: []Item{orphan}, Now: time.Now(), Remove: MaterializedRemover{Cache: cache}.Remove}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems orphan returned error: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestMaterializedRemoveOrphanedAndExpiredItems(t *testing.T) {
 	}
 	expired := requireItem(t, scanMaterializedItems(t, cache), expiredPath)
 	expired.Status = StatusExpired
-	result, err = PruneItems(context.Background(), []Item{expired}, PruneRequest{Force: true}, time.Now(), MaterializedRemover{Cache: cache}.Remove)
+	result, err = PruneItems(context.Background(), ItemRemovalContext{Items: []Item{expired}, Now: time.Now(), Remove: MaterializedRemover{Cache: cache}.Remove}, PruneRequest{Force: true})
 	if err != nil {
 		t.Fatalf("PruneItems expired returned error: %v", err)
 	}

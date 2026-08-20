@@ -99,7 +99,7 @@ func pruneBoxliteRuntimeDerivedCaches(ctx context.Context, boxliteHome string, r
 	if err != nil {
 		return cache.Result{}, err
 	}
-	result, err := cache.PruneItems(ctx, list.Items, req, time.Now().UTC(), boxliteRuntimeDerivedRemover{boxliteHome: boxliteHome}.Remove)
+	result, err := cache.PruneItems(ctx, cache.ItemRemovalContext{Items: list.Items, Now: time.Now().UTC(), Remove: boxliteRuntimeDerivedRemover{boxliteHome: boxliteHome}.Remove}, req)
 	if err != nil {
 		return result, err
 	}
@@ -112,7 +112,7 @@ func removeBoxliteRuntimeDerivedCache(ctx context.Context, boxliteHome string, r
 	if err != nil {
 		return cache.Result{}, err
 	}
-	result, err := cache.RemoveItem(ctx, list.Items, req, time.Now().UTC(), boxliteRuntimeDerivedRemover{boxliteHome: boxliteHome}.Remove)
+	result, err := cache.RemoveItem(ctx, cache.ItemRemovalContext{Items: list.Items, Now: time.Now().UTC(), Remove: boxliteRuntimeDerivedRemover{boxliteHome: boxliteHome}.Remove}, req)
 	if err != nil {
 		return result, err
 	}
