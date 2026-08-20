@@ -29,7 +29,12 @@ func TestRuntimeDriverNotCompiledConnectBoundaries(t *testing.T) {
 			ID: sandboxID, Driver: driverpkg.RuntimeDriverMicrosandbox, VMStatus: domain.VMStatusStopped, RuntimeRef: "original-runtime-ref",
 		}}}
 		remover := &characterizationSandboxRemover{err: unsupported}
-		handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, remover, nil)
+		handler := NewSandboxHandler(SandboxHandlerDeps{
+			Delegate:  &characterizationSessionDelegate{},
+			Store:     store,
+			Remover:   remover,
+			Dashboard: nil,
+		})
 
 		_, err := handler.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: sandboxID}))
 		if connect.CodeOf(err) != connect.CodeUnimplemented || !errors.Is(err, driverpkg.ErrRuntimeDriverNotCompiled) {
@@ -48,8 +53,13 @@ func TestRuntimeDriverNotCompiledConnectBoundaries(t *testing.T) {
 		}}
 		vmState := domain.VMState{Driver: driverpkg.RuntimeDriverMicrosandbox, BoxID: "original-box"}
 		store := &apiExecSandboxStore{sandbox: sandbox, vm: vmState}
-		handler := NewExecHandler(&appconfig.Config{}, store, apiExecProjectStore{}, func(*domain.Sandbox) (ExecRuntime, error) {
-			return nil, unsupported
+		handler := NewExecHandler(ExecHandlerDeps{
+			Config:   &appconfig.Config{},
+			Store:    store,
+			Projects: apiExecProjectStore{},
+			Runtime: func(*domain.Sandbox) (ExecRuntime, error) {
+				return nil, unsupported
+			},
 		})
 		req := &agentcomposev2.ExecRequest{
 			Target:  &agentcomposev2.ExecRequest_SandboxId{SandboxId: sandbox.Summary.ID},

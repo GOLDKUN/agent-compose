@@ -15,7 +15,12 @@ import (
 
 func TestIntegrationListSandboxesRejectsInvalidStatusOverConnect(t *testing.T) {
 	store := &characterizationSandboxStore{}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 	path, serviceHandler := agentcomposev2connect.NewSandboxServiceHandler(handler)
 	mux := http.NewServeMux()
 	mux.Handle(path, serviceHandler)

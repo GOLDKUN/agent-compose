@@ -24,7 +24,12 @@ func TestV2SandboxLifecycleActions(t *testing.T) {
 	store := &characterizationSandboxStore{session: &domain.Sandbox{Summary: domain.SandboxSummary{
 		ID: sandboxID, Driver: "docker", VMStatus: domain.VMStatusRunning, CreatedAt: now, UpdatedAt: now, ProxyPath: "/agent-compose/session/" + sandboxID,
 	}}}
-	handler := NewSandboxHandler(delegate, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  delegate,
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	got, err := handler.GetSandbox(context.Background(), connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
 	if err != nil || got.Msg.GetSandbox().GetStatus() != agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING || got.Msg.GetSandbox().GetProxyPath() == "" || delegate.proxyCalls != 0 {
@@ -44,7 +49,12 @@ func TestV2SandboxLifecycleActions(t *testing.T) {
 func TestV2GetSandboxAcceptsLegacyUUID(t *testing.T) {
 	const sandboxID = "28fed243-4d9d-4e56-96cf-8b2baa8643c8"
 	store := &characterizationSandboxStore{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: sandboxID}}}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	response, err := handler.GetSandbox(context.Background(), connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
 	if err != nil {
@@ -67,7 +77,12 @@ func TestV2GetSandboxIncludesSavedExposedNotebookURL(t *testing.T) {
 		session:    &domain.Sandbox{Summary: domain.SandboxSummary{ID: sandboxID, VMStatus: domain.VMStatusRunning, ProxyPath: "/jupyter/" + sandboxID + "/lab"}},
 		proxyState: domain.ProxyState{Enabled: true, Exposed: true, ProxyPath: "/jupyter/" + sandboxID + "/lab", Token: "token value"},
 	}
-	handler := NewSandboxHandler(delegate, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  delegate,
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	response, err := handler.GetSandbox(context.Background(), connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
 	if err != nil {
@@ -90,7 +105,12 @@ func TestGetSandboxDoesNotPrepareProxyForStoppedSandbox(t *testing.T) {
 		}},
 		proxyState: domain.ProxyState{Enabled: true, Exposed: true, ProxyPath: "/agent-compose/session/" + sandboxID, Token: "token"},
 	}
-	handler := NewSandboxHandler(delegate, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  delegate,
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	response, err := handler.GetSandbox(context.Background(), connect.NewRequest(&agentcomposev2.GetSandboxRequest{SandboxId: sandboxID}))
 	if err != nil {
@@ -115,7 +135,12 @@ func TestV2ListSandboxHistoryReturnsLegacyCellsAndEvents(t *testing.T) {
 		cells:   []domain.NotebookCell{{ID: "cell-1", Type: "agent", Source: "hello", Output: "world", Agent: "codex", CreatedAt: createdAt}},
 		events:  []domain.SandboxEvent{{ID: "event-1", Type: "agent.completed", Level: "info", Message: "done", CreatedAt: createdAt}},
 	}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	response, err := handler.ListSandboxHistory(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxHistoryRequest{SandboxId: sandboxID}))
 	if err != nil {
@@ -154,7 +179,12 @@ func TestV2SandboxLifecycleIsIdempotentAndRejectsInvalidState(t *testing.T) {
 	sandboxID := identity.NewID(identity.ResourceSandbox, "characterization", "idempotent")
 	delegate := &characterizationSessionDelegate{}
 	store := &characterizationSandboxStore{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: sandboxID, VMStatus: domain.VMStatusStopped}}}
-	handler := NewSandboxHandler(delegate, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  delegate,
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	if _, err := handler.StopSandbox(context.Background(), connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID})); err != nil {
 		t.Fatalf("idempotent StopSandbox: %v", err)
@@ -174,7 +204,12 @@ func TestV2ListSandboxesEmptyPageReturnsTotal(t *testing.T) {
 	store := &characterizationSandboxStore{listResults: []domain.SandboxListResult{
 		{Sandboxes: nil, TotalCount: 5, HasMore: true},
 	}}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	resp, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Limit: 1}))
 	if err != nil {
@@ -196,7 +231,12 @@ func TestV2ListSandboxesUsesOffsetPagination(t *testing.T) {
 		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: firstID, UpdatedAt: firstUpdatedAt}}}, TotalCount: 2},
 		{Sandboxes: []*domain.Sandbox{{Summary: domain.SandboxSummary{ID: secondID, UpdatedAt: firstUpdatedAt.Add(-time.Second)}}}, TotalCount: 2},
 	}}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 	first, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Limit: 1}))
 	if err != nil || first.Msg.GetSandboxes()[0].GetSandboxId() != firstID || first.Msg.GetTotal() != 2 {
 		t.Fatalf("first ListSandboxes() = %#v, err=%v", first, err)
@@ -212,7 +252,12 @@ func TestV2ListSandboxesUsesOffsetPagination(t *testing.T) {
 
 func TestV2ListSandboxesPassesProjectAndStatusFiltersToStore(t *testing.T) {
 	store := &characterizationSandboxStore{}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	_, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{
 		ProjectId: " project-a ", Status: []agentcomposev2.SandboxStatus{agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED, agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING},
@@ -233,7 +278,12 @@ func TestV2ListSandboxesRejectsUnknownStatusBeforeStore(t *testing.T) {
 	for _, statuses := range [][]agentcomposev2.SandboxStatus{{agentcomposev2.SandboxStatus_SANDBOX_STATUS_UNSPECIFIED}, {agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING, agentcomposev2.SandboxStatus(99)}} {
 		t.Run(fmt.Sprint(statuses), func(t *testing.T) {
 			store := &characterizationSandboxStore{}
-			handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+			handler := NewSandboxHandler(SandboxHandlerDeps{
+				Delegate:  &characterizationSessionDelegate{},
+				Store:     store,
+				Remover:   &characterizationSandboxRemover{},
+				Dashboard: nil,
+			})
 
 			_, err := handler.ListSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.ListSandboxesRequest{Status: statuses}))
 			if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "unsupported sandbox status") {
@@ -254,7 +304,12 @@ func TestV2SandboxRemoveUsesSandboxIDAndSessionCompatibilityDelegate(t *testing.
 	}
 	remover := &characterizationSandboxRemover{}
 	dashboard := &characterizationDashboard{}
-	handler := NewSandboxHandler(delegate, store, remover, dashboard)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  delegate,
+		Store:     store,
+		Remover:   remover,
+		Dashboard: dashboard,
+	})
 
 	resp, err := handler.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{
 		SandboxId: " " + sandboxID + " ",
@@ -285,7 +340,12 @@ func TestV2SandboxRemoveRejectsRunningWithoutForce(t *testing.T) {
 	store := &characterizationSandboxStore{
 		session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: sandboxID, VMStatus: domain.VMStatusRunning}},
 	}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 
 	_, err := handler.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: sandboxID}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -303,7 +363,12 @@ func TestV2SandboxRemoveKeepsMetadataWhenRuntimeRemovalFails(t *testing.T) {
 	}
 	removeErr := errors.New("runtime remove failed")
 	remover := &characterizationSandboxRemover{err: removeErr}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, remover, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   remover,
+		Dashboard: nil,
+	})
 
 	_, err := handler.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: sandboxID}))
 	if connect.CodeOf(err) != connect.CodeInternal || !errors.Is(err, removeErr) {
@@ -318,7 +383,12 @@ func TestV2SandboxRemoveKeepsMetadataWhenRuntimeRemovalFails(t *testing.T) {
 }
 
 func TestV2SandboxRemoveValidationAndStoreErrors(t *testing.T) {
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, &characterizationSandboxStore{}, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     &characterizationSandboxStore{},
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 	for _, sandboxID := range []string{"", "not an id", "../bad"} {
 		_, err := handler.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: sandboxID}))
 		if connect.CodeOf(err) != connect.CodeInvalidArgument {
@@ -327,17 +397,27 @@ func TestV2SandboxRemoveValidationAndStoreErrors(t *testing.T) {
 	}
 
 	missingID := identity.NewID(identity.ResourceSandbox, "characterization", "missing")
-	missing := NewSandboxHandler(&characterizationSessionDelegate{}, &characterizationSandboxStore{getErr: errors.New("missing")}, &characterizationSandboxRemover{}, nil)
+	missing := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     &characterizationSandboxStore{getErr: errors.New("missing")},
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 	if _, err := missing.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: missingID})); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("RemoveSandbox missing code = %v, want not found (err=%v)", connect.CodeOf(err), err)
 	}
 
 	removeErr := errors.New("remove failed")
 	removeID := identity.NewID(identity.ResourceSandbox, "characterization", "remove-error")
-	failing := NewSandboxHandler(&characterizationSessionDelegate{}, &characterizationSandboxStore{
-		session:   &domain.Sandbox{Summary: domain.SandboxSummary{ID: removeID, VMStatus: domain.VMStatusStopped}},
-		removeErr: removeErr,
-	}, &characterizationSandboxRemover{}, nil)
+	failing := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate: &characterizationSessionDelegate{},
+		Store: &characterizationSandboxStore{
+			session:   &domain.Sandbox{Summary: domain.SandboxSummary{ID: removeID, VMStatus: domain.VMStatusStopped}},
+			removeErr: removeErr,
+		},
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 	if _, err := failing.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: removeID})); connect.CodeOf(err) != connect.CodeInternal {
 		t.Fatalf("RemoveSandbox remove error code = %v, want internal (err=%v)", connect.CodeOf(err), err)
 	}

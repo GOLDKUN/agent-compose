@@ -110,9 +110,17 @@ func (h *SandboxHandler) WithRunTargetResolver(resolver SandboxRunTargetResolver
 	return h
 }
 
-func NewSandboxHandler(delegate SandboxLifecycleDelegate, store SandboxStore, remover SandboxRuntimeRemover, dashboard SandboxDashboardNotifier, stats ...SandboxStatsRuntimeResolver) *SandboxHandler {
-	handler := &SandboxHandler{delegate: delegate, store: store, remover: remover, dashboard: dashboard}
-	if reconciler, ok := delegate.(SandboxRuntimeReconciler); ok {
+// SandboxHandlerDeps bundles NewSandboxHandler's required dependencies.
+type SandboxHandlerDeps struct {
+	Delegate  SandboxLifecycleDelegate
+	Store     SandboxStore
+	Remover   SandboxRuntimeRemover
+	Dashboard SandboxDashboardNotifier
+}
+
+func NewSandboxHandler(deps SandboxHandlerDeps, stats ...SandboxStatsRuntimeResolver) *SandboxHandler {
+	handler := &SandboxHandler{delegate: deps.Delegate, store: deps.Store, remover: deps.Remover, dashboard: deps.Dashboard}
+	if reconciler, ok := deps.Delegate.(SandboxRuntimeReconciler); ok {
 		handler.reconciler = reconciler
 	}
 	if len(stats) > 0 {

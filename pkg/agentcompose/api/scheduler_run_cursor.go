@@ -20,16 +20,27 @@ type schedulerRunPageCursor struct {
 	RunID           string    `json:"run_id"`
 }
 
-func encodeSchedulerRunCursor(projectID string, projectRevision int64, agentName, triggerID, status string, run domain.SchedulerRunSummary) string {
+// schedulerRunCursorRequest identifies the run-page selection
+// encodeSchedulerRunCursor encodes alongside the run to resume from.
+type schedulerRunCursorRequest struct {
+	ProjectID       string
+	ProjectRevision int64
+	AgentName       string
+	TriggerID       string
+	Status          string
+	Run             domain.SchedulerRunSummary
+}
+
+func encodeSchedulerRunCursor(req schedulerRunCursorRequest) string {
 	payload, err := json.Marshal(schedulerRunPageCursor{
-		ProjectID:       strings.TrimSpace(projectID),
-		ProjectRevision: projectRevision,
-		AgentName:       strings.TrimSpace(agentName),
-		TriggerID:       strings.TrimSpace(triggerID),
-		Status:          strings.TrimSpace(status),
-		StartedAt:       run.StartedAt.UTC(),
-		SchedulerID:     strings.TrimSpace(run.SchedulerID),
-		RunID:           strings.TrimSpace(run.ID),
+		ProjectID:       strings.TrimSpace(req.ProjectID),
+		ProjectRevision: req.ProjectRevision,
+		AgentName:       strings.TrimSpace(req.AgentName),
+		TriggerID:       strings.TrimSpace(req.TriggerID),
+		Status:          strings.TrimSpace(req.Status),
+		StartedAt:       req.Run.StartedAt.UTC(),
+		SchedulerID:     strings.TrimSpace(req.Run.SchedulerID),
+		RunID:           strings.TrimSpace(req.Run.ID),
 	})
 	if err != nil {
 		// An unencodable timestamp cannot produce a resumable page cursor; an

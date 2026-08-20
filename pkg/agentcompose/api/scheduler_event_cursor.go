@@ -20,16 +20,28 @@ type projectSchedulerEventCursor struct {
 	EventID         string    `json:"event_id"`
 }
 
-func encodeProjectSchedulerEventCursor(projectID string, projectRevision int64, agentName, triggerID, runID string, event domain.SchedulerEvent) string {
+// projectSchedulerEventCursorRequest identifies the stream selection
+// encodeProjectSchedulerEventCursor encodes alongside the event to resume
+// from.
+type projectSchedulerEventCursorRequest struct {
+	ProjectID       string
+	ProjectRevision int64
+	AgentName       string
+	TriggerID       string
+	RunID           string
+	Event           domain.SchedulerEvent
+}
+
+func encodeProjectSchedulerEventCursor(req projectSchedulerEventCursorRequest) string {
 	payload, err := json.Marshal(projectSchedulerEventCursor{
-		ProjectID:       strings.TrimSpace(projectID),
-		ProjectRevision: projectRevision,
-		AgentName:       strings.TrimSpace(agentName),
-		TriggerID:       strings.TrimSpace(triggerID),
-		RunID:           strings.TrimSpace(runID),
-		CreatedAt:       event.CreatedAt.UTC(),
-		SchedulerID:     strings.TrimSpace(event.SchedulerID),
-		EventID:         strings.TrimSpace(event.ID),
+		ProjectID:       strings.TrimSpace(req.ProjectID),
+		ProjectRevision: req.ProjectRevision,
+		AgentName:       strings.TrimSpace(req.AgentName),
+		TriggerID:       strings.TrimSpace(req.TriggerID),
+		RunID:           strings.TrimSpace(req.RunID),
+		CreatedAt:       req.Event.CreatedAt.UTC(),
+		SchedulerID:     strings.TrimSpace(req.Event.SchedulerID),
+		EventID:         strings.TrimSpace(req.Event.ID),
 	})
 	if err != nil {
 		// An unencodable timestamp cannot produce a resumable checkpoint; an

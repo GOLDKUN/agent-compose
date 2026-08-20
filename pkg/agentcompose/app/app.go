@@ -97,13 +97,13 @@ func RegisterDependencies(di do.Injector) {
 func RegisterRoutes(di do.Injector) {
 	app := do.MustInvoke[*echo.Echo](di)
 
-	projectHandler := api.NewProjectHandlerWithAgentModels(
-		projectControllerDelegate{controller: do.MustInvoke[*projects.Controller](di)},
-		do.MustInvoke[*configstore.ConfigStore](di),
-		do.MustInvoke[*schedulers.Controller](di),
-		newProjectAgentModelResolver(do.MustInvoke[*appconfig.Config](di), do.MustInvoke[*configstore.ConfigStore](di)),
-		do.MustInvoke[*sandboxstore.Store](di),
-	)
+	projectHandler := api.NewProjectHandlerWithAgentModels(api.ProjectHandlerDeps{
+		Delegate:         projectControllerDelegate{controller: do.MustInvoke[*projects.Controller](di)},
+		Store:            do.MustInvoke[*configstore.ConfigStore](di),
+		SchedulerRuntime: do.MustInvoke[*schedulers.Controller](di),
+		AgentModels:      newProjectAgentModelResolver(do.MustInvoke[*appconfig.Config](di), do.MustInvoke[*configstore.ConfigStore](di)),
+		SandboxDirs:      do.MustInvoke[*sandboxstore.Store](di),
+	})
 	path, handler := agentcomposev2connect.NewProjectServiceHandler(projectHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))
 	runDelegate := runControllerDelegate{
@@ -113,15 +113,14 @@ func RegisterRoutes(di do.Injector) {
 	runHandler := api.NewRunHandlerWithRunLogHub(runDelegate, do.MustInvoke[*configstore.ConfigStore](di), do.MustInvoke[*runs.RunLogHub](di), do.MustInvoke[*RunSupervisor](di))
 	path, handler = agentcomposev2connect.NewRunServiceHandler(runHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))
-	execHandler := api.NewExecHandler(
-		do.MustInvoke[*appconfig.Config](di),
-		do.MustInvoke[*sandboxstore.Store](di),
-		do.MustInvoke[*configstore.ConfigStore](di),
-		func(session *domain.Sandbox) (api.ExecRuntime, error) {
+	execHandler := api.NewExecHandler(api.ExecHandlerDeps{
+		Config:   do.MustInvoke[*appconfig.Config](di),
+		Store:    do.MustInvoke[*sandboxstore.Store](di),
+		Projects: do.MustInvoke[*configstore.ConfigStore](di),
+		Runtime: func(session *domain.Sandbox) (api.ExecRuntime, error) {
 			return do.MustInvoke[adapters.RuntimeProvider](di).ForSession(session)
 		},
-		runDelegate,
-	).WithLifecycleLocks(do.MustInvoke[*sandboxes.LifecycleLocks](di))
+	}, runDelegate).WithLifecycleLocks(do.MustInvoke[*sandboxes.LifecycleLocks](di))
 	path, handler = agentcomposev2connect.NewExecServiceHandler(execHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))
 	imageHandler := api.NewImageHandler(do.MustInvoke[*adapters.ImageBackends](di))
@@ -133,11 +132,12 @@ func RegisterRoutes(di do.Injector) {
 	volumeHandler := api.NewVolumeHandler(do.MustInvoke[*volumes.Manager](di))
 	path, handler = agentcomposev2connect.NewVolumeServiceHandler(volumeHandler)
 	app.Any(path+"*", echo.WrapHandler(handler))
-	sandboxHandler := api.NewSandboxHandler(
-		do.MustInvoke[*adapters.SandboxRPCBridge](di),
-		do.MustInvoke[*sandboxstore.Store](di),
-		do.MustInvoke[*adapters.SandboxDriver](di),
-		do.MustInvoke[*dashboard.Hub](di),
+	sandboxHandler := api.NewSandboxHandler(api.SandboxHandlerDeps{
+		Delegate:  do.MustInvoke[*adapters.SandboxRPCBridge](di),
+		Store:     do.MustInvoke[*sandboxstore.Store](di),
+		Remover:   do.MustInvoke[*adapters.SandboxDriver](di),
+		Dashboard: do.MustInvoke[*dashboard.Hub](di),
+	},
 		func(session *domain.Sandbox) (api.SandboxStatsRuntime, error) {
 			runtime, err := do.MustInvoke[adapters.RuntimeProvider](di).ForSession(session)
 			if err != nil {

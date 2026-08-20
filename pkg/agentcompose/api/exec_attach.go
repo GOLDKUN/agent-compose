@@ -196,7 +196,15 @@ func (s *execAttachState) responseFromRuntimeFrame(frame driverpkg.RuntimeOutput
 		if strings.TrimSpace(result.Error) != "" {
 			accumulated.Success = false
 		}
-		execResult := ExecResultToProto(s.execID, s.sandbox.Summary.ID, s.runID, s.request, s.cwd, accumulated, errorFromString(result.Error))
+		execResult := ExecResultToProto(ExecResultProtoRequest{
+			ExecID:    s.execID,
+			SandboxID: s.sandbox.Summary.ID,
+			RunID:     s.runID,
+			Request:   s.request,
+			Cwd:       s.cwd,
+			Result:    accumulated,
+			ExecErr:   errorFromString(result.Error),
+		})
 		resp.Frame = &agentcomposev2.AttachExecResponse_Result{Result: &agentcomposev2.AttachResult{
 			ExitCode:   int32(result.ExitCode),
 			Success:    result.Success,

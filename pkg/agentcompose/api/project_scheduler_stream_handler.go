@@ -59,10 +59,30 @@ func (h *ProjectHandler) StreamProjectSchedulerEvents(ctx context.Context, req *
 			lower = &boundary[0]
 		}
 	}
-	return h.sendSchedulerEventPages(ctx, stream, selection, baseFilter, lower, upper[0], batchSize)
+	return h.sendSchedulerEventPages(ctx, schedulerEventPageStreamRequest{
+		Stream:    stream,
+		Selection: selection,
+		Base:      baseFilter,
+		Lower:     lower,
+		Upper:     upper[0],
+		BatchSize: batchSize,
+	})
 }
 
-func (h *ProjectHandler) sendSchedulerEventPages(ctx context.Context, stream *connect.ServerStream[agentcomposev2.StreamProjectSchedulerEventsResponse], selection schedulerEventStreamSelection, base schedulers.SchedulerEventPageFilter, lower *domain.SchedulerEvent, upper domain.SchedulerEvent, batchSize int) error {
+// schedulerEventPageStreamRequest bundles the stream, selection, and page
+// window sendSchedulerEventPages needs to page through and send scheduler
+// events in display order.
+type schedulerEventPageStreamRequest struct {
+	Stream    *connect.ServerStream[agentcomposev2.StreamProjectSchedulerEventsResponse]
+	Selection schedulerEventStreamSelection
+	Base      schedulers.SchedulerEventPageFilter
+	Lower     *domain.SchedulerEvent
+	Upper     domain.SchedulerEvent
+	BatchSize int
+}
+
+func (h *ProjectHandler) sendSchedulerEventPages(ctx context.Context, req schedulerEventPageStreamRequest) error {
+	selection, base, lower, upper, batchSize := req.Selection, req.Base, req.Lower, req.Upper, req.BatchSize
 	var after *domain.SchedulerEvent
 	var emitted uint64
 	checkpoint := ""
@@ -96,15 +116,22 @@ func (h *ProjectHandler) sendSchedulerEventPages(ctx context.Context, stream *co
 		last := events[len(events)-1]
 		after = &last
 		emitted += uint64(len(items))
-		checkpoint = encodeProjectSchedulerEventCursor(selection.project.ID, selection.project.CurrentRevision, selection.agentName, selection.triggerID, selection.runID, last)
-		if err := stream.Send(&agentcomposev2.StreamProjectSchedulerEventsResponse{Events: items, Checkpoint: checkpoint, EmittedCount: emitted}); err != nil {
+		checkpoint = encodeProjectSchedulerEventCursor(projectSchedulerEventCursorRequest{
+			ProjectID:       selection.project.ID,
+			ProjectRevision: selection.project.CurrentRevision,
+			AgentName:       selection.agentName,
+			TriggerID:       selection.triggerID,
+			RunID:           selection.runID,
+			Event:           last,
+		})
+		if err := req.Stream.Send(&agentcomposev2.StreamProjectSchedulerEventsResponse{Events: items, Checkpoint: checkpoint, EmittedCount: emitted}); err != nil {
 			return err
 		}
 		if len(events) < batchSize || sameSchedulerEventKey(last, upper) {
 			break
 		}
 	}
-	return stream.Send(&agentcomposev2.StreamProjectSchedulerEventsResponse{Complete: true, Checkpoint: checkpoint, EmittedCount: emitted})
+	return req.Stream.Send(&agentcomposev2.StreamProjectSchedulerEventsResponse{Complete: true, Checkpoint: checkpoint, EmittedCount: emitted})
 }
 
 func (h *ProjectHandler) schedulerEventStreamSelection(ctx context.Context, req *agentcomposev2.StreamProjectSchedulerEventsRequest) (schedulerEventStreamSelection, error) {
@@ -208,7 +235,14 @@ func (h *ProjectHandler) sendSchedulerRunPages(ctx context.Context, stream *conn
 		last := page[len(page)-1]
 		before = &last
 		emitted += uint64(len(items))
-		checkpoint = encodeSchedulerRunCursor(selection.project.ID, selection.project.CurrentRevision, selection.agentName, selection.triggerID, selection.status, last)
+		checkpoint = encodeSchedulerRunCursor(schedulerRunCursorRequest{
+			ProjectID:       selection.project.ID,
+			ProjectRevision: selection.project.CurrentRevision,
+			AgentName:       selection.agentName,
+			TriggerID:       selection.triggerID,
+			Status:          selection.status,
+			Run:             last,
+		})
 		if err := stream.Send(&agentcomposev2.StreamSchedulerRunsResponse{Runs: items, Checkpoint: checkpoint, EmittedCount: emitted}); err != nil {
 			return err
 		}
