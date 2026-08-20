@@ -250,7 +250,9 @@ func TestSandboxProjectProjectionMigrationInvalidatesCache(t *testing.T) {
 		t.Fatalf("migrated sandbox projection version rows = %d, want 0 to force rebuild", versionCount)
 	}
 	assertSandboxProjectColumnsExist(t, ctx, db)
-	assertSQLiteIndexColumns(t, db, "idx_sandboxes_project_updated", []string{"project_id_search", "updated_at", "id"}, []bool{false, true, true})
+	assertSQLiteIndexColumns(t, db, sqliteIndexColumnsExpectation{
+		IndexName: "idx_sandboxes_project_updated", Columns: []string{"project_id_search", "updated_at", "id"}, Descending: []bool{false, true, true},
+	})
 }
 
 func TestBaselineIncludesPreviouslyOmittedSchema(t *testing.T) {
@@ -281,7 +283,9 @@ func TestBaselineIncludesPreviouslyOmittedSchema(t *testing.T) {
 		{name: "idx_event_source_correlation_sequence", columns: []string{"source", "correlation_id", "sequence"}, descending: []bool{false, false, true}},
 	}
 	for _, definition := range indexDefinitions {
-		assertSQLiteIndexColumns(t, db, definition.name, definition.columns, definition.descending)
+		assertSQLiteIndexColumns(t, db, sqliteIndexColumnsExpectation{
+			IndexName: definition.name, Columns: definition.columns, Descending: definition.descending,
+		})
 	}
 }
 
@@ -301,8 +305,15 @@ func assertSandboxProjectColumnsExist(t *testing.T, ctx context.Context, db *sql
 	}
 }
 
-func assertSQLiteIndexColumns(t *testing.T, db *sql.DB, indexName string, columns []string, descending []bool) {
+type sqliteIndexColumnsExpectation struct {
+	IndexName  string
+	Columns    []string
+	Descending []bool
+}
+
+func assertSQLiteIndexColumns(t *testing.T, db *sql.DB, want sqliteIndexColumnsExpectation) {
 	t.Helper()
+	indexName, columns, descending := want.IndexName, want.Columns, want.Descending
 	if len(columns) != len(descending) {
 		t.Fatalf("index %s expectation has %d columns and %d sort directions", indexName, len(columns), len(descending))
 	}

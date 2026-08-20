@@ -76,10 +76,10 @@ func NewWithConfig(config *appconfig.Config) (*Store, error) {
 	}
 	database, err := storagesqlite.OpenWithMaxOpenConns(dbPath, config.DbTimeout, config.EffectiveSQLiteMaxOpenConns())
 	if err != nil {
-		return newStoreWithIndex(config, nil, dbPath, err, nil)
+		return newStoreWithIndex(config, storeIndexInit{DBPath: dbPath, IndexErr: err})
 	}
 	index, _, indexErr := openSandboxCacheDB(context.Background(), database.DB())
-	store, err := newStoreWithIndex(config, index, dbPath, indexErr, nil)
+	store, err := newStoreWithIndex(config, storeIndexInit{Index: index, DBPath: dbPath, IndexErr: indexErr})
 	if err != nil {
 		return nil, errors.Join(err, database.Close())
 	}
@@ -104,10 +104,19 @@ func NewWithDatabase(config *appconfig.Config, db *sql.DB, projectResolvers ...S
 	if len(projectResolvers) > 0 {
 		projectResolver = projectResolvers[0]
 	}
-	return newStoreWithIndex(config, index, config.DbAddr, err, projectResolver)
+	return newStoreWithIndex(config, storeIndexInit{Index: index, DBPath: config.DbAddr, IndexErr: err, ProjectResolver: projectResolver})
 }
 
-func newStoreWithIndex(config *appconfig.Config, index *sandboxCache, dbPath string, indexErr error, projectResolver SandboxProjectResolver) (*Store, error) {
+// storeIndexInit bundles the sandbox listing cache and the outcome of trying to open it.
+type storeIndexInit struct {
+	Index           *sandboxCache
+	DBPath          string
+	IndexErr        error
+	ProjectResolver SandboxProjectResolver
+}
+
+func newStoreWithIndex(config *appconfig.Config, init storeIndexInit) (*Store, error) {
+	index, dbPath, indexErr, projectResolver := init.Index, init.DBPath, init.IndexErr, init.ProjectResolver
 	if err := os.MkdirAll(config.SandboxRoot, 0o755); err != nil {
 		return nil, closeSandboxCacheAfterStoreInitFailure(index, fmt.Errorf("create sandbox root: %w", err))
 	}

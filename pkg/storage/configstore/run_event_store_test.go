@@ -40,7 +40,7 @@ func TestProjectRunEventsAreOrderedIdempotentAndCascade(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	agentID := createRunEventTestAgent(t, ctx, store, project.ID, "worker")
+	agentID := createRunEventTestAgent(t, runEventTestAgentSpec{Ctx: ctx, Store: store, ProjectID: project.ID, AgentName: "worker"})
 	createdRun, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{RunID: "run-events", ProjectID: project.ID, AgentName: "worker", AgentID: agentID, SandboxID: "sandbox-events", Status: domain.ProjectRunStatusRunning})
 	if err != nil {
 		t.Fatalf("create run: %v", err)
@@ -116,7 +116,7 @@ func TestProjectRunAndEventsCommitAtomically(t *testing.T) {
 	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-atomic", Name: "atomic"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	agentID := createRunEventTestAgent(t, ctx, store, "project-atomic", "worker")
+	agentID := createRunEventTestAgent(t, runEventTestAgentSpec{Ctx: ctx, Store: store, ProjectID: "project-atomic", AgentName: "worker"})
 	if _, err := store.db.ExecContext(ctx, `CREATE TRIGGER fail_run_event BEFORE INSERT ON project_run_event BEGIN SELECT RAISE(ABORT, 'forced event failure'); END`); err != nil {
 		t.Fatalf("create failure trigger: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestCreateProjectRunWithEventsIsIdempotent(t *testing.T) {
 	if _, err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "project-idempotent", Name: "idempotent"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	agentID := createRunEventTestAgent(t, ctx, store, "project-idempotent", "worker")
+	agentID := createRunEventTestAgent(t, runEventTestAgentSpec{Ctx: ctx, Store: store, ProjectID: "project-idempotent", AgentName: "worker"})
 	run := domain.ProjectRunRecord{
 		RunID:     "run-idempotent",
 		ProjectID: "project-idempotent",
@@ -231,7 +231,7 @@ func TestProjectRunEventSequencesAreAtomicAcrossConnections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	agentID := createRunEventTestAgent(t, ctx, store, project.ID, "worker")
+	agentID := createRunEventTestAgent(t, runEventTestAgentSpec{Ctx: ctx, Store: store, ProjectID: project.ID, AgentName: "worker"})
 	if _, err := store.CreateProjectRun(ctx, domain.ProjectRunRecord{RunID: "run-concurrent-events", ProjectID: project.ID, AgentName: "worker", AgentID: agentID, Status: domain.ProjectRunStatusRunning}); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -279,13 +279,20 @@ func TestProjectRunEventSequencesAreAtomicAcrossConnections(t *testing.T) {
 	}
 }
 
-func createRunEventTestAgent(t *testing.T, ctx context.Context, store *ConfigStore, projectID, agentName string) string {
+type runEventTestAgentSpec struct {
+	Ctx       context.Context
+	Store     *ConfigStore
+	ProjectID string
+	AgentName string
+}
+
+func createRunEventTestAgent(t *testing.T, spec runEventTestAgentSpec) string {
 	t.Helper()
-	agentID, err := projects.StableProjectAgentID(projectID, agentName)
+	agentID, err := projects.StableProjectAgentID(spec.ProjectID, spec.AgentName)
 	if err != nil {
 		t.Fatalf("derive project agent id: %v", err)
 	}
-	if _, err := store.UpsertProjectAgent(ctx, domain.ProjectAgentRecord{ID: agentID, ProjectID: projectID, AgentName: agentName}); err != nil {
+	if _, err := spec.Store.UpsertProjectAgent(spec.Ctx, domain.ProjectAgentRecord{ID: agentID, ProjectID: spec.ProjectID, AgentName: spec.AgentName}); err != nil {
 		t.Fatalf("create project agent: %v", err)
 	}
 	return agentID

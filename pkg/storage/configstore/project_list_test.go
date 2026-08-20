@@ -15,12 +15,48 @@ func TestListProjectsFiltersPagesAndCountsCurrentRevision(t *testing.T) {
 		t.Fatalf("init schema: %v", err)
 	}
 
-	seedProjectListProject(t, store, "project-alpha", "Alpha NEEDLE", "/work/alpha", 2, 300, 0)
-	seedProjectListProject(t, store, "project-beta", "Beta", "/work/needle-beta", 1, 200, 0)
-	seedProjectListProject(t, store, "project-needle-removed", "Removed", "/work/removed", 1, 400, 350)
-	seedProjectListResources(t, store, "project-alpha", 1, "old", true)
-	seedProjectListResources(t, store, "project-alpha", 2, "current", true)
-	seedProjectListResources(t, store, "project-beta", 1, "current", false)
+	seedProjectListProject(t, store, projectListSeed{
+		ID:         "project-alpha",
+		Name:       "Alpha NEEDLE",
+		SourcePath: "/work/alpha",
+		Revision:   2,
+		UpdatedAt:  300,
+		RemovedAt:  0,
+	})
+	seedProjectListProject(t, store, projectListSeed{
+		ID:         "project-beta",
+		Name:       "Beta",
+		SourcePath: "/work/needle-beta",
+		Revision:   1,
+		UpdatedAt:  200,
+		RemovedAt:  0,
+	})
+	seedProjectListProject(t, store, projectListSeed{
+		ID:         "project-needle-removed",
+		Name:       "Removed",
+		SourcePath: "/work/removed",
+		Revision:   1,
+		UpdatedAt:  400,
+		RemovedAt:  350,
+	})
+	seedProjectListResources(t, store, projectListResourceSeed{
+		ProjectID: "project-alpha",
+		Revision:  1,
+		Suffix:    "old",
+		Scheduler: true,
+	})
+	seedProjectListResources(t, store, projectListResourceSeed{
+		ProjectID: "project-alpha",
+		Revision:  2,
+		Suffix:    "current",
+		Scheduler: true,
+	})
+	seedProjectListResources(t, store, projectListResourceSeed{
+		ProjectID: "project-beta",
+		Revision:  1,
+		Suffix:    "current",
+		Scheduler: false,
+	})
 
 	result, err := store.ListProjects(ctx, domain.ProjectListOptions{Query: "NeEdLe", Limit: 1})
 	if err != nil {
@@ -71,9 +107,30 @@ func TestListProjectsTreatsSearchMetacharactersLiterally(t *testing.T) {
 		t.Fatalf("init schema: %v", err)
 	}
 
-	seedProjectListProject(t, store, "project-percent", "100% Ready", "/work/percent", 0, 100, 0)
-	seedProjectListProject(t, store, "project-underscore", "Under_score", "/work/underscore", 0, 90, 0)
-	seedProjectListProject(t, store, "project-plain", "Plain", "/work/plain", 0, 80, 0)
+	seedProjectListProject(t, store, projectListSeed{
+		ID:         "project-percent",
+		Name:       "100% Ready",
+		SourcePath: "/work/percent",
+		Revision:   0,
+		UpdatedAt:  100,
+		RemovedAt:  0,
+	})
+	seedProjectListProject(t, store, projectListSeed{
+		ID:         "project-underscore",
+		Name:       "Under_score",
+		SourcePath: "/work/underscore",
+		Revision:   0,
+		UpdatedAt:  90,
+		RemovedAt:  0,
+	})
+	seedProjectListProject(t, store, projectListSeed{
+		ID:         "project-plain",
+		Name:       "Plain",
+		SourcePath: "/work/plain",
+		Revision:   0,
+		UpdatedAt:  80,
+		RemovedAt:  0,
+	})
 
 	for _, test := range []struct {
 		query string
@@ -101,7 +158,14 @@ func TestListProjectsReturnsMoreThanLegacyTwoHundredLimit(t *testing.T) {
 	}
 	for index := range 205 {
 		id := fmt.Sprintf("project-%03d", index)
-		seedProjectListProject(t, store, id, id, "/work/"+id, 0, int64(1000-index), 0)
+		seedProjectListProject(t, store, projectListSeed{
+			ID:         id,
+			Name:       id,
+			SourcePath: "/work/" + id,
+			Revision:   0,
+			UpdatedAt:  int64(1000 - index),
+			RemovedAt:  0,
+		})
 	}
 
 	result, err := store.ListProjects(ctx, domain.ProjectListOptions{Limit: 500, Offset: -10})
@@ -113,18 +177,35 @@ func TestListProjectsReturnsMoreThanLegacyTwoHundredLimit(t *testing.T) {
 	}
 }
 
-func seedProjectListProject(t *testing.T, store *ConfigStore, id, name, sourcePath string, revision, updatedAt, removedAt int64) {
+type projectListSeed struct {
+	ID         string
+	Name       string
+	SourcePath string
+	Revision   int64
+	UpdatedAt  int64
+	RemovedAt  int64
+}
+
+func seedProjectListProject(t *testing.T, store *ConfigStore, seed projectListSeed) {
 	t.Helper()
 	_, err := store.db.Exec(`INSERT INTO project(
 		id, name, short_id, source_path, source_json, current_revision, spec_hash, created_at, updated_at, removed_at
-	) VALUES(?, ?, ?, ?, '{}', ?, '', ?, ?, ?)`, id, name, id, sourcePath, revision, updatedAt, updatedAt, removedAt)
+	) VALUES(?, ?, ?, ?, '{}', ?, '', ?, ?, ?)`, seed.ID, seed.Name, seed.ID, seed.SourcePath, seed.Revision, seed.UpdatedAt, seed.UpdatedAt, seed.RemovedAt)
 	if err != nil {
-		t.Fatalf("seed project %s: %v", id, err)
+		t.Fatalf("seed project %s: %v", seed.ID, err)
 	}
 }
 
-func seedProjectListResources(t *testing.T, store *ConfigStore, projectID string, revision int64, suffix string, scheduler bool) {
+type projectListResourceSeed struct {
+	ProjectID string
+	Revision  int64
+	Suffix    string
+	Scheduler bool
+}
+
+func seedProjectListResources(t *testing.T, store *ConfigStore, seed projectListResourceSeed) {
 	t.Helper()
+	projectID, revision, suffix, scheduler := seed.ProjectID, seed.Revision, seed.Suffix, seed.Scheduler
 	agentName := "agent-" + suffix
 	agentID := projectID + "-" + suffix
 	if _, err := store.db.Exec(`INSERT INTO project_agent(

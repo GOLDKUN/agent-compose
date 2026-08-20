@@ -38,26 +38,50 @@ func (s *Store) CreateSandbox(ctx context.Context, title, baseWorkspace, driver,
 }
 
 func (s *Store) CreateSandboxWithOptions(ctx context.Context, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource string, workspace *SandboxWorkspace, envItems []SandboxEnvVar, tags []SandboxTag, options CreateSandboxOptions) (*Sandbox, error) {
-	return s.createSandboxWithCacheDependencyLock(ctx, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource, workspace, envItems, tags, options)
+	return s.createSandboxWithCacheDependencyLock(ctx, sandboxCreateSpec{
+		Title: title, BaseWorkspace: baseWorkspace, Driver: driver, GuestImage: guestImage,
+		WorkspaceID: workspaceID, TriggerSource: triggerSource, Workspace: workspace,
+		EnvItems: envItems, Tags: tags, Options: options,
+	})
 }
 
-func (s *Store) createSandboxWithCacheDependencyLock(ctx context.Context, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource string, workspace *SandboxWorkspace, envItems []SandboxEnvVar, tags []SandboxTag, options CreateSandboxOptions) (*Sandbox, error) {
+// sandboxCreateSpec groups the fields the sandbox-creation chain
+// (createSandboxWithCacheDependencyLock -> createSandboxWithOptions) needs.
+// The exported CreateSandbox/CreateSandboxWithOptions keep their existing
+// positional signatures since they have many external callers; only the
+// private chain beneath them is bundled here.
+type sandboxCreateSpec struct {
+	Title         string
+	BaseWorkspace string
+	Driver        string
+	GuestImage    string
+	WorkspaceID   string
+	TriggerSource string
+	Workspace     *SandboxWorkspace
+	EnvItems      []SandboxEnvVar
+	Tags          []SandboxTag
+	Options       CreateSandboxOptions
+}
+
+func (s *Store) createSandboxWithCacheDependencyLock(ctx context.Context, spec sandboxCreateSpec) (*Sandbox, error) {
 	s.cacheDependencyMu.RLock()
 	locker := s.cacheDependencyLocker
 	s.cacheDependencyMu.RUnlock()
 	if locker == nil {
-		return s.createSandboxWithOptions(title, baseWorkspace, driver, guestImage, workspaceID, triggerSource, workspace, envItems, tags, options)
+		return s.createSandboxWithOptions(spec)
 	}
 	var sandbox *Sandbox
 	err := locker.WithLockContext(ctx, func() error {
 		var err error
-		sandbox, err = s.createSandboxWithOptions(title, baseWorkspace, driver, guestImage, workspaceID, triggerSource, workspace, envItems, tags, options)
+		sandbox, err = s.createSandboxWithOptions(spec)
 		return err
 	})
 	return sandbox, err
 }
 
-func (s *Store) createSandboxWithOptions(title, baseWorkspace, driver, guestImage, workspaceID, triggerSource string, workspace *SandboxWorkspace, envItems []SandboxEnvVar, tags []SandboxTag, options CreateSandboxOptions) (*Sandbox, error) {
+func (s *Store) createSandboxWithOptions(spec sandboxCreateSpec) (*Sandbox, error) {
+	title, baseWorkspace, driver, guestImage, workspaceID, triggerSource, workspace, envItems, tags, options :=
+		spec.Title, spec.BaseWorkspace, spec.Driver, spec.GuestImage, spec.WorkspaceID, spec.TriggerSource, spec.Workspace, spec.EnvItems, spec.Tags, spec.Options
 	localNow := s.currentTime()
 	now := localNow.UTC()
 	workspaceID = strings.TrimSpace(workspaceID)

@@ -35,7 +35,9 @@ func (s *llmStore) ApplyModelCatalog(ctx context.Context, catalog llms.ModelCata
 	}
 	sort.Strings(providerIDs)
 	for _, providerID := range providerIDs {
-		if err := applyCatalogProvider(ctx, tx, providerID, catalog.Providers[providerID], now); err != nil {
+		if err := applyCatalogProvider(ctx, tx, catalogProviderUpsert{
+			ProviderID: providerID, Definition: catalog.Providers[providerID], Now: now,
+		}); err != nil {
 			return err
 		}
 	}
@@ -48,7 +50,15 @@ func (s *llmStore) ApplyModelCatalog(ctx context.Context, catalog llms.ModelCata
 	return nil
 }
 
-func applyCatalogProvider(ctx context.Context, tx *sql.Tx, providerID string, definition llms.CatalogProvider, now int64) error {
+// catalogProviderUpsert bundles one provider catalog entry and the apply timestamp.
+type catalogProviderUpsert struct {
+	ProviderID string
+	Definition llms.CatalogProvider
+	Now        int64
+}
+
+func applyCatalogProvider(ctx context.Context, tx *sql.Tx, upsert catalogProviderUpsert) error {
+	providerID, definition, now := upsert.ProviderID, upsert.Definition, upsert.Now
 	protocol := llms.NormalizeWireAPI(pointerString(definition.Protocol))
 	providerType, authHeader, authScheme := llms.ProviderFamilyOpenAI, "Authorization", "Bearer"
 	if protocol == llms.APIProtocolMessages {
@@ -87,14 +97,25 @@ func applyCatalogProvider(ctx context.Context, tx *sql.Tx, providerID string, de
 		return fmt.Errorf("replace provider %q model catalog: %w", providerID, err)
 	}
 	for _, model := range definition.Models {
-		if err := applyCatalogModel(ctx, tx, providerID, protocol, model, now); err != nil {
+		if err := applyCatalogModel(ctx, tx, catalogModelUpsert{
+			ProviderID: providerID, ProviderProtocol: protocol, Definition: model, Now: now,
+		}); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func applyCatalogModel(ctx context.Context, tx *sql.Tx, providerID, providerProtocol string, definition llms.CatalogModel, now int64) error {
+// catalogModelUpsert bundles one provider's model catalog entry and the apply timestamp.
+type catalogModelUpsert struct {
+	ProviderID       string
+	ProviderProtocol string
+	Definition       llms.CatalogModel
+	Now              int64
+}
+
+func applyCatalogModel(ctx context.Context, tx *sql.Tx, upsert catalogModelUpsert) error {
+	providerID, providerProtocol, definition, now := upsert.ProviderID, upsert.ProviderProtocol, upsert.Definition, upsert.Now
 	modelID := strings.TrimSpace(definition.ID)
 	if err := ensureCatalogModelIdentity(ctx, tx, modelID, now); err != nil {
 		return fmt.Errorf("upsert provider %q model %q: %w", providerID, modelID, err)

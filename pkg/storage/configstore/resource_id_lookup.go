@@ -24,8 +24,12 @@ func (s *ConfigStore) FindResourceIDs(ctx context.Context, options resources.Res
 	}
 	var result []resources.Target
 	if allowed[resources.KindProject] {
-		items, err := queryResourceIDs(ctx, s.db, `SELECT id, name FROM project WHERE removed_at = 0 AND `+clause, args, func(values []string) resources.Target {
-			return resources.Target{Kind: resources.KindProject, ID: values[0], ShortID: identity.ShortID(values[0]), ProjectID: values[0], ProjectName: values[1]}
+		items, err := queryResourceIDs(ctx, s.db, resourceIDQuery{
+			Statement: `SELECT id, name FROM project WHERE removed_at = 0 AND ` + clause,
+			Args:      args,
+			Build: func(values []string) resources.Target {
+				return resources.Target{Kind: resources.KindProject, ID: values[0], ShortID: identity.ShortID(values[0]), ProjectID: values[0], ProjectName: values[1]}
+			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("find project ids: %w", err)
@@ -34,8 +38,12 @@ func (s *ConfigStore) FindResourceIDs(ctx context.Context, options resources.Res
 	}
 	if allowed[resources.KindAgent] {
 		agentClause, agentArgs, _ := resourceIDClause("pa.id", options.ID)
-		items, err := queryResourceIDs(ctx, s.db, `SELECT pa.id, pa.agent_name, pa.project_id, p.name FROM project_agent pa JOIN project p ON p.id = pa.project_id WHERE p.removed_at = 0 AND `+agentClause, agentArgs, func(values []string) resources.Target {
-			return resources.Target{Kind: resources.KindAgent, ID: values[0], ShortID: identity.ShortID(values[0]), AgentName: values[1], ProjectID: values[2], ProjectName: values[3]}
+		items, err := queryResourceIDs(ctx, s.db, resourceIDQuery{
+			Statement: `SELECT pa.id, pa.agent_name, pa.project_id, p.name FROM project_agent pa JOIN project p ON p.id = pa.project_id WHERE p.removed_at = 0 AND ` + agentClause,
+			Args:      agentArgs,
+			Build: func(values []string) resources.Target {
+				return resources.Target{Kind: resources.KindAgent, ID: values[0], ShortID: identity.ShortID(values[0]), AgentName: values[1], ProjectID: values[2], ProjectName: values[3]}
+			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("find agent ids: %w", err)
@@ -44,8 +52,12 @@ func (s *ConfigStore) FindResourceIDs(ctx context.Context, options resources.Res
 	}
 	if allowed[resources.KindRun] {
 		runClause, runArgs, _ := resourceIDClause("run_id", options.ID)
-		items, err := queryResourceIDs(ctx, s.db, `SELECT run_id, agent_name, project_id, project_name FROM project_run WHERE `+runClause, runArgs, func(values []string) resources.Target {
-			return resources.Target{Kind: resources.KindRun, ID: values[0], ShortID: identity.ShortID(values[0]), AgentName: values[1], ProjectID: values[2], ProjectName: values[3]}
+		items, err := queryResourceIDs(ctx, s.db, resourceIDQuery{
+			Statement: `SELECT run_id, agent_name, project_id, project_name FROM project_run WHERE ` + runClause,
+			Args:      runArgs,
+			Build: func(values []string) resources.Target {
+				return resources.Target{Kind: resources.KindRun, ID: values[0], ShortID: identity.ShortID(values[0]), AgentName: values[1], ProjectID: values[2], ProjectName: values[3]}
+			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("find run ids: %w", err)
@@ -87,7 +99,16 @@ func nextResourceIDPrefix(prefix string) string {
 	return "g"
 }
 
-func queryResourceIDs(ctx context.Context, db *sql.DB, statement string, args []any, build func([]string) resources.Target) ([]resources.Target, error) {
+// resourceIDQuery describes one resource-ID lookup statement and how to build a
+// resources.Target from each scanned row.
+type resourceIDQuery struct {
+	Statement string
+	Args      []any
+	Build     func([]string) resources.Target
+}
+
+func queryResourceIDs(ctx context.Context, db *sql.DB, query resourceIDQuery) ([]resources.Target, error) {
+	statement, args, build := query.Statement, query.Args, query.Build
 	rows, err := db.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return nil, err

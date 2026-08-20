@@ -476,10 +476,20 @@ func (s *schedulerStore) AddSchedulerEvent(ctx context.Context, event domain.Sch
 }
 
 func (s *schedulerStore) ListSchedulerEvents(ctx context.Context, schedulerID string, limit int) ([]domain.SchedulerEvent, error) {
-	return s.ListSchedulerEventsBefore(ctx, schedulerID, time.Time{}, "", limit)
+	return s.ListSchedulerEventsBefore(ctx, SchedulerEventsBeforeCursor{SchedulerID: schedulerID, Limit: limit})
 }
 
-func (s *schedulerStore) ListSchedulerEventsBefore(ctx context.Context, schedulerID string, before time.Time, beforeID string, limit int) ([]domain.SchedulerEvent, error) {
+// SchedulerEventsBeforeCursor paginates scheduler events strictly before the given
+// (created_at, event_id) position; a zero Before lists from the most recent event.
+type SchedulerEventsBeforeCursor struct {
+	SchedulerID string
+	Before      time.Time
+	BeforeID    string
+	Limit       int
+}
+
+func (s *schedulerStore) ListSchedulerEventsBefore(ctx context.Context, cursor SchedulerEventsBeforeCursor) ([]domain.SchedulerEvent, error) {
+	schedulerID, before, beforeID, limit := cursor.SchedulerID, cursor.Before, cursor.BeforeID, cursor.Limit
 	if limit <= 0 {
 		limit = 100
 	}
