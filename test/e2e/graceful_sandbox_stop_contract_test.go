@@ -60,7 +60,7 @@ func TestGracefulSandboxStopOutcomesUsePublicConnectContract(t *testing.T) {
 				Preparation:   sandboxes.StopPreparationResult{Outcome: test.preparation},
 				DriverStopped: true,
 			}}
-			handler := api.NewSandboxHandler(delegate, &e2eGracefulStopStore{sandbox: stored}, nil, nil)
+			handler := api.NewSandboxHandler(api.SandboxHandlerDeps{Delegate: delegate, Store: &e2eGracefulStopStore{sandbox: stored}})
 			servicePath, serviceHandler := agentcomposev2connect.NewSandboxServiceHandler(handler)
 			mux := http.NewServeMux()
 			mux.Handle(servicePath, serviceHandler)
@@ -122,7 +122,7 @@ func testCancelledGracefulStopContainment(t *testing.T) {
 		store:  store,
 		result: make(chan e2eLifecycleStopResult, 1),
 	}
-	handler := api.NewSandboxHandler(delegate, store, nil, nil)
+	handler := api.NewSandboxHandler(api.SandboxHandlerDeps{Delegate: delegate, Store: store})
 	servicePath, serviceHandler := agentcomposev2connect.NewSandboxServiceHandler(handler)
 	mux := http.NewServeMux()
 	mux.Handle(servicePath, serviceHandler)
