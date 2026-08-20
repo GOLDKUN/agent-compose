@@ -55,12 +55,20 @@ func (h *ExecHandler) WithLifecycleLocks(locks *sandboxes.LifecycleLocks) *ExecH
 	return h
 }
 
-func NewExecHandler(config *appconfig.Config, store ExecSandboxStore, projects ExecProjectStore, runtime ExecRuntimeResolver, runAttach ...ExecRunAttachDelegate) *ExecHandler {
+// ExecHandlerDeps bundles NewExecHandler's required dependencies.
+type ExecHandlerDeps struct {
+	Config   *appconfig.Config
+	Store    ExecSandboxStore
+	Projects ExecProjectStore
+	Runtime  ExecRuntimeResolver
+}
+
+func NewExecHandler(deps ExecHandlerDeps, runAttach ...ExecRunAttachDelegate) *ExecHandler {
 	handler := &ExecHandler{
-		config:   config,
-		store:    store,
-		projects: projects,
-		runtime:  runtime,
+		config:   deps.Config,
+		store:    deps.Store,
+		projects: deps.Projects,
+		runtime:  deps.Runtime,
 	}
 	if len(runAttach) > 0 {
 		handler.runAttach = runAttach[0]

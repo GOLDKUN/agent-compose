@@ -121,6 +121,13 @@ func (h *ExecHandler) resolveExecTargetSandbox(ctx context.Context, req *agentco
 	if selector == nil {
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("exec target is required"))
 	}
+	return h.resolveExecTargetBySelector(ctx, selector)
+}
+
+// resolveExecTargetBySelector resolves the single running sandbox matching a
+// project (and optionally agent) selector, erroring if none or more than one
+// candidate is found.
+func (h *ExecHandler) resolveExecTargetBySelector(ctx context.Context, selector *agentcomposev2.ExecSandboxSelector) (*domain.Sandbox, string, error) {
 	projectRef := &agentcomposev2.ProjectRef{}
 	switch project := selector.GetProject().(type) {
 	case *agentcomposev2.ExecSandboxSelector_ProjectId:

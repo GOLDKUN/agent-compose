@@ -42,7 +42,12 @@ func TestStopSandboxRetriesPendingRuntimeRelease(t *testing.T) {
 		StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove,
 		StoppedRuntime:       &domain.StoppedRuntime{State: domain.StoppedRuntimeStateReleasePending},
 	}}
-	handler := NewSandboxHandler(delegate, store, nil, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  delegate,
+		Store:     store,
+		Remover:   nil,
+		Dashboard: nil,
+	})
 
 	if _, err := handler.StopSandbox(context.Background(), connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID})); err != nil {
 		t.Fatalf("StopSandbox release retry returned error: %v", err)
@@ -59,7 +64,12 @@ func TestStopSandboxDoesNotReleaseUnexpectedRuntimeLoss(t *testing.T) {
 		Summary:              domain.SandboxSummary{ID: sandboxID, VMStatus: domain.VMStatusStopped},
 		StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove,
 	}}
-	handler := NewSandboxHandler(delegate, store, nil, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  delegate,
+		Store:     store,
+		Remover:   nil,
+		Dashboard: nil,
+	})
 
 	_, err := handler.StopSandbox(context.Background(), connect.NewRequest(&agentcomposev2.StopSandboxRequest{SandboxId: sandboxID}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {

@@ -279,13 +279,23 @@ func (h *RunHandler) FollowRunLogs(ctx context.Context, req *connect.Request[age
 			return err
 		}
 	}
+	target := runLogFollowTarget{Run: run, Offset: offset, Stream: stream}
 	if req.Msg.GetFollow() && h.runLogs != nil {
-		return h.followRunLogsWithHub(ctx, req.Msg.GetProjectId(), run, offset, stream)
+		return h.followRunLogsWithHub(ctx, req.Msg.GetProjectId(), target)
 	}
-	return h.followRunLogsByPolling(ctx, req, run, offset, stream)
+	return h.followRunLogsByPolling(ctx, req, target)
 }
 
-func (h *RunHandler) followRunLogsByPolling(ctx context.Context, req *connect.Request[agentcomposev2.FollowRunLogsRequest], run domain.ProjectRunRecord, offset uint64, stream *connect.ServerStream[agentcomposev2.RunLogChunk]) error {
+// runLogFollowTarget bundles the run, log offset, and output stream shared by
+// followRunLogsByPolling and followRunLogsWithHub.
+type runLogFollowTarget struct {
+	Run    domain.ProjectRunRecord
+	Offset uint64
+	Stream *connect.ServerStream[agentcomposev2.RunLogChunk]
+}
+
+func (h *RunHandler) followRunLogsByPolling(ctx context.Context, req *connect.Request[agentcomposev2.FollowRunLogsRequest], target runLogFollowTarget) error {
+	run, offset, stream := target.Run, target.Offset, target.Stream
 	runID := run.RunID
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
@@ -309,10 +319,11 @@ func (h *RunHandler) followRunLogsByPolling(ctx context.Context, req *connect.Re
 	}
 }
 
-func (h *RunHandler) followRunLogsWithHub(ctx context.Context, projectID string, run domain.ProjectRunRecord, offset uint64, stream *connect.ServerStream[agentcomposev2.RunLogChunk]) error {
+func (h *RunHandler) followRunLogsWithHub(ctx context.Context, projectID string, target runLogFollowTarget) error {
+	run, offset, stream := target.Run, target.Offset, target.Stream
 	sub := h.runLogs.Subscribe(run.RunID)
 	if sub == nil {
-		return h.followRunLogsByPolling(ctx, connect.NewRequest(&agentcomposev2.FollowRunLogsRequest{ProjectId: projectID, RunId: run.RunID, Follow: true}), run, offset, stream)
+		return h.followRunLogsByPolling(ctx, connect.NewRequest(&agentcomposev2.FollowRunLogsRequest{ProjectId: projectID, RunId: run.RunID, Follow: true}), target)
 	}
 	defer sub.Close()
 	if err := sendRunLogFileChunks(stream, run, &offset, time.Now().UTC()); err != nil {

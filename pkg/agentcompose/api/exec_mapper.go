@@ -22,20 +22,33 @@ func ExecEnvMap(items []*agentcomposev2.EnvVarSpec) map[string]string {
 	return result
 }
 
-func ExecResultToProto(execID, sandboxID, runID string, req *agentcomposev2.ExecRequest, cwd string, result domain.ExecResult, execErr error) *agentcomposev2.ExecResult {
+// ExecResultProtoRequest bundles the exec identifiers and originating
+// request ExecResultToProto needs alongside the runtime result itself.
+type ExecResultProtoRequest struct {
+	ExecID    string
+	SandboxID string
+	RunID     string
+	Request   *agentcomposev2.ExecRequest
+	Cwd       string
+	Result    domain.ExecResult
+	ExecErr   error
+}
+
+func ExecResultToProto(req ExecResultProtoRequest) *agentcomposev2.ExecResult {
 	errorText := ""
-	if execErr != nil {
-		errorText = execErr.Error()
+	if req.ExecErr != nil {
+		errorText = req.ExecErr.Error()
 	}
+	result := req.Result
 	return &agentcomposev2.ExecResult{
-		ExecId:    execID,
-		SandboxId: sandboxID,
-		RunId:     runID,
+		ExecId:    req.ExecID,
+		SandboxId: req.SandboxID,
+		RunId:     req.RunID,
 		Command: &agentcomposev2.ExecCommand{
-			Command: req.GetCommand().GetCommand(),
-			Args:    append([]string(nil), req.GetCommand().GetArgs()...),
+			Command: req.Request.GetCommand().GetCommand(),
+			Args:    append([]string(nil), req.Request.GetCommand().GetArgs()...),
 		},
-		Cwd:      cwd,
+		Cwd:      req.Cwd,
 		ExitCode: int32(result.ExitCode),
 		Success:  result.Success,
 		Stdout:   result.Stdout,

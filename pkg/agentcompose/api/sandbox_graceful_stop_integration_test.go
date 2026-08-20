@@ -26,7 +26,12 @@ func TestIntegrationGracefulStopPropagatesOptionsOverConnect(t *testing.T) {
 		Preparation:   sandboxes.StopPreparationResult{Outcome: sandboxes.StopPreparationGraceful},
 		DriverStopped: true,
 	}}
-	handler := NewSandboxHandler(delegate, &gracefulStopAPIStore{sandbox: running}, nil, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  delegate,
+		Store:     &gracefulStopAPIStore{sandbox: running},
+		Remover:   nil,
+		Dashboard: nil,
+	})
 	servicePath, serviceHandler := agentcomposev2connect.NewSandboxServiceHandler(handler)
 	mux := http.NewServeMux()
 	mux.Handle(servicePath, serviceHandler)

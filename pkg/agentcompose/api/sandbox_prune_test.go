@@ -24,7 +24,12 @@ func TestPruneSandboxesMapsRequestAndCandidates(t *testing.T) {
 		Skipped:  []sandboxes.PruneCandidate{{Kind: sandboxes.PruneCandidateRuntimeResidue, SandboxID: "sandbox-orphan", Driver: "microsandbox", RuntimeID: "msb-1", Removable: false, BlockedReasons: []string{"ownership incomplete"}}},
 		Warnings: []string{"inventory partial"},
 	}}
-	handler := NewSandboxHandler(nil, nil, nil, nil).WithRemovalCoordinator(coordinator)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  nil,
+		Store:     nil,
+		Remover:   nil,
+		Dashboard: nil,
+	}).WithRemovalCoordinator(coordinator)
 	response, err := handler.PruneSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.PruneSandboxesRequest{
 		ProjectId: " project-1 ", Status: []agentcomposev2.SandboxStatus{agentcomposev2.SandboxStatus_SANDBOX_STATUS_STOPPED}, AgentName: " worker ", Driver: " docker ",
 		OlderThanSeconds: 3600, IncludeOrphans: true, Force: false,
@@ -44,7 +49,12 @@ func TestPruneSandboxesMapsRequestAndCandidates(t *testing.T) {
 }
 
 func TestPruneSandboxesValidatesDurationAndCoordinatorErrors(t *testing.T) {
-	handler := NewSandboxHandler(nil, nil, nil, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  nil,
+		Store:     nil,
+		Remover:   nil,
+		Dashboard: nil,
+	})
 	if _, err := handler.PruneSandboxes(context.Background(), connect.NewRequest(&agentcomposev2.PruneSandboxesRequest{})); connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("missing coordinator code = %v, err=%v", connect.CodeOf(err), err)
 	}

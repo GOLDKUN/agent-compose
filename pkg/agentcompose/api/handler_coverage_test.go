@@ -96,7 +96,12 @@ func TestRemoveSandboxRemoveRaceRemainsInternal(t *testing.T) {
 		session:   &domain.Sandbox{Summary: domain.SandboxSummary{ID: sandboxID, VMStatus: domain.VMStatusStopped}},
 		removeErr: os.ErrNotExist,
 	}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, &characterizationSandboxRemover{}, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   &characterizationSandboxRemover{},
+		Dashboard: nil,
+	})
 	_, err := handler.RemoveSandbox(context.Background(), connect.NewRequest(&agentcomposev2.RemoveSandboxRequest{SandboxId: sandboxID}))
 	if connect.CodeOf(err) != connect.CodeInternal {
 		t.Fatalf("RemoveSandbox error code = %v, want %v; err=%v", connect.CodeOf(err), connect.CodeInternal, err)
@@ -120,7 +125,12 @@ func TestGetSandboxStatsReturnsRuntimeMetrics(t *testing.T) {
 		CPUPercent:       domain.MetricValue{Value: &value, Unit: "percent", Status: domain.MetricStatusOK},
 		MemoryUsageBytes: domain.MetricValue{Unit: "bytes", Status: domain.MetricStatusUnknown},
 	}}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, nil, nil, func(*domain.Sandbox) (SandboxStatsRuntime, error) {
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   nil,
+		Dashboard: nil,
+	}, func(*domain.Sandbox) (SandboxStatsRuntime, error) {
 		return runtime, nil
 	})
 	resp, err := handler.GetSandboxStats(context.Background(), connect.NewRequest(&agentcomposev2.GetSandboxStatsRequest{SandboxId: sandboxID}))
@@ -143,7 +153,12 @@ func TestGetSandboxStatsRejectsStoppedSandbox(t *testing.T) {
 	store := &apiSandboxStore{
 		session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: sandboxID, VMStatus: domain.VMStatusStopped}},
 	}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, nil, nil, func(*domain.Sandbox) (SandboxStatsRuntime, error) {
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   nil,
+		Dashboard: nil,
+	}, func(*domain.Sandbox) (SandboxStatsRuntime, error) {
 		return &apiStatsRuntime{}, nil
 	})
 	_, err := handler.GetSandboxStats(context.Background(), connect.NewRequest(&agentcomposev2.GetSandboxStatsRequest{SandboxId: sandboxID}))
@@ -157,7 +172,12 @@ func TestGetSandboxStatsUnsupportedRuntimeIsUnimplemented(t *testing.T) {
 	store := &apiSandboxStore{
 		session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: sandboxID, VMStatus: domain.VMStatusRunning}},
 	}
-	handler := NewSandboxHandler(&characterizationSessionDelegate{}, store, nil, nil)
+	handler := NewSandboxHandler(SandboxHandlerDeps{
+		Delegate:  &characterizationSessionDelegate{},
+		Store:     store,
+		Remover:   nil,
+		Dashboard: nil,
+	})
 	_, err := handler.GetSandboxStats(context.Background(), connect.NewRequest(&agentcomposev2.GetSandboxStatsRequest{SandboxId: sandboxID}))
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Fatalf("GetSandboxStats unsupported code = %v, err=%v", connect.CodeOf(err), err)
@@ -337,8 +357,13 @@ func TestExecHandlerSandboxTargetWorkflow(t *testing.T) {
 	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-1", VMStatus: domain.VMStatusRunning, WorkspacePath: filepath.Join(sandboxRoot, "workspace")}}
 	store := &apiExecSandboxStore{sandbox: sandbox, vm: domain.VMState{Driver: "docker"}}
 	runtime := &apiExecRuntime{}
-	handler := NewExecHandler(&appconfig.Config{}, store, apiExecProjectStore{}, func(*domain.Sandbox) (ExecRuntime, error) {
-		return runtime, nil
+	handler := NewExecHandler(ExecHandlerDeps{
+		Config:   &appconfig.Config{},
+		Store:    store,
+		Projects: apiExecProjectStore{},
+		Runtime: func(*domain.Sandbox) (ExecRuntime, error) {
+			return runtime, nil
+		},
 	})
 	resp, err := handler.Exec(ctx, connect.NewRequest(&agentcomposev2.ExecRequest{
 		Target:  &agentcomposev2.ExecRequest_SandboxId{SandboxId: "sandbox-1"},
@@ -401,8 +426,13 @@ func TestExecHandlerRunSelectorAndStreamSenderWorkflow(t *testing.T) {
 		},
 	}
 	runtime := &apiExecRuntime{}
-	handler := NewExecHandler(&appconfig.Config{}, store, projects, func(*domain.Sandbox) (ExecRuntime, error) {
-		return runtime, nil
+	handler := NewExecHandler(ExecHandlerDeps{
+		Config:   &appconfig.Config{},
+		Store:    store,
+		Projects: projects,
+		Runtime: func(*domain.Sandbox) (ExecRuntime, error) {
+			return runtime, nil
+		},
 	})
 
 	var events []*agentcomposev2.StreamExecResponse
@@ -507,8 +537,13 @@ func TestExecHandlerSelectorRechecksVMStatusAfterSummaryFilter(t *testing.T) {
 			{RunID: "run-stale", ProjectID: "project-1", ProjectName: "Project", AgentName: "worker", SandboxID: "sandbox-stale"},
 		},
 	}
-	handler := NewExecHandler(&appconfig.Config{}, store, projects, func(*domain.Sandbox) (ExecRuntime, error) {
-		return &apiExecRuntime{}, nil
+	handler := NewExecHandler(ExecHandlerDeps{
+		Config:   &appconfig.Config{},
+		Store:    store,
+		Projects: projects,
+		Runtime: func(*domain.Sandbox) (ExecRuntime, error) {
+			return &apiExecRuntime{}, nil
+		},
 	})
 	_, err := handler.executeProjectCommand(ctx, &agentcomposev2.ExecRequest{
 		Target:  &agentcomposev2.ExecRequest_Selector{Selector: &agentcomposev2.ExecSandboxSelector{Project: &agentcomposev2.ExecSandboxSelector_ProjectId{ProjectId: "project-1"}, AgentName: "worker"}},
@@ -520,8 +555,13 @@ func TestExecHandlerSelectorRechecksVMStatusAfterSummaryFilter(t *testing.T) {
 }
 
 func TestExecHandlerSelectorErrors(t *testing.T) {
-	handler := NewExecHandler(&appconfig.Config{}, &apiExecSandboxStore{}, apiExecProjectStore{err: sql.ErrNoRows}, func(*domain.Sandbox) (ExecRuntime, error) {
-		return &apiExecRuntime{}, nil
+	handler := NewExecHandler(ExecHandlerDeps{
+		Config:   &appconfig.Config{},
+		Store:    &apiExecSandboxStore{},
+		Projects: apiExecProjectStore{err: sql.ErrNoRows},
+		Runtime: func(*domain.Sandbox) (ExecRuntime, error) {
+			return &apiExecRuntime{}, nil
+		},
 	})
 	if _, err := handler.Exec(context.Background(), connect.NewRequest(&agentcomposev2.ExecRequest{})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("expected target error, got %v", err)
@@ -660,8 +700,13 @@ func TestExecAttachPromptDelegatesToRunAttach(t *testing.T) {
 		RunID: "run-latest", ProjectID: "project-1", AgentName: "worker", SandboxID: "session-attach",
 	}}}
 	delegate := &apiExecPromptRunAttachDelegate{}
-	handler := NewExecHandler(&appconfig.Config{}, store, projects, func(*domain.Sandbox) (ExecRuntime, error) {
-		return &apiExecRuntime{}, nil
+	handler := NewExecHandler(ExecHandlerDeps{
+		Config:   &appconfig.Config{},
+		Store:    store,
+		Projects: projects,
+		Runtime: func(*domain.Sandbox) (ExecRuntime, error) {
+			return &apiExecRuntime{}, nil
+		},
 	}, delegate)
 	var sent []*agentcomposev2.AttachExecResponse
 	err := handler.execAttach(context.Background(), sliceExecAttachReceiver(
@@ -1205,8 +1250,13 @@ func newExecAttachTestHandler(t *testing.T, runtime ExecRuntime) *ExecHandler {
 	t.Helper()
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-attach", VMStatus: domain.VMStatusRunning}}
 	store := &apiExecSandboxStore{sandbox: session, vm: domain.VMState{Driver: "docker"}}
-	return NewExecHandler(&appconfig.Config{}, store, apiExecProjectStore{}, func(*domain.Sandbox) (ExecRuntime, error) {
-		return runtime, nil
+	return NewExecHandler(ExecHandlerDeps{
+		Config:   &appconfig.Config{},
+		Store:    store,
+		Projects: apiExecProjectStore{},
+		Runtime: func(*domain.Sandbox) (ExecRuntime, error) {
+			return runtime, nil
+		},
 	})
 }
 

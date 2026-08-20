@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -150,58 +149,6 @@ func projectSchedulerPresentation(specJSON string) (string, string) {
 		return "", ""
 	}
 	return strings.TrimSpace(presentation.DisplayName), strings.TrimSpace(presentation.Description)
-}
-
-func ProjectApplyChanges(project domain.ProjectRecord, existing domain.ProjectRecord, found bool, revision domain.ProjectRevisionRecord, revisionCreated bool) []*agentcomposev2.ProjectChange {
-	projectAction := agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED
-	if found {
-		projectAction = agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UNCHANGED
-		if !projects.ProjectRecordUnchanged(existing, project) {
-			projectAction = agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_UPDATED
-		}
-	}
-	return []*agentcomposev2.ProjectChange{
-		{
-			Action:       projectAction,
-			ResourceType: "project",
-			ResourceId:   project.ID,
-			Name:         project.Name,
-		},
-	}
-}
-
-func DryRunProjectChanges(project domain.ProjectRecord, agents []domain.ProjectAgentRecord, agentDefinitions []domain.AgentDefinition, schedulers []domain.ProjectSchedulerRecord, _ []domain.Scheduler) []*agentcomposev2.ProjectChange {
-	changes := []*agentcomposev2.ProjectChange{{
-		Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
-		ResourceType: "project",
-		ResourceId:   project.ID,
-		Name:         project.Name,
-	}}
-	for _, agent := range agents {
-		changes = append(changes, &agentcomposev2.ProjectChange{
-			Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
-			ResourceType: "project_agent",
-			ResourceId:   agent.ID,
-			Name:         agent.AgentName,
-		})
-	}
-	for _, agent := range agentDefinitions {
-		changes = append(changes, &agentcomposev2.ProjectChange{
-			Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
-			ResourceType: "agent_definition",
-			ResourceId:   agent.ID,
-			Name:         agent.Name,
-		})
-	}
-	for _, scheduler := range schedulers {
-		changes = append(changes, &agentcomposev2.ProjectChange{
-			Action:       agentcomposev2.ProjectChangeAction_PROJECT_CHANGE_ACTION_CREATED,
-			ResourceType: "scheduler",
-			ResourceId:   scheduler.ID,
-			Name:         scheduler.AgentName,
-		})
-	}
-	return changes
 }
 
 func ProjectServiceSourcePath(source *agentcomposev2.ProjectSource) string {
