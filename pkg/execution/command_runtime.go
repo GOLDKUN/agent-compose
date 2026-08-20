@@ -24,27 +24,56 @@ type RuntimeCommandRequest struct {
 	ArtifactDir    string            `json:"artifactDir"`
 }
 
-func RuntimeCommandRequestPayload(config *appconfig.Config, request domain.SchedulerCommandRequest, guestCellDir string) RuntimeCommandRequest {
-	return RuntimeCommandRequestPayloadFromCommand(config, request.Mode, request.Command, request.Args, request.Script, request.Cwd, request.Env, request.TimeoutMs, request.MaxOutputBytes, guestCellDir)
+// RuntimeCommandSpec describes a command to run, independent of where its
+// artifacts land. It intentionally has no ArtifactDir field: that value is
+// always the caller's guest execution/cell state dir and is supplied
+// separately to RuntimeCommandRequestPayloadFromCommand, so it can't be
+// silently dropped if a caller reuses a RuntimeCommandRequest as input.
+type RuntimeCommandSpec struct {
+	Mode           string
+	Command        string
+	Args           []string
+	Script         string
+	Cwd            string
+	Env            map[string]string
+	TimeoutMs      int64
+	MaxOutputBytes int64
 }
 
-func RuntimeCommandRequestPayloadFromCommand(config *appconfig.Config, mode, command string, args []string, script, cwd string, env map[string]string, timeoutMs, maxOutputBytes int64, guestArtifactDir string) RuntimeCommandRequest {
+func RuntimeCommandRequestPayload(config *appconfig.Config, request domain.SchedulerCommandRequest, guestCellDir string) RuntimeCommandRequest {
+	return RuntimeCommandRequestPayloadFromCommand(config, RuntimeCommandSpec{
+		Mode:           request.Mode,
+		Command:        request.Command,
+		Args:           request.Args,
+		Script:         request.Script,
+		Cwd:            request.Cwd,
+		Env:            request.Env,
+		TimeoutMs:      request.TimeoutMs,
+		MaxOutputBytes: request.MaxOutputBytes,
+	}, guestCellDir)
+}
+
+// RuntimeCommandRequestPayloadFromCommand normalizes spec's fields (mode
+// lowercased, cwd defaulted, max output bytes defaulted) and stamps
+// guestArtifactDir onto the result.
+func RuntimeCommandRequestPayloadFromCommand(config *appconfig.Config, spec RuntimeCommandSpec, guestArtifactDir string) RuntimeCommandRequest {
 	appconfig.ApplyDefaultGuestPaths(config)
+	maxOutputBytes := spec.MaxOutputBytes
 	if maxOutputBytes <= 0 {
 		maxOutputBytes = DefaultSchedulerCommandMaxOutputBytes
 	}
-	cwd = strings.TrimSpace(cwd)
+	cwd := strings.TrimSpace(spec.Cwd)
 	if cwd == "" {
 		cwd = config.GuestWorkspacePath
 	}
 	return RuntimeCommandRequest{
-		Mode:           strings.ToLower(strings.TrimSpace(mode)),
-		Command:        command,
-		Args:           append([]string(nil), args...),
-		Script:         script,
+		Mode:           strings.ToLower(strings.TrimSpace(spec.Mode)),
+		Command:        spec.Command,
+		Args:           append([]string(nil), spec.Args...),
+		Script:         spec.Script,
 		Cwd:            cwd,
-		Env:            env,
-		TimeoutMs:      timeoutMs,
+		Env:            spec.Env,
+		TimeoutMs:      spec.TimeoutMs,
 		MaxOutputBytes: maxOutputBytes,
 		ArtifactDir:    guestArtifactDir,
 	}
