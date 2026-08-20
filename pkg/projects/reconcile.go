@@ -37,13 +37,46 @@ type ReconcileSchedulerOptions struct {
 	RefreshSchedulers      func(ctx context.Context) error
 }
 
-func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, project domain.ProjectRecord, schedulers []domain.ProjectSchedulerRecord, definitions []domain.Scheduler, options ReconcileSchedulerOptions) ([]Change, bool, error) {
+// ReconcileSchedulersRequest describes the project schedulers to reconcile
+// against their scheduler definitions.
+type ReconcileSchedulersRequest struct {
+	Project     domain.ProjectRecord
+	Schedulers  []domain.ProjectSchedulerRecord
+	Definitions []domain.Scheduler
+}
+
+func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, req ReconcileSchedulersRequest, options ReconcileSchedulerOptions) ([]Change, bool, error) {
 	if store == nil {
 		return nil, false, fmt.Errorf("config store is required")
 	}
+	changes, currentByID, unchanged, err := reconcileCurrentSchedulers(ctx, store, req, options)
+	if err != nil {
+		return changes, false, err
+	}
+	removedChanges, removedUnchanged, err := disableRemovedSchedulers(ctx, store, req, currentByID)
+	changes = append(changes, removedChanges...)
+	if err != nil {
+		return changes, false, err
+	}
+	if !removedUnchanged {
+		unchanged = false
+	}
+	if options.RefreshSchedulers != nil {
+		if err := options.RefreshSchedulers(ctx); err != nil {
+			return changes, false, fmt.Errorf("refresh scheduler controller: %w", err)
+		}
+	}
+	return changes, unchanged, nil
+}
+
+// reconcileCurrentSchedulers upserts each scheduler present in req.Schedulers,
+// returning the schedulers seen so disableRemovedSchedulers can identify the
+// ones that dropped out of the spec.
+func reconcileCurrentSchedulers(ctx context.Context, store ReconcileSchedulerStore, req ReconcileSchedulersRequest, options ReconcileSchedulerOptions) ([]Change, map[string]domain.ProjectSchedulerRecord, bool, error) {
+	schedulers := req.Schedulers
 	currentByID := make(map[string]domain.ProjectSchedulerRecord, len(schedulers))
-	definitionsByID := make(map[string]domain.Scheduler, len(definitions))
-	for _, definition := range definitions {
+	definitionsByID := make(map[string]domain.Scheduler, len(req.Definitions))
+	for _, definition := range req.Definitions {
 		definitionsByID[definition.Summary.ID] = definition
 	}
 	changes := make([]Change, 0, len(schedulers))
@@ -52,17 +85,17 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 		currentByID[scheduler.SchedulerID] = scheduler
 		existing, found, err := projectSchedulerIfExists(ctx, store, scheduler.ProjectID, scheduler.SchedulerID)
 		if err != nil {
-			return changes, false, fmt.Errorf("load project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
+			return changes, currentByID, false, fmt.Errorf("load project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 		}
 		definition, ok := definitionsByID[scheduler.ID]
 		if !ok {
-			return changes, false, fmt.Errorf("scheduler definition %s for scheduler %s is missing", scheduler.ID, scheduler.SchedulerID)
+			return changes, currentByID, false, fmt.Errorf("scheduler definition %s for scheduler %s is missing", scheduler.ID, scheduler.SchedulerID)
 		}
 		var existingScheduler domain.Scheduler
 		if found {
 			existingScheduler, err = store.GetScheduler(ctx, definition.Summary.ID)
 			if err != nil {
-				return changes, false, fmt.Errorf("load scheduler %s: %w", definition.Summary.ID, err)
+				return changes, currentByID, false, fmt.Errorf("load scheduler %s: %w", definition.Summary.ID, err)
 			}
 		}
 		if found && SchedulerRecordUnchanged(existing, scheduler) && SchedulerDefinitionUnchanged(existingScheduler, definition) {
@@ -78,18 +111,18 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 		stagedScheduler.Enabled = false
 		saved, err := store.UpsertProjectScheduler(ctx, stagedScheduler)
 		if err != nil {
-			return changes, false, fmt.Errorf("stage project scheduler %s/%s disabled: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
+			return changes, currentByID, false, fmt.Errorf("stage project scheduler %s/%s disabled: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
 		}
 
 		if _, err := store.ReplaceSchedulerTriggers(ctx, saved.ID, definition.Triggers); err != nil {
 			cleanupFailedScheduler(ctx, options, saved, saved.ID)
-			return changes, false, fmt.Errorf("replace scheduler triggers %s: %w", saved.ID, err)
+			return changes, currentByID, false, fmt.Errorf("replace scheduler triggers %s: %w", saved.ID, err)
 		}
 		if scheduler.Enabled {
 			enabledScheduler, enableErr := store.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, true)
 			if enableErr != nil {
 				cleanupFailedScheduler(ctx, options, stagedScheduler, saved.ID)
-				return changes, false, fmt.Errorf("enable project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, enableErr)
+				return changes, currentByID, false, fmt.Errorf("enable project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, enableErr)
 			}
 			saved = enabledScheduler
 		} else {
@@ -110,10 +143,18 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 			Name:         saved.AgentName,
 		})
 	}
-	existingSchedulers, err := store.ListProjectSchedulers(ctx, project.ID)
+	return changes, currentByID, unchanged, nil
+}
+
+// disableRemovedSchedulers disables any project scheduler that is no longer
+// present in currentByID (i.e. dropped from the project spec).
+func disableRemovedSchedulers(ctx context.Context, store ReconcileSchedulerStore, req ReconcileSchedulersRequest, currentByID map[string]domain.ProjectSchedulerRecord) ([]Change, bool, error) {
+	existingSchedulers, err := store.ListProjectSchedulers(ctx, req.Project.ID)
 	if err != nil {
-		return changes, false, fmt.Errorf("list project schedulers: %w", err)
+		return nil, false, fmt.Errorf("list project schedulers: %w", err)
 	}
+	changes := make([]Change, 0, len(existingSchedulers))
+	unchanged := true
 	for _, existing := range existingSchedulers {
 		if _, ok := currentByID[existing.SchedulerID]; ok {
 			continue
@@ -133,11 +174,6 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, pro
 			Name:         disabled.AgentName,
 			Message:      "disabled because the scheduler is no longer present in the project spec",
 		})
-	}
-	if options.RefreshSchedulers != nil {
-		if err := options.RefreshSchedulers(ctx); err != nil {
-			return changes, false, fmt.Errorf("refresh scheduler controller: %w", err)
-		}
 	}
 	return changes, unchanged, nil
 }

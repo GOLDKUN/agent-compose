@@ -66,46 +66,52 @@ func ResolveProjectRef(ctx context.Context, store ProjectRefStore, ref ProjectRe
 	case projectRefID:
 		return store.GetProject(ctx, value)
 	case projectRefName:
-		return resolveProjectByExactMatch(ctx, store, value, false, "name", func(project domain.ProjectRecord) string {
-			return project.Name
+		return resolveProjectByExactMatch(ctx, store, exactMatchRequest{
+			Value:        value,
+			SelectorName: "name",
+			FieldValue:   func(project domain.ProjectRecord) string { return project.Name },
 		})
 	case projectRefSourcePath:
 		value = NormalizeProjectSourcePath(value)
-		return resolveProjectByExactMatch(ctx, store, value, false, "source path", func(project domain.ProjectRecord) string {
-			return NormalizeProjectSourcePath(project.SourcePath)
+		return resolveProjectByExactMatch(ctx, store, exactMatchRequest{
+			Value:        value,
+			SelectorName: "source path",
+			FieldValue:   func(project domain.ProjectRecord) string { return NormalizeProjectSourcePath(project.SourcePath) },
 		})
 	default:
 		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrRequired, "project selector is required", nil)
 	}
 }
 
-func resolveProjectByExactMatch(
-	ctx context.Context,
-	store ProjectRefStore,
-	value string,
-	includeRemoved bool,
-	selectorName string,
-	projectValue func(domain.ProjectRecord) string,
-) (domain.ProjectRecord, error) {
-	if selectorName == "name" {
+// exactMatchRequest describes an exact-match project lookup by a single
+// selector field (name or source path).
+type exactMatchRequest struct {
+	Value          string
+	IncludeRemoved bool
+	SelectorName   string
+	FieldValue     func(domain.ProjectRecord) string
+}
+
+func resolveProjectByExactMatch(ctx context.Context, store ProjectRefStore, req exactMatchRequest) (domain.ProjectRecord, error) {
+	if req.SelectorName == "name" {
 		if nameStore, ok := store.(projectNameStore); ok {
-			return nameStore.GetProjectByName(ctx, value, includeRemoved)
+			return nameStore.GetProjectByName(ctx, req.Value, req.IncludeRemoved)
 		}
 	}
-	if selectorName == "source path" {
+	if req.SelectorName == "source path" {
 		if sourcePathStore, ok := store.(projectSourcePathStore); ok {
-			return sourcePathStore.GetProjectBySourcePath(ctx, value, includeRemoved)
+			return sourcePathStore.GetProjectBySourcePath(ctx, req.Value, req.IncludeRemoved)
 		}
 	}
 	const pageSize = 200
 	var matches []domain.ProjectRecord
 	for offset := 0; ; offset += pageSize {
-		result, err := store.ListProjects(ctx, domain.ProjectListOptions{Query: value, IncludeRemoved: includeRemoved, Offset: offset, Limit: pageSize})
+		result, err := store.ListProjects(ctx, domain.ProjectListOptions{Query: req.Value, IncludeRemoved: req.IncludeRemoved, Offset: offset, Limit: pageSize})
 		if err != nil {
 			return domain.ProjectRecord{}, err
 		}
 		for _, project := range result.Projects {
-			if projectValue(project) == value {
+			if req.FieldValue(project) == req.Value {
 				matches = append(matches, project)
 			}
 		}
@@ -114,10 +120,10 @@ func resolveProjectByExactMatch(
 		}
 	}
 	if len(matches) == 0 {
-		return domain.ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", value, fmt.Sprintf("project with %s %s not found", selectorName, value), sql.ErrNoRows)
+		return domain.ProjectRecord{}, domain.ResourceError(domain.ErrNotFound, "project", req.Value, fmt.Sprintf("project with %s %s not found", req.SelectorName, req.Value), sql.ErrNoRows)
 	}
 	if len(matches) > 1 {
-		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrAmbiguous, fmt.Sprintf("project %s %s is ambiguous; use project_id", selectorName, value), nil)
+		return domain.ProjectRecord{}, domain.ClassifyError(domain.ErrAmbiguous, fmt.Sprintf("project %s %s is ambiguous; use project_id", req.SelectorName, req.Value), nil)
 	}
 	return matches[0], nil
 }

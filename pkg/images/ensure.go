@@ -16,20 +16,27 @@ type EnsureRequest struct {
 	AgentName   string
 }
 
-func EnsureProjectAgentImages(ctx context.Context, config *appconfig.Config, backend Backend, projectName string, agents []domain.ProjectAgentRecord) error {
+// ProjectAgentImagesRequest identifies the project and agents to ensure
+// driver images for.
+type ProjectAgentImagesRequest struct {
+	ProjectName string
+	Agents      []domain.ProjectAgentRecord
+}
+
+func EnsureProjectAgentImages(ctx context.Context, config *appconfig.Config, backend Backend, req ProjectAgentImagesRequest) error {
 	if config == nil {
 		return fmt.Errorf("image ensure config is required")
 	}
-	for _, agent := range agents {
+	for _, agent := range req.Agents {
 		driver, err := driverpkg.ResolveSandboxRuntimeDriver(agent.Driver, config.RuntimeDriver)
 		if err != nil {
-			return fmt.Errorf("ensure image for project %s agent %s: %w", projectName, agent.AgentName, err)
+			return fmt.Errorf("ensure image for project %s agent %s: %w", req.ProjectName, agent.AgentName, err)
 		}
 		imageRef := driverpkg.ResolveSandboxGuestImage(agent.Image, driverpkg.DefaultGuestImageForDriver(config, driver))
 		if err := EnsureDriverImage(ctx, config, backend, EnsureRequest{
 			Driver:      driver,
 			ImageRef:    imageRef,
-			ProjectName: projectName,
+			ProjectName: req.ProjectName,
 			AgentName:   agent.AgentName,
 		}); err != nil {
 			return err

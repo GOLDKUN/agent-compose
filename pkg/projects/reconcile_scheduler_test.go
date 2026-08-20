@@ -63,7 +63,7 @@ func TestReconcileSchedulersReportsUnifiedSchedulerStateChanges(t *testing.T) {
 				store.existingRecord = &existingRecord
 			}
 
-			changes, unchanged, err := ReconcileSchedulers(context.Background(), store, project, []domain.ProjectSchedulerRecord{record}, []domain.Scheduler{definition}, ReconcileSchedulerOptions{})
+			changes, unchanged, err := ReconcileSchedulers(context.Background(), store, ReconcileSchedulersRequest{Project: project, Schedulers: []domain.ProjectSchedulerRecord{record}, Definitions: []domain.Scheduler{definition}}, ReconcileSchedulerOptions{})
 			if err != nil {
 				t.Fatalf("ReconcileSchedulers returned error: %v", err)
 			}
@@ -96,7 +96,7 @@ func TestReconcileSchedulersRemovalIsIdempotent(t *testing.T) {
 			existing := record
 			existing.Enabled = tt.enabled
 			store := &schedulerReconcileStateStore{existingRecord: &existing, listedRecords: []domain.ProjectSchedulerRecord{existing}, listConfigured: true}
-			changes, unchanged, err := ReconcileSchedulers(context.Background(), store, project, nil, nil, ReconcileSchedulerOptions{})
+			changes, unchanged, err := ReconcileSchedulers(context.Background(), store, ReconcileSchedulersRequest{Project: project}, ReconcileSchedulerOptions{})
 			if err != nil {
 				t.Fatalf("ReconcileSchedulers returned error: %v", err)
 			}
@@ -140,7 +140,7 @@ func TestReconcileSchedulersFailureReportsCleanupAndPartialChanges(t *testing.T)
 				enableErr:          tt.enableErr,
 			}
 			cleanupID := ""
-			changes, unchanged, err := ReconcileSchedulers(context.Background(), store, project, []domain.ProjectSchedulerRecord{currentRecord}, []domain.Scheduler{currentDefinition}, ReconcileSchedulerOptions{
+			changes, unchanged, err := ReconcileSchedulers(context.Background(), store, ReconcileSchedulersRequest{Project: project, Schedulers: []domain.ProjectSchedulerRecord{currentRecord}, Definitions: []domain.Scheduler{currentDefinition}}, ReconcileSchedulerOptions{
 				CleanupFailedScheduler: func(_ context.Context, _ domain.ProjectSchedulerRecord, schedulerID string) {
 					cleanupID = schedulerID
 				},
@@ -291,7 +291,7 @@ func TestReconcileSchedulersSkipsWritesForUnchangedScheduler(t *testing.T) {
 	}
 	store := &unchangedSchedulerReconcileStore{scheduler: scheduler, definition: definition}
 
-	changes, unchanged, err := ReconcileSchedulers(context.Background(), store, project, []domain.ProjectSchedulerRecord{scheduler}, []domain.Scheduler{definition}, ReconcileSchedulerOptions{})
+	changes, unchanged, err := ReconcileSchedulers(context.Background(), store, ReconcileSchedulersRequest{Project: project, Schedulers: []domain.ProjectSchedulerRecord{scheduler}, Definitions: []domain.Scheduler{definition}}, ReconcileSchedulerOptions{})
 	if err != nil {
 		t.Fatalf("ReconcileSchedulers returned error: %v", err)
 	}

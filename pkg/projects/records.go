@@ -86,7 +86,7 @@ func NewAgentRecordsFromSpec(projectID string, revision int64, spec *compose.Nor
 func NewAgentDefinitionsFromSpec(project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]domain.AgentDefinition, error) {
 	agents := make([]domain.AgentDefinition, 0, len(spec.Agents))
 	for _, agent := range spec.Agents {
-		record, err := NewAgentDefinitionFromSpec(project, revision, agent, spec.MCPServers, spec.OctoBusServers)
+		record, err := NewAgentDefinitionFromSpec(project, revision, agent, AgentDefinitionProjectRefs{MCPServers: spec.MCPServers, OctoBusServers: spec.OctoBusServers})
 		if err != nil {
 			return nil, err
 		}
@@ -95,12 +95,19 @@ func NewAgentDefinitionsFromSpec(project domain.ProjectRecord, revision int64, s
 	return agents, nil
 }
 
-func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, agent compose.NormalizedAgentSpec, projectMCPServers map[string]compose.NormalizedMCPServerSpec, projectOctoBusServers map[string]compose.NormalizedOctoBusServerSpec) (domain.AgentDefinition, error) {
+// AgentDefinitionProjectRefs holds the project-level MCP/OctoBus server
+// definitions an agent's config may reference by name.
+type AgentDefinitionProjectRefs struct {
+	MCPServers     map[string]compose.NormalizedMCPServerSpec
+	OctoBusServers map[string]compose.NormalizedOctoBusServerSpec
+}
+
+func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, agent compose.NormalizedAgentSpec, projectRefs AgentDefinitionProjectRefs) (domain.AgentDefinition, error) {
 	projectAgentID, err := StableProjectAgentID(project.ID, agent.Name)
 	if err != nil {
 		return domain.AgentDefinition{}, err
 	}
-	configJSON, err := agentDefinitionConfigJSON(agent, projectMCPServers, projectOctoBusServers)
+	configJSON, err := agentDefinitionConfigJSON(agent, projectRefs.MCPServers, projectRefs.OctoBusServers)
 	if err != nil {
 		return domain.AgentDefinition{}, fmt.Errorf("marshal managed agent %s config: %w", agent.Name, err)
 	}
