@@ -168,28 +168,28 @@ func TestAppRunControllerHelperCoverage(t *testing.T) {
 
 func TestStopProjectSandboxCoverage(t *testing.T) {
 	ctx := context.Background()
-	if err := stopProjectSandbox(ctx, "", nil, nil, nil, nil, nil, nil); err != nil {
+	if err := stopProjectSandbox(ctx, stopProjectSandboxDeps{}, nil); err != nil {
 		t.Fatalf("stopProjectSandbox nil sandbox err=%v", err)
 	}
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-1"}}
-	if err := stopProjectSandbox(ctx, "", nil, nil, nil, nil, session, nil); err == nil {
+	if err := stopProjectSandbox(ctx, stopProjectSandboxDeps{}, session); err == nil {
 		t.Fatalf("stopProjectSandbox nil store returned nil error")
 	}
 	store := &projectSessionStoreFake{session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "session-1", VMStatus: domain.VMStatusStopped}}}
-	if err := stopProjectSandbox(ctx, "", nil, store, nil, nil, session, nil); err != nil || store.updated {
+	if err := stopProjectSandbox(ctx, stopProjectSandboxDeps{Store: store}, session); err != nil || store.updated {
 		t.Fatalf("stopProjectSandbox stopped err=%v updated=%v", err, store.updated)
 	}
 	store.session.Summary.VMStatus = domain.VMStatusRunning
-	if err := stopProjectSandbox(ctx, "", nil, store, nil, nil, session, nil); err == nil {
+	if err := stopProjectSandbox(ctx, stopProjectSandboxDeps{Store: store}, session); err == nil {
 		t.Fatalf("stopProjectSandbox nil driver returned nil error")
 	}
 	driver := &projectSandboxDriverFake{err: errors.New("stop failed")}
-	if err := stopProjectSandbox(ctx, "", nil, store, driver, nil, session, nil); err == nil {
+	if err := stopProjectSandbox(ctx, stopProjectSandboxDeps{Store: store, Driver: driver}, session); err == nil {
 		t.Fatalf("stopProjectSandbox driver error returned nil error")
 	}
 	driver.err = nil
 	streams := &projectSessionStreamsFake{}
-	if err := stopProjectSandbox(ctx, "", nil, store, driver, streams, session, nil); err != nil {
+	if err := stopProjectSandbox(ctx, stopProjectSandboxDeps{Store: store, Driver: driver, Streams: streams}, session); err != nil {
 		t.Fatalf("stopProjectSandbox running err=%v", err)
 	}
 	if !store.updated || store.session.Summary.VMStatus != domain.VMStatusStopped || len(store.events) != 1 || streams.updated == 0 || streams.events == 0 {

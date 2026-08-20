@@ -39,7 +39,14 @@ func NewProjectController(di do.Injector) (*projects.Controller, error) {
 		Volumes:    do.MustInvoke[*volumes.Manager](di),
 		Gateway:    do.MustInvoke[*configstore.ConfigStore](di),
 		StopSandbox: func(ctx context.Context, session *domain.Sandbox) error {
-			return stopProjectSandbox(ctx, do.MustInvoke[*appconfig.Config](di).SandboxRoot, do.MustInvoke[*sessionstream.LifecycleLocks](di), sessionStore, sandboxDriver, streams, session, do.MustInvoke[*adapters.CapabilitySandboxResolver](di))
+			return stopProjectSandbox(ctx, stopProjectSandboxDeps{
+				SandboxRoot:   do.MustInvoke[*appconfig.Config](di).SandboxRoot,
+				Locks:         do.MustInvoke[*sessionstream.LifecycleLocks](di),
+				Store:         sessionStore,
+				Driver:        sandboxDriver,
+				Streams:       streams,
+				AccessRevoker: do.MustInvoke[*adapters.CapabilitySandboxResolver](di),
+			}, session)
 		},
 	}), nil
 }
@@ -49,22 +56,33 @@ type projectSandboxStreams interface {
 	PublishEventAdded(string, domain.SandboxEvent)
 }
 
-func stopProjectSandbox(ctx context.Context, sandboxRoot string, locks *sessionstream.LifecycleLocks, store sessionstream.LifecycleStore, driver sessionstream.SandboxDriver, streams projectSandboxStreams, session *domain.Sandbox, accessRevoker sessionstream.SandboxAccessRevoker) error {
+// stopProjectSandboxDeps bundles the lifecycle dependencies stopProjectSandbox
+// needs, as opposed to session, the sandbox actually being stopped.
+type stopProjectSandboxDeps struct {
+	SandboxRoot   string
+	Locks         *sessionstream.LifecycleLocks
+	Store         sessionstream.LifecycleStore
+	Driver        sessionstream.SandboxDriver
+	Streams       projectSandboxStreams
+	AccessRevoker sessionstream.SandboxAccessRevoker
+}
+
+func stopProjectSandbox(ctx context.Context, deps stopProjectSandboxDeps, session *domain.Sandbox) error {
 	if session == nil {
 		return nil
 	}
-	if store == nil {
+	if deps.Store == nil {
 		return fmt.Errorf("sandbox store is required")
 	}
 	_, err := (sessionstream.Lifecycle{
-		Config:        &appconfig.Config{SandboxRoot: sandboxRoot},
-		Store:         store,
-		Driver:        driver,
-		AccessRevoker: accessRevoker,
+		Config:        &appconfig.Config{SandboxRoot: deps.SandboxRoot},
+		Store:         deps.Store,
+		Driver:        deps.Driver,
+		AccessRevoker: deps.AccessRevoker,
 		Notifier: projectSandboxLifecycleNotifier{
-			streams: streams,
+			streams: deps.Streams,
 		},
-		Locks: locks,
+		Locks: deps.Locks,
 	}).StopLoaded(ctx, session)
 	return err
 }

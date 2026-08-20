@@ -68,7 +68,14 @@ type runCompletionStopper struct {
 }
 
 func (s runCompletionStopper) Stop(ctx context.Context, sandbox *domain.Sandbox) error {
-	return stopProjectSandbox(ctx, s.config.SandboxRoot, s.locks, s.store, s.driver, s.streams, sandbox, s.capTokens)
+	return stopProjectSandbox(ctx, stopProjectSandboxDeps{
+		SandboxRoot:   s.config.SandboxRoot,
+		Locks:         s.locks,
+		Store:         s.store,
+		Driver:        s.driver,
+		Streams:       s.streams,
+		AccessRevoker: s.capTokens,
+	}, sandbox)
 }
 
 func NewRunCompletionManager(di do.Injector) (*runs.CompletionManager, error) {

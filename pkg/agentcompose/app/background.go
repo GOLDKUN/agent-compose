@@ -29,30 +29,43 @@ type backgroundSchedulerController interface {
 	Start()
 }
 
-func startBackgroundManagers(ctx context.Context, sandboxes *sandboxstore.Store, configDB *configstore.ConfigStore, bridge runtimeReconciler, schedulers backgroundSchedulerController, events *events.Dispatcher, capProxy *capproxy.Server, capTokens *adapters.CapabilitySandboxResolver, completions *runs.CompletionManager) error {
+// backgroundManagersDeps bundles the runtime components startBackgroundManagers
+// starts and reconciles on daemon startup.
+type backgroundManagersDeps struct {
+	Sandboxes   *sandboxstore.Store
+	ConfigDB    *configstore.ConfigStore
+	Bridge      runtimeReconciler
+	Schedulers  backgroundSchedulerController
+	Events      *events.Dispatcher
+	CapProxy    *capproxy.Server
+	CapTokens   *adapters.CapabilitySandboxResolver
+	Completions *runs.CompletionManager
+}
+
+func startBackgroundManagers(ctx context.Context, deps backgroundManagersDeps) error {
 	startedAt := time.Now().UTC()
 	reconcileCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := reconcilePersistedSandboxes(reconcileCtx, sandboxes, bridge, startedAt); err != nil {
+	if err := reconcilePersistedSandboxes(reconcileCtx, deps.Sandboxes, deps.Bridge, startedAt); err != nil {
 		slog.Warn("failed to reconcile persisted sandbox state on startup", "error", err)
 	}
-	if capTokens != nil {
-		if err := capTokens.Rebuild(reconcileCtx); err != nil {
+	if deps.CapTokens != nil {
+		if err := deps.CapTokens.Rebuild(reconcileCtx); err != nil {
 			slog.Warn("failed to rebuild capability sandbox token index on startup", "error", err)
 		}
 	}
-	if err := schedulers.RecoverInterruptedRuns(reconcileCtx, startedAt); err != nil {
+	if err := deps.Schedulers.RecoverInterruptedRuns(reconcileCtx, startedAt); err != nil {
 		slog.Warn("failed to recover interrupted scheduler runs", "error", err)
 	}
-	if err := completions.Start(ctx); err != nil {
+	if err := deps.Completions.Start(ctx); err != nil {
 		return err
 	}
-	if err := reconcilePersistedProjectRuns(reconcileCtx, configDB, completions, startedAt); err != nil {
+	if err := reconcilePersistedProjectRuns(reconcileCtx, deps.ConfigDB, deps.Completions, startedAt); err != nil {
 		slog.Warn("failed to reconcile persisted project runs", "error", err)
 	}
-	schedulers.Start()
-	events.Start()
-	return startCapabilityProxy(ctx, capProxy)
+	deps.Schedulers.Start()
+	deps.Events.Start()
+	return startCapabilityProxy(ctx, deps.CapProxy)
 }
 
 func reconcilePersistedSandboxes(ctx context.Context, store *sandboxstore.Store, bridge runtimeReconciler, startedAt time.Time) error {
@@ -110,23 +123,33 @@ func reconcilePendingSandboxState(ctx context.Context, store *sandboxstore.Store
 	return store.GetSandbox(ctx, session.Summary.ID)
 }
 
+// projectRunReconcileContext bundles the store/manager and startup timestamp
+// reconcilePersistedProjectRunsWithStatus needs, shared across every status
+// it's called with.
+type projectRunReconcileContext struct {
+	ConfigDB    *configstore.ConfigStore
+	Completions *runs.CompletionManager
+	StartedAt   time.Time
+}
+
 func reconcilePersistedProjectRuns(ctx context.Context, configDB *configstore.ConfigStore, completions *runs.CompletionManager, startedAt time.Time) error {
 	if configDB == nil {
 		return nil
 	}
+	reconcile := projectRunReconcileContext{ConfigDB: configDB, Completions: completions, StartedAt: startedAt}
 	for _, status := range []string{domain.ProjectRunStatusPending, domain.ProjectRunStatusRunning} {
-		if err := reconcilePersistedProjectRunsWithStatus(ctx, configDB, completions, status, startedAt); err != nil {
+		if err := reconcilePersistedProjectRunsWithStatus(ctx, reconcile, status); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func reconcilePersistedProjectRunsWithStatus(ctx context.Context, configDB *configstore.ConfigStore, completions *runs.CompletionManager, status string, startedAt time.Time) error {
+func reconcilePersistedProjectRunsWithStatus(ctx context.Context, reconcile projectRunReconcileContext, status string) error {
 	var staleRuns []domain.ProjectRunRecord
 	offset := 0
 	for {
-		runs, err := configDB.ListProjectRunsByOptions(ctx, domain.ProjectRunListOptions{
+		runs, err := reconcile.ConfigDB.ListProjectRunsByOptions(ctx, domain.ProjectRunListOptions{
 			Status: status,
 			Limit:  200,
 			Offset: offset,
@@ -138,7 +161,7 @@ func reconcilePersistedProjectRunsWithStatus(ctx context.Context, configDB *conf
 			break
 		}
 		for _, run := range runs {
-			if !run.CreatedAt.Before(startedAt) {
+			if !run.CreatedAt.Before(reconcile.StartedAt) {
 				continue
 			}
 			staleRuns = append(staleRuns, run)
@@ -146,7 +169,7 @@ func reconcilePersistedProjectRunsWithStatus(ctx context.Context, configDB *conf
 		offset += len(runs)
 	}
 	for _, run := range staleRuns {
-		if err := completions.StageInterrupted(ctx, run, staleProjectRunError); err != nil {
+		if err := reconcile.Completions.StageInterrupted(ctx, run, staleProjectRunError); err != nil {
 			slog.Warn("failed to stage stale project run completion", "run_id", run.RunID, "error", err)
 		}
 	}
