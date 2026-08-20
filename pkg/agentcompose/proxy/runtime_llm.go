@@ -66,66 +66,101 @@ func (h runtimeLLMHandler) handleAnthropicMessages(c echo.Context) error {
 	return h.handle(c, protocolbridge.ProtocolAnthropicMessages, llms.APIProtocolMessages)
 }
 
-func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge.Protocol, facadeWireAPI string) error {
+// resolvedRuntimeLLMRequest is the request state handle needs after
+// authorizeAndResolveRuntimeLLMRequest has validated the caller and decided
+// which upstream target to proxy the request to.
+type resolvedRuntimeLLMRequest struct {
+	InboundAdapter   protocolbridge.Adapter
+	LLMRequest       *protocolbridge.LLMRequest
+	Body             []byte
+	Target           llms.ResolvedTarget
+	UpstreamProtocol protocolbridge.Protocol
+	UpstreamEndpoint string
+}
+
+// authorizeAndResolveRuntimeLLMRequest validates the caller's facade token,
+// checks the sandbox is running, decodes the inbound LLM request, and
+// resolves which upstream provider/model target to proxy it to. If handled
+// is true, the caller must return err as-is (a response has already been
+// written).
+func (h runtimeLLMHandler) authorizeAndResolveRuntimeLLMRequest(c echo.Context, inboundProtocol protocolbridge.Protocol, facadeWireAPI string) (resolvedRuntimeLLMRequest, bool, error) {
 	if h.opts.Tokens == nil || h.opts.Sandboxes == nil || h.opts.ResolveTarget == nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "llm facade dependencies are required"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusInternalServerError, map[string]string{"error": "llm facade dependencies are required"})
 	}
 	sandboxID := strings.TrimSpace(c.Param("sandbox_id"))
 	rawToken := llms.RuntimeFacadeToken(c.Request().Header)
 	if sandboxID == "" || rawToken == "" {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "llm facade token is required"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusUnauthorized, map[string]string{"error": "llm facade token is required"})
 	}
 	token, err := h.opts.Tokens.GetLLMFacadeToken(c.Request().Context(), rawToken)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid llm facade token"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid llm facade token"})
 	}
 	now := time.Now().UTC()
 	if token.SandboxID != sandboxID || !token.RevokedAt.IsZero() || (!token.ExpiresAt.IsZero() && now.After(token.ExpiresAt)) {
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token is not valid for this sandbox"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token is not valid for this sandbox"})
 	}
 	if token.WireAPI != "" && llms.NormalizeWireAPI(token.WireAPI) != llms.NormalizeWireAPI(facadeWireAPI) {
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token wire api mismatch"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token wire api mismatch"})
 	}
 	session, err := h.opts.Sandboxes.GetSandbox(c.Request().Context(), sandboxID)
 	if err != nil {
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "sandbox is not available"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusForbidden, map[string]string{"error": "sandbox is not available"})
 	}
 	if session.Summary.VMStatus == domain.VMStatusStopped || session.Summary.VMStatus == domain.VMStatusFailed {
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "sandbox is not running"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusForbidden, map[string]string{"error": "sandbox is not running"})
 	}
 	body, err := io.ReadAll(io.LimitReader(c.Request().Body, 64<<20))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "read llm request failed"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": "read llm request failed"})
 	}
 	inboundAdapter, err := llms.ProtocolAdapter(inboundProtocol)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 	llmReq, err := inboundAdapter.DecodeRequest(body)
 	if err != nil {
 		raw, status := inboundAdapter.EncodeError(err)
-		return WriteRuntimeLLMEncodedError(c, raw, status)
+		return resolvedRuntimeLLMRequest{}, true, WriteRuntimeLLMEncodedError(c, raw, status)
 	}
 	model := strings.TrimSpace(llmReq.Model)
 	if model == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "llm model is required"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": "llm model is required"})
 	}
 	// Provider-bound tokens may request any model from that provider. Preserve
 	// the legacy model scope for compatibility tokens that have no provider.
 	if token.ProviderID == "" && token.Model != "" && token.Model != model {
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token model mismatch"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token model mismatch"})
 	}
 	target, err := h.opts.ResolveTarget(c.Request().Context(), model, token.ProviderID)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 	if token.ProviderID != "" && token.ProviderID != target.Provider.ID {
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token provider mismatch"})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusForbidden, map[string]string{"error": "llm facade token provider mismatch"})
 	}
 	upstreamProtocol, upstreamEndpoint, err := llms.UpstreamProtocolAndEndpoint(target)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return resolvedRuntimeLLMRequest{}, true, c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
+	return resolvedRuntimeLLMRequest{
+		InboundAdapter:   inboundAdapter,
+		LLMRequest:       llmReq,
+		Body:             body,
+		Target:           target,
+		UpstreamProtocol: upstreamProtocol,
+		UpstreamEndpoint: upstreamEndpoint,
+	}, false, nil
+}
+
+func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge.Protocol, facadeWireAPI string) error {
+	resolved, handled, err := h.authorizeAndResolveRuntimeLLMRequest(c, inboundProtocol, facadeWireAPI)
+	if handled {
+		return err
+	}
+	inboundAdapter, llmReq, body := resolved.InboundAdapter, resolved.LLMRequest, resolved.Body
+	target, upstreamProtocol, upstreamEndpoint := resolved.Target, resolved.UpstreamProtocol, resolved.UpstreamEndpoint
+
 	if inboundProtocol == upstreamProtocol {
 		upstreamBody, err := llms.RewriteRuntimeRequestForUpstream(body, target, upstreamProtocol)
 		if err != nil {
@@ -133,7 +168,12 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 			return WriteRuntimeLLMEncodedError(c, raw, status)
 		}
 		upstreamBody = injectMaxOutputTokens(upstreamBody, upstreamProtocol, effectiveMaxOutputTokens(target, h.opts.MaxOutputTokens))
-		return h.proxyTransparent(c, upstreamEndpoint, upstreamBody, target, upstreamProtocol)
+		return h.proxyTransparent(c, proxyTransparentRequest{
+			UpstreamEndpoint: upstreamEndpoint,
+			Body:             upstreamBody,
+			Target:           target,
+			UpstreamProtocol: upstreamProtocol,
+		})
 	}
 	upstreamBody, err := llms.EncodeRuntimeUpstreamRequest(inboundProtocol, upstreamProtocol, target, llmReq)
 	if err != nil {
@@ -161,7 +201,12 @@ func (h runtimeLLMHandler) handle(c echo.Context, inboundProtocol protocolbridge
 		return nil
 	}
 	if llms.RuntimeResponseShouldFlush(resp.Header) {
-		return BridgeRuntimeLLMStreamResponse(c, resp, inboundProtocol, upstreamProtocol, llms.NormalizeProviderType(target.Provider.ProviderType), target.Model.Name)
+		return BridgeRuntimeLLMStreamResponse(c, resp, runtimeLLMStreamBridgeRequest{
+			InboundProtocol:  inboundProtocol,
+			UpstreamProtocol: upstreamProtocol,
+			UpstreamFamily:   llms.NormalizeProviderType(target.Provider.ProviderType),
+			Model:            target.Model.Name,
+		})
 	}
 	upstreamRespBody, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
@@ -224,8 +269,18 @@ func injectMaxOutputTokens(body []byte, upstreamProtocol protocolbridge.Protocol
 	return out
 }
 
-func (h runtimeLLMHandler) proxyTransparent(c echo.Context, upstreamEndpoint string, body []byte, target llms.ResolvedTarget, upstreamProtocol protocolbridge.Protocol) error {
-	upstreamReq, err := http.NewRequestWithContext(c.Request().Context(), http.MethodPost, upstreamEndpoint, bytes.NewReader(body))
+// proxyTransparentRequest bundles the upstream request details proxyTransparent
+// needs to relay a request whose inbound and upstream wire protocols match.
+type proxyTransparentRequest struct {
+	UpstreamEndpoint string
+	Body             []byte
+	Target           llms.ResolvedTarget
+	UpstreamProtocol protocolbridge.Protocol
+}
+
+func (h runtimeLLMHandler) proxyTransparent(c echo.Context, req proxyTransparentRequest) error {
+	target, upstreamProtocol := req.Target, req.UpstreamProtocol
+	upstreamReq, err := http.NewRequestWithContext(c.Request().Context(), http.MethodPost, req.UpstreamEndpoint, bytes.NewReader(req.Body))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "create upstream llm request failed"})
 	}
@@ -238,7 +293,12 @@ func (h runtimeLLMHandler) proxyTransparent(c echo.Context, upstreamEndpoint str
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 && llms.UseGenericResponsesTextParts(target, upstreamProtocol) {
 		if llms.RuntimeResponseShouldFlush(resp.Header) {
-			return BridgeRuntimeLLMStreamResponse(c, resp, protocolbridge.ProtocolOpenAIResponses, protocolbridge.ProtocolOpenAIResponses, llms.ProviderFamilyOpenAI, target.Model.Name)
+			return BridgeRuntimeLLMStreamResponse(c, resp, runtimeLLMStreamBridgeRequest{
+				InboundProtocol:  protocolbridge.ProtocolOpenAIResponses,
+				UpstreamProtocol: protocolbridge.ProtocolOpenAIResponses,
+				UpstreamFamily:   llms.ProviderFamilyOpenAI,
+				Model:            target.Model.Name,
+			})
 		}
 		upstreamRespBody, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 		if err != nil {
@@ -279,8 +339,19 @@ func WriteRuntimeLLMEncodedError(c echo.Context, raw []byte, status int) error {
 	return c.Blob(status, "application/json", raw)
 }
 
-func BridgeRuntimeLLMStreamResponse(c echo.Context, resp *http.Response, inboundProtocol, upstreamProtocol protocolbridge.Protocol, upstreamFamily, model string) error {
-	decoder, encoder, err := llms.RuntimeStreamBridge(inboundProtocol, upstreamProtocol, upstreamFamily, model)
+// runtimeLLMStreamBridgeRequest bundles the protocol/model metadata
+// BridgeRuntimeLLMStreamResponse needs to translate an upstream SSE stream
+// into the inbound wire protocol.
+type runtimeLLMStreamBridgeRequest struct {
+	InboundProtocol  protocolbridge.Protocol
+	UpstreamProtocol protocolbridge.Protocol
+	UpstreamFamily   string
+	Model            string
+}
+
+func BridgeRuntimeLLMStreamResponse(c echo.Context, resp *http.Response, req runtimeLLMStreamBridgeRequest) error {
+	inboundProtocol := req.InboundProtocol
+	decoder, encoder, err := llms.RuntimeStreamBridge(req.InboundProtocol, req.UpstreamProtocol, req.UpstreamFamily, req.Model)
 	if err != nil {
 		return err
 	}
