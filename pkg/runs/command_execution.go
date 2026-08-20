@@ -54,7 +54,7 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.Pr
 		return transition, err
 	}
 	guestArtifactsDir := filepath.Join(c.config.GuestStateRoot, "runs", run.RunID)
-	runtimeRequest := execution.RuntimeCommandRequestPayloadFromCommand(c.config, execution.RuntimeCommandRequest{
+	runtimeRequest := execution.RuntimeCommandRequestPayloadFromCommand(c.config, execution.RuntimeCommandSpec{
 		Mode:   "shell",
 		Script: commandText,
 		Cwd:    c.config.GuestWorkspacePath,
