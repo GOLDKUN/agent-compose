@@ -79,9 +79,24 @@ func TestCapabilityConnectErrorMapsOctoBusHTTPStatus(t *testing.T) {
 			want: connect.CodeDeadlineExceeded,
 		},
 		{
-			name: "unknown http status fallback",
+			name: "http internal server error fallback",
 			err:  &capability.OctoBusError{HTTPStatus: http.StatusInternalServerError, Message: "upstream failed"},
+			want: connect.CodeInternal,
+		},
+		{
+			name: "http bad gateway fallback",
+			err:  &capability.OctoBusError{HTTPStatus: http.StatusBadGateway, Message: "gateway failed"},
 			want: connect.CodeUnavailable,
+		},
+		{
+			name: "http service unavailable fallback",
+			err:  &capability.OctoBusError{HTTPStatus: http.StatusServiceUnavailable, Message: "upstream unavailable"},
+			want: connect.CodeUnavailable,
+		},
+		{
+			name: "unknown http status fallback",
+			err:  &capability.OctoBusError{HTTPStatus: 599, Message: "unmapped status"},
+			want: connect.CodeUnknown,
 		},
 	}
 

@@ -81,10 +81,14 @@ func octoBusConnectCode(err *capability.OctoBusError) connect.Code {
 		return connect.CodeFailedPrecondition
 	case http.StatusTooManyRequests:
 		return connect.CodeResourceExhausted
+	case http.StatusInternalServerError:
+		return connect.CodeInternal
+	case http.StatusBadGateway, http.StatusServiceUnavailable:
+		return connect.CodeUnavailable
 	case http.StatusNotImplemented:
 		return connect.CodeUnimplemented
 	case http.StatusGatewayTimeout:
 		return connect.CodeDeadlineExceeded
 	}
-	return connect.CodeUnavailable
+	return connect.CodeUnknown
 }
