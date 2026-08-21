@@ -168,13 +168,12 @@ func (c *Controller) runCommandInteraction(ctx context.Context, runCtx interacti
 	run := runCtx.Run
 	sandbox := runCtx.Sandbox
 	commandText := strings.TrimSpace(runCtx.Request.Command)
-	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID}
 	session, err := c.openCommandInteraction(ctx, runCtx, commandText, start)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("command execution failed: %v", err)
-		return transition, err
+		logsPath := filepath.Join(projectRunCommandArtifactsDir(run, sandbox), "transcript.txt")
+		return TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath, ExitCode: 1, Error: fmt.Sprintf("command execution failed: %v", err)}, err
 	}
+	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID}
 	run = session.Run
 	logsPath := session.LogsPath
 	transition.LogsPath = logsPath
