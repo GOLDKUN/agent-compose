@@ -15,7 +15,7 @@ import (
 func TestCapabilityConnectErrorMapsOctoBusHTTPStatus(t *testing.T) {
 	tests := []struct {
 		name string
-		err  error
+		err  *capability.OctoBusError
 		want connect.Code
 	}{
 		{
@@ -106,7 +106,7 @@ func TestCapabilityConnectErrorMapsOctoBusHTTPStatus(t *testing.T) {
 			if connect.CodeOf(err) != tc.want {
 				t.Fatalf("CapabilityConnectError code = %s, want %s; err=%v", connect.CodeOf(err), tc.want, err)
 			}
-			if !strings.Contains(err.Error(), tc.err.(*capability.OctoBusError).Message) {
+			if !strings.Contains(err.Error(), tc.err.Message) {
 				t.Fatalf("CapabilityConnectError did not preserve upstream message: %v", err)
 			}
 		})
@@ -116,7 +116,7 @@ func TestCapabilityConnectErrorMapsOctoBusHTTPStatus(t *testing.T) {
 func TestCapabilityConnectErrorPrefersOctoBusCode(t *testing.T) {
 	tests := []struct {
 		name string
-		err  error
+		err  *capability.OctoBusError
 		want connect.Code
 	}{
 		{
@@ -172,7 +172,7 @@ func TestCapabilityConnectErrorPrefersOctoBusCode(t *testing.T) {
 			if connect.CodeOf(err) != tc.want {
 				t.Fatalf("CapabilityConnectError code = %s, want %s; err=%v", connect.CodeOf(err), tc.want, err)
 			}
-			if !strings.Contains(err.Error(), tc.err.(*capability.OctoBusError).Message) {
+			if !strings.Contains(err.Error(), tc.err.Message) {
 				t.Fatalf("CapabilityConnectError did not preserve upstream message: %v", err)
 			}
 		})
