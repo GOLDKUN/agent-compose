@@ -28,7 +28,7 @@ func (h *CapabilityV2Handler) GetCapabilityStatus(ctx context.Context, _ *connec
 func (h *CapabilityV2Handler) ListCapabilitySets(ctx context.Context, req *connect.Request[agentcomposev2.ListCapabilitySetsRequest]) (*connect.Response[agentcomposev2.ListCapabilitySetsResponse], error) {
 	items, err := h.provider.ListCapsets(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, CapabilityConnectError(err)
 	}
 	enabled := items[:0]
 	for _, item := range items {

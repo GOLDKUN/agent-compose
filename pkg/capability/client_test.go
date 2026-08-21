@@ -3,8 +3,10 @@ package capability
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -82,6 +84,65 @@ func TestClientCatalogUsesAllQueryAndEscapesCapset(t *testing.T) {
 	}
 	if catalog.CapsetID != "dev/tools" {
 		t.Fatalf("unexpected catalog %+v", catalog)
+	}
+}
+
+func TestClientPreservesOctoBusErrorPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"code":    "NOT_FOUND",
+				"message": "capset dev was not found",
+				"details": map[string]any{"capset_id": "dev"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{Addr: server.URL})
+	_, err := client.Catalog(context.Background(), "dev")
+	if err == nil {
+		t.Fatal("Catalog returned nil error")
+	}
+	var upstream *OctoBusError
+	if !errors.As(err, &upstream) {
+		t.Fatalf("Catalog error type = %T, want *OctoBusError: %v", err, err)
+	}
+	if upstream.HTTPStatus != http.StatusNotFound || upstream.Code != "NOT_FOUND" || upstream.Message != "capset dev was not found" {
+		t.Fatalf("unexpected OctoBus error: %+v", upstream)
+	}
+	if !strings.Contains(err.Error(), "NOT_FOUND: capset dev was not found") {
+		t.Fatalf("error string did not preserve upstream code/message: %v", err)
+	}
+}
+
+func TestClientCatalogMarkdownPreservesPlainTextOctoBusError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.EscapedPath() != "/admin/v1/catalog/dev" {
+			t.Fatalf("unexpected path %s", r.URL.EscapedPath())
+		}
+		if r.URL.Query().Get("format") != "md" || r.URL.Query().Get("grpc") != "true" {
+			t.Fatalf("unexpected query %s", r.URL.RawQuery)
+		}
+		if r.Header.Get("Accept") != "text/markdown" {
+			t.Fatalf("unexpected accept header %q", r.Header.Get("Accept"))
+		}
+		http.Error(w, "temporary upstream outage", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{Addr: server.URL})
+	_, err := client.CatalogMarkdown(context.Background(), "dev")
+	if err == nil {
+		t.Fatal("CatalogMarkdown returned nil error")
+	}
+	var upstream *OctoBusError
+	if !errors.As(err, &upstream) {
+		t.Fatalf("CatalogMarkdown error type = %T, want *OctoBusError: %v", err, err)
+	}
+	if upstream.HTTPStatus != http.StatusServiceUnavailable || upstream.Code != "HTTP_503" || upstream.Message != http.StatusText(http.StatusServiceUnavailable) {
+		t.Fatalf("unexpected OctoBus error fallback: %+v", upstream)
 	}
 }
 
