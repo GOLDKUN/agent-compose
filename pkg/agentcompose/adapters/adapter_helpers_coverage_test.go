@@ -16,10 +16,10 @@ import (
 
 func TestAdapterHelperCoverage(t *testing.T) {
 	t.Run("scheduler host unavailable dependencies", func(t *testing.T) {
-		if err := (SchedulerHostEvents{}).Add(context.Background(), "", "", "", "", "", "", nil, "", "", ""); err == nil {
+		if err := (SchedulerHostEvents{}).Add(context.Background(), schedulers.SchedulerEventInput{}); err == nil {
 			t.Fatalf("SchedulerHostEvents.Add returned nil error")
 		}
-		if _, err := (SchedulerHostEvents{}).AddRecord(context.Background(), "", "", "", "", "", "", nil, "", "", ""); err == nil {
+		if _, err := (SchedulerHostEvents{}).AddRecord(context.Background(), schedulers.SchedulerEventInput{}); err == nil {
 			t.Fatalf("SchedulerHostEvents.AddRecord returned nil error")
 		}
 		if _, err := (SchedulerHostAgentExecutor{}).ExecuteAgent(context.Background(), nil, schedulers.HostAgentExecutionRequest{}); err == nil {

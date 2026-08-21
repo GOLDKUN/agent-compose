@@ -114,7 +114,9 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, req AgentRunRequest, 
 	if err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
-	runtimeConfig, err := runtimefacade.EnsureSessionAgentRuntimeConfig(ctx, r.config, facadeStoreFor(r.configDB), session, agent, effectiveModel, runtimefacade.TokenSourceAgent, runID)
+	runtimeConfig, err := runtimefacade.EnsureSessionAgentRuntimeConfig(ctx, runtimefacade.SessionFacadeConfigRequest{
+		Config: r.config, Store: facadeStoreFor(r.configDB), Session: session, Agent: agent, Model: effectiveModel, Source: runtimefacade.TokenSourceAgent, RunID: runID,
+	})
 	if err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
@@ -184,7 +186,9 @@ func (r *AgentRunner) PrepareSandboxAgentEnvironment(ctx context.Context, sessio
 			return err
 		}
 	}
-	startupEnv, err := runtimefacade.EnsureSessionStartupFacadeConfig(ctx, r.config, facadeStoreFor(r.configDB), session, runtimefacade.TokenSourceAgent, "")
+	startupEnv, err := runtimefacade.EnsureSessionStartupFacadeConfig(ctx, runtimefacade.SessionFacadeConfigRequest{
+		Config: r.config, Store: facadeStoreFor(r.configDB), Session: session, Source: runtimefacade.TokenSourceAgent, RunID: "",
+	})
 	if err != nil {
 		if r.configDB != nil {
 			_ = r.configDB.RevokeLLMFacadeTokensForSandbox(context.WithoutCancel(ctx), session.Summary.ID)
@@ -197,7 +201,9 @@ func (r *AgentRunner) PrepareSandboxAgentEnvironment(ctx context.Context, sessio
 		}
 		return err
 	}
-	managedEnv, err := runtimefacade.EnsureSessionLLMFacadeConfig(ctx, r.config, facadeStoreFor(r.configDB), session, agent.Provider, agent.Model, "session", "")
+	managedEnv, err := runtimefacade.EnsureSessionLLMFacadeConfig(ctx, runtimefacade.SessionFacadeConfigRequest{
+		Config: r.config, Store: facadeStoreFor(r.configDB), Session: session, Agent: agent.Provider, Model: agent.Model, Source: "session", RunID: "",
+	})
 	if err != nil {
 		if r.configDB != nil {
 			_ = r.configDB.RevokeLLMFacadeTokensForSandbox(context.WithoutCancel(ctx), session.Summary.ID)

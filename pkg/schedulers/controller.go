@@ -126,16 +126,14 @@ func NewController(deps ControllerDependencies) *Controller {
 func (c *Controller) init() {
 	if c.runExecutor == nil {
 		c.runExecutor = NewRunExecutor(RunExecutorDependencies{
-			Store:         c.deps.Store,
-			Engine:        c.deps.Engine,
-			HostFactory:   c.deps.HostFactory,
-			ArtifactsDir:  c.RunArtifactsDir,
-			WriteArtifact: c.WriteRunArtifact,
-			EnterRun:      c.EnterRun,
-			LeaveRun:      c.LeaveRun,
-			AddSchedulerEvent: func(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
-				return c.AddSchedulerEvent(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
-			},
+			Store:                      c.deps.Store,
+			Engine:                     c.deps.Engine,
+			HostFactory:                c.deps.HostFactory,
+			ArtifactsDir:               c.RunArtifactsDir,
+			WriteArtifact:              c.WriteRunArtifact,
+			EnterRun:                   c.EnterRun,
+			LeaveRun:                   c.LeaveRun,
+			AddSchedulerEvent:          c.AddSchedulerEvent,
 			UpdateTriggerEventDelivery: c.UpdateTriggerEventDelivery,
 			Notify:                     c.notify,
 			Refresh:                    c.Refresh,
@@ -168,10 +166,8 @@ func (c *Controller) init() {
 			Store:         c.deps.Store,
 			Snapshot:      c.CachedSchedulersMap,
 			ReplaceCached: c.ReplaceCachedSchedulers,
-			Run: func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-				return c.Run(ctx, scheduler, trigger, payloadJSON, source, options, triggerEventAck...)
-			},
-			RunTimeout: c.runTimeout,
+			Run:           c.Run,
+			RunTimeout:    c.runTimeout,
 		})
 	}
 	if c.eventDispatcher == nil {
@@ -181,15 +177,13 @@ func (c *Controller) init() {
 			Targets:      func(topic string) []EventTarget { return CollectEventTargets(c.SnapshotSchedulers(), topic) },
 			IsBusy:       c.AnyTargetBusy,
 			ReserveSlots: c.deps.ReserveSlots,
-			Run: func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-				return c.Run(ctx, scheduler, trigger, payloadJSON, source, options, triggerEventAck...)
-			},
-			Prepare:    c.Prepare,
-			Execute:    c.Execute,
-			Abort:      c.Abort,
-			RunTimeout: c.runTimeout,
-			EnterRun:   c.EnterRun,
-			LeaveRun:   c.LeaveRun,
+			Run:          c.Run,
+			Prepare:      c.Prepare,
+			Execute:      c.Execute,
+			Abort:        c.Abort,
+			RunTimeout:   c.runTimeout,
+			EnterRun:     c.EnterRun,
+			LeaveRun:     c.LeaveRun,
 		})
 	}
 }
@@ -274,15 +268,15 @@ func (c *Controller) RunNow(ctx context.Context, req RunNowRequest) (domain.Sche
 	}
 	runCtx, cancel := context.WithTimeout(c.deps.RootCtx, c.runTimeout(req.Timeout))
 	defer cancel()
-	return c.Run(runCtx, scheduler, trigger, req.PayloadJSON, "manual", RunOptions{})
+	return c.Run(runCtx, RunTriggerRequest{Scheduler: scheduler, Trigger: trigger, PayloadJSON: req.PayloadJSON, Source: "manual"})
 }
 
-func (c *Controller) Run(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-	return c.runExecutor.Run(ctx, scheduler, trigger, payloadJSON, source, options, triggerEventAck...)
+func (c *Controller) Run(ctx context.Context, req RunTriggerRequest, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+	return c.runExecutor.Run(ctx, req, triggerEventAck...)
 }
 
-func (c *Controller) Prepare(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error) {
-	return c.runExecutor.Prepare(ctx, scheduler, trigger, payloadJSON, source, options)
+func (c *Controller) Prepare(ctx context.Context, req RunTriggerRequest) (PreparedRun, error) {
+	return c.runExecutor.Prepare(ctx, req)
 }
 
 func (c *Controller) Execute(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error) {
@@ -461,28 +455,28 @@ func (c *Controller) AnyTargetBusy(targets []EventTarget) bool {
 	return AnyTargetBusy(targets, c.running)
 }
 
-func (c *Controller) AddSchedulerEvent(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
-	_, err := c.AddSchedulerEventRecord(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+func (c *Controller) AddSchedulerEvent(ctx context.Context, event SchedulerEventInput) error {
+	_, err := c.AddSchedulerEventRecord(ctx, event)
 	return err
 }
 
-func (c *Controller) AddSchedulerEventRecord(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
-	payloadJSON, err := domain.MarshalJSONCompact(payload)
+func (c *Controller) AddSchedulerEventRecord(ctx context.Context, input SchedulerEventInput) (domain.SchedulerEvent, error) {
+	payloadJSON, err := domain.MarshalJSONCompact(input.Payload)
 	if err != nil {
 		return domain.SchedulerEvent{}, err
 	}
 	event := domain.SchedulerEvent{
 		ID:                  c.newID(),
-		SchedulerID:         strings.TrimSpace(schedulerID),
-		RunID:               strings.TrimSpace(runID),
-		TriggerID:           strings.TrimSpace(triggerID),
-		Type:                strings.TrimSpace(eventType),
-		Level:               firstNonEmpty(strings.TrimSpace(level), "info"),
-		Message:             strings.TrimSpace(message),
+		SchedulerID:         strings.TrimSpace(input.SchedulerID),
+		RunID:               strings.TrimSpace(input.RunID),
+		TriggerID:           strings.TrimSpace(input.TriggerID),
+		Type:                strings.TrimSpace(input.EventType),
+		Level:               firstNonEmpty(strings.TrimSpace(input.Level), "info"),
+		Message:             strings.TrimSpace(input.Message),
 		PayloadJSON:         payloadJSON,
-		LinkedSandboxID:     strings.TrimSpace(linkedSandboxID),
-		LinkedCellID:        strings.TrimSpace(linkedCellID),
-		LinkedAgentThreadID: strings.TrimSpace(linkedAgentThreadID),
+		LinkedSandboxID:     strings.TrimSpace(input.LinkedSandboxID),
+		LinkedCellID:        strings.TrimSpace(input.LinkedCellID),
+		LinkedAgentThreadID: strings.TrimSpace(input.LinkedAgentThreadID),
 		CreatedAt:           c.now(),
 	}
 	if err := c.deps.Store.AddSchedulerEvent(ctx, event); err != nil {

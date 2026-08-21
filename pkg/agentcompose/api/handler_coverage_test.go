@@ -1635,7 +1635,7 @@ func (s *apiProjectRunStore) ListProjectRunEventRunIDsForSandbox(_ context.Conte
 	return runIDs, nil
 }
 
-func (s *apiProjectRunStore) ListProjectRunEventsForSandbox(_ context.Context, sandboxID string, _ time.Time, _ string, _ uint64, limit int) ([]domain.ProjectRunEventRecord, error) {
+func (s *apiProjectRunStore) ListProjectRunEventsForSandbox(_ context.Context, sandboxID string, cursor domain.ProjectRunEventSandboxCursor) ([]domain.ProjectRunEventRecord, error) {
 	allowed := map[string]bool{}
 	for _, run := range s.runs {
 		if run.SandboxID == sandboxID {
@@ -1648,19 +1648,19 @@ func (s *apiProjectRunStore) ListProjectRunEventsForSandbox(_ context.Context, s
 			items = append(items, event)
 		}
 	}
-	if len(items) > limit {
-		items = items[:limit]
+	if len(items) > cursor.Limit {
+		items = items[:cursor.Limit]
 	}
 	return items, nil
 }
 
 func (s *apiProjectRunStore) ListProjectRunEventsForSandboxPage(ctx context.Context, sandboxID string, offset, limit int) ([]domain.ProjectRunEventRecord, error) {
-	items, err := s.ListProjectRunEventsForSandbox(ctx, sandboxID, time.Time{}, "", 0, int(^uint(0)>>1))
+	items, err := s.ListProjectRunEventsForSandbox(ctx, sandboxID, domain.ProjectRunEventSandboxCursor{Limit: int(^uint(0) >> 1)})
 	start := min(max(offset, 0), len(items))
 	return items[start:min(start+limit, len(items))], err
 }
 
 func (s *apiProjectRunStore) CountProjectRunEventsForSandbox(ctx context.Context, sandboxID string) (int, error) {
-	items, err := s.ListProjectRunEventsForSandbox(ctx, sandboxID, time.Time{}, "", 0, int(^uint(0)>>1))
+	items, err := s.ListProjectRunEventsForSandbox(ctx, sandboxID, domain.ProjectRunEventSandboxCursor{Limit: int(^uint(0) >> 1)})
 	return len(items), err
 }

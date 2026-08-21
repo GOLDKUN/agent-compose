@@ -259,6 +259,7 @@ func (c *Controller) PatchProject(ctx context.Context, req PatchRequest) (ApplyR
 	}, true)
 }
 
+//nolint:funlen // orchestrates project/agent/workspace/volume reconciliation with heavily shared mutable state and many partial-result early returns; a forced split would move state between functions rather than reduce complexity.
 func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecycleHeld bool) (ApplyResult, error) {
 	normalized := req.Normalized
 	if HasValidationErrors(req.Issues) {

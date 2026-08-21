@@ -159,7 +159,8 @@ func (s *projectStore) ListProjectRunEventRunIDsForSandbox(ctx context.Context, 
 	return runIDs, nil
 }
 
-func (s *projectStore) ListProjectRunEventsForSandbox(ctx context.Context, sandboxID string, afterCreatedAt time.Time, afterRunID string, afterSequence uint64, limit int) ([]domain.ProjectRunEventRecord, error) {
+func (s *projectStore) ListProjectRunEventsForSandbox(ctx context.Context, sandboxID string, cursor domain.ProjectRunEventSandboxCursor) ([]domain.ProjectRunEventRecord, error) {
+	afterCreatedAt, afterRunID, afterSequence, limit := cursor.AfterCreatedAt, cursor.AfterRunID, cursor.AfterSequence, cursor.Limit
 	if limit <= 0 {
 		limit = 100
 	}

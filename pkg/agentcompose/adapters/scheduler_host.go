@@ -15,18 +15,18 @@ type SchedulerHostEvents struct {
 	Controller *schedulers.Controller
 }
 
-func (e SchedulerHostEvents) Add(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
+func (e SchedulerHostEvents) Add(ctx context.Context, event schedulers.SchedulerEventInput) error {
 	if e.Controller == nil {
 		return fmt.Errorf("scheduler controller is unavailable")
 	}
-	return e.Controller.AddSchedulerEvent(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+	return e.Controller.AddSchedulerEvent(ctx, event)
 }
 
-func (e SchedulerHostEvents) AddRecord(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
+func (e SchedulerHostEvents) AddRecord(ctx context.Context, event schedulers.SchedulerEventInput) (domain.SchedulerEvent, error) {
 	if e.Controller == nil {
 		return domain.SchedulerEvent{}, fmt.Errorf("scheduler controller is unavailable")
 	}
-	return e.Controller.AddSchedulerEventRecord(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+	return e.Controller.AddSchedulerEventRecord(ctx, event)
 }
 
 type SchedulerHostAgentExecutor struct {

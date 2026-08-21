@@ -652,7 +652,9 @@ func TestSandboxDriverStopPreservesFacadeTokensUntilRuntimeRelease(t *testing.T)
 	if err := store.SaveVMState(session.Summary.ID, domain.VMState{Driver: driverpkg.RuntimeDriverDocker, BoxID: "container-1"}); err != nil {
 		t.Fatalf("SaveVMState returned error: %v", err)
 	}
-	rawToken, token, err := llms.NewFacadeToken(session.Summary.ID, "model-1", "provider-1", llms.APIProtocolResponses, "test", "")
+	rawToken, token, err := llms.NewFacadeToken(llms.NewFacadeTokenRequest{
+		SandboxID: session.Summary.ID, Model: "model-1", ProviderID: "provider-1", WireAPI: llms.APIProtocolResponses, Source: "test", RunID: "",
+	})
 	if err != nil {
 		t.Fatalf("NewFacadeToken returned error: %v", err)
 	}

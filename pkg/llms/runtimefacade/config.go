@@ -34,21 +34,38 @@ type AgentRuntimeConfig struct {
 	Model string
 }
 
-func EnsureSessionLLMFacadeConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, agent, model, source, runID string) (map[string]string, error) {
-	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, agent, model, source, runID)
+// SessionFacadeConfigRequest bundles the config, credential store, target
+// session, and requested agent/model/source/run identifiers the
+// EnsureSessionXxxFacadeConfig entry points need to resolve and mint a
+// facade token. EnsureSessionStartupFacadeConfig ignores Agent and Model.
+type SessionFacadeConfigRequest struct {
+	Config  *appconfig.Config
+	Store   FacadeStore
+	Session *domain.Sandbox
+	Agent   string
+	Model   string
+	Source  string
+	RunID   string
+}
+
+func EnsureSessionLLMFacadeConfig(ctx context.Context, req SessionFacadeConfigRequest) (map[string]string, error) {
+	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return runtimeConfig.Env, nil
 }
 
-func EnsureSessionAgentRuntimeConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, agent, model, source, runID string) (AgentRuntimeConfig, error) {
+func EnsureSessionAgentRuntimeConfig(ctx context.Context, req SessionFacadeConfigRequest) (AgentRuntimeConfig, error) {
+	config, store, session, agent, model, source, runID := req.Config, req.Store, req.Session, req.Agent, req.Model, req.Source, req.RunID
 	if config == nil || store == nil || session == nil {
 		return AgentRuntimeConfig{}, nil
 	}
 	switch domain.NormalizeAgentKind(agent) {
 	case "codex":
-		env, err := llms.EnsureCodexFacadeConfig(ctx, config, store, session, model, source, runID)
+		env, err := llms.EnsureCodexFacadeConfig(ctx, llms.CodexFacadeConfigRequest{
+			Config: config, Store: store, Sandbox: session, Model: model, Source: source, RunID: runID,
+		})
 		return AgentRuntimeConfig{Env: env}, err
 	case "claude":
 		env, err := ensureSessionClaudeConfig(ctx, sessionFacadeCall{Config: config, Store: store, Session: session, Model: model, Source: source, RunID: runID})
@@ -57,7 +74,9 @@ func EnsureSessionAgentRuntimeConfig(ctx context.Context, config *appconfig.Conf
 		env, err := ensureSessionOpenCodeConfig(ctx, sessionFacadeCall{Config: config, Store: store, Session: session, Model: model, Source: source, RunID: runID})
 		return AgentRuntimeConfig{Env: env, Model: strings.TrimSpace(env["OPENCODE_MODEL"])}, err
 	case "pi":
-		env, err := llms.EnsurePiFacadeConfig(ctx, config, store, session, model, source, runID)
+		env, err := llms.EnsurePiFacadeConfig(ctx, llms.PiFacadeConfigRequest{
+			Config: config, Store: store, Sandbox: session, Model: model, Source: source, RunID: runID,
+		})
 		return AgentRuntimeConfig{Env: env}, err
 	case "dsh":
 		env, err := llms.EnsureDshFacadeConfig(ctx, llms.DshFacadeConfigRequest{
@@ -91,7 +110,9 @@ func ensureSessionClaudeConfig(ctx context.Context, call sessionFacadeCall) (map
 	if err != nil {
 		return nil, err
 	}
-	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, config, store, session.Summary.ID, llms.ProviderFamilyAnthropic, model, "", providerEnv)
+	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: config, SessionID: session.Summary.ID, PreferredProviderFamily: llms.ProviderFamilyAnthropic, RequestedModel: model, ProviderID: "", EnvItems: providerEnv,
+	})
 	tokenModel := ""
 	tokenProvider := ""
 	if err != nil {
@@ -102,7 +123,9 @@ func ensureSessionClaudeConfig(ctx context.Context, call sessionFacadeCall) (map
 		tokenModel = target.Model.Name
 		tokenProvider = target.Provider.ID
 	}
-	tokenValue, token, err := llms.NewFacadeToken(session.Summary.ID, tokenModel, tokenProvider, llms.APIProtocolMessages, source, runID)
+	tokenValue, token, err := llms.NewFacadeToken(llms.NewFacadeTokenRequest{
+		SandboxID: session.Summary.ID, Model: tokenModel, ProviderID: tokenProvider, WireAPI: llms.APIProtocolMessages, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +150,9 @@ func ensureSessionClaudeConfig(ctx context.Context, call sessionFacadeCall) (map
 }
 
 func ensureSessionOpenCodeConfig(ctx context.Context, call sessionFacadeCall) (map[string]string, error) {
-	return llms.EnsureOpenCodeFacadeConfig(ctx, call.Config, call.Store, call.Session, call.Model, call.Source, call.RunID)
+	return llms.EnsureOpenCodeFacadeConfig(ctx, llms.OpenCodeFacadeConfigRequest{
+		Config: call.Config, Store: call.Store, Sandbox: call.Session, Model: call.Model, Source: call.Source, RunID: call.RunID,
+	})
 }
 
 func isOptionalConfigError(err error) bool {

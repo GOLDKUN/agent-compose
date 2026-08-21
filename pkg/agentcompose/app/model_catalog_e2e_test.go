@@ -68,13 +68,15 @@ func TestE2EModelCatalogConfiguresOpenCodeFacadeTarget(t *testing.T) {
 	}}
 	runtimeConfig, err := runtimefacade.EnsureSessionAgentRuntimeConfig(
 		ctx,
-		config,
-		store,
-		sandbox,
-		"opencode",
-		"baizhi/deepseek-v4-flash",
-		runtimefacade.TokenSourceAgent,
-		"catalog-e2e-run",
+		runtimefacade.SessionFacadeConfigRequest{
+			Config:  config,
+			Store:   store,
+			Session: sandbox,
+			Agent:   "opencode",
+			Model:   "baizhi/deepseek-v4-flash",
+			Source:  runtimefacade.TokenSourceAgent,
+			RunID:   "catalog-e2e-run",
+		},
 	)
 	if err != nil {
 		t.Fatalf("configure OpenCode facade: %v", err)

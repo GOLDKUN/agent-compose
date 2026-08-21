@@ -137,10 +137,10 @@ func ResolveLLMTarget(ctx context.Context, config *appconfig.Config, store LLMRe
 	return resolveLLMTarget(ctx, config, store, requestedModel)
 }
 
-// runtimeLLMTargetQuery groups the shared inputs for resolving a runtime LLM
+// RuntimeLLMTargetQuery groups the shared inputs for resolving a runtime LLM
 // target: which model/provider was requested, from which session/family, and
 // (for the WithEnv variant) the session's own provider env items.
-type runtimeLLMTargetQuery struct {
+type RuntimeLLMTargetQuery struct {
 	Config                  *appconfig.Config
 	SessionID               string
 	PreferredProviderFamily string
@@ -149,7 +149,7 @@ type runtimeLLMTargetQuery struct {
 	EnvItems                []domain.SandboxEnvVar
 }
 
-func resolveRuntimeLLMTarget(ctx context.Context, store LLMResolverStore, q runtimeLLMTargetQuery) (ResolvedTarget, error) {
+func resolveRuntimeLLMTarget(ctx context.Context, store LLMResolverStore, q RuntimeLLMTargetQuery) (ResolvedTarget, error) {
 	config, requestedModel, providerID := q.Config, q.RequestedModel, q.ProviderID
 	if strings.TrimSpace(providerID) == "" {
 		if selectedProvider, selectedModel, ok := SplitProviderModelReference(requestedModel); ok && hasEnabledLLMProviderID(ctx, store, selectedProvider) {
@@ -168,11 +168,11 @@ func resolveRuntimeLLMTarget(ctx context.Context, store LLMResolverStore, q runt
 			return target, nil
 		}
 	}
-	return resolveRuntimeLLMTargetWithEnv(ctx, store, runtimeLLMTargetQuery{Config: config, RequestedModel: requestedModel, ProviderID: providerID})
+	return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{Config: config, RequestedModel: requestedModel, ProviderID: providerID})
 }
 
 func ResolveRuntimeLLMTarget(ctx context.Context, config *appconfig.Config, store LLMResolverStore, requestedModel, providerID string) (ResolvedTarget, error) {
-	return resolveRuntimeLLMTarget(ctx, store, runtimeLLMTargetQuery{Config: config, RequestedModel: requestedModel, ProviderID: providerID})
+	return resolveRuntimeLLMTarget(ctx, store, RuntimeLLMTargetQuery{Config: config, RequestedModel: requestedModel, ProviderID: providerID})
 }
 
 // providerBootstrapContext groups the routing signals
@@ -297,7 +297,7 @@ func sessionHasEnvProvider(sessionID, requestedModel string, envItems []domain.S
 	return firstNonEmptyTrimmed(SessionAnthropicEnvModel(envItems), EnvItemValue(envItems, "LLM_MODEL"), sessionRequestedModel) != ""
 }
 
-func resolveRuntimeLLMTargetWithEnv(ctx context.Context, store LLMResolverStore, q runtimeLLMTargetQuery) (ResolvedTarget, error) {
+func ResolveRuntimeLLMTargetWithEnv(ctx context.Context, store LLMResolverStore, q RuntimeLLMTargetQuery) (ResolvedTarget, error) {
 	config, requestedModel, providerID, envItems := q.Config, q.RequestedModel, q.ProviderID, q.EnvItems
 	sessionID := strings.TrimSpace(q.SessionID)
 	preferredProviderFamily := NormalizeOptionalProviderType(q.PreferredProviderFamily)
@@ -436,12 +436,6 @@ func legacyReferenceUsesDefaultEnv(providerID string, lookup EnvProviderLookup) 
 	default:
 		return false
 	}
-}
-
-func ResolveRuntimeLLMTargetWithEnv(ctx context.Context, config *appconfig.Config, store LLMResolverStore, sessionID, preferredProviderFamily, requestedModel, providerID string, envItems []domain.SandboxEnvVar) (ResolvedTarget, error) {
-	return resolveRuntimeLLMTargetWithEnv(ctx, store, runtimeLLMTargetQuery{
-		Config: config, SessionID: sessionID, PreferredProviderFamily: preferredProviderFamily, RequestedModel: requestedModel, ProviderID: providerID, EnvItems: envItems,
-	})
 }
 
 func bootstrapAnthropicLLMConfig(ctx context.Context, config *appconfig.Config, store LLMResolverStore, requestedModel string) error {

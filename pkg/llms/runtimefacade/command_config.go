@@ -36,6 +36,20 @@ func (s *trackingCommandFacadeStore) SaveLLMFacadeToken(ctx context.Context, tok
 	return nil
 }
 
+// CommandFacadeConfigRequest bundles the config, credential store, target
+// session, and requested agent/model/source/run identifiers
+// EnsureSessionCommandFacadeConfig needs to reconstruct the transient facade
+// environment on a command's in-memory Sandbox clone.
+type CommandFacadeConfigRequest struct {
+	Config  *appconfig.Config
+	Store   CommandFacadeStore
+	Session *domain.Sandbox
+	Agent   string
+	Model   string
+	Source  string
+	RunID   string
+}
+
 // EnsureSessionCommandFacadeConfig reconstructs the transient facade
 // environment on the command's in-memory Sandbox clone. Startup family
 // variables are applied first and the selected agent variables are applied
@@ -43,13 +57,8 @@ func (s *trackingCommandFacadeStore) SaveLLMFacadeToken(ctx context.Context, tok
 //
 // Any failure removes every token successfully persisted by this invocation.
 // Successful callers own the returned token hashes until command termination.
-func EnsureSessionCommandFacadeConfig(
-	ctx context.Context,
-	config *appconfig.Config,
-	store CommandFacadeStore,
-	session *domain.Sandbox,
-	agent, model, source, runID string,
-) (result CommandFacadeConfig, returnErr error) {
+func EnsureSessionCommandFacadeConfig(ctx context.Context, req CommandFacadeConfigRequest) (result CommandFacadeConfig, returnErr error) {
+	config, store, session, agent, model, source, runID := req.Config, req.Store, req.Session, req.Agent, req.Model, req.Source, req.RunID
 	if config == nil || store == nil || session == nil {
 		return CommandFacadeConfig{}, nil
 	}
@@ -70,11 +79,15 @@ func EnsureSessionCommandFacadeConfig(
 		returnErr = errors.Join(returnErr, cleanupErr)
 	}()
 
-	startupEnv, err := EnsureSessionStartupFacadeConfig(ctx, config, tracker, session, source, runID)
+	startupEnv, err := EnsureSessionStartupFacadeConfig(ctx, SessionFacadeConfigRequest{
+		Config: config, Store: tracker, Session: session, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return CommandFacadeConfig{}, err
 	}
-	selectedEnv, err := EnsureSessionLLMFacadeConfig(ctx, config, tracker, session, agent, model, source, runID)
+	selectedEnv, err := EnsureSessionLLMFacadeConfig(ctx, SessionFacadeConfigRequest{
+		Config: config, Store: tracker, Session: session, Agent: agent, Model: model, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return CommandFacadeConfig{}, err
 	}

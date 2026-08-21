@@ -61,7 +61,9 @@ func EnsureDshFacadeConfig(ctx context.Context, req DshFacadeConfigRequest) (map
 		return nil, err
 	}
 	facadeBaseURL := strings.TrimRight(baseURL, "/") + "/api/runtime/sandboxes/" + sandbox.Summary.ID + "/llm/openai/v1"
-	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, APIProtocolChatCompletions, req.Source, req.RunID)
+	tokenValue, token, err := NewFacadeToken(NewFacadeTokenRequest{
+		SandboxID: sandbox.Summary.ID, Model: target.Model.Name, ProviderID: target.Provider.ID, WireAPI: APIProtocolChatCompletions, Source: req.Source, RunID: req.RunID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -104,14 +106,20 @@ func resolveDshFacadeTarget(ctx context.Context, in dshFacadeTargetInput) (Resol
 		if err != nil {
 			return ResolvedTarget{}, err
 		}
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, providerID, envItems)
+		return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+			Config: config, SessionID: sandboxID, PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: model, ProviderID: providerID, EnvItems: envItems,
+		})
 	}
 	if HasEnabledLLMProviderID(ctx, store, providerID) {
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, "", model, providerID, envItems)
+		return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+			Config: config, SessionID: sandboxID, PreferredProviderFamily: "", RequestedModel: model, ProviderID: providerID, EnvItems: envItems,
+		})
 	}
 	switch providerID {
 	case ProviderFamilyOpenAI, ProviderIDDefaultOpenAI:
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, "", envItems)
+		return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+			Config: config, SessionID: sandboxID, PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: model, ProviderID: "", EnvItems: envItems,
+		})
 	default:
 		return resolveCustomOpenAIFacadeTarget(ctx, customOpenAIFacadeTargetRequest{
 			Config:     config,

@@ -630,33 +630,33 @@ type hostEventsFake struct {
 	addRecordErr error
 }
 
-func (e *hostEventsFake) Add(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error {
-	_, err := e.AddRecord(ctx, schedulerID, runID, triggerID, eventType, level, message, payload, linkedSandboxID, linkedCellID, linkedAgentThreadID)
+func (e *hostEventsFake) Add(ctx context.Context, event schedulers.SchedulerEventInput) error {
+	_, err := e.AddRecord(ctx, event)
 	return err
 }
 
-func (e *hostEventsFake) AddRecord(_ context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) (domain.SchedulerEvent, error) {
-	if e.addRecordErr != nil && (e.failType == "" || e.failType == eventType) {
+func (e *hostEventsFake) AddRecord(_ context.Context, input schedulers.SchedulerEventInput) (domain.SchedulerEvent, error) {
+	if e.addRecordErr != nil && (e.failType == "" || e.failType == input.EventType) {
 		return domain.SchedulerEvent{}, e.addRecordErr
 	}
 	payloadJSON := ""
-	if payload != nil {
-		if data, err := json.Marshal(payload); err == nil {
+	if input.Payload != nil {
+		if data, err := json.Marshal(input.Payload); err == nil {
 			payloadJSON = string(data)
 		}
 	}
 	event := domain.SchedulerEvent{
 		ID:                  fmt.Sprintf("event-%d", len(e.items)+1),
-		SchedulerID:         schedulerID,
-		RunID:               runID,
-		TriggerID:           triggerID,
-		Type:                eventType,
-		Level:               level,
-		Message:             message,
+		SchedulerID:         input.SchedulerID,
+		RunID:               input.RunID,
+		TriggerID:           input.TriggerID,
+		Type:                input.EventType,
+		Level:               input.Level,
+		Message:             input.Message,
 		PayloadJSON:         payloadJSON,
-		LinkedSandboxID:     linkedSandboxID,
-		LinkedCellID:        linkedCellID,
-		LinkedAgentThreadID: linkedAgentThreadID,
+		LinkedSandboxID:     input.LinkedSandboxID,
+		LinkedCellID:        input.LinkedCellID,
+		LinkedAgentThreadID: input.LinkedAgentThreadID,
 		CreatedAt:           time.Now().UTC(),
 	}
 	e.items = append(e.items, event)

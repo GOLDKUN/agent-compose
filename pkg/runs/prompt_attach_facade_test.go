@@ -136,9 +136,11 @@ func TestEnsurePromptAttachClaudeLLMFacadeEnvPreservesRequestedModelWithoutConfi
 	sandbox := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-claude-attach"}}
 	env, err := ensurePromptAttachClaudeLLMFacadeEnv(
 		context.Background(),
-		&appconfig.Config{RuntimeBaseURL: "http://agent-compose.test:7410"},
-		store,
-		sandbox,
+		promptAttachFacadeTarget{
+			Config:  &appconfig.Config{RuntimeBaseURL: "http://agent-compose.test:7410"},
+			Store:   store,
+			Sandbox: sandbox,
+		},
 		" claude-sonnet-4-20250514 ",
 		"run-claude-attach",
 	)

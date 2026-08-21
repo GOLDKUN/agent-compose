@@ -44,7 +44,7 @@ func TestIntegrationEnsureSessionOpenCodeKeepsResponsesIngressForChatUpstream(t 
 		{Name: "LLM_MODEL", Value: "gpt-chat"},
 	})
 
-	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "opencode", "openai/gpt-chat", TokenSourceAgent, "run-chat")
+	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "opencode", Model: "openai/gpt-chat", Source: TokenSourceAgent, RunID: "run-chat"})
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig returned error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestIntegrationEnsureSessionOpenCodeKeepsConfiguredProviderInMixedEnvironme
 
 	assertTarget := func(testSession *domain.Sandbox, reference, model, protocol, providerID, runID string) {
 		t.Helper()
-		runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, testSession, "opencode", reference, TokenSourceAgent, runID)
+		runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: testSession, Agent: "opencode", Model: reference, Source: TokenSourceAgent, RunID: runID})
 		if err != nil {
 			t.Fatalf("EnsureSessionAgentRuntimeConfig(%q) returned error: %v", reference, err)
 		}

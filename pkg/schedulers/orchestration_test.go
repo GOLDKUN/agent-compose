@@ -43,7 +43,8 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 		LeaveRun: func(schedulerID string) {
 			leaves = append(leaves, schedulerID)
 		},
-		AddSchedulerEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
+		AddSchedulerEvent: func(_ context.Context, event schedulers.SchedulerEventInput) error {
+			eventType := event.EventType
 			events = append(events, eventType)
 			return nil
 		},
@@ -59,7 +60,7 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 		},
 	})
 
-	run, err := executor.Run(ctx, scheduler, &trigger, `{"eventId":"evt-1"}`, "manual", schedulers.RunOptions{})
+	run, err := executor.Run(ctx, schedulers.RunTriggerRequest{Scheduler: scheduler, Trigger: &trigger, PayloadJSON: `{"eventId":"evt-1"}`, Source: "manual"})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
@@ -86,21 +87,22 @@ func TestRunExecutorLifecycleWorkflows(t *testing.T) {
 		ArtifactsDir:  func(schedulerID, runID string) string { return filepath.Join(t.TempDir(), schedulerID, runID) },
 		WriteArtifact: func(string, string, string) error { return nil },
 		EnterRun:      func(domain.Scheduler) bool { return false },
-		AddSchedulerEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
+		AddSchedulerEvent: func(_ context.Context, event schedulers.SchedulerEventInput) error {
+			eventType := event.EventType
 			events = append(events, eventType)
 			return nil
 		},
 		UpdateTriggerEventDelivery: func(context.Context, domain.SchedulerRunSummary) {},
 		Notify:                     func(string) {},
 	})
-	skipped, err := busyExecutor.Run(ctx, scheduler, nil, `{}`, "manual", schedulers.RunOptions{})
+	skipped, err := busyExecutor.Run(ctx, schedulers.RunTriggerRequest{Scheduler: scheduler, PayloadJSON: `{}`, Source: "manual"})
 	if err != nil {
 		t.Fatalf("busy Run returned error: %v", err)
 	}
 	if skipped.Status != domain.SchedulerRunStatusSkipped || skipped.Error == "" || busyStore.lastError[scheduler.Summary.ID] == "" {
 		t.Fatalf("skipped run/store = %#v/%#v", skipped, busyStore.lastError)
 	}
-	if _, err := busyExecutor.Run(ctx, scheduler, nil, `{}`, "manual", schedulers.RunOptions{RetryWhenBusy: true}); !errors.Is(err, schedulers.ErrRunBusyForRetry) {
+	if _, err := busyExecutor.Run(ctx, schedulers.RunTriggerRequest{Scheduler: scheduler, PayloadJSON: `{}`, Source: "manual", Options: schedulers.RunOptions{RetryWhenBusy: true}}); !errors.Is(err, schedulers.ErrRunBusyForRetry) {
 		t.Fatalf("busy retry err = %v", err)
 	}
 }
@@ -159,11 +161,11 @@ func TestEventDispatcherWorkflows(t *testing.T) {
 			return webhooks.NoopReservations(1), true
 		},
 		RunTimeout: func(time.Duration) time.Duration { return time.Second },
-		Run: func(_ context.Context, _ domain.Scheduler, _ *domain.SchedulerTrigger, payloadJSON, source string, _ schedulers.RunOptions, ack ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+		Run: func(_ context.Context, req schedulers.RunTriggerRequest, ack ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
 			if len(ack) > 0 && ack[0] != nil {
 				_ = ack[0](ctx)
 			}
-			runCalled <- source + ":" + payloadJSON
+			runCalled <- req.Source + ":" + req.PayloadJSON
 			return domain.SchedulerRunSummary{}, nil
 		},
 	})
@@ -249,7 +251,8 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 			return webhooks.NoopReservations(1), true
 		},
 		RunTimeout: func(time.Duration) time.Duration { return time.Second },
-		Prepare: func(_ context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options schedulers.RunOptions) (schedulers.PreparedRun, error) {
+		Prepare: func(_ context.Context, req schedulers.RunTriggerRequest) (schedulers.PreparedRun, error) {
+			scheduler, trigger, payloadJSON, source, options := req.Scheduler, req.Trigger, req.PayloadJSON, req.Source, req.Options
 			if !options.AlreadyEntered || source != "topic.webhook" || !strings.Contains(payloadJSON, `"topic":"topic.webhook"`) {
 				t.Fatalf("Prepare source/options/payload = %q/%#v/%q", source, options, payloadJSON)
 			}
@@ -322,7 +325,8 @@ func TestEventDispatcherWebhookAndWrapperWorkflows(t *testing.T) {
 		ReserveSlots: func(domain.SchedulerTopicEvent, int) ([]*webhooks.Reservation, bool) {
 			return webhooks.NoopReservations(2), true
 		},
-		Prepare: func(_ context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, _ string, _ schedulers.RunOptions) (schedulers.PreparedRun, error) {
+		Prepare: func(_ context.Context, req schedulers.RunTriggerRequest) (schedulers.PreparedRun, error) {
+			scheduler, trigger, payloadJSON := req.Scheduler, req.Trigger, req.PayloadJSON
 			if scheduler.Summary.ID == "scheduler-2" {
 				return schedulers.PreparedRun{}, errors.New("prepare failed")
 			}
@@ -380,8 +384,8 @@ func TestSchedulerCollectDueAndDispatch(t *testing.T) {
 			}
 		},
 		RunTimeout: func(time.Duration) time.Duration { return time.Second },
-		Run: func(_ context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, _ string, source string, _ schedulers.RunOptions, _ ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-			runCalled <- scheduler.Summary.ID + "/" + trigger.ID + "/" + source
+		Run: func(_ context.Context, req schedulers.RunTriggerRequest, _ ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+			runCalled <- req.Scheduler.Summary.ID + "/" + req.Trigger.ID + "/" + req.Source
 			return domain.SchedulerRunSummary{}, nil
 		},
 	})

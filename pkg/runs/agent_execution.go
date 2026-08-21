@@ -50,7 +50,23 @@ func (c *Controller) projectRunAgentDefinition(ctx context.Context, run domain.P
 	return agent, nil
 }
 
-func projectRunAgentExecutionStream(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandbox *domain.Sandbox, sink *StreamSink, hub *RunLogHub) execution.AgentExecutionStream {
+// agentExecutionStreamRequest bundles the coordinator, run, target sandbox,
+// output sink, and log hub projectRunAgentExecutionStream needs to build the
+// callbacks execution.AgentExecutionStream fires as the agent run progresses.
+type agentExecutionStreamRequest struct {
+	Coordinator *Coordinator
+	Run         domain.ProjectRunRecord
+	Sandbox     *domain.Sandbox
+	Sink        *StreamSink
+	Hub         *RunLogHub
+}
+
+func projectRunAgentExecutionStream(ctx context.Context, req agentExecutionStreamRequest) execution.AgentExecutionStream {
+	coordinator := req.Coordinator
+	run := req.Run
+	sandbox := req.Sandbox
+	sink := req.Sink
+	hub := req.Hub
 	return execution.AgentExecutionStream{
 		OnStart: func(cell domain.NotebookCell) error {
 			if coordinator != nil {

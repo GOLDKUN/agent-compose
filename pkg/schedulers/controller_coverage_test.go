@@ -68,7 +68,7 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 	if !identity.IsID(manualRun.ID) || identity.ShortID(manualRun.ID) == "" {
 		t.Fatalf("RunNow run id = %q, want SHA-256 resource id", manualRun.ID)
 	}
-	prepared, err := controller.Prepare(ctx, created, &created.Triggers[0], `{"prepared":true}`, "manual", RunOptions{})
+	prepared, err := controller.Prepare(ctx, RunTriggerRequest{Scheduler: created, Trigger: &created.Triggers[0], PayloadJSON: `{"prepared":true}`, Source: "manual"})
 	if err != nil || prepared.Run.Status != domain.SchedulerRunStatusRunning {
 		t.Fatalf("Prepare prepared=%#v err=%v", prepared, err)
 	}
@@ -79,7 +79,7 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 	if err != nil || executed.Status != domain.SchedulerRunStatusSucceeded {
 		t.Fatalf("Execute run=%#v err=%v", executed, err)
 	}
-	prepared, err = controller.Prepare(ctx, created, &created.Triggers[0], `{"abort":true}`, "manual", RunOptions{})
+	prepared, err = controller.Prepare(ctx, RunTriggerRequest{Scheduler: created, Trigger: &created.Triggers[0], PayloadJSON: `{"abort":true}`, Source: "manual"})
 	if err != nil {
 		t.Fatalf("Prepare before Abort returned error: %v", err)
 	}
@@ -106,11 +106,16 @@ func TestControllerCoverageWorkflow(t *testing.T) {
 		t.Fatalf("parallel EnterRun should succeed")
 	}
 	controller.LeaveRun(created.Summary.ID)
-	event, err := controller.AddSchedulerEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "scheduler.test", "", "message", map[string]any{"ok": true}, "session-1", "cell-1", "agent-session")
+	event, err := controller.AddSchedulerEventRecord(ctx, SchedulerEventInput{
+		SchedulerID: created.Summary.ID, RunID: "run-1", TriggerID: "trigger-1", EventType: "scheduler.test",
+		Message: "message", Payload: map[string]any{"ok": true}, LinkedSandboxID: "session-1", LinkedCellID: "cell-1", LinkedAgentThreadID: "agent-session",
+	})
 	if err != nil || event.ID != "event-id" || event.Level != "info" {
 		t.Fatalf("AddSchedulerEventRecord event=%#v err=%v", event, err)
 	}
-	if _, err := controller.AddSchedulerEventRecord(ctx, created.Summary.ID, "run-1", "trigger-1", "scheduler.bad", "", "message", func() {}, "", "", ""); err == nil {
+	if _, err := controller.AddSchedulerEventRecord(ctx, SchedulerEventInput{
+		SchedulerID: created.Summary.ID, RunID: "run-1", TriggerID: "trigger-1", EventType: "scheduler.bad", Message: "message", Payload: func() {},
+	}); err == nil {
 		t.Fatalf("AddSchedulerEventRecord invalid payload returned nil error")
 	}
 	dir := controller.RunArtifactsDir(created.Summary.ID, "run-1")

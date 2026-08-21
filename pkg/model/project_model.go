@@ -159,6 +159,16 @@ type ProjectRunEventRecord struct {
 	CreatedAt   time.Time           `json:"created_at"`
 }
 
+// ProjectRunEventSandboxCursor describes the position a sandbox-scoped
+// project run event listing should resume after, plus the page size to
+// return.
+type ProjectRunEventSandboxCursor struct {
+	AfterCreatedAt time.Time
+	AfterRunID     string
+	AfterSequence  uint64
+	Limit          int
+}
+
 type ProjectListOptions struct {
 	Query          string
 	IncludeRemoved bool

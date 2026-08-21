@@ -45,7 +45,7 @@ type RunEventStore interface {
 	HasProjectRunEvents(context.Context, string) (bool, error)
 	ListProjectRunEventRunIDsForSandbox(context.Context, string) ([]string, error)
 	ListProjectRunEvents(context.Context, string, uint64, int) ([]domain.ProjectRunEventRecord, error)
-	ListProjectRunEventsForSandbox(context.Context, string, time.Time, string, uint64, int) ([]domain.ProjectRunEventRecord, error)
+	ListProjectRunEventsForSandbox(context.Context, string, domain.ProjectRunEventSandboxCursor) ([]domain.ProjectRunEventRecord, error)
 	ListProjectRunEventsPage(context.Context, string, int, int) ([]domain.ProjectRunEventRecord, error)
 	ListProjectRunEventsForSandboxPage(context.Context, string, int, int) ([]domain.ProjectRunEventRecord, error)
 	CountProjectRunEvents(context.Context, string) (int, error)

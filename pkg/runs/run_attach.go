@@ -16,9 +16,24 @@ import (
 	"agent-compose/pkg/projects"
 )
 
-func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run domain.ProjectRunRecord, req RunAgentRequest, warnings []string, start RunAttachInput, mode RunAttachMode, receive RunAttachReceiver, send RunAttachSender) (domain.ProjectRunRecord, error, error) {
+// startedRunAttachContext bundles the started run's state and the first
+// attach frame executeStartedProjectRunAttach needs to run the interactive
+// attach loop.
+type startedRunAttachContext struct {
+	Run      domain.ProjectRunRecord
+	Request  RunAgentRequest
+	Warnings []string
+	Start    RunAttachInput
+	Mode     RunAttachMode
+}
+
+func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, attach startedRunAttachContext, receive RunAttachReceiver, send RunAttachSender) (domain.ProjectRunRecord, error, error) {
+	run := attach.Run
+	req := attach.Request
+	warnings := attach.Warnings
+	start := attach.Start
+	mode := attach.Mode
 	coordinator := NewCoordinator(c.configDB, projects.StableProjectRunID)
-	commandText := strings.TrimSpace(req.Command)
 	transitionCtx := context.WithoutCancel(ctx)
 	prepared, err := c.prepareProjectRun(ctx, run, req.Env)
 	if err != nil {
@@ -48,11 +63,12 @@ func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run dom
 	run = withRunWarnings(run, warnings)
 	var transition TransitionRequest
 	var execErr error
+	runCtx := interactionRunContext{Coordinator: coordinator, Run: run, Sandbox: sandboxResult.Sandbox, Request: req}
 	switch mode {
 	case RunAttachModePrompt:
-		transition, execErr = c.runPromptInteraction(ctx, coordinator, run, sandboxResult.Sandbox, req, start, receive, send)
+		transition, execErr = c.runPromptInteraction(ctx, runCtx, start, receive, send)
 	default:
-		transition, execErr = c.runCommandInteraction(ctx, coordinator, run, sandboxResult.Sandbox, req, commandText, start, receive, send)
+		transition, execErr = c.runCommandInteraction(ctx, runCtx, start, receive, send)
 	}
 	if execErr != nil || transition.ExitCode != 0 {
 		run, err = c.completeProjectRunError(transitionCtx, ctx, transition, execErr)
@@ -75,46 +91,53 @@ func (c *Controller) executeStartedProjectRunAttach(ctx context.Context, run dom
 	return run, nil, nil
 }
 
-func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandbox *domain.Sandbox, req RunAgentRequest, commandText string, start RunAttachInput, receive RunAttachReceiver, send RunAttachSender) (TransitionRequest, error) {
+// interactionRunContext bundles the coordinator, run, target sandbox, and
+// originating request shared by the prompt/command attach interaction paths.
+type interactionRunContext struct {
+	Coordinator *Coordinator
+	Run         domain.ProjectRunRecord
+	Sandbox     *domain.Sandbox
+	Request     RunAgentRequest
+}
+
+// commandInteractionSession is the runtime interaction session
+// openCommandInteraction hands back to runCommandInteraction once the
+// runtime dependencies are validated, start artifacts are written, and the
+// interaction is open.
+type commandInteractionSession struct {
+	Run         domain.ProjectRunRecord
+	Interaction driverpkg.RuntimeInteraction
+	LogsPath    string
+}
+
+func (c *Controller) openCommandInteraction(ctx context.Context, runCtx interactionRunContext, commandText string, start RunAttachInput) (commandInteractionSession, error) {
+	run := runCtx.Run
+	sandbox := runCtx.Sandbox
+	req := runCtx.Request
 	artifactsDir := projectRunCommandArtifactsDir(run, sandbox)
 	logsPath := filepath.Join(artifactsDir, "transcript.txt")
-	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath}
 	if c.store == nil || c.runtime == nil {
-		err := fmt.Errorf("command runtime dependencies are required")
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("command execution failed: %v", err)
-		return transition, err
+		return commandInteractionSession{}, fmt.Errorf("command runtime dependencies are required")
 	}
 	appconfig.ApplyDefaultGuestPaths(c.config)
 	vmState, err := c.store.GetVMState(sandbox.Summary.ID)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("command execution failed: %v", err)
-		return transition, err
+		return commandInteractionSession{}, err
 	}
 	runtime, err := c.runtime(sandbox)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("command execution failed: %v", err)
-		return transition, err
+		return commandInteractionSession{}, err
 	}
 	interactionRuntime, ok := runtime.(InteractionRuntime)
 	if !ok {
-		err := fmt.Errorf("%w: command attach is unsupported by this runtime driver", domain.ErrUnsupported)
-		transition.ExitCode = 1
-		transition.Error = err.Error()
-		return transition, err
+		return commandInteractionSession{}, fmt.Errorf("%w: command attach is unsupported by this runtime driver", domain.ErrUnsupported)
 	}
 	if err := os.MkdirAll(artifactsDir, 0o755); err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("command execution failed: %v", err)
-		return transition, err
+		return commandInteractionSession{}, err
 	}
-	run, err = markProjectRunInteractionArtifacts(ctx, coordinator, run, sandbox, logsPath, artifactsDir)
+	run, err = markProjectRunInteractionArtifacts(ctx, runCtx, logsPath, artifactsDir)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("command execution failed: %v", err)
-		return transition, err
+		return commandInteractionSession{}, err
 	}
 	spec := driverpkg.RuntimeStartSpec{
 		OperationID: run.RunID,
@@ -135,11 +158,26 @@ func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coo
 	}
 	interaction, err := interactionRuntime.OpenInteraction(ctx, sandbox, vmState, spec)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("command execution failed: %v", err)
-		return transition, err
+		return commandInteractionSession{}, err
 	}
 	interaction = driverpkg.GuardRuntimeInteractionInput(interaction)
+	return commandInteractionSession{Run: run, Interaction: interaction, LogsPath: logsPath}, nil
+}
+
+func (c *Controller) runCommandInteraction(ctx context.Context, runCtx interactionRunContext, start RunAttachInput, receive RunAttachReceiver, send RunAttachSender) (TransitionRequest, error) {
+	run := runCtx.Run
+	sandbox := runCtx.Sandbox
+	commandText := strings.TrimSpace(runCtx.Request.Command)
+	session, err := c.openCommandInteraction(ctx, runCtx, commandText, start)
+	if err != nil {
+		logsPath := filepath.Join(projectRunCommandArtifactsDir(run, sandbox), "transcript.txt")
+		return TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath, ExitCode: 1, Error: fmt.Sprintf("command execution failed: %v", err)}, err
+	}
+	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID}
+	run = session.Run
+	logsPath := session.LogsPath
+	transition.LogsPath = logsPath
+	interaction := session.Interaction
 	defer func() { _ = interaction.CloseSend() }()
 	go pumpRunAttachInput(receive, interaction)
 	accumulator := execution.ExecStreamAccumulator{}
@@ -204,7 +242,10 @@ func (c *Controller) runCommandInteraction(ctx context.Context, coordinator *Coo
 	}
 }
 
-func markProjectRunInteractionArtifacts(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandbox *domain.Sandbox, logsPath, artifactsDir string) (domain.ProjectRunRecord, error) {
+func markProjectRunInteractionArtifacts(ctx context.Context, runCtx interactionRunContext, logsPath, artifactsDir string) (domain.ProjectRunRecord, error) {
+	coordinator := runCtx.Coordinator
+	run := runCtx.Run
+	sandbox := runCtx.Sandbox
 	if coordinator == nil || sandbox == nil {
 		return run, nil
 	}

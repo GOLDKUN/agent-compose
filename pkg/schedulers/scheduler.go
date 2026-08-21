@@ -18,7 +18,7 @@ type SchedulerDependencies struct {
 	Store         SchedulerStore
 	Snapshot      func() map[string]domain.Scheduler
 	ReplaceCached func(map[string]domain.Scheduler)
-	Run           func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error)
+	Run           func(ctx context.Context, req RunTriggerRequest, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error)
 	RunTimeout    func(time.Duration) time.Duration
 }
 
@@ -73,7 +73,7 @@ func (s *Scheduler) Dispatch(jobs []ScheduledRun) {
 		runCtx, cancel := context.WithTimeout(s.rootCtx(), s.runTimeout(0))
 		go func(job ScheduledRun) {
 			defer cancel()
-			if _, err := s.deps.Run(runCtx, job.Scheduler, &job.Trigger, job.PayloadJSON, job.Source, RunOptions{}); err != nil {
+			if _, err := s.deps.Run(runCtx, RunTriggerRequest{Scheduler: job.Scheduler, Trigger: &job.Trigger, PayloadJSON: job.PayloadJSON, Source: job.Source}); err != nil {
 				slog.Warn("scheduler run failed", "scheduler_id", job.Scheduler.Summary.ID, "trigger_id", job.Trigger.ID, "trigger_kind", job.Trigger.Kind, "error", err)
 			}
 		}(job)

@@ -27,9 +27,22 @@ func SplitPiModel(value string) (string, string, error) {
 	return providerID, model, nil
 }
 
+// PiFacadeConfigRequest bundles the config, credential store, target
+// sandbox, and requested model/source/run identifiers
+// EnsurePiFacadeConfig needs to resolve and mint a Pi facade token.
+type PiFacadeConfigRequest struct {
+	Config  *appconfig.Config
+	Store   PiFacadeStore
+	Sandbox *domain.Sandbox
+	Model   string
+	Source  string
+	RunID   string
+}
+
 // EnsurePiFacadeConfig resolves Pi's explicit provider/model selection, writes
 // the managed models.json, and returns only facade-scoped credentials.
-func EnsurePiFacadeConfig(ctx context.Context, config *appconfig.Config, store PiFacadeStore, sandbox *domain.Sandbox, model, source, runID string) (map[string]string, error) {
+func EnsurePiFacadeConfig(ctx context.Context, req PiFacadeConfigRequest) (map[string]string, error) {
+	config, store, sandbox, model, source, runID := req.Config, req.Store, req.Sandbox, req.Model, req.Source, req.RunID
 	providerID, modelName, err := SplitPiModel(model)
 	if err != nil {
 		return nil, err
@@ -47,7 +60,9 @@ func EnsurePiFacadeConfig(ctx context.Context, config *appconfig.Config, store P
 	if err != nil {
 		return nil, err
 	}
-	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, facadeProtocol, source, runID)
+	tokenValue, token, err := NewFacadeToken(NewFacadeTokenRequest{
+		SandboxID: sandbox.Summary.ID, Model: target.Model.Name, ProviderID: target.Provider.ID, WireAPI: facadeProtocol, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -93,13 +108,19 @@ func resolvePiFacadeTarget(ctx context.Context, in piFacadeTargetInput) (Resolve
 		return resolvePiEnvFacadeTarget(ctx, piEnvFacadeTargetInput{Config: config, Store: store, SandboxID: sandboxID, RequestedProviderID: providerID, Model: model, EnvItems: envItems})
 	}
 	if HasEnabledLLMProviderID(ctx, store, providerID) {
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, "", model, providerID, envItems)
+		return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+			Config: config, SessionID: sandboxID, PreferredProviderFamily: "", RequestedModel: model, ProviderID: providerID, EnvItems: envItems,
+		})
 	}
 	switch providerID {
 	case ProviderFamilyAnthropic:
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyAnthropic, model, "", envItems)
+		return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+			Config: config, SessionID: sandboxID, PreferredProviderFamily: ProviderFamilyAnthropic, RequestedModel: model, ProviderID: "", EnvItems: envItems,
+		})
 	case ProviderFamilyOpenAI, ProviderIDDefaultOpenAI:
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, "", envItems)
+		return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+			Config: config, SessionID: sandboxID, PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: model, ProviderID: "", EnvItems: envItems,
+		})
 	default:
 		return resolveCustomOpenAIFacadeTarget(ctx, customOpenAIFacadeTargetRequest{
 			Config:     config,
@@ -129,13 +150,17 @@ func resolvePiEnvFacadeTarget(ctx context.Context, in piEnvFacadeTargetInput) (R
 		if err != nil {
 			return ResolvedTarget{}, err
 		}
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, family, model, providerID, envItems)
+		return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+			Config: config, SessionID: sandboxID, PreferredProviderFamily: family, RequestedModel: model, ProviderID: providerID, EnvItems: envItems,
+		})
 	}
 	providerID, err := ensureSessionOpenAIEnvProviderWithConfig(ctx, store, SessionEnvProviderQuery{Config: config, SessionID: sandboxID, RequestedModel: model, EnvItems: envItems})
 	if err != nil {
 		return ResolvedTarget{}, err
 	}
-	return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, providerID, envItems)
+	return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+		Config: config, SessionID: sandboxID, PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: model, ProviderID: providerID, EnvItems: envItems,
+	})
 }
 
 func piEnvProviderFamily(ctx context.Context, store ProviderListStore, requestedProviderID string, envItems []domain.SandboxEnvVar) string {

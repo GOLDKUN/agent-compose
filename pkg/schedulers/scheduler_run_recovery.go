@@ -35,11 +35,11 @@ func (c *Controller) RecoverInterruptedRuns(ctx context.Context, startedAt time.
 			recoveryErrors = append(recoveryErrors, fmt.Errorf("recover interrupted scheduler run %s/%s: %w", run.SchedulerID, run.ID, err))
 			continue
 		}
-		if _, err := c.AddSchedulerEventRecord(
-			ctx, run.SchedulerID, run.ID, run.TriggerID,
-			"scheduler.run.failed", "error", interruptedSchedulerRunError,
-			map[string]any{"reason": "daemon_interrupted"}, "", "", "",
-		); err != nil {
+		if _, err := c.AddSchedulerEventRecord(ctx, SchedulerEventInput{
+			SchedulerID: run.SchedulerID, RunID: run.ID, TriggerID: run.TriggerID,
+			EventType: "scheduler.run.failed", Level: "error", Message: interruptedSchedulerRunError,
+			Payload: map[string]any{"reason": "daemon_interrupted"},
+		}); err != nil {
 			recoveryErrors = append(recoveryErrors, fmt.Errorf("record interrupted scheduler run event %s/%s: %w", run.SchedulerID, run.ID, err))
 		}
 	}

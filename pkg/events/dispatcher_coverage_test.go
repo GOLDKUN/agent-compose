@@ -122,9 +122,9 @@ func (s *dispatcherCoverageStore) ClaimEvent(context.Context, string, string, ti
 	return true, nil
 }
 
-func (s *dispatcherCoverageStore) ReleaseEventClaim(_ context.Context, _ string, _ string, status string, _ string, _ time.Time) error {
+func (s *dispatcherCoverageStore) ReleaseEventClaim(_ context.Context, req ReleaseEventClaimRequest) error {
 	s.released++
-	if status == domain.TopicEventDispatchRetrying {
+	if req.Status == domain.TopicEventDispatchRetrying {
 		s.retrying++
 	}
 	return nil

@@ -21,8 +21,8 @@ type EventDispatcherDependencies struct {
 	Targets      func(topic string) []EventTarget
 	IsBusy       func(targets []EventTarget) bool
 	ReserveSlots func(event domain.SchedulerTopicEvent, count int) ([]*webhooks.Reservation, bool)
-	Run          func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error)
-	Prepare      func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error)
+	Run          func(ctx context.Context, req RunTriggerRequest, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error)
+	Prepare      func(ctx context.Context, req RunTriggerRequest) (PreparedRun, error)
 	Execute      func(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error)
 	Abort        func(ctx context.Context, prepared PreparedRun, reason string)
 	RunTimeout   func(time.Duration) time.Duration
@@ -102,7 +102,10 @@ func (d *EventDispatcher) dispatchTargets(event domain.SchedulerTopicEvent, targ
 		go func(target EventTarget, payloadJSON string, topic string, ack func(context.Context) error, release func(), reservation *webhooks.Reservation) {
 			defer cancel()
 			defer reservation.Release()
-			if _, err := d.deps.Run(runCtx, target.Scheduler, &target.Trigger, payloadJSON, topic, RunOptions{RetryWhenBusy: event.Source == domain.TopicEventSourceWebhook}, ack); err != nil {
+			if _, err := d.deps.Run(runCtx, RunTriggerRequest{
+				Scheduler: target.Scheduler, Trigger: &target.Trigger, PayloadJSON: payloadJSON, Source: topic,
+				Options: RunOptions{RetryWhenBusy: event.Source == domain.TopicEventSourceWebhook},
+			}, ack); err != nil {
 				if errors.Is(err, ErrRunBusyForRetry) {
 					d.retry(event, "scheduler is already running")
 					return
@@ -133,7 +136,9 @@ func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEven
 	}
 	prepared := make([]PreparedRun, 0, len(targets))
 	for index, target := range targets {
-		preparedRun, err := d.deps.Prepare(d.rootCtx(), target.Scheduler, &target.Trigger, payloadJSON, event.Topic, RunOptions{AlreadyEntered: true})
+		preparedRun, err := d.deps.Prepare(d.rootCtx(), RunTriggerRequest{
+			Scheduler: target.Scheduler, Trigger: &target.Trigger, PayloadJSON: payloadJSON, Source: event.Topic, Options: RunOptions{AlreadyEntered: true},
+		})
 		if err != nil {
 			for _, item := range prepared {
 				d.deps.Abort(context.WithoutCancel(d.rootCtx()), item, err.Error())

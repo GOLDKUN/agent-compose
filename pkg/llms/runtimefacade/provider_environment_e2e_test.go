@@ -227,7 +227,7 @@ type claudeFacadeModelCheck struct {
 func requireClaudeFacadeModel(t *testing.T, check claudeFacadeModelCheck) string {
 	t.Helper()
 	ctx, config, store, sandbox, runID, wantModel := check.Ctx, check.Config, check.Store, check.Sandbox, check.RunID, check.WantModel
-	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, sandbox, "claude", "", TokenSourceAgent, runID)
+	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: sandbox, Agent: "claude", Model: "", Source: TokenSourceAgent, RunID: runID})
 	if err != nil {
 		t.Fatalf("configure Claude facade: %v", err)
 	}

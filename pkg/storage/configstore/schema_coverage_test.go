@@ -11,6 +11,7 @@ import (
 
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
+	"agent-compose/pkg/events"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
 )
@@ -380,10 +381,10 @@ func testConfigStoreTopicEventCoverageWorkflows(t *testing.T) {
 	if claimed, err := store.ClaimEvent(ctx, event.ID, "claim-ignored", now, now.Add(time.Minute)); err != nil || claimed {
 		t.Fatalf("ClaimEvent active claim claimed=%v err=%v", claimed, err)
 	}
-	if err := store.ReleaseEventClaim(ctx, "", "claim", domain.TopicEventDispatchRetrying, "", time.Time{}); err == nil {
+	if err := store.ReleaseEventClaim(ctx, events.ReleaseEventClaimRequest{ClaimID: "claim", Status: domain.TopicEventDispatchRetrying}); err == nil {
 		t.Fatalf("ReleaseEventClaim empty id returned nil error")
 	}
-	if err := store.ReleaseEventClaim(ctx, event.ID, "claim-1", domain.TopicEventDispatchRetrying, "retry", now.Add(time.Millisecond)); err != nil {
+	if err := store.ReleaseEventClaim(ctx, events.ReleaseEventClaimRequest{EventID: event.ID, ClaimID: "claim-1", Status: domain.TopicEventDispatchRetrying, LastError: "retry", NextAttemptAt: now.Add(time.Millisecond)}); err != nil {
 		t.Fatalf("ReleaseEventClaim returned error: %v", err)
 	}
 	claimed, err = store.ClaimEvent(ctx, event.ID, "claim-2", now.Add(time.Second), now.Add(time.Minute))
@@ -725,10 +726,12 @@ func testConfigStoreLLMBootstrapResolveCoverage(t *testing.T, ctx context.Contex
 	if target.Provider.ID != llms.ProviderIDDefaultOpenAI || target.Provider.APIKey != "global-key" || target.Model.ID != "global-model" || target.WireAPI != llms.APIProtocolChatCompletions {
 		t.Fatalf("OpenAI resolved target = %#v", target)
 	}
-	runtimeTarget, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, config, store, "sandbox-1", llms.ProviderFamilyOpenAI, "session-model", "", []domain.SandboxEnvVar{
-		{Name: "LLM_API_ENDPOINT", Value: "https://session.example/v1"},
-		{Name: "LLM_API_KEY", Value: "session-key", Secret: true},
-		{Name: "LLM_MODEL", Value: "session-model"},
+	runtimeTarget, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: config, SessionID: "sandbox-1", PreferredProviderFamily: llms.ProviderFamilyOpenAI, RequestedModel: "session-model", ProviderID: "", EnvItems: []domain.SandboxEnvVar{
+			{Name: "LLM_API_ENDPOINT", Value: "https://session.example/v1"},
+			{Name: "LLM_API_KEY", Value: "session-key", Secret: true},
+			{Name: "LLM_MODEL", Value: "session-model"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("ResolveRuntimeLLMTargetWithEnv OpenAI returned error: %v", err)
@@ -739,7 +742,9 @@ func testConfigStoreLLMBootstrapResolveCoverage(t *testing.T, ctx context.Contex
 	if llms.HasEnabledLLMProviderID(ctx, store, runtimeTarget.Provider.ID) != true {
 		t.Fatalf("expected session provider to be enabled")
 	}
-	reusedRuntimeTarget, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, config, store, "sandbox-1", llms.ProviderFamilyOpenAI, "session-model", "", nil)
+	reusedRuntimeTarget, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: config, SessionID: "sandbox-1", PreferredProviderFamily: llms.ProviderFamilyOpenAI, RequestedModel: "session-model", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil || reusedRuntimeTarget.Provider.ID != runtimeTarget.Provider.ID {
 		t.Fatalf("reused session OpenAI target=%#v err=%v", reusedRuntimeTarget, err)
 	}
