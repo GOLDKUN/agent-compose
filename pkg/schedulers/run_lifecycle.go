@@ -44,6 +44,17 @@ type RunOptions struct {
 	AlreadyEntered bool
 }
 
+// RunTriggerRequest bundles the scheduler, trigger, payload, source, and
+// options identifying which run to prepare/execute, shared by Run and
+// Prepare on both Controller and RunExecutor.
+type RunTriggerRequest struct {
+	Scheduler   domain.Scheduler
+	Trigger     *domain.SchedulerTrigger
+	PayloadJSON string
+	Source      string
+	Options     RunOptions
+}
+
 type PreparedRun struct {
 	Scheduler   domain.Scheduler
 	Trigger     *domain.SchedulerTrigger
@@ -59,7 +70,7 @@ type RunExecutorDependencies struct {
 	WriteArtifact              func(dir, name, content string) error
 	EnterRun                   func(scheduler domain.Scheduler) bool
 	LeaveRun                   func(schedulerID string)
-	AddSchedulerEvent          func(ctx context.Context, schedulerID, runID, triggerID, eventType, level, message string, payload any, linkedSandboxID, linkedCellID, linkedAgentThreadID string) error
+	AddSchedulerEvent          func(ctx context.Context, event SchedulerEventInput) error
 	UpdateTriggerEventDelivery func(ctx context.Context, run domain.SchedulerRunSummary)
 	Notify                     func(reason string)
 	Refresh                    func(ctx context.Context) error
@@ -75,21 +86,22 @@ func NewRunExecutor(deps RunExecutorDependencies) *RunExecutor {
 	return &RunExecutor{deps: deps}
 }
 
-func (e *RunExecutor) Run(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
-	prepared, err := e.Prepare(ctx, scheduler, trigger, payloadJSON, source, options)
+func (e *RunExecutor) Run(ctx context.Context, req RunTriggerRequest, triggerEventAck ...func(context.Context) error) (domain.SchedulerRunSummary, error) {
+	prepared, err := e.Prepare(ctx, req)
 	if err != nil {
 		return domain.SchedulerRunSummary{}, err
 	}
 	if len(triggerEventAck) > 0 && triggerEventAck[0] != nil {
 		if err := triggerEventAck[0](ctx); err != nil {
-			slog.Warn("failed to mark scheduler topic event published", "topic", source, "error", err)
+			slog.Warn("failed to mark scheduler topic event published", "topic", req.Source, "error", err)
 		}
 	}
 	return e.Execute(ctx, prepared)
 }
 
-func (e *RunExecutor) Prepare(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error) {
-	payloadJSON, err := domain.NormalizeJSONDocument(payloadJSON)
+func (e *RunExecutor) Prepare(ctx context.Context, req RunTriggerRequest) (PreparedRun, error) {
+	scheduler, trigger, source, options := req.Scheduler, req.Trigger, req.Source, req.Options
+	payloadJSON, err := domain.NormalizeJSONDocument(req.PayloadJSON)
 	if err != nil {
 		if options.AlreadyEntered {
 			e.leaveRun(scheduler.Summary.ID)
@@ -334,7 +346,10 @@ func (e *RunExecutor) addSchedulerEvent(ctx context.Context, event schedulerRunE
 	if e.deps.AddSchedulerEvent == nil {
 		return nil
 	}
-	return e.deps.AddSchedulerEvent(ctx, event.SchedulerID, event.RunID, event.TriggerID, event.EventType, event.Level, event.Message, event.Payload, "", "", "")
+	return e.deps.AddSchedulerEvent(ctx, SchedulerEventInput{
+		SchedulerID: event.SchedulerID, RunID: event.RunID, TriggerID: event.TriggerID,
+		EventType: event.EventType, Level: event.Level, Message: event.Message, Payload: event.Payload,
+	})
 }
 
 func (e *RunExecutor) updateTriggerEventDelivery(ctx context.Context, run domain.SchedulerRunSummary) {

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
@@ -73,7 +72,7 @@ func TestProjectRunEventsAreOrderedIdempotentAndCascade(t *testing.T) {
 	if err != nil || len(events) != 1 || events[0].Sequence != 2 {
 		t.Fatalf("list=%#v err=%v", events, err)
 	}
-	sandboxEvents, err := store.ListProjectRunEventsForSandbox(ctx, "sandbox-events", time.Time{}, "", 0, 1)
+	sandboxEvents, err := store.ListProjectRunEventsForSandbox(ctx, "sandbox-events", domain.ProjectRunEventSandboxCursor{Limit: 1})
 	if err != nil || len(sandboxEvents) != 1 || sandboxEvents[0].ID != first.ID {
 		t.Fatalf("list sandbox first page=%#v err=%v", sandboxEvents, err)
 	}
@@ -81,7 +80,9 @@ func TestProjectRunEventsAreOrderedIdempotentAndCascade(t *testing.T) {
 	if err != nil || len(runIDs) != 1 || runIDs[0] != createdRun.RunID {
 		t.Fatalf("sandbox history run ids = %#v, err = %v", runIDs, err)
 	}
-	sandboxEvents, err = store.ListProjectRunEventsForSandbox(ctx, "sandbox-events", first.CreatedAt, first.RunID, first.Sequence, 10)
+	sandboxEvents, err = store.ListProjectRunEventsForSandbox(ctx, "sandbox-events", domain.ProjectRunEventSandboxCursor{
+		AfterCreatedAt: first.CreatedAt, AfterRunID: first.RunID, AfterSequence: first.Sequence, Limit: 10,
+	})
 	if err != nil || len(sandboxEvents) != 1 || sandboxEvents[0].ID != second.ID {
 		t.Fatalf("list sandbox second page=%#v err=%v", sandboxEvents, err)
 	}

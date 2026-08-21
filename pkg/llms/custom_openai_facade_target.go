@@ -37,11 +37,15 @@ func resolveCustomOpenAIFacadeTarget(ctx context.Context, req customOpenAIFacade
 			return ResolvedTarget{}, err
 		}
 		if strings.TrimSpace(sessionProviderID) != "" {
-			return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, sessionProviderID, envItems)
+			return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+				Config: config, SessionID: sandboxID, PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: model, ProviderID: sessionProviderID, EnvItems: envItems,
+			})
 		}
 	}
 	if HasEnabledLLMProviderID(ctx, store, providerID) {
-		return ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandboxID, ProviderFamilyOpenAI, model, providerID, envItems)
+		return ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+			Config: config, SessionID: sandboxID, PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: model, ProviderID: providerID, EnvItems: envItems,
+		})
 	}
 	// An explicit custom provider reference (anything other than the "openai"/
 	// "anthropic" legacy aliases, which the caller already special-cases) is

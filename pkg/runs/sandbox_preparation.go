@@ -47,6 +47,7 @@ func resolveRunJupyterOptions(base sandboxstore.CreateSandboxOptions, override *
 	return result, nil
 }
 
+//nolint:funlen // a manual mutex lock/unlock spans the reuse-attempt and fallthrough-to-create paths, driverValidated/volumesResolved flags are set in one phase and read in another, and a recursive self-call handles concurrent sticky-binding claims; splitting would move this coupling across a function boundary rather than remove it.
 func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.ProjectRunRecord, prepared Preparation, req RunAgentRequest) (SandboxResult, error) {
 	if c == nil || c.config == nil || c.store == nil || c.driver == nil {
 		return SandboxResult{}, fmt.Errorf("sandbox runtime dependencies are required")

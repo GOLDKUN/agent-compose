@@ -1394,7 +1394,13 @@ func TestRunsControllerExecuteProjectRunCommandEdgeBranches(t *testing.T) {
 	run := domain.ProjectRunRecord{RunID: "run-edge", ProjectID: "project-1", AgentName: "worker"}
 	req := RunAgentRequest{Env: []*agentcomposev2.EnvVarSpec{{Name: "REQUEST_ENV", Value: "yes"}}}
 
-	transition, err := (&Controller{config: config}).executeProjectRunCommand(ctx, run, session, req, "echo edge", nil)
+	transition, err := (&Controller{config: config}).executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     session,
+		Request:     req,
+		CommandText: "echo edge",
+		Sink:        nil,
+	})
 	if err == nil || transition.ExitCode != 1 || !strings.Contains(transition.Error, "dependencies are required") {
 		t.Fatalf("nil deps transition=%#v err=%v", transition, err)
 	}
@@ -1402,9 +1408,15 @@ func TestRunsControllerExecuteProjectRunCommandEdgeBranches(t *testing.T) {
 	controller := &Controller{config: config, store: store, runtime: func(*domain.Sandbox) (Runtime, error) {
 		return &fakeControllerRuntime{}, nil
 	}}
-	transition, err = controller.executeProjectRunCommand(ctx, run, session, req, "echo edge", &StreamSink{
-		SendStarted: func(domain.ProjectRunRecord, time.Time) error {
-			return errors.New("start send failed")
+	transition, err = controller.executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     session,
+		Request:     req,
+		CommandText: "echo edge",
+		Sink: &StreamSink{
+			SendStarted: func(domain.ProjectRunRecord, time.Time) error {
+				return errors.New("start send failed")
+			},
 		},
 	})
 	if err == nil || transition.ExitCode != 1 || !strings.Contains(transition.Error, "start send failed") {
@@ -1414,7 +1426,13 @@ func TestRunsControllerExecuteProjectRunCommandEdgeBranches(t *testing.T) {
 	missingVMSandbox := *session
 	missingVMSandbox.Summary.ID = "missing-vm"
 	missingVMSandbox.Summary.WorkspacePath = filepath.Join(root, "missing-vm", "workspace")
-	transition, err = controller.executeProjectRunCommand(ctx, run, &missingVMSandbox, req, "echo edge", nil)
+	transition, err = controller.executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     &missingVMSandbox,
+		Request:     req,
+		CommandText: "echo edge",
+		Sink:        nil,
+	})
 	if err == nil || transition.ExitCode != 1 || !strings.Contains(transition.Error, "no such file") {
 		t.Fatalf("missing vm transition=%#v err=%v", transition, err)
 	}
@@ -1425,7 +1443,13 @@ func TestRunsControllerExecuteProjectRunCommandEdgeBranches(t *testing.T) {
 	controller.runtime = func(*domain.Sandbox) (Runtime, error) {
 		return nil, errors.New("runtime unavailable")
 	}
-	transition, err = controller.executeProjectRunCommand(ctx, run, session, req, "echo edge", nil)
+	transition, err = controller.executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     session,
+		Request:     req,
+		CommandText: "echo edge",
+		Sink:        nil,
+	})
 	if err == nil || transition.ExitCode != 1 || !strings.Contains(transition.Error, "runtime unavailable") {
 		t.Fatalf("runtime provider transition=%#v err=%v", transition, err)
 	}
@@ -1441,15 +1465,27 @@ func TestRunsControllerExecuteProjectRunCommandEdgeBranches(t *testing.T) {
 	controller.runtime = func(*domain.Sandbox) (Runtime, error) {
 		return &fakeControllerRuntime{}, nil
 	}
-	transition, err = controller.executeProjectRunCommand(ctx, run, session, req, "echo edge", nil)
+	transition, err = controller.executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     session,
+		Request:     req,
+		CommandText: "echo edge",
+		Sink:        nil,
+	})
 	if err == nil || transition.ExitCode != 1 || !strings.Contains(transition.Error, "not a directory") {
 		t.Fatalf("mkdir transition=%#v err=%v", transition, err)
 	}
 
 	run.RunID = "run-send"
-	transition, err = controller.executeProjectRunCommand(ctx, run, session, req, "echo edge", &StreamSink{
-		SendChunk: func(string, domain.ExecChunk, time.Time) error {
-			return errors.New("chunk send failed")
+	transition, err = controller.executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     session,
+		Request:     req,
+		CommandText: "echo edge",
+		Sink: &StreamSink{
+			SendChunk: func(string, domain.ExecChunk, time.Time) error {
+				return errors.New("chunk send failed")
+			},
 		},
 	})
 	if err == nil || transition.ExitCode != 1 || !strings.Contains(transition.Error, "chunk send failed") {
@@ -1460,7 +1496,13 @@ func TestRunsControllerExecuteProjectRunCommandEdgeBranches(t *testing.T) {
 	controller.runtime = func(*domain.Sandbox) (Runtime, error) {
 		return &fakeControllerRuntime{execErr: errors.New("exec failed")}, nil
 	}
-	transition, err = controller.executeProjectRunCommand(ctx, run, session, req, "echo edge", nil)
+	transition, err = controller.executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     session,
+		Request:     req,
+		CommandText: "echo edge",
+		Sink:        nil,
+	})
 	if err == nil || transition.ExitCode == 0 || !strings.Contains(transition.Error, "exec failed") {
 		t.Fatalf("exec error transition=%#v err=%v", transition, err)
 	}
@@ -1470,7 +1512,13 @@ func TestRunsControllerExecuteProjectRunCommandEdgeBranches(t *testing.T) {
 	controller.runtime = func(*domain.Sandbox) (Runtime, error) {
 		return &fakeControllerRuntime{rawResult: &rawResult}, nil
 	}
-	transition, err = controller.executeProjectRunCommand(ctx, run, session, req, "echo edge", nil)
+	transition, err = controller.executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     session,
+		Request:     req,
+		CommandText: "echo edge",
+		Sink:        nil,
+	})
 	if err == nil || transition.ExitCode != 1 || !strings.Contains(transition.Error, "no result payload") {
 		t.Fatalf("parse transition=%#v err=%v", transition, err)
 	}

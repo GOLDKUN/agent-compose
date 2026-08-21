@@ -30,9 +30,23 @@ type openCodeFacadeCall struct {
 	RunID      string
 }
 
+// OpenCodeFacadeConfigRequest bundles the config, credential store, target
+// sandbox, and requested model/source/run identifiers
+// EnsureOpenCodeFacadeConfig needs to resolve and mint an OpenCode facade
+// token.
+type OpenCodeFacadeConfigRequest struct {
+	Config  *appconfig.Config
+	Store   OpenCodeFacadeStore
+	Sandbox *domain.Sandbox
+	Model   string
+	Source  string
+	RunID   string
+}
+
 // EnsureOpenCodeFacadeConfig resolves an OpenCode provider/model pair, writes
 // its guest runtime config, and returns the managed facade environment.
-func EnsureOpenCodeFacadeConfig(ctx context.Context, config *appconfig.Config, store OpenCodeFacadeStore, sandbox *domain.Sandbox, model, source, runID string) (map[string]string, error) {
+func EnsureOpenCodeFacadeConfig(ctx context.Context, req OpenCodeFacadeConfigRequest) (map[string]string, error) {
+	config, store, sandbox, model, source, runID := req.Config, req.Store, req.Sandbox, req.Model, req.Source, req.RunID
 	providerID, modelName, err := SplitOpenCodeModel(model)
 	if err != nil {
 		return nil, err
@@ -64,7 +78,9 @@ func ensureOpenCodeConfiguredFacadeConfig(ctx context.Context, call openCodeFaca
 	if err != nil {
 		return nil, err
 	}
-	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandbox.Summary.ID, "", call.Model, call.ProviderID, providerEnv)
+	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+		Config: config, SessionID: sandbox.Summary.ID, PreferredProviderFamily: "", RequestedModel: call.Model, ProviderID: call.ProviderID, EnvItems: providerEnv,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +111,9 @@ func ensureOpenCodeResolvedFacadeConfig(ctx context.Context, call openCodeFacade
 	baseURL := GuestRuntimeBaseURL(config, sandbox)
 	providerFamily := NormalizeProviderType(target.Provider.ProviderType)
 	if providerFamily == ProviderFamilyAnthropic {
-		tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, APIProtocolMessages, source, runID)
+		tokenValue, token, err := NewFacadeToken(NewFacadeTokenRequest{
+			SandboxID: sandbox.Summary.ID, Model: target.Model.Name, ProviderID: target.Provider.ID, WireAPI: APIProtocolMessages, Source: source, RunID: runID,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +139,9 @@ func ensureOpenCodeResolvedFacadeConfig(ctx context.Context, call openCodeFacade
 	if protocol != APIProtocolResponses && protocol != APIProtocolChatCompletions {
 		return nil, domain.ClassifyError(domain.ErrFailedPrecondition, "opencode model uses an unsupported wire protocol", nil)
 	}
-	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, protocol, source, runID)
+	tokenValue, token, err := NewFacadeToken(NewFacadeTokenRequest{
+		SandboxID: sandbox.Summary.ID, Model: target.Model.Name, ProviderID: target.Provider.ID, WireAPI: protocol, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -144,12 +164,16 @@ func ensureOpenCodeAnthropicFacadeConfig(ctx context.Context, call openCodeFacad
 	if err != nil {
 		return nil, err
 	}
-	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandbox.Summary.ID, ProviderFamilyAnthropic, model, "", providerEnv)
+	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+		Config: config, SessionID: sandbox.Summary.ID, PreferredProviderFamily: ProviderFamilyAnthropic, RequestedModel: model, ProviderID: "", EnvItems: providerEnv,
+	})
 	if err != nil {
 		return nil, err
 	}
 	baseURL := GuestRuntimeBaseURL(config, sandbox)
-	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, APIProtocolMessages, source, runID)
+	tokenValue, token, err := NewFacadeToken(NewFacadeTokenRequest{
+		SandboxID: sandbox.Summary.ID, Model: target.Model.Name, ProviderID: target.Provider.ID, WireAPI: APIProtocolMessages, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -180,12 +204,16 @@ func ensureOpenCodeOpenAIFacadeConfig(ctx context.Context, call openCodeFacadeCa
 	if err != nil {
 		return nil, err
 	}
-	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandbox.Summary.ID, ProviderFamilyOpenAI, model, "", providerEnv)
+	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+		Config: config, SessionID: sandbox.Summary.ID, PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: model, ProviderID: "", EnvItems: providerEnv,
+	})
 	if err != nil {
 		return nil, err
 	}
 	baseURL := GuestRuntimeBaseURL(config, sandbox)
-	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, APIProtocolResponses, source, runID)
+	tokenValue, token, err := NewFacadeToken(NewFacadeTokenRequest{
+		SandboxID: sandbox.Summary.ID, Model: target.Model.Name, ProviderID: target.Provider.ID, WireAPI: APIProtocolResponses, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +243,9 @@ func ensureOpenCodeCustomFacadeConfig(ctx context.Context, call openCodeFacadeCa
 		return nil, err
 	}
 	baseURL := GuestRuntimeBaseURL(config, sandbox)
-	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, APIProtocolChatCompletions, source, runID)
+	tokenValue, token, err := NewFacadeToken(NewFacadeTokenRequest{
+		SandboxID: sandbox.Summary.ID, Model: target.Model.Name, ProviderID: target.Provider.ID, WireAPI: APIProtocolChatCompletions, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return nil, err
 	}

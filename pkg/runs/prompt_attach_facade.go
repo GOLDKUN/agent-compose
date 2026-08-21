@@ -12,7 +12,19 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func ensurePromptAttachClaudeLLMFacadeEnv(ctx context.Context, config *appconfig.Config, store llmFacadeStore, sandbox *domain.Sandbox, model, runID string) (map[string]string, error) {
+// promptAttachFacadeTarget bundles the config, credential store, and target
+// sandbox a prompt-attach LLM facade helper needs to resolve and mint a
+// token against.
+type promptAttachFacadeTarget struct {
+	Config  *appconfig.Config
+	Store   llmFacadeStore
+	Sandbox *domain.Sandbox
+}
+
+func ensurePromptAttachClaudeLLMFacadeEnv(ctx context.Context, facade promptAttachFacadeTarget, model, runID string) (map[string]string, error) {
+	config := facade.Config
+	store := facade.Store
+	sandbox := facade.Sandbox
 	baseURL := llms.GuestRuntimeBaseURL(config, sandbox)
 	if strings.TrimSpace(baseURL) == "" {
 		return nil, nil
@@ -21,7 +33,9 @@ func ensurePromptAttachClaudeLLMFacadeEnv(ctx context.Context, config *appconfig
 	if err != nil {
 		return nil, err
 	}
-	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandbox.Summary.ID, llms.ProviderFamilyAnthropic, model, "", providerEnv)
+	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: config, SessionID: sandbox.Summary.ID, PreferredProviderFamily: llms.ProviderFamilyAnthropic, RequestedModel: model, ProviderID: "", EnvItems: providerEnv,
+	})
 	tokenModel := strings.TrimSpace(model)
 	tokenProvider := ""
 	if err != nil {
@@ -33,7 +47,9 @@ func ensurePromptAttachClaudeLLMFacadeEnv(ctx context.Context, config *appconfig
 		tokenModel = target.Model.Name
 		tokenProvider = target.Provider.ID
 	}
-	tokenValue, token, err := llms.NewFacadeToken(sandbox.Summary.ID, tokenModel, tokenProvider, llms.APIProtocolMessages, "agent", runID)
+	tokenValue, token, err := llms.NewFacadeToken(llms.NewFacadeTokenRequest{
+		SandboxID: sandbox.Summary.ID, Model: tokenModel, ProviderID: tokenProvider, WireAPI: llms.APIProtocolMessages, Source: "agent", RunID: runID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -85,13 +101,19 @@ func (c *Controller) ensurePromptAttachLLMFacadeEnv(ctx context.Context, sandbox
 	}
 	switch domain.NormalizeAgentKind(agent.Provider) {
 	case "claude":
-		return ensurePromptAttachClaudeLLMFacadeEnv(ctx, c.config, store, sandbox, agent.Model, runID)
+		return ensurePromptAttachClaudeLLMFacadeEnv(ctx, promptAttachFacadeTarget{Config: c.config, Store: store, Sandbox: sandbox}, agent.Model, runID)
 	case "opencode":
-		return llms.EnsureOpenCodeFacadeConfig(ctx, c.config, store, sandbox, agent.Model, "agent", runID)
+		return llms.EnsureOpenCodeFacadeConfig(ctx, llms.OpenCodeFacadeConfigRequest{
+			Config: c.config, Store: store, Sandbox: sandbox, Model: agent.Model, Source: "agent", RunID: runID,
+		})
 	case "pi":
-		return llms.EnsurePiFacadeConfig(ctx, c.config, store, sandbox, agent.Model, "agent", runID)
+		return llms.EnsurePiFacadeConfig(ctx, llms.PiFacadeConfigRequest{
+			Config: c.config, Store: store, Sandbox: sandbox, Model: agent.Model, Source: "agent", RunID: runID,
+		})
 	case "codex":
-		return llms.EnsureCodexFacadeConfig(ctx, c.config, store, sandbox, agent.Model, "agent", runID)
+		return llms.EnsureCodexFacadeConfig(ctx, llms.CodexFacadeConfigRequest{
+			Config: c.config, Store: store, Sandbox: sandbox, Model: agent.Model, Source: "agent", RunID: runID,
+		})
 	default:
 		return nil, nil
 	}

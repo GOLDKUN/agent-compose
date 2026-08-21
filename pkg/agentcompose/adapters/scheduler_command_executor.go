@@ -45,6 +45,7 @@ func NewSchedulerCommandExecutor(deps SchedulerCommandExecutorDeps) *SchedulerCo
 	return &SchedulerCommandExecutor{Config: deps.Config, Store: deps.Store, ConfigDB: deps.ConfigDB, Runtimes: deps.Runtimes, Streams: deps.Streams}
 }
 
+//nolint:funlen // closures share mutable state across the whole command lifecycle, same as ExecuteAgentRequest; splitting would relocate rather than reduce the complexity.
 func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, session *domain.Sandbox, request domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {
 	appconfig.ApplyDefaultGuestPaths(e.Config)
 	if session.Summary.VMStatus != domain.VMStatusRunning {
@@ -289,7 +290,9 @@ func (e *SchedulerCommandExecutor) prepareSchedulerCommandLLMFacadeEnv(ctx conte
 	}
 	execSession.ProviderEnvItems = domain.MergeEnvItems(execSession.ProviderEnvItems, schedulers.CommandSandboxEnv(request))
 
-	managedConfig, err := runtimefacade.EnsureSessionCommandFacadeConfig(ctx, e.Config, commandFacadeStoreFor(e.ConfigDB), &execSession, agent, model, runtimefacade.TokenSourceSchedulerCommand, runID)
+	managedConfig, err := runtimefacade.EnsureSessionCommandFacadeConfig(ctx, runtimefacade.CommandFacadeConfigRequest{
+		Config: e.Config, Store: commandFacadeStoreFor(e.ConfigDB), Session: &execSession, Agent: agent, Model: model, Source: runtimefacade.TokenSourceSchedulerCommand, RunID: runID,
+	})
 	if err != nil {
 		return nil, nil, err
 	}

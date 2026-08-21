@@ -16,7 +16,8 @@ import (
 // facade variables are intentionally left to EnsureSessionAgentRuntimeConfig,
 // because one process environment cannot represent two different common
 // facade tokens at once.
-func EnsureSessionStartupFacadeConfig(ctx context.Context, config *appconfig.Config, store FacadeStore, session *domain.Sandbox, source, runID string) (map[string]string, error) {
+func EnsureSessionStartupFacadeConfig(ctx context.Context, req SessionFacadeConfigRequest) (map[string]string, error) {
+	config, store, session, source, runID := req.Config, req.Store, req.Session, req.Source, req.RunID
 	if config == nil || store == nil || session == nil {
 		return nil, nil
 	}
@@ -67,16 +68,9 @@ func ensureStartupFamilyConfig(ctx context.Context, call startupFamilyCall) (map
 		return nil, nil
 	}
 	if !available {
-		target, resolveErr := llms.ResolveRuntimeLLMTargetWithEnv(
-			ctx,
-			config,
-			store,
-			session.Summary.ID,
-			family,
-			startupFamilyModel(ctx, famEnv),
-			"",
-			providerEnv,
-		)
+		target, resolveErr := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+			Config: config, SessionID: session.Summary.ID, PreferredProviderFamily: family, RequestedModel: startupFamilyModel(ctx, famEnv), ProviderID: "", EnvItems: providerEnv,
+		})
 		if resolveErr != nil {
 			return nil, fmt.Errorf("resolve %s startup facade provider: %w", family, resolveErr)
 		}
@@ -87,7 +81,9 @@ func ensureStartupFamilyConfig(ctx context.Context, call startupFamilyCall) (map
 	if family == llms.ProviderFamilyAnthropic {
 		wireAPI = llms.APIProtocolMessages
 	}
-	rawToken, token, err := llms.NewFacadeToken(session.Summary.ID, "", provider.ID, wireAPI, source, runID)
+	rawToken, token, err := llms.NewFacadeToken(llms.NewFacadeTokenRequest{
+		SandboxID: session.Summary.ID, Model: "", ProviderID: provider.ID, WireAPI: wireAPI, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("issue %s startup facade token: %w", family, err)
 	}

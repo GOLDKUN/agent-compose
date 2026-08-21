@@ -16,15 +16,30 @@ type CodexFacadeStore interface {
 	SaveLLMFacadeToken(context.Context, FacadeToken) error
 }
 
+// CodexFacadeConfigRequest bundles the config, credential store, target
+// sandbox, and requested model/source/run identifiers
+// EnsureCodexFacadeConfig needs to resolve and mint a Codex facade token.
+type CodexFacadeConfigRequest struct {
+	Config  *appconfig.Config
+	Store   CodexFacadeStore
+	Sandbox *domain.Sandbox
+	Model   string
+	Source  string
+	RunID   string
+}
+
 // EnsureCodexFacadeConfig resolves the managed Codex provider and model,
 // requires a sandbox-reachable facade, and returns its managed environment.
 // A missing managed provider remains a no-op so Codex can use its own login.
-func EnsureCodexFacadeConfig(ctx context.Context, config *appconfig.Config, store CodexFacadeStore, sandbox *domain.Sandbox, model, source, runID string) (map[string]string, error) {
+func EnsureCodexFacadeConfig(ctx context.Context, req CodexFacadeConfigRequest) (map[string]string, error) {
+	config, store, sandbox, model, source, runID := req.Config, req.Store, req.Sandbox, req.Model, req.Source, req.RunID
 	providerEnv, err := SandboxProviderEnvItems(ctx, store, sandbox, ProviderFamilyOpenAI)
 	if err != nil {
 		return nil, err
 	}
-	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, config, store, sandbox.Summary.ID, ProviderFamilyOpenAI, model, "", providerEnv)
+	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+		Config: config, SessionID: sandbox.Summary.ID, PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: model, ProviderID: "", EnvItems: providerEnv,
+	})
 	if err != nil {
 		if errors.Is(err, domain.ErrRequired) || errors.Is(err, domain.ErrFailedPrecondition) {
 			return nil, nil
@@ -39,7 +54,9 @@ func EnsureCodexFacadeConfig(ctx context.Context, config *appconfig.Config, stor
 		return nil, err
 	}
 
-	tokenValue, token, err := NewFacadeToken(sandbox.Summary.ID, target.Model.Name, target.Provider.ID, APIProtocolResponses, source, runID)
+	tokenValue, token, err := NewFacadeToken(NewFacadeTokenRequest{
+		SandboxID: sandbox.Summary.ID, Model: target.Model.Name, ProviderID: target.Provider.ID, WireAPI: APIProtocolResponses, Source: source, RunID: runID,
+	})
 	if err != nil {
 		return nil, err
 	}

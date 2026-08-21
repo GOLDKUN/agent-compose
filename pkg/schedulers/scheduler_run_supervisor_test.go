@@ -26,7 +26,8 @@ func TestRunExecutorCancellationWritesCanceledTerminalState(t *testing.T) {
 			return filepath.Join(artifactsDir, schedulerID, runID)
 		},
 		WriteArtifact: func(string, string, string) error { return nil },
-		AddSchedulerEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
+		AddSchedulerEvent: func(_ context.Context, event SchedulerEventInput) error {
+			eventType := event.EventType
 			events = append(events, eventType)
 			return nil
 		},
@@ -34,10 +35,14 @@ func TestRunExecutorCancellationWritesCanceledTerminalState(t *testing.T) {
 	result := make(chan domain.SchedulerRunSummary, 1)
 	errResult := make(chan error, 1)
 	go func() {
-		run, err := executor.Run(ctx, domain.Scheduler{
-			Summary: domain.SchedulerSummary{ID: "scheduler-1", Runtime: domain.SchedulerRuntimeScheduler},
-			Script:  "function main() {}",
-		}, nil, `{}`, "manual", RunOptions{})
+		run, err := executor.Run(ctx, RunTriggerRequest{
+			Scheduler: domain.Scheduler{
+				Summary: domain.SchedulerSummary{ID: "scheduler-1", Runtime: domain.SchedulerRuntimeScheduler},
+				Script:  "function main() {}",
+			},
+			PayloadJSON: `{}`,
+			Source:      "manual",
+		})
 		result <- run
 		errResult <- err
 	}()
@@ -67,7 +72,8 @@ func TestSchedulerRunSupervisorRunReturnsFinalResult(t *testing.T) {
 		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1"}}, nil, nil
 		},
-		Prepare: func(_ context.Context, scheduler domain.Scheduler, _ *domain.SchedulerTrigger, _, _ string, _ RunOptions) (PreparedRun, error) {
+		Prepare: func(_ context.Context, req RunTriggerRequest) (PreparedRun, error) {
+			scheduler := req.Scheduler
 			return PreparedRun{Scheduler: scheduler, Run: domain.SchedulerRunSummary{ID: "run-success", SchedulerID: scheduler.Summary.ID, Status: domain.SchedulerRunStatusRunning}}, nil
 		},
 		Execute: func(_ context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error) {
@@ -92,7 +98,7 @@ func TestSchedulerRunSupervisorRejectsEmptyTriggerWithoutPreparingRun(t *testing
 			t.Fatal("empty trigger must be rejected before loading")
 			return domain.Scheduler{}, nil, nil
 		},
-		Prepare: func(context.Context, domain.Scheduler, *domain.SchedulerTrigger, string, string, RunOptions) (PreparedRun, error) {
+		Prepare: func(context.Context, RunTriggerRequest) (PreparedRun, error) {
 			prepareCalls++
 			return PreparedRun{}, nil
 		},
@@ -110,7 +116,8 @@ func TestSchedulerRunSupervisorTimeoutCancelsExecution(t *testing.T) {
 		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1"}}, nil, nil
 		},
-		Prepare: func(_ context.Context, scheduler domain.Scheduler, _ *domain.SchedulerTrigger, _, _ string, _ RunOptions) (PreparedRun, error) {
+		Prepare: func(_ context.Context, req RunTriggerRequest) (PreparedRun, error) {
+			scheduler := req.Scheduler
 			return PreparedRun{Scheduler: scheduler, Run: domain.SchedulerRunSummary{ID: "run-timeout", SchedulerID: scheduler.Summary.ID, Status: domain.SchedulerRunStatusRunning}}, nil
 		},
 		Execute: func(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error) {
@@ -138,7 +145,8 @@ func TestSchedulerRunSupervisorStopWaitsForExecutorTerminalState(t *testing.T) {
 		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1"}}, nil, nil
 		},
-		Prepare: func(_ context.Context, scheduler domain.Scheduler, _ *domain.SchedulerTrigger, payloadJSON, source string, _ RunOptions) (PreparedRun, error) {
+		Prepare: func(_ context.Context, req RunTriggerRequest) (PreparedRun, error) {
+			scheduler, payloadJSON, source := req.Scheduler, req.PayloadJSON, req.Source
 			run := domain.SchedulerRunSummary{ID: "run-1", SchedulerID: scheduler.Summary.ID, Status: domain.SchedulerRunStatusRunning, PayloadJSON: payloadJSON, TriggerSource: source}
 			store.set(run)
 			return PreparedRun{Scheduler: scheduler, Run: run, PayloadJSON: payloadJSON}, nil
@@ -193,7 +201,8 @@ func TestSchedulerRunSupervisorStopsQJSPendingPromise(t *testing.T) {
 			return filepath.Join(artifactsDir, schedulerID, runID)
 		},
 		WriteArtifact: func(string, string, string) error { return nil },
-		AddSchedulerEvent: func(_ context.Context, _, _, _, eventType, _, _ string, _ any, _, _, _ string) error {
+		AddSchedulerEvent: func(_ context.Context, event SchedulerEventInput) error {
+			eventType := event.EventType
 			eventMu.Lock()
 			defer eventMu.Unlock()
 			events = append(events, eventType)
@@ -259,7 +268,8 @@ func TestSchedulerRunSupervisorRootContextStopsBackgroundRun(t *testing.T) {
 		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
 			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1"}}, nil, nil
 		},
-		Prepare: func(_ context.Context, scheduler domain.Scheduler, _ *domain.SchedulerTrigger, _, _ string, _ RunOptions) (PreparedRun, error) {
+		Prepare: func(_ context.Context, req RunTriggerRequest) (PreparedRun, error) {
+			scheduler := req.Scheduler
 			run := domain.SchedulerRunSummary{ID: "run-root", SchedulerID: scheduler.Summary.ID, Status: domain.SchedulerRunStatusRunning}
 			store.set(run)
 			return PreparedRun{Scheduler: scheduler, Run: run}, nil

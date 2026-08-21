@@ -32,7 +32,9 @@ func TestIntegrationLoadApplyAndResolveModelCatalogProtocolOverrides(t *testing.
 		t.Fatalf("ApplyModelCatalog: %v", err)
 	}
 
-	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, nil, store, "", "", "gateway/chat-model", "", nil)
+	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: nil, SessionID: "", PreferredProviderFamily: "", RequestedModel: "gateway/chat-model", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("ResolveRuntimeLLMTargetWithEnv: %v", err)
 	}
@@ -72,21 +74,27 @@ func TestIntegrationApplyModelCatalogResolvesLiteralModelsDefaultsAndBehavior(t 
 	if err != nil || !ok || providerID != "baizhi" || modelID != "deepseek-v4-flash" {
 		t.Fatalf("default = %q/%q ok=%v err=%v", providerID, modelID, ok, err)
 	}
-	literal, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, nil, store, "", "", "baizhi/upstream-only-model", "", nil)
+	literal, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: nil, SessionID: "", PreferredProviderFamily: "", RequestedModel: "baizhi/upstream-only-model", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("resolve literal model: %v", err)
 	}
 	if literal.Model.ID != "upstream-only-model" || literal.MaxOutputTokens != 0 {
 		t.Fatalf("literal target = %#v", literal)
 	}
-	configured, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, nil, store, "", "", "baizhi/deepseek-v4-flash", "", nil)
+	configured, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: nil, SessionID: "", PreferredProviderFamily: "", RequestedModel: "baizhi/deepseek-v4-flash", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("resolve configured model: %v", err)
 	}
 	if configured.MaxOutputTokens != limit || configured.Provider.APIKey != apiKey {
 		t.Fatalf("configured target = %#v", configured)
 	}
-	defaultTarget, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, nil, store, "", "", "", "", nil)
+	defaultTarget, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: nil, SessionID: "", PreferredProviderFamily: "", RequestedModel: "", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("resolve catalog default: %v", err)
 	}
@@ -109,14 +117,18 @@ func TestIntegrationDaemonEnvironmentDefaultWinsButExplicitCatalogProviderRemain
 		t.Fatal(err)
 	}
 	config := &appconfig.Config{LLMAPIEndpoint: "https://legacy.example/v1", LLMAPIProtocol: llms.APIProtocolResponses, LLMAPIKey: "legacy-key", LLMModel: "feature/gpt-5.6-sol"}
-	legacy, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, config, store, "", "", "", "", nil)
+	legacy, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: config, SessionID: "", PreferredProviderFamily: "", RequestedModel: "", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("resolve daemon environment default: %v", err)
 	}
 	if legacy.Provider.ID != llms.ProviderIDDefaultOpenAI || legacy.Model.ID != "feature/gpt-5.6-sol" || legacy.Provider.APIKey != "legacy-key" {
 		t.Fatalf("daemon environment target = %#v", legacy)
 	}
-	explicit, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, config, store, "", "", "baizhi/literal-model", "", nil)
+	explicit, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: config, SessionID: "", PreferredProviderFamily: "", RequestedModel: "baizhi/literal-model", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("resolve explicit catalog provider: %v", err)
 	}
@@ -136,7 +148,9 @@ func TestIntegrationExplicitUnavailableCatalogProviderDoesNotFallBack(t *testing
 	if err := store.ApplyModelCatalog(ctx, llms.ModelCatalog{Providers: map[string]llms.CatalogProvider{"custom": {BaseURL: &baseURL, Protocol: &protocol}}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, &appconfig.Config{LLMAPIEndpoint: "https://daemon.example/v1", LLMAPIKey: "daemon-key", LLMModel: "daemon-model"}, store, "", "", "custom/literal-model", "", nil)
+	_, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, store, llms.RuntimeLLMTargetQuery{
+		Config: &appconfig.Config{LLMAPIEndpoint: "https://daemon.example/v1", LLMAPIKey: "daemon-key", LLMModel: "daemon-model"}, SessionID: "", PreferredProviderFamily: "", RequestedModel: "custom/literal-model", ProviderID: "", EnvItems: nil,
+	})
 	if err == nil || !strings.Contains(err.Error(), `provider "custom"`) {
 		t.Fatalf("explicit unavailable provider error = %v", err)
 	}

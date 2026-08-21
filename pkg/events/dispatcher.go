@@ -12,10 +12,21 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
+// ReleaseEventClaimRequest describes how to release a previously claimed
+// topic event: the outcome status, an optional error message, and (for a
+// retryable outcome) when the event becomes eligible for redelivery.
+type ReleaseEventClaimRequest struct {
+	EventID       string
+	ClaimID       string
+	Status        string
+	LastError     string
+	NextAttemptAt time.Time
+}
+
 type Store interface {
 	ListDispatchableEvents(context.Context, time.Time, int) ([]domain.TopicEventRecord, error)
 	ClaimEvent(context.Context, string, string, time.Time, time.Time) (bool, error)
-	ReleaseEventClaim(context.Context, string, string, string, string, time.Time) error
+	ReleaseEventClaim(context.Context, ReleaseEventClaimRequest) error
 	MarkEventPublished(context.Context, string, string, time.Time) error
 	MarkEventNoSubscriber(context.Context, string, string, time.Time) error
 }
@@ -103,7 +114,7 @@ func (d *Dispatcher) publishOne(ctx context.Context, item domain.TopicEventRecor
 	payload := map[string]any{}
 	if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
 		slog.Warn("failed to decode topic event payload", "event_id", item.ID, "topic", item.Topic, "error", err)
-		_ = d.configDB.ReleaseEventClaim(ctx, item.ID, claimID, domain.TopicEventDispatchDeadLetter, err.Error(), time.Time{})
+		_ = d.configDB.ReleaseEventClaim(ctx, ReleaseEventClaimRequest{EventID: item.ID, ClaimID: claimID, Status: domain.TopicEventDispatchDeadLetter, LastError: err.Error()})
 		return true
 	}
 	d.setInFlight(item.ID)
@@ -124,14 +135,14 @@ func (d *Dispatcher) publishOne(ctx context.Context, item domain.TopicEventRecor
 		},
 		Retry: func(ctx context.Context, reason string, nextAttemptAt time.Time) error {
 			defer d.clearInFlight(item.ID)
-			return d.configDB.ReleaseEventClaim(ctx, item.ID, claimID, domain.TopicEventDispatchRetrying, reason, nextAttemptAt)
+			return d.configDB.ReleaseEventClaim(ctx, ReleaseEventClaimRequest{EventID: item.ID, ClaimID: claimID, Status: domain.TopicEventDispatchRetrying, LastError: reason, NextAttemptAt: nextAttemptAt})
 		},
 		Release: func() {
 			d.clearInFlight(item.ID)
 		},
 	}); !ok {
 		d.clearInFlight(item.ID)
-		_ = d.configDB.ReleaseEventClaim(ctx, item.ID, claimID, domain.TopicEventDispatchRetrying, "scheduler bus is full", time.Now().UTC().Add(time.Second))
+		_ = d.configDB.ReleaseEventClaim(ctx, ReleaseEventClaimRequest{EventID: item.ID, ClaimID: claimID, Status: domain.TopicEventDispatchRetrying, LastError: "scheduler bus is full", NextAttemptAt: time.Now().UTC().Add(time.Second)})
 		return false
 	}
 	return true

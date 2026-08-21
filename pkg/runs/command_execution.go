@@ -14,14 +14,25 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
-func (c *Controller) executeProjectRunCommand(ctx context.Context, run domain.ProjectRunRecord, sandbox *domain.Sandbox, req RunAgentRequest, commandText string, sink *StreamSink) (TransitionRequest, error) {
+// projectRunCommandExecution bundles the run, target sandbox, originating
+// request, and resolved command text executeProjectRunCommand needs. Kept as
+// a struct rather than trimming commandText (it is not always
+// strings.TrimSpace(req.Command) - callers may resolve it separately) so the
+// signature stays within the argument limit without losing that
+// independence.
+type projectRunCommandExecution struct {
+	Run         domain.ProjectRunRecord
+	Sandbox     *domain.Sandbox
+	Request     RunAgentRequest
+	CommandText string
+	Sink        *StreamSink
+}
+
+func (c *Controller) executeProjectRunCommand(ctx context.Context, exec projectRunCommandExecution) (TransitionRequest, error) {
+	run, sandbox, req, commandText, sink := exec.Run, exec.Sandbox, exec.Request, exec.CommandText, exec.Sink
 	artifactsDir := projectRunCommandArtifactsDir(run, sandbox)
 	logsPath := filepath.Join(artifactsDir, "transcript.txt")
-	transition := TransitionRequest{
-		RunID:     run.RunID,
-		SandboxID: sandbox.Summary.ID,
-		LogsPath:  logsPath,
-	}
+	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath}
 	if c.store == nil || c.runtime == nil {
 		err := fmt.Errorf("command runtime dependencies are required")
 		transition.ExitCode = 1

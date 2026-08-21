@@ -29,7 +29,7 @@ type schedulerRunSupervisorDependencies struct {
 	RootCtx             context.Context
 	Store               schedulerRunStore
 	LoadSchedulerForRun func(ctx context.Context, schedulerID, triggerID string) (domain.Scheduler, *domain.SchedulerTrigger, error)
-	Prepare             func(ctx context.Context, scheduler domain.Scheduler, trigger *domain.SchedulerTrigger, payloadJSON, source string, options RunOptions) (PreparedRun, error)
+	Prepare             func(ctx context.Context, req RunTriggerRequest) (PreparedRun, error)
 	Execute             func(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error)
 	RunTimeout          func(override time.Duration) time.Duration
 }
@@ -94,7 +94,7 @@ func (s *schedulerRunSupervisor) start(ctx context.Context, request SchedulerRun
 	if err != nil {
 		return domain.SchedulerRunSummary{}, nil, err
 	}
-	prepared, err := s.deps.Prepare(ctx, scheduler, trigger, request.PayloadJSON, "manual", RunOptions{})
+	prepared, err := s.deps.Prepare(ctx, RunTriggerRequest{Scheduler: scheduler, Trigger: trigger, PayloadJSON: request.PayloadJSON, Source: "manual"})
 	if err != nil {
 		return domain.SchedulerRunSummary{}, nil, err
 	}

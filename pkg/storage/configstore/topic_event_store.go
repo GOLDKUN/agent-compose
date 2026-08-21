@@ -188,17 +188,17 @@ func (s *eventStore) ClaimEvent(ctx context.Context, eventID, claimID string, no
 	return affected > 0, nil
 }
 
-func (s *eventStore) ReleaseEventClaim(ctx context.Context, eventID, claimID, status, lastError string, nextAttemptAt time.Time) error {
-	eventID = strings.TrimSpace(eventID)
-	claimID = strings.TrimSpace(claimID)
-	status = events.NormalizeDispatchStatus(status)
+func (s *eventStore) ReleaseEventClaim(ctx context.Context, req events.ReleaseEventClaimRequest) error {
+	eventID := strings.TrimSpace(req.EventID)
+	claimID := strings.TrimSpace(req.ClaimID)
+	status := events.NormalizeDispatchStatus(req.Status)
 	if eventID == "" || claimID == "" || status == "" {
 		return fmt.Errorf("event claim release requires event, claim, and status")
 	}
 	_, err := s.db.ExecContext(ctx, `UPDATE event SET dispatch_status = ?, claim_id = '', claim_until = 0, next_attempt_at = ?, last_error = ? WHERE id = ? AND claim_id = ?`,
 		status,
-		domain.NonZeroTimeUnixMilli(nextAttemptAt),
-		strings.TrimSpace(lastError),
+		domain.NonZeroTimeUnixMilli(req.NextAttemptAt),
+		strings.TrimSpace(req.LastError),
 		eventID,
 		claimID,
 	)

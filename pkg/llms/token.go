@@ -8,7 +8,20 @@ import (
 	"time"
 )
 
-func NewFacadeToken(sandboxID, model, providerID, wireAPI, source, runID string) (string, FacadeToken, error) {
+// NewFacadeTokenRequest describes the token NewFacadeToken mints. It
+// deliberately excludes FacadeToken's computed fields (TokenHash,
+// TokenFingerprint, IssuedAt, ...) so there's no ambiguity about which
+// fields a caller controls.
+type NewFacadeTokenRequest struct {
+	SandboxID  string
+	Model      string
+	ProviderID string
+	WireAPI    string
+	Source     string
+	RunID      string
+}
+
+func NewFacadeToken(req NewFacadeTokenRequest) (string, FacadeToken, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", FacadeToken{}, err
@@ -16,19 +29,19 @@ func NewFacadeToken(sandboxID, model, providerID, wireAPI, source, runID string)
 	tokenValue := "ac_llm_" + hex.EncodeToString(raw)
 	hash, fingerprint := HashFacadeToken(tokenValue)
 	now := time.Now().UTC()
-	normalizedWireAPI := strings.TrimSpace(wireAPI)
+	normalizedWireAPI := strings.TrimSpace(req.WireAPI)
 	if normalizedWireAPI != "" {
 		normalizedWireAPI = NormalizeWireAPI(normalizedWireAPI)
 	}
 	return tokenValue, FacadeToken{
-		SandboxID:        strings.TrimSpace(sandboxID),
+		SandboxID:        strings.TrimSpace(req.SandboxID),
 		TokenHash:        hash,
 		TokenFingerprint: fingerprint,
-		Model:            strings.TrimSpace(model),
-		ProviderID:       strings.TrimSpace(providerID),
+		Model:            strings.TrimSpace(req.Model),
+		ProviderID:       strings.TrimSpace(req.ProviderID),
 		WireAPI:          normalizedWireAPI,
-		Source:           strings.TrimSpace(source),
-		RunID:            strings.TrimSpace(runID),
+		Source:           strings.TrimSpace(req.Source),
+		RunID:            strings.TrimSpace(req.RunID),
 		IssuedAt:         now,
 	}, nil
 }

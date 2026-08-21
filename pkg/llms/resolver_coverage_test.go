@@ -71,10 +71,12 @@ func TestResolverBootstrapAndRuntimeTargetWorkflows(t *testing.T) {
 	}
 
 	sessionStore := newResolverCoverageStore()
-	runtimeTarget, err := ResolveRuntimeLLMTargetWithEnv(ctx, &appconfig.Config{}, sessionStore, "session-1", ProviderFamilyOpenAI, "", "", []domain.SandboxEnvVar{
-		{Name: "OPENAI_API_KEY", Value: "session-key"},
-		{Name: "LLM_MODEL", Value: "gpt-session"},
-		{Name: "LLM_API_PROTOCOL", Value: "responses"},
+	runtimeTarget, err := ResolveRuntimeLLMTargetWithEnv(ctx, sessionStore, RuntimeLLMTargetQuery{
+		Config: &appconfig.Config{}, SessionID: "session-1", PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: "", ProviderID: "", EnvItems: []domain.SandboxEnvVar{
+			{Name: "OPENAI_API_KEY", Value: "session-key"},
+			{Name: "LLM_MODEL", Value: "gpt-session"},
+			{Name: "LLM_API_PROTOCOL", Value: "responses"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("ResolveRuntimeLLMTargetWithEnv returned error: %v", err)
@@ -82,7 +84,9 @@ func TestResolverBootstrapAndRuntimeTargetWorkflows(t *testing.T) {
 	if runtimeTarget.Provider.Scope != ProviderScopeSessionEnv || runtimeTarget.Model.ID != "gpt-session" || runtimeTarget.WireAPI != APIProtocolResponses {
 		t.Fatalf("session runtime target = %#v", runtimeTarget)
 	}
-	pinned, err := ResolveRuntimeLLMTargetWithEnv(ctx, &appconfig.Config{}, sessionStore, "session-1", ProviderFamilyOpenAI, "gpt-session", runtimeTarget.Provider.ID, nil)
+	pinned, err := ResolveRuntimeLLMTargetWithEnv(ctx, sessionStore, RuntimeLLMTargetQuery{
+		Config: &appconfig.Config{}, SessionID: "session-1", PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: "gpt-session", ProviderID: runtimeTarget.Provider.ID, EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("ResolveRuntimeLLMTargetWithEnv pinned returned error: %v", err)
 	}
@@ -107,16 +111,9 @@ func TestResolveRuntimeLLMTargetTreatsUnknownSlashPrefixAsLiteralModel(t *testin
 		LLMAPIKey:      "openai-key",
 		LLMModel:       "feature/gpt-5.6-sol",
 	}
-	target, err := ResolveRuntimeLLMTargetWithEnv(
-		ctx,
-		config,
-		store,
-		"session-1",
-		ProviderFamilyOpenAI,
-		config.LLMModel,
-		"",
-		nil,
-	)
+	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+		Config: config, SessionID: "session-1", PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: config.LLMModel, ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("ResolveRuntimeLLMTargetWithEnv returned error: %v", err)
 	}
@@ -142,16 +139,9 @@ func TestResolveRuntimeLLMTargetUsesConfiguredSlashPrefixAsProvider(t *testing.T
 	store.models = []Model{{ID: "gpt-5.6-sol", Name: "gpt-5.6-sol", Enabled: true, Scope: ProviderScopeSystem}}
 	store.wire["feature\x00gpt-5.6-sol"] = APIProtocolResponses
 
-	target, err := ResolveRuntimeLLMTargetWithEnv(
-		ctx,
-		&appconfig.Config{},
-		store,
-		"session-1",
-		ProviderFamilyOpenAI,
-		"feature/gpt-5.6-sol",
-		"",
-		nil,
-	)
+	target, err := ResolveRuntimeLLMTargetWithEnv(ctx, store, RuntimeLLMTargetQuery{
+		Config: &appconfig.Config{}, SessionID: "session-1", PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: "feature/gpt-5.6-sol", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("ResolveRuntimeLLMTargetWithEnv returned error: %v", err)
 	}

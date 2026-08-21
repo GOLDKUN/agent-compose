@@ -43,6 +43,7 @@ func (e *AgentExecutor) PrepareSandboxAgentEnvironmentFromTags(ctx context.Conte
 	return e.runner.PrepareSandboxAgentEnvironmentFromTags(ctx, session)
 }
 
+//nolint:funlen // closures share mutable state (cellMu, streamErrMu, streamErr, a later-mutated retainFacadeToken flag) across the whole request lifecycle; splitting would require threading that state back out through extra params/returns rather than reducing complexity.
 func (e *AgentExecutor) ExecuteAgentRequest(ctx context.Context, session *domain.Sandbox, request execution.ExecuteAgentRequest) (domain.NotebookCell, domain.SandboxEvent, domain.SandboxEvent, error) {
 	agent := domain.NormalizeAgentKind(request.Agent)
 	if agent == "" {

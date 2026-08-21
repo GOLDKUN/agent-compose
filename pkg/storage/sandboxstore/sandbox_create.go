@@ -33,10 +33,12 @@ type CreateSandboxOptions struct {
 	StoppedRuntimePolicy string
 }
 
+//nolint:revive // exported store API with ~75 call sites across many packages (and test/e2e, outside pkg/); the private chain beneath it (sandboxCreateSpec) is already bundled, but changing this signature means updating every caller in one pass rather than incrementally.
 func (s *Store) CreateSandbox(ctx context.Context, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource string, workspace *SandboxWorkspace, envItems []SandboxEnvVar, tags []SandboxTag) (*Sandbox, error) {
 	return s.CreateSandboxWithOptions(ctx, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource, workspace, envItems, tags, CreateSandboxOptions{})
 }
 
+//nolint:revive // exported store API with ~13 direct call sites (plus CreateSandbox's own ~75); same reasoning as CreateSandbox above.
 func (s *Store) CreateSandboxWithOptions(ctx context.Context, title, baseWorkspace, driver, guestImage, workspaceID, triggerSource string, workspace *SandboxWorkspace, envItems []SandboxEnvVar, tags []SandboxTag, options CreateSandboxOptions) (*Sandbox, error) {
 	return s.createSandboxWithCacheDependencyLock(ctx, sandboxCreateSpec{
 		Title: title, BaseWorkspace: baseWorkspace, Driver: driver, GuestImage: guestImage,
@@ -79,7 +81,16 @@ func (s *Store) createSandboxWithCacheDependencyLock(ctx context.Context, spec s
 	return sandbox, err
 }
 
-func (s *Store) createSandboxWithOptions(spec sandboxCreateSpec) (*Sandbox, error) {
+// preparedSandboxCreate is the on-disk-allocated, VM-state-saved Sandbox
+// prepareSandboxCreateSession hands back to createSandboxWithOptions, ready
+// for proxy-state provisioning and persistence.
+type preparedSandboxCreate struct {
+	Session    *Sandbox
+	SandboxDir string
+	GuestImage string
+}
+
+func (s *Store) prepareSandboxCreateSession(spec sandboxCreateSpec) (preparedSandboxCreate, error) {
 	title, baseWorkspace, driver, guestImage, workspaceID, triggerSource, workspace, envItems, tags, options :=
 		spec.Title, spec.BaseWorkspace, spec.Driver, spec.GuestImage, spec.WorkspaceID, spec.TriggerSource, spec.Workspace, spec.EnvItems, spec.Tags, spec.Options
 	localNow := s.currentTime()
@@ -89,18 +100,18 @@ func (s *Store) createSandboxWithOptions(spec sandboxCreateSpec) (*Sandbox, erro
 	shortID := identity.ShortID(id)
 	sandboxDir, err := s.layout.allocate(id, localNow)
 	if err != nil {
-		return nil, fmt.Errorf("allocate sandbox directory: %w", err)
+		return preparedSandboxCreate{}, fmt.Errorf("allocate sandbox directory: %w", err)
 	}
 	workspaceDir := filepath.Join(sandboxDir, "workspace")
 	proxyPath := strings.TrimRight(s.config.JupyterProxyBasePath, "/") + "/" + id + "/lab"
 	driver, err = driverpkg.ResolveSandboxRuntimeDriver(driver, s.config.RuntimeDriver)
 	if err != nil {
-		return nil, err
+		return preparedSandboxCreate{}, err
 	}
 	guestImage = driverpkg.ResolveSandboxGuestImage(guestImage, "", driverpkg.DefaultGuestImageForDriver(s.config, driver))
 	stoppedRuntimePolicy, err := compose.NormalizeStoppedRuntimePolicy(options.StoppedRuntimePolicy)
 	if err != nil {
-		return nil, fmt.Errorf("create sandbox: %w", err)
+		return preparedSandboxCreate{}, fmt.Errorf("create sandbox: %w", err)
 	}
 	var workspaceProvisioning *domain.SandboxWorkspaceProvisioning
 	if workspace != nil || workspaceID != "" {
@@ -126,7 +137,7 @@ func (s *Store) createSandboxWithOptions(spec sandboxCreateSpec) (*Sandbox, erro
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("create sandbox dir %s: %w", dir, err)
+			return preparedSandboxCreate{}, fmt.Errorf("create sandbox dir %s: %w", dir, err)
 		}
 	}
 
@@ -170,8 +181,19 @@ func (s *Store) createSandboxWithOptions(spec sandboxCreateSpec) (*Sandbox, erro
 		vmState.Registry = s.config.ImageRegistry
 	}
 	if err := s.saveVMState(session.Summary.ID, vmState); err != nil {
+		return preparedSandboxCreate{}, err
+	}
+	return preparedSandboxCreate{Session: session, SandboxDir: sandboxDir, GuestImage: guestImage}, nil
+}
+
+func (s *Store) createSandboxWithOptions(spec sandboxCreateSpec) (*Sandbox, error) {
+	prepared, err := s.prepareSandboxCreateSession(spec)
+	if err != nil {
 		return nil, err
 	}
+	session, sandboxDir, guestImage := prepared.Session, prepared.SandboxDir, prepared.GuestImage
+	id := session.Summary.ID
+	options := spec.Options
 	proxyState := ProxyState{
 		ProxyPath: session.Summary.ProxyPath,
 		GuestHost: "127.0.0.1",
@@ -183,7 +205,7 @@ func (s *Store) createSandboxWithOptions(spec sandboxCreateSpec) (*Sandbox, erro
 		if guestPort == 0 {
 			guestPort = s.config.JupyterGuestPort
 		}
-		if driver != driverpkg.RuntimeDriverDocker {
+		if session.Summary.Driver != driverpkg.RuntimeDriverDocker {
 			hostPort, err := s.allocateHostPort()
 			if err != nil {
 				return nil, err

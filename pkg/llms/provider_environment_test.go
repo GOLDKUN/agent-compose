@@ -229,8 +229,10 @@ func TestRuntimeTargetDoesNotMixIncompleteSessionProviderWithDaemonEnvironment(t
 		{Name: "ANTHROPIC_MODEL", Value: "global-claude"},
 	}
 
-	target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), &appconfig.Config{}, store, "sandbox-layered", ProviderFamilyOpenAI, "", "", []domain.SandboxEnvVar{
-		{Name: "OPENAI_API_KEY", Value: "sandbox-key"},
+	target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), store, RuntimeLLMTargetQuery{
+		Config: &appconfig.Config{}, SessionID: "sandbox-layered", PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: "", ProviderID: "", EnvItems: []domain.SandboxEnvVar{
+			{Name: "OPENAI_API_KEY", Value: "sandbox-key"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("resolve layered OpenAI target: %v", err)
@@ -253,7 +255,9 @@ func TestRuntimeTargetUsesSharedDefaultInsteadOfGlobalSessionSnapshot(t *testing
 		{Name: "LLM_API_KEY", Value: "global-key"},
 		{Name: "LLM_MODEL", Value: "global-model"},
 	}
-	target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), &appconfig.Config{}, store, "sandbox-global-only", ProviderFamilyOpenAI, "", "", nil)
+	target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), store, RuntimeLLMTargetQuery{
+		Config: &appconfig.Config{}, SessionID: "sandbox-global-only", PreferredProviderFamily: ProviderFamilyOpenAI, RequestedModel: "", ProviderID: "", EnvItems: nil,
+	})
 	if err != nil {
 		t.Fatalf("resolve default OpenAI target: %v", err)
 	}
@@ -341,7 +345,9 @@ func TestRuntimeTargetKeepsAnthropicCredentialFromWinningLayer(t *testing.T) {
 				{Name: "ANTHROPIC_BASE_URL", Value: "https://global.anthropic.example"},
 				{Name: "ANTHROPIC_MODEL", Value: "global-claude"},
 			}, tt.globalItems...)
-			target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), &appconfig.Config{LLMAPIKey: tt.configKey}, store, "sandbox-anthropic-auth", ProviderFamilyAnthropic, "", "", tt.sandboxItems)
+			target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), store, RuntimeLLMTargetQuery{
+				Config: &appconfig.Config{LLMAPIKey: tt.configKey}, SessionID: "sandbox-anthropic-auth", PreferredProviderFamily: ProviderFamilyAnthropic, RequestedModel: "", ProviderID: "", EnvItems: tt.sandboxItems,
+			})
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected incomplete provider error")
@@ -361,11 +367,13 @@ func TestRuntimeTargetKeepsAnthropicCredentialFromWinningLayer(t *testing.T) {
 func TestRuntimeTargetKeepsGenericResponsesProviderForClaudeFacade(t *testing.T) {
 	isolateLLMEnv(t)
 	store := newResolverCoverageStore()
-	target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), &appconfig.Config{}, store, "sandbox-generic-anthropic", ProviderFamilyAnthropic, "", "", []domain.SandboxEnvVar{
-		{Name: "LLM_API_ENDPOINT", Value: "https://gateway.example/base"},
-		{Name: "LLM_API_PROTOCOL", Value: APIProtocolResponses},
-		{Name: "LLM_API_KEY", Value: "generic-key"},
-		{Name: "LLM_MODEL", Value: "generic-model"},
+	target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), store, RuntimeLLMTargetQuery{
+		Config: &appconfig.Config{}, SessionID: "sandbox-generic-anthropic", PreferredProviderFamily: ProviderFamilyAnthropic, RequestedModel: "", ProviderID: "", EnvItems: []domain.SandboxEnvVar{
+			{Name: "LLM_API_ENDPOINT", Value: "https://gateway.example/base"},
+			{Name: "LLM_API_PROTOCOL", Value: APIProtocolResponses},
+			{Name: "LLM_API_KEY", Value: "generic-key"},
+			{Name: "LLM_MODEL", Value: "generic-model"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("resolve generic Responses target for Claude: %v", err)
@@ -383,11 +391,13 @@ func TestRuntimeTargetKeepsGenericResponsesProviderForClaudeFacade(t *testing.T)
 func TestRuntimeTargetUsesMessagesProtocolWhenProviderFamilyIsUnspecified(t *testing.T) {
 	isolateLLMEnv(t)
 	store := newResolverCoverageStore()
-	target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), &appconfig.Config{}, store, "sandbox-protocol-anthropic", "", "", "", []domain.SandboxEnvVar{
-		{Name: "LLM_API_ENDPOINT", Value: "https://gateway.example/api/anthropic"},
-		{Name: "LLM_API_PROTOCOL", Value: APIProtocolMessages},
-		{Name: "LLM_API_KEY", Value: "generic-key"},
-		{Name: "LLM_MODEL", Value: "generic-claude"},
+	target, err := ResolveRuntimeLLMTargetWithEnv(context.Background(), store, RuntimeLLMTargetQuery{
+		Config: &appconfig.Config{}, SessionID: "sandbox-protocol-anthropic", PreferredProviderFamily: "", RequestedModel: "", ProviderID: "", EnvItems: []domain.SandboxEnvVar{
+			{Name: "LLM_API_ENDPOINT", Value: "https://gateway.example/api/anthropic"},
+			{Name: "LLM_API_PROTOCOL", Value: APIProtocolMessages},
+			{Name: "LLM_API_KEY", Value: "generic-key"},
+			{Name: "LLM_MODEL", Value: "generic-claude"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("resolve protocol-selected Anthropic target: %v", err)

@@ -17,6 +17,19 @@ linters:
     - durationcheck
     - wastedassign
     - copyloopvar
+    # Size: functions and argument lists kept reviewable.
+    - funlen
+    - revive
+
+  settings:
+    funlen:
+      lines: 150
+      statements: -1
+      ignore-comments: true
+    revive:
+      rules:
+        - name: argument-limit
+          arguments: [5]
 
   exclusions:
     generated: lax
@@ -24,6 +37,18 @@ linters:
       # A failed marshal in a test is a test bug that the assertion following it
       # already surfaces.
       - linters: [errchkjson]
+        path: _test\.go
+      # funlen/argument-limit have only been remediated under pkg/ so far;
+      # cmd/agent-compose and friends still need a dedicated cleanup pass
+      # before these can apply repo-wide.
+      - linters: [funlen, revive]
+        path-except: '^pkg/'
+      # Coverage-sweep test functions intentionally walk one scenario
+      # end-to-end in a single function, and test helpers/fakes take
+      # positional params that are self-describing at the call site;
+      # splitting either fragments the narrative or bundles into a struct
+      # with no real benefit. Test code is exempt from both size rules.
+      - linters: [funlen, revive]
         path: _test\.go
 
 formatters:

@@ -52,7 +52,7 @@ func TestEnsureSessionLLMFacadeConfigCreatesCodexEnvAndToken(t *testing.T) {
 		},
 	}
 
-	env, err := EnsureSessionLLMFacadeConfig(ctx, config, store, session, "codex", "", "test", "run-1")
+	env, err := EnsureSessionLLMFacadeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "codex", Model: "", Source: "test", RunID: "run-1"})
 	if err != nil {
 		t.Fatalf("EnsureSessionLLMFacadeConfig returned error: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestEnsureSessionStartupFacadeConfigIncludesAllAvailableFamilies(t *testing
 	}
 
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-startup-facades", Driver: driverpkg.RuntimeDriverDocker}}
-	env, err := EnsureSessionStartupFacadeConfig(ctx, config, store, session, TokenSourceAgent, "")
+	env, err := EnsureSessionStartupFacadeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Source: TokenSourceAgent, RunID: ""})
 	if err != nil {
 		t.Fatalf("EnsureSessionStartupFacadeConfig returned error: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestEnsureSessionStartupFacadeConfigSkipsUnavailableFamily(t *testing.T) {
 		t.Fatalf("save Anthropic provider: %v", err)
 	}
 
-	env, err := EnsureSessionStartupFacadeConfig(ctx, config, store, &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-anthropic-only"}}, TokenSourceAgent, "")
+	env, err := EnsureSessionStartupFacadeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-anthropic-only"}}, Source: TokenSourceAgent, RunID: ""})
 	if err != nil {
 		t.Fatalf("EnsureSessionStartupFacadeConfig returned error: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestEnsureSessionLLMFacadeConfigRejectsManagedCodexWithoutReachableFacade(t
 		WorkspacePath: filepath.Join(root, "sandboxes", "sandbox-runtimefacade-unreachable", "workspace"),
 	}}
 
-	env, err := EnsureSessionLLMFacadeConfig(ctx, config, store, session, "codex", "", "test", "run-1")
+	env, err := EnsureSessionLLMFacadeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "codex", Model: "", Source: "test", RunID: "run-1"})
 	if !errors.Is(err, domain.ErrFailedPrecondition) {
 		t.Fatalf("EnsureSessionLLMFacadeConfig error = %v, want failed precondition", err)
 	}
@@ -256,7 +256,7 @@ func TestEnsureSessionLLMFacadeConfigAllowsUnmanagedCodexWithoutFacade(t *testin
 	}
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-runtimefacade-unmanaged", Driver: driverpkg.RuntimeDriverDocker}}
 
-	env, err := EnsureSessionLLMFacadeConfig(ctx, config, store, session, "codex", "", "test", "run-1")
+	env, err := EnsureSessionLLMFacadeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "codex", Model: "", Source: "test", RunID: "run-1"})
 	if err != nil || len(env) != 0 {
 		t.Fatalf("EnsureSessionLLMFacadeConfig env = %#v, error = %v; want unmanaged no-op", env, err)
 	}
@@ -296,7 +296,7 @@ func TestEnsureSessionAgentRuntimeConfigClaudeAndOpenCodeWorkflows(t *testing.T)
 			{Name: "LLM_MODEL", Value: "gpt-test"},
 		},
 	}
-	claude, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "claude", "", "agent", "run-claude")
+	claude, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "claude", Model: "", Source: "agent", RunID: "run-claude"})
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig claude returned error: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestEnsureSessionAgentRuntimeConfigClaudeAndOpenCodeWorkflows(t *testing.T)
 		t.Fatalf("claude emitted deprecated session token env")
 	}
 
-	openAI, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "opencode", "openai/gpt-test", TokenSourceAgent, "run-openai")
+	openAI, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "opencode", Model: "openai/gpt-test", Source: TokenSourceAgent, RunID: "run-openai"})
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig opencode openai returned error: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestEnsureSessionAgentRuntimeConfigClaudeAndOpenCodeWorkflows(t *testing.T)
 		t.Fatalf("opencode openai env = %#v", openAI.Env)
 	}
 
-	anthropic, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "opencode", "anthropic/claude-test", TokenSourceAgent, "run-anthropic")
+	anthropic, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "opencode", Model: "anthropic/claude-test", Source: TokenSourceAgent, RunID: "run-anthropic"})
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig opencode anthropic returned error: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestEnsureSessionAgentRuntimeConfigClaudeAndOpenCodeWorkflows(t *testing.T)
 		t.Fatalf("opencode anthropic env = %#v", anthropic.Env)
 	}
 
-	pi, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "pi", "openai/gpt-test", TokenSourceAgent, "run-pi")
+	pi, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "pi", Model: "openai/gpt-test", Source: TokenSourceAgent, RunID: "run-pi"})
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig pi returned error: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestEnsureSessionAgentRuntimeConfigClaudeAndOpenCodeWorkflows(t *testing.T)
 		t.Fatalf("pi token = %#v, err=%v", token, err)
 	}
 
-	custom, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "opencode", "custom/gpt-custom", TokenSourceSchedulerCommand, "run-custom")
+	custom, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "opencode", Model: "custom/gpt-custom", Source: TokenSourceSchedulerCommand, RunID: "run-custom"})
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig opencode custom returned error: %v", err)
 	}
@@ -362,17 +362,17 @@ func TestEnsureSessionAgentRuntimeConfigClaudeAndOpenCodeWorkflows(t *testing.T)
 		t.Fatalf("opencode custom env = %#v", custom.Env)
 	}
 
-	noop, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "opencode", "opencode/local", "", "")
+	noop, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "opencode", Model: "opencode/local", Source: "", RunID: ""})
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig opencode local returned error: %v", err)
 	}
 	if len(noop.Env) != 0 {
 		t.Fatalf("opencode local env = %#v", noop.Env)
 	}
-	if _, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "opencode", "bad-model", "", ""); err == nil {
+	if _, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "opencode", Model: "bad-model", Source: "", RunID: ""}); err == nil {
 		t.Fatalf("expected invalid opencode model error")
 	}
-	if env, err := EnsureSessionLLMFacadeConfig(ctx, nil, store, session, "codex", "", "", ""); err != nil || env != nil {
+	if env, err := EnsureSessionLLMFacadeConfig(ctx, SessionFacadeConfigRequest{Config: nil, Store: store, Session: session, Agent: "codex", Model: "", Source: "", RunID: ""}); err != nil || env != nil {
 		t.Fatalf("nil config env=%#v err=%v", env, err)
 	}
 	if !HasAnthropicProviderKey(ctx, config, store) {
@@ -406,7 +406,7 @@ func TestEnsureSessionAgentRuntimeConfigClaudePreservesProviderlessCompatibility
 	}
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{ID: "sandbox-claude-compat", Driver: driverpkg.RuntimeDriverDocker}}
 
-	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, config, store, session, "claude", "", "test", "run-compat")
+	runtimeConfig, err := EnsureSessionAgentRuntimeConfig(ctx, SessionFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "claude", Model: "", Source: "test", RunID: "run-compat"})
 	if err != nil {
 		t.Fatalf("EnsureSessionAgentRuntimeConfig returned error: %v", err)
 	}

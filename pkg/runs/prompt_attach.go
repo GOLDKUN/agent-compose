@@ -17,93 +17,111 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
-func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, sandbox *domain.Sandbox, req RunAgentRequest, _ RunAttachInput, receive RunAttachReceiver, send RunAttachSender) (transitionResult TransitionRequest, returnErr error) {
+// preparedPromptInteraction is the resolved agent/runtime state
+// preparePromptInteractionRuntime hands back to runPromptInteraction once
+// dependencies are validated and the run's prompt/schema artifacts are
+// written, ready to open the interactive runtime session.
+type preparedPromptInteraction struct {
+	Run                domain.ProjectRunRecord
+	LogsPath           string
+	AgentConfig        execution.AgentConfig
+	SchemaPath         string
+	Env                map[string]string
+	ManagedEnv         map[string]string
+	VMState            domain.VMState
+	InteractionRuntime InteractionRuntime
+}
+
+func (c *Controller) preparePromptInteractionRuntime(ctx context.Context, runCtx interactionRunContext) (preparedPromptInteraction, error) {
+	run := runCtx.Run
+	sandbox := runCtx.Sandbox
+	req := runCtx.Request
 	artifactsDir := projectRunCommandArtifactsDir(run, sandbox)
 	logsPath := filepath.Join(artifactsDir, "transcript.txt")
-	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath}
 	if c.store == nil || c.runtime == nil {
-		err := fmt.Errorf("prompt runtime dependencies are required")
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, fmt.Errorf("prompt runtime dependencies are required")
 	}
 	appconfig.ApplyDefaultGuestPaths(c.config)
 	vmState, err := c.store.GetVMState(sandbox.Summary.ID)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
 	runtime, err := c.runtime(sandbox)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
 	interactionRuntime, ok := runtime.(InteractionRuntime)
 	if !ok {
-		err := fmt.Errorf("%w: prompt attach is unsupported by this runtime driver", domain.ErrUnsupported)
-		transition.ExitCode = 1
-		transition.Error = err.Error()
-		return transition, err
+		return preparedPromptInteraction{}, fmt.Errorf("%w: prompt attach is unsupported by this runtime driver", domain.ErrUnsupported)
 	}
 	if err := os.MkdirAll(artifactsDir, 0o755); err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
-	run, err = markProjectRunInteractionArtifacts(ctx, coordinator, run, sandbox, logsPath, artifactsDir)
+	run, err = markProjectRunInteractionArtifacts(ctx, runCtx, logsPath, artifactsDir)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
 	agentConfig, err := c.projectRunAgentConfig(ctx, run)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
 	if agentConfig.Provider != "codex" && agentConfig.Provider != "claude" && agentConfig.Provider != "opencode" && agentConfig.Provider != "pi" {
-		err := fmt.Errorf("%w: prompt attach currently supports codex, claude, opencode, and pi providers only", domain.ErrUnsupported)
-		transition.ExitCode = 1
-		transition.Error = err.Error()
-		return transition, err
+		return preparedPromptInteraction{}, fmt.Errorf("%w: prompt attach currently supports codex, claude, opencode, and pi providers only", domain.ErrUnsupported)
 	}
 	systemPrompt, err := c.projectRunAgentSystemPrompt(ctx, run)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
 	if err := execution.WriteAgentSystemPromptFile(sandbox, systemPrompt); err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
 	schemaPath, err := execution.WriteAgentOutputSchemaFile(c.config, sandbox, agentConfig.Provider, req.OutputSchemaJSON)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
 	env := execution.BuildSandboxExecEnv(c.config, sandbox, c.config.GuestHomePath)
 	managedEnv, err := c.ensurePromptAttachLLMFacadeEnv(ctx, sandbox, agentConfig, run.RunID)
 	if err != nil {
-		transition.ExitCode = 1
-		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
-		return transition, err
+		return preparedPromptInteraction{}, err
 	}
 	if len(managedEnv) > 0 {
 		env = llms.MergeManagedExecEnv(env, managedEnv)
-		if token := managedEnv["AGENT_COMPOSE_SANDBOX_TOKEN"]; token != "" {
-			defer func() {
-				if !errors.Is(returnErr, domain.ErrExecTerminationUnconfirmed) && !errors.Is(returnErr, driverpkg.ErrExecTerminationUnconfirmed) {
-					c.deletePromptAttachLLMFacadeToken(context.WithoutCancel(ctx), token)
-				}
-			}()
-		}
 	}
+	return preparedPromptInteraction{
+		Run:                run,
+		LogsPath:           logsPath,
+		AgentConfig:        agentConfig,
+		SchemaPath:         schemaPath,
+		Env:                env,
+		ManagedEnv:         managedEnv,
+		VMState:            vmState,
+		InteractionRuntime: interactionRuntime,
+	}, nil
+}
+
+func (c *Controller) runPromptInteraction(ctx context.Context, runCtx interactionRunContext, _ RunAttachInput, receive RunAttachReceiver, send RunAttachSender) (transitionResult TransitionRequest, returnErr error) {
+	run := runCtx.Run
+	sandbox := runCtx.Sandbox
+	prepared, err := c.preparePromptInteractionRuntime(ctx, runCtx)
+	if err != nil {
+		logsPath := filepath.Join(projectRunCommandArtifactsDir(run, sandbox), "transcript.txt")
+		return TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath, ExitCode: 1, Error: fmt.Sprintf("agent execution failed: %v", err)}, err
+	}
+	if token := prepared.ManagedEnv["AGENT_COMPOSE_SANDBOX_TOKEN"]; token != "" {
+		defer func() {
+			if !errors.Is(returnErr, domain.ErrExecTerminationUnconfirmed) && !errors.Is(returnErr, driverpkg.ErrExecTerminationUnconfirmed) {
+				c.deletePromptAttachLLMFacadeToken(context.WithoutCancel(ctx), token)
+			}
+		}()
+	}
+	return c.runPromptInteractionSession(ctx, runCtx, prepared, receive, send)
+}
+
+func (c *Controller) runPromptInteractionSession(ctx context.Context, runCtx interactionRunContext, prepared preparedPromptInteraction, receive RunAttachReceiver, send RunAttachSender) (TransitionRequest, error) {
+	run := prepared.Run
+	sandbox := runCtx.Sandbox
+	logsPath := prepared.LogsPath
+	transition := TransitionRequest{RunID: run.RunID, SandboxID: sandbox.Summary.ID, LogsPath: logsPath}
 	command := strings.Join([]string{
 		"set -e",
 		"cd " + execution.ShellQuote(c.config.GuestWorkspacePath),
@@ -117,15 +135,15 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 		Command: &driverpkg.RuntimeCommandSpec{
 			Command: "sh",
 			Args:    []string{"-lc", command},
-			Env:     env,
+			Env:     prepared.Env,
 			Cwd:     c.config.GuestWorkspacePath,
 		},
 		Cwd:         c.config.GuestWorkspacePath,
-		Env:         env,
+		Env:         prepared.Env,
 		AttachStdin: true,
 		TTY:         false,
 	}
-	interaction, err := interactionRuntime.OpenInteraction(ctx, sandbox, vmState, spec)
+	interaction, err := prepared.InteractionRuntime.OpenInteraction(ctx, sandbox, prepared.VMState, spec)
 	if err != nil {
 		transition.ExitCode = 1
 		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
@@ -135,7 +153,7 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 	defer func() { _ = interaction.CloseSend() }()
 	projector := newPersistentPromptAttachProjector(context.WithoutCancel(ctx), persistentPromptAttachProjectorDeps{Run: run, Sandbox: sandbox, LogsPath: logsPath, Hub: c.runLogs, EventStore: c.configDB})
 	input := &promptWrapperInput{interaction: interaction}
-	if err := input.Start(agentConfig, c.config, schemaPath); err != nil {
+	if err := input.Start(prepared.AgentConfig, c.config, prepared.SchemaPath); err != nil {
 		transition.ExitCode = 1
 		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
 		return transition, err
@@ -143,7 +161,7 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 	inputCtx, cancelInput := context.WithCancel(ctx)
 	defer cancelInput()
 	turnReady := make(chan struct{}, 1)
-	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
+	if prompt := strings.TrimSpace(runCtx.Request.Prompt); prompt != "" {
 		if err := input.HumanMessage(prompt); err != nil {
 			transition.ExitCode = 1
 			transition.Error = fmt.Sprintf("agent execution failed: %v", err)
@@ -153,6 +171,21 @@ func (c *Controller) runPromptInteraction(ctx context.Context, coordinator *Coor
 		releasePromptTurn(turnReady)
 	}
 	go pumpRunPromptAttachInput(inputCtx, receive, promptInputPump{Input: input, TurnReady: turnReady, OnHumanMessage: projector.AppendHumanMessageFrame})
+	return receivePromptInteractionFrames(run, sandbox, transition, promptInteractionReceiveState{Interaction: interaction, Projector: projector, TurnReady: turnReady}, send)
+}
+
+// promptInteractionReceiveState bundles the open interaction, log
+// projector, and turn-ready gate receivePromptInteractionFrames needs as it
+// pumps frames from the runtime until the interaction ends.
+type promptInteractionReceiveState struct {
+	Interaction driverpkg.RuntimeInteraction
+	Projector   *promptAttachProjector
+	TurnReady   chan struct{}
+}
+
+func receivePromptInteractionFrames(run domain.ProjectRunRecord, sandbox *domain.Sandbox, transition TransitionRequest, state promptInteractionReceiveState, send RunAttachSender) (TransitionRequest, error) {
+	interaction, projector, turnReady := state.Interaction, state.Projector, state.TurnReady
+	logsPath := transition.LogsPath
 	var promptTransition *TransitionRequest
 	for {
 		frame, err := interaction.Recv()

@@ -264,7 +264,12 @@ func (c *Controller) StartProjectRun(ctx context.Context, req RunAgentRequest) (
 			// Async runs execute from the daemon root context. Restore only the
 			// request metadata they need instead of retaining the transport context.
 			execCtx = domain.NewContextWithTrustedHeaders(execCtx, trustedHeaders)
-			return c.executeStartedProjectRun(execCtx, coordinator, run, req, warnings, stream)
+			return c.executeStartedProjectRun(execCtx, startedProjectRunContext{
+				Coordinator: coordinator,
+				Run:         run,
+				Request:     req,
+				Warnings:    warnings,
+			}, stream)
 		},
 	}, nil
 }
@@ -320,7 +325,13 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	if onStarted != nil {
 		onStarted(started.Run.RunID)
 	}
-	run, execErr, err := c.executeStartedProjectRunAttach(ctx, started.Run, req, started.Warnings, first, mode, receive, send)
+	run, execErr, err := c.executeStartedProjectRunAttach(ctx, startedRunAttachContext{
+		Run:      started.Run,
+		Request:  req,
+		Warnings: started.Warnings,
+		Start:    first,
+		Mode:     mode,
+	}, receive, send)
 	if err != nil {
 		return err
 	}
@@ -331,7 +342,21 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	return nil
 }
 
-func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *Coordinator, run domain.ProjectRunRecord, req RunAgentRequest, warnings []string, stream *StreamSink) (domain.ProjectRunRecord, error, error) {
+// startedProjectRunContext bundles the run-scoped state StartProjectRun
+// captures at begin-run time, needed once the caller invokes Execute to
+// actually run it.
+type startedProjectRunContext struct {
+	Coordinator *Coordinator
+	Run         domain.ProjectRunRecord
+	Request     RunAgentRequest
+	Warnings    []string
+}
+
+func (c *Controller) executeStartedProjectRun(ctx context.Context, started startedProjectRunContext, stream *StreamSink) (domain.ProjectRunRecord, error, error) {
+	coordinator := started.Coordinator
+	run := started.Run
+	req := started.Request
+	warnings := started.Warnings
 	commandText := strings.TrimSpace(req.Command)
 	transitionCtx := context.WithoutCancel(ctx)
 	prepared, err := c.prepareProjectRun(ctx, run, req.Env)
@@ -391,78 +416,117 @@ func (c *Controller) executeStartedProjectRun(ctx context.Context, coordinator *
 		return domain.ProjectRunRecord{}, nil, err
 	}
 	run = withRunWarnings(run, warnings)
+	sandboxed := sandboxedProjectRun{
+		TransitionCtx: transitionCtx,
+		Coordinator:   coordinator,
+		Run:           run,
+		Sandbox:       sandboxResult.Sandbox,
+		Request:       req,
+		Warnings:      warnings,
+		Stream:        stream,
+	}
 	if commandText != "" {
-		transition, execErr := c.executeProjectRunCommand(ctx, run, sandboxResult.Sandbox, req, commandText, stream)
-		if execErr != nil || transition.ExitCode != 0 {
-			run, err = c.completeProjectRunError(transitionCtx, ctx, transition, execErr)
-			if err != nil {
-				return domain.ProjectRunRecord{}, nil, err
-			}
-			run = withRunWarnings(run, warnings)
-			return run, execErr, nil
-		}
-		transition.Status = domain.ProjectRunStatusSucceeded
-		run, err = c.completeProjectRun(transitionCtx, transition)
+		return c.completeProjectRunCommand(ctx, sandboxed, commandText)
+	}
+	return c.completeProjectRunAgent(ctx, sandboxed)
+}
+
+// sandboxedProjectRun bundles the run-scoped state shared by the command and
+// agent execution branches once ensureProjectRunSandbox has produced a ready
+// sandbox: the transition-safe context, coordinator, run, sandbox, original
+// request, accumulated warnings, and output stream.
+type sandboxedProjectRun struct {
+	TransitionCtx context.Context
+	Coordinator   *Coordinator
+	Run           domain.ProjectRunRecord
+	Sandbox       *domain.Sandbox
+	Request       RunAgentRequest
+	Warnings      []string
+	Stream        *StreamSink
+}
+
+func (c *Controller) completeProjectRunCommand(ctx context.Context, sandboxed sandboxedProjectRun, commandText string) (domain.ProjectRunRecord, error, error) {
+	run, warnings := sandboxed.Run, sandboxed.Warnings
+	transition, execErr := c.executeProjectRunCommand(ctx, projectRunCommandExecution{
+		Run:         run,
+		Sandbox:     sandboxed.Sandbox,
+		Request:     sandboxed.Request,
+		CommandText: commandText,
+		Sink:        sandboxed.Stream,
+	})
+	if execErr != nil || transition.ExitCode != 0 {
+		run, err := c.completeProjectRunError(sandboxed.TransitionCtx, ctx, transition, execErr)
 		if err != nil {
 			return domain.ProjectRunRecord{}, nil, err
 		}
-		run = withRunWarnings(run, warnings)
-		return run, nil, nil
+		return withRunWarnings(run, warnings), execErr, nil
 	}
+	transition.Status = domain.ProjectRunStatusSucceeded
+	run, err := c.completeProjectRun(sandboxed.TransitionCtx, transition)
+	if err != nil {
+		return domain.ProjectRunRecord{}, nil, err
+	}
+	return withRunWarnings(run, warnings), nil, nil
+}
+
+func (c *Controller) completeProjectRunAgent(ctx context.Context, sandboxed sandboxedProjectRun) (domain.ProjectRunRecord, error, error) {
+	run, warnings, req := sandboxed.Run, sandboxed.Warnings, sandboxed.Request
 	agentConfig, err := c.projectRunAgentConfig(ctx, run)
 	if err != nil {
-		run, markErr := c.completeProjectRun(transitionCtx, TransitionRequest{
+		run, markErr := c.completeProjectRun(sandboxed.TransitionCtx, TransitionRequest{
 			RunID:     run.RunID,
 			Status:    domain.ProjectRunStatusFailed,
-			SandboxID: sandboxResult.Sandbox.Summary.ID,
+			SandboxID: sandboxed.Sandbox.Summary.ID,
 			ExitCode:  1,
 			Error:     fmt.Sprintf("agent execution failed: %v", err),
 		})
 		if markErr != nil {
 			return domain.ProjectRunRecord{}, nil, markErr
 		}
-		run = withRunWarnings(run, warnings)
-		return run, err, nil
+		return withRunWarnings(run, warnings), err, nil
 	}
 	if c.executor == nil {
 		err = fmt.Errorf("executor is required")
-		run, markErr := c.completeProjectRun(transitionCtx, TransitionRequest{
+		run, markErr := c.completeProjectRun(sandboxed.TransitionCtx, TransitionRequest{
 			RunID:     run.RunID,
 			Status:    domain.ProjectRunStatusFailed,
-			SandboxID: sandboxResult.Sandbox.Summary.ID,
+			SandboxID: sandboxed.Sandbox.Summary.ID,
 			ExitCode:  1,
 			Error:     fmt.Sprintf("agent execution failed: %v", err),
 		})
 		if markErr != nil {
 			return domain.ProjectRunRecord{}, nil, markErr
 		}
-		run = withRunWarnings(run, warnings)
-		return run, err, nil
+		return withRunWarnings(run, warnings), err, nil
 	}
-	cell, _, assistantEvent, execErr := c.executor.ExecuteAgentRequest(ctx, sandboxResult.Sandbox, execution.ExecuteAgentRequest{
+	cell, _, assistantEvent, execErr := c.executor.ExecuteAgentRequest(ctx, sandboxed.Sandbox, execution.ExecuteAgentRequest{
 		Agent:             agentConfig.Provider,
 		AgentDefinitionID: run.AgentID,
 		Model:             agentConfig.Model,
 		RunID:             run.RunID,
 		Message:           req.Prompt,
 		OutputSchemaJSON:  req.OutputSchemaJSON,
-		Stream:            projectRunAgentExecutionStream(transitionCtx, coordinator, run, sandboxResult.Sandbox, stream, c.runLogs),
+		Stream: projectRunAgentExecutionStream(sandboxed.TransitionCtx, agentExecutionStreamRequest{
+			Coordinator: sandboxed.Coordinator,
+			Run:         run,
+			Sandbox:     sandboxed.Sandbox,
+			Sink:        sandboxed.Stream,
+			Hub:         c.runLogs,
+		}),
 	})
-	transition := TransitionFromAgentCell(run, sandboxResult.Sandbox, cell, execErr)
+	transition := TransitionFromAgentCell(run, sandboxed.Sandbox, cell, execErr)
 	transition.TerminalEvents = projectAgentTerminalEvents(run, cell, assistantEvent, execErr)
 	if execErr != nil || !cell.Success {
-		run, err = c.completeProjectRunError(transitionCtx, ctx, transition, execErr)
+		run, err = c.completeProjectRunError(sandboxed.TransitionCtx, ctx, transition, execErr)
 		if err != nil {
 			return domain.ProjectRunRecord{}, nil, err
 		}
-		run = withRunWarnings(run, warnings)
-		return run, execErr, nil
+		return withRunWarnings(run, warnings), execErr, nil
 	}
 	transition.Status = domain.ProjectRunStatusSucceeded
-	run, err = c.completeProjectRun(transitionCtx, transition)
+	run, err = c.completeProjectRun(sandboxed.TransitionCtx, transition)
 	if err != nil {
 		return domain.ProjectRunRecord{}, nil, err
 	}
-	run = withRunWarnings(run, warnings)
-	return run, nil, nil
+	return withRunWarnings(run, warnings), nil, nil
 }

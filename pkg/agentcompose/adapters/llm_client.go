@@ -48,7 +48,9 @@ func (c *LLMClient) GenerateWithEnv(ctx context.Context, req GenerateWithEnvRequ
 	if c == nil {
 		return llms.GenerateResult{}, fmt.Errorf("llm client is unavailable")
 	}
-	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, c.config, c.store, req.ScopeID, "", req.Model, "", req.EnvItems)
+	target, err := llms.ResolveRuntimeLLMTargetWithEnv(ctx, c.store, llms.RuntimeLLMTargetQuery{
+		Config: c.config, SessionID: req.ScopeID, PreferredProviderFamily: "", RequestedModel: req.Model, ProviderID: "", EnvItems: req.EnvItems,
+	})
 	if err != nil {
 		return llms.GenerateResult{}, err
 	}

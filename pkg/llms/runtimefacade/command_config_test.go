@@ -30,7 +30,7 @@ func TestEnsureSessionCommandFacadeConfigRebuildsStartupAndSelectedEnvironment(t
 		WorkspacePath: filepath.Join(root, "sandboxes", "sandbox-command-facades", "workspace"),
 	}}
 
-	result, err := EnsureSessionCommandFacadeConfig(ctx, config, store, session, "codex", "openai-model", TokenSourceSchedulerCommand, "run-command")
+	result, err := EnsureSessionCommandFacadeConfig(ctx, CommandFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "codex", Model: "openai-model", Source: TokenSourceSchedulerCommand, RunID: "run-command"})
 	if err != nil {
 		t.Fatalf("EnsureSessionCommandFacadeConfig returned error: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestEnsureSessionCommandFacadeConfigCleansAllTokensAfterPartialFailure(t *t
 		WorkspacePath: filepath.Join(blockedSandboxDir, "workspace"),
 	}}
 
-	result, err := EnsureSessionCommandFacadeConfig(ctx, config, store, session, "codex", "openai-model", TokenSourceSchedulerCommand, "run-partial-failure")
+	result, err := EnsureSessionCommandFacadeConfig(ctx, CommandFacadeConfigRequest{Config: config, Store: store, Session: session, Agent: "codex", Model: "openai-model", Source: TokenSourceSchedulerCommand, RunID: "run-partial-failure"})
 	if err == nil || !strings.Contains(err.Error(), "codex config") {
 		t.Fatalf("EnsureSessionCommandFacadeConfig error = %v, want Codex config write failure", err)
 	}
