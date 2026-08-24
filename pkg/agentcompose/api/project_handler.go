@@ -110,6 +110,7 @@ type ProjectHandlerDeps struct {
 	Delegate         ProjectDelegate
 	Store            ProjectStore
 	SchedulerRuntime ProjectSchedulerRuntime
+	SchedulerRuns    ProjectSchedulerRunRuntime
 	AgentModels      ProjectAgentModelResolver
 	SandboxDirs      schedulers.SandboxDirResolver
 }
@@ -121,7 +122,10 @@ func NewProjectHandlerWithAgentModels(deps ProjectHandlerDeps) *ProjectHandler {
 }
 
 func newProjectHandler(deps ProjectHandlerDeps) *ProjectHandler {
-	schedulerRuns, _ := deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
+	schedulerRuns := deps.SchedulerRuns
+	if schedulerRuns == nil {
+		schedulerRuns, _ = deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
+	}
 	invocations, _ := deps.SchedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := deps.SchedulerRuntime.(ProjectSchedulerPruneRuntime)
 	return &ProjectHandler{delegate: deps.Delegate, store: deps.Store, agentModels: deps.AgentModels, schedulerRuntime: deps.SchedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune, sandboxDirs: deps.SandboxDirs}
