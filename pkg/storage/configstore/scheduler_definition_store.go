@@ -10,6 +10,7 @@ import (
 	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
+	"agent-compose/pkg/storedtime"
 )
 
 func (s *schedulerStore) loadSchedulerDefinition(ctx context.Context, schedulerID string) (domain.Scheduler, error) {
@@ -47,12 +48,12 @@ func (s *schedulerStore) loadSchedulerDefinition(ctx context.Context, schedulerI
 		return domain.Scheduler{}, fmt.Errorf("load scheduler definition %s: %w", schedulerID, err)
 	}
 	scheduler.Enabled = enabled != 0
-	scheduler.CreatedAt = ParseStoredTime(schedulerCreated)
-	scheduler.UpdatedAt = ParseStoredTime(schedulerUpdated)
+	scheduler.CreatedAt = storedtime.ParseStoredTime(schedulerCreated)
+	scheduler.UpdatedAt = storedtime.ParseStoredTime(schedulerUpdated)
 	project.ID = scheduler.ProjectID
-	project.CreatedAt = ParseStoredTime(projectCreated)
-	project.UpdatedAt = ParseStoredTime(projectUpdated)
-	project.RemovedAt = ParseStoredTime(projectRemoved)
+	project.CreatedAt = storedtime.ParseStoredTime(projectCreated)
+	project.UpdatedAt = storedtime.ParseStoredTime(projectUpdated)
+	project.RemovedAt = storedtime.ParseStoredTime(projectRemoved)
 
 	spec, err := compose.ParseCanonicalJSON([]byte(revisionJSON))
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/storage/storeutil"
+	"agent-compose/pkg/storedtime"
 	"context"
 	"database/sql"
 	"errors"
@@ -354,8 +355,8 @@ func (s *eventStore) ListEventDeliveries(ctx context.Context, eventIDs []string)
 		if err := rows.Scan(&item.EventID, &item.SchedulerID, &item.TriggerID, &item.RunID, &item.Status, &item.Error, &createdAtRaw, &updatedAtRaw); err != nil {
 			return nil, fmt.Errorf("scan event delivery: %w", err)
 		}
-		item.CreatedAt = storeutil.ParseStoredUnixTimeAuto(createdAtRaw)
-		item.UpdatedAt = storeutil.ParseStoredUnixTimeAuto(updatedAtRaw)
+		item.CreatedAt = storedtime.ParseStoredUnixTimeAuto(createdAtRaw)
+		item.UpdatedAt = storedtime.ParseStoredUnixTimeAuto(updatedAtRaw)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -400,7 +401,7 @@ func (s *eventStore) ListEventSandboxLinks(ctx context.Context, eventIDs []strin
 		if err := rows.Scan(&item.EventID, &item.SandboxID, &item.Relation, &item.SchedulerID, &item.RunID, &item.TriggerID, &item.SchedulerEventID, &createdAtRaw); err != nil {
 			return nil, fmt.Errorf("scan event sandbox link: %w", err)
 		}
-		item.CreatedAt = storeutil.ParseStoredUnixTimeAuto(createdAtRaw)
+		item.CreatedAt = storedtime.ParseStoredUnixTimeAuto(createdAtRaw)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -486,8 +487,8 @@ func (s *eventStore) ListEnabledWebhookSourcesForTopic(ctx context.Context, topi
 			return nil, fmt.Errorf("scan webhook source: %w", err)
 		}
 		item.Enabled = enabled != 0
-		item.CreatedAt = storeutil.ParseStoredUnixTimeAuto(createdAtRaw)
-		item.UpdatedAt = storeutil.ParseStoredUnixTimeAuto(updatedAtRaw)
+		item.CreatedAt = storedtime.ParseStoredUnixTimeAuto(createdAtRaw)
+		item.UpdatedAt = storedtime.ParseStoredUnixTimeAuto(updatedAtRaw)
 		if webhookSourceTopicMatches(topic, item.TopicPrefix) {
 			items = append(items, item)
 		}
@@ -527,8 +528,8 @@ func (s *eventStore) ListWebhookSources(ctx context.Context) ([]domain.WebhookSo
 			return nil, fmt.Errorf("scan webhook source: %w", err)
 		}
 		item.Enabled = enabled != 0
-		item.CreatedAt = storeutil.ParseStoredUnixTimeAuto(createdAtRaw)
-		item.UpdatedAt = storeutil.ParseStoredUnixTimeAuto(updatedAtRaw)
+		item.CreatedAt = storedtime.ParseStoredUnixTimeAuto(createdAtRaw)
+		item.UpdatedAt = storedtime.ParseStoredUnixTimeAuto(updatedAtRaw)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -555,8 +556,8 @@ func (s *eventStore) GetWebhookSource(ctx context.Context, sourceID string) (dom
 		return domain.WebhookSource{}, false, fmt.Errorf("get webhook source: %w", err)
 	}
 	item.Enabled = enabled != 0
-	item.CreatedAt = storeutil.ParseStoredUnixTimeAuto(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredUnixTimeAuto(updatedAtRaw)
+	item.CreatedAt = storedtime.ParseStoredUnixTimeAuto(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredUnixTimeAuto(updatedAtRaw)
 	return item, true, nil
 }
 
