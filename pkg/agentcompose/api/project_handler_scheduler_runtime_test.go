@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -15,6 +16,16 @@ func TestNewProjectHandlerAllowsOmittedSchedulerRuntime(t *testing.T) {
 
 	if handler.schedulerRuntime != nil || handler.schedulerRuns != nil || handler.invocations != nil || handler.schedulerPrune != nil {
 		t.Fatalf("scheduler runtime dependencies = %#v", handler)
+	}
+}
+
+func TestNewProjectHandlerUsesControllerSchedulerRuns(t *testing.T) {
+	controller := schedulers.NewController(schedulers.ControllerDependencies{})
+
+	handler := NewProjectHandler(nil, nil, controller)
+
+	if handler.schedulerRuns != controller.SchedulerRuns() {
+		t.Fatalf("scheduler runs = %T, want controller scheduler runs", handler.schedulerRuns)
 	}
 }
 

@@ -81,7 +81,11 @@ func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRu
 	if len(schedulerRuntimes) > 0 {
 		schedulerRuntime = schedulerRuntimes[0]
 	}
-	return newProjectHandler(ProjectHandlerDeps{Delegate: delegate, Store: store, SchedulerRuntime: schedulerRuntime})
+	deps := ProjectHandlerDeps{Delegate: delegate, Store: store, SchedulerRuntime: schedulerRuntime}
+	if controller, ok := schedulerRuntime.(*schedulers.Controller); ok {
+		deps.SchedulerRuns = controller.SchedulerRuns()
+	}
+	return newProjectHandler(deps)
 }
 
 // WithSandboxDirs injects the sandbox directory resolver ResolveEventMessage
