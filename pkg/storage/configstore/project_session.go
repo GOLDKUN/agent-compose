@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
 )
@@ -62,7 +63,7 @@ func (s *projectStore) ListProjectSandboxRuns(ctx context.Context, filter domain
 }
 
 func (s *projectStore) ListLatestProjectRunsForSandboxes(ctx context.Context, sandboxIDs []string) (map[string]ProjectRunRecord, error) {
-	ids := normalizedNonEmptyStrings(sandboxIDs)
+	ids := idset.Normalize(sandboxIDs)
 	if len(ids) == 0 {
 		return map[string]ProjectRunRecord{}, nil
 	}
@@ -109,21 +110,4 @@ func placeholders(count int) string {
 		values[i] = "?"
 	}
 	return strings.Join(values, ",")
-}
-
-func normalizedNonEmptyStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		result = append(result, value)
-	}
-	return result
 }

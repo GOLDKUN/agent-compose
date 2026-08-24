@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
@@ -206,7 +207,7 @@ func (h *ProjectHandler) BatchGetLatestSchedulerRuns(ctx context.Context, req *c
 	if err != nil {
 		return nil, ConnectErrorForDomain(err)
 	}
-	sandboxIDs := normalizeSchedulerRunBatchSandboxIDs(req.Msg.GetSandboxIds())
+	sandboxIDs := idset.Normalize(req.Msg.GetSandboxIds())
 	response := &agentcomposev2.BatchGetLatestSchedulerRunsResponse{Results: make([]*agentcomposev2.SandboxSchedulerRun, 0, len(sandboxIDs))}
 	if len(sandboxIDs) == 0 {
 		return connect.NewResponse(response), nil
@@ -233,23 +234,6 @@ func (h *ProjectHandler) BatchGetLatestSchedulerRuns(ctx context.Context, req *c
 		response.Results = append(response.Results, &agentcomposev2.SandboxSchedulerRun{SandboxId: sandboxID, Run: schedulerRunToProto(run, scheduler)})
 	}
 	return connect.NewResponse(response), nil
-}
-
-func normalizeSchedulerRunBatchSandboxIDs(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		result = append(result, value)
-	}
-	return result
 }
 
 func (h *ProjectHandler) StopSchedulerRun(ctx context.Context, req *connect.Request[agentcomposev2.StopSchedulerRunRequest]) (*connect.Response[agentcomposev2.StopSchedulerRunResponse], error) {
