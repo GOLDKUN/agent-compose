@@ -29,6 +29,19 @@ func TestNewProjectHandlerUsesControllerSchedulerRuns(t *testing.T) {
 	}
 }
 
+func TestNewProjectHandlerAllowsNilControllerRuntime(t *testing.T) {
+	var controller *schedulers.Controller
+
+	handler := NewProjectHandler(nil, nil, controller)
+
+	if handler.schedulerRuntime == nil {
+		t.Fatal("scheduler runtime lost typed nil controller")
+	}
+	if handler.schedulerRuns != nil {
+		t.Fatalf("scheduler runs = %T, want nil", handler.schedulerRuns)
+	}
+}
+
 func TestProjectHandlerSchedulerUpdatesUseSchedulerRuntime(t *testing.T) {
 	const (
 		projectID   = "project-1"

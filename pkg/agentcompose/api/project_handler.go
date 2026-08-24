@@ -82,7 +82,7 @@ func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRu
 		schedulerRuntime = schedulerRuntimes[0]
 	}
 	deps := ProjectHandlerDeps{Delegate: delegate, Store: store, SchedulerRuntime: schedulerRuntime}
-	if controller, ok := schedulerRuntime.(*schedulers.Controller); ok {
+	if controller, ok := schedulerRuntime.(*schedulers.Controller); ok && controller != nil {
 		deps.SchedulerRuns = controller.SchedulerRuns()
 	}
 	return newProjectHandler(deps)
