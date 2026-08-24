@@ -143,12 +143,16 @@ func (d projectControllerDelegate) ApplyProject(ctx context.Context, req *connec
 }
 
 func (d projectControllerDelegate) PatchProject(ctx context.Context, req *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
+	projectRef, err := api.ProjectReferenceFromProto(req.Msg.GetProject())
+	if err != nil {
+		return nil, projectConnectError(err)
+	}
 	raw, issues, err := parseProjectRequest(req.Msg.GetSpec())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	result, err := d.controller.PatchProject(ctx, projects.PatchRequest{
-		Project:                 projectRefFromProto(req.Msg.GetProject()),
+		Project:                 projectRef,
 		ExpectedCurrentSpecHash: req.Msg.GetExpectedCurrentSpecHash(),
 		Spec:                    raw,
 		Issues:                  issues,
@@ -178,8 +182,12 @@ func applyProjectResponse(result projects.ApplyResult) *agentcomposev2.ApplyProj
 }
 
 func (d projectControllerDelegate) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
+	projectRef, err := api.ProjectReferenceFromProto(req.Msg.GetProject())
+	if err != nil {
+		return nil, projectConnectError(err)
+	}
 	result, err := d.controller.RemoveProject(ctx, projects.RemoveRequest{
-		Project:       projectRefFromProto(req.Msg.GetProject()),
+		Project:       projectRef,
 		RemoveHistory: req.Msg.GetRemoveHistory(),
 	})
 	if err != nil {
@@ -256,22 +264,6 @@ func normalizedSpecToProto(spec *compose.NormalizedProjectSpec) *agentcomposev2.
 		return nil
 	}
 	return api.ProjectSpecToProtoRedacted(spec)
-}
-
-func projectRefFromProto(ref *agentcomposev2.ProjectRef) projects.ProjectRef {
-	if ref == nil {
-		return projects.ProjectRef{}
-	}
-	switch selector := ref.GetSelector().(type) {
-	case *agentcomposev2.ProjectRef_ProjectId:
-		return projects.ProjectRefByID(selector.ProjectId)
-	case *agentcomposev2.ProjectRef_Name:
-		return projects.ProjectRefByName(selector.Name)
-	case *agentcomposev2.ProjectRef_SourcePath:
-		return projects.ProjectRefBySourcePath(selector.SourcePath)
-	default:
-		return projects.ProjectRef{}
-	}
 }
 
 func validationIssuesFromProto(items []*agentcomposev2.ProjectValidationIssue) []projects.ValidationIssue {

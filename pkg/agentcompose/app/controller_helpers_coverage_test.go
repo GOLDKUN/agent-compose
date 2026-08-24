@@ -17,6 +17,18 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
+func TestProjectControllerDelegateRejectsMissingProjectSelector(t *testing.T) {
+	delegate := projectControllerDelegate{}
+	ctx := context.Background()
+
+	if _, err := delegate.PatchProject(ctx, connect.NewRequest(&agentcomposev2.PatchProjectRequest{})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("PatchProject() code = %v, want %v (error: %v)", connect.CodeOf(err), connect.CodeInvalidArgument, err)
+	}
+	if _, err := delegate.RemoveProject(ctx, connect.NewRequest(&agentcomposev2.RemoveProjectRequest{Project: &agentcomposev2.ProjectRef{}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("RemoveProject() code = %v, want %v (error: %v)", connect.CodeOf(err), connect.CodeInvalidArgument, err)
+	}
+}
+
 func TestAppProjectControllerHelperCoverage(t *testing.T) {
 	if normalized, issues, err := normalizeProjectRequest(nil, nil, ""); err != nil || normalized.Spec != nil || len(issues) != 1 {
 		t.Fatalf("normalizeProjectRequest nil normalized=%#v issues=%#v err=%v", normalized, issues, err)
@@ -47,18 +59,6 @@ func TestAppProjectControllerHelperCoverage(t *testing.T) {
 	}
 	if normalizedSpecToProto(nil) != nil {
 		t.Fatalf("normalizedSpecToProto nil returned non-nil")
-	}
-	for _, ref := range []*agentcomposev2.ProjectRef{
-		{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}},
-		{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}},
-		{Selector: &agentcomposev2.ProjectRef_SourcePath{SourcePath: "/repo"}},
-	} {
-		if got := projectRefFromProto(ref); got == (projects.ProjectRef{}) {
-			t.Fatalf("projectRefFromProto(%T) returned empty ref", ref.GetSelector())
-		}
-	}
-	if ref := projectRefFromProto(nil); ref != (projects.ProjectRef{}) {
-		t.Fatalf("projectRefFromProto nil = %#v", ref)
 	}
 	protoIssues := validationIssuesToProto([]projects.ValidationIssue{{Path: "path", Message: "bad"}})
 	if got := validationIssuesFromProto(append(protoIssues, nil)); len(got) != 2 || got[0].Path != "path" {
