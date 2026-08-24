@@ -1,11 +1,28 @@
 package schedulers
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	domain "agent-compose/pkg/model"
 )
+
+type schedulerBindingClaimStoreStub struct {
+	called      bool
+	expected    *domain.SchedulerBinding
+	replacement domain.SchedulerBinding
+	claimed     bool
+	err         error
+}
+
+func (s *schedulerBindingClaimStoreStub) CompareAndSwapSchedulerBinding(_ context.Context, expected *domain.SchedulerBinding, replacement domain.SchedulerBinding) (bool, error) {
+	s.called = true
+	s.expected = expected
+	s.replacement = replacement
+	return s.claimed, s.err
+}
 
 func TestSchedulerBindingsMatchComparesStickyState(t *testing.T) {
 	current := domain.SchedulerBinding{
@@ -97,6 +114,45 @@ func TestAdoptLegacySchedulerBindingConfigHash(t *testing.T) {
 			got, ok := AdoptLegacySchedulerBindingConfigHash(test.binding, test.desired)
 			if ok || got != test.binding {
 				t.Fatalf("AdoptLegacySchedulerBindingConfigHash = %#v/%v, want unchanged/false", got, ok)
+			}
+		})
+	}
+}
+
+func TestClaimLegacySchedulerBindingConfigHash(t *testing.T) {
+	legacy := domain.SchedulerBinding{SchedulerID: "scheduler-1", TriggerID: "trigger-1", SandboxID: "sandbox-1"}
+	storeErr := errors.New("store unavailable")
+	for name, test := range map[string]struct {
+		binding       domain.SchedulerBinding
+		claimed       bool
+		storeErr      error
+		wantHash      string
+		wantCurrent   bool
+		wantStoreCall bool
+		wantErr       error
+	}{
+		"CAS winner":      {binding: legacy, claimed: true, wantHash: "sha256:current", wantCurrent: true, wantStoreCall: true},
+		"CAS loser":       {binding: legacy, claimed: false, wantHash: "sha256:current", wantStoreCall: true},
+		"current binding": {binding: domain.SchedulerBinding{SchedulerID: "scheduler-1", SandboxConfigHash: "sha256:existing"}, wantHash: "sha256:existing", wantCurrent: true},
+		"store error":     {binding: legacy, storeErr: storeErr, wantStoreCall: true, wantErr: storeErr},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &schedulerBindingClaimStoreStub{claimed: test.claimed, err: test.storeErr}
+			got, current, err := ClaimLegacySchedulerBindingConfigHash(context.Background(), store, test.binding, " sha256:current ")
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("ClaimLegacySchedulerBindingConfigHash error = %v, want %v", err, test.wantErr)
+			}
+			if current != test.wantCurrent {
+				t.Fatalf("ClaimLegacySchedulerBindingConfigHash current = %v, want %v", current, test.wantCurrent)
+			}
+			if got.SandboxConfigHash != test.wantHash {
+				t.Fatalf("ClaimLegacySchedulerBindingConfigHash hash = %q, want %q", got.SandboxConfigHash, test.wantHash)
+			}
+			if store.called != test.wantStoreCall {
+				t.Fatalf("CompareAndSwapSchedulerBinding called = %v, want %v", store.called, test.wantStoreCall)
+			}
+			if store.called && (*store.expected != test.binding || store.replacement.SandboxConfigHash != "sha256:current") {
+				t.Fatalf("CompareAndSwapSchedulerBinding arguments = %#v/%#v", store.expected, store.replacement)
 			}
 		})
 	}

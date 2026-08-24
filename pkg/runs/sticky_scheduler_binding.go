@@ -127,7 +127,7 @@ func (c *Controller) resolveStickySchedulerBinding(ctx context.Context, store st
 			return "", &binding, nil, nil
 		}
 		if !retiring {
-			binding, current, err := claimLegacyStickySchedulerBindingConfigHash(ctx, store, binding, configHash)
+			binding, current, err := schedulers.ClaimLegacySchedulerBindingConfigHash(ctx, store, binding, configHash)
 			if err != nil {
 				return "", &binding, nil, fmt.Errorf("adopt legacy sticky sandbox configuration: %w", err)
 			}
@@ -165,18 +165,6 @@ func (c *Controller) resolveStickySchedulerBinding(ctx context.Context, store st
 	return "", nil, nil, fmt.Errorf("sticky sandbox binding changed concurrently")
 }
 
-func claimLegacyStickySchedulerBindingConfigHash(ctx context.Context, store stickyBindingStore, binding domain.SchedulerBinding, configHash string) (domain.SchedulerBinding, bool, error) {
-	replacement, legacy := schedulers.AdoptLegacySchedulerBindingConfigHash(binding, configHash)
-	if !legacy {
-		return binding, true, nil
-	}
-	claimed, err := store.CompareAndSwapSchedulerBinding(ctx, &binding, replacement)
-	if err != nil {
-		return binding, false, err
-	}
-	return replacement, claimed, nil
-}
-
 func loadCompatibleStickySchedulerBinding(ctx context.Context, store stickyBindingStore, key stickyBindingKey) (domain.SchedulerBinding, bool, error) {
 	schedulerID, triggerID, configHash := key.SchedulerID, key.TriggerID, key.ConfigHash
 	for range 3 {
@@ -187,7 +175,7 @@ func loadCompatibleStickySchedulerBinding(ctx context.Context, store stickyBindi
 		if _, retiring := schedulers.RetiringSchedulerBindingConfigHash(binding); retiring {
 			return domain.SchedulerBinding{}, false, nil
 		}
-		binding, current, err := claimLegacyStickySchedulerBindingConfigHash(ctx, store, binding, configHash)
+		binding, current, err := schedulers.ClaimLegacySchedulerBindingConfigHash(ctx, store, binding, configHash)
 		if err != nil {
 			return domain.SchedulerBinding{}, false, err
 		}

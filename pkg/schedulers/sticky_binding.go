@@ -1,12 +1,18 @@
 package schedulers
 
 import (
+	"context"
 	"strings"
 
 	domain "agent-compose/pkg/model"
 )
 
 const retiringSchedulerBindingConfigPrefix = "retiring:"
+
+// SchedulerBindingClaimStore installs scheduler binding state atomically.
+type SchedulerBindingClaimStore interface {
+	CompareAndSwapSchedulerBinding(context.Context, *domain.SchedulerBinding, domain.SchedulerBinding) (bool, error)
+}
 
 // SchedulerBindingsMatch reports whether two bindings identify the same sticky
 // sandbox state. Persistence timestamps are deliberately excluded because
@@ -29,6 +35,21 @@ func AdoptLegacySchedulerBindingConfigHash(binding domain.SchedulerBinding, desi
 	}
 	binding.SandboxConfigHash = desiredConfigHash
 	return binding, true
+}
+
+// ClaimLegacySchedulerBindingConfigHash adopts the desired configuration for
+// a legacy binding using compare-and-swap. Current bindings require no store
+// operation and are reported as claimed by the caller.
+func ClaimLegacySchedulerBindingConfigHash(ctx context.Context, store SchedulerBindingClaimStore, binding domain.SchedulerBinding, desiredConfigHash string) (domain.SchedulerBinding, bool, error) {
+	replacement, legacy := AdoptLegacySchedulerBindingConfigHash(binding, desiredConfigHash)
+	if !legacy {
+		return binding, true, nil
+	}
+	claimed, err := store.CompareAndSwapSchedulerBinding(ctx, &binding, replacement)
+	if err != nil {
+		return binding, false, err
+	}
+	return replacement, claimed, nil
 }
 
 // RetiringSchedulerBinding returns a compare-and-swap replacement that makes an
