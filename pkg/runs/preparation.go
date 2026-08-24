@@ -2,7 +2,6 @@ package runs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"agent-compose/pkg/projects"
 	"agent-compose/pkg/storage/sandboxstore"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type PreparationStore interface {
@@ -151,7 +151,8 @@ func DecodeRevisionSpec(raw string) (*agentcomposev2.ProjectSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode project revision spec: %w", err)
 	}
-	if err := json.Unmarshal(normalizedData, &spec); err != nil {
+	opts := protojson.UnmarshalOptions{DiscardUnknown: true}
+	if err := opts.Unmarshal(normalizedData, &spec); err != nil {
 		return nil, fmt.Errorf("decode project revision spec: %w", err)
 	}
 	if err := restoreCanonicalRevisionWorkspaces(data, &spec); err != nil {
