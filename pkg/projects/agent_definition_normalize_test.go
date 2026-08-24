@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"reflect"
 	"testing"
 
 	domain "agent-compose/pkg/model"
@@ -30,5 +31,31 @@ func TestNormalizeAgentDefinitionAcceptsDsh(t *testing.T) {
 	}
 	if normalized.Provider != "dsh" || normalized.Model != "deepseek-official/deepseek-v4-flash" {
 		t.Fatalf("normalized definition = %#v", normalized)
+	}
+}
+
+func TestNormalizeAgentDefinitionNormalizesCapsetIDs(t *testing.T) {
+	definition := domain.AgentDefinition{
+		ID: "agent-1", Name: "reviewer", Provider: "codex",
+		CapsetIDs: []string{" beta ", "", "alpha", "beta", "  ", "gamma", "alpha"},
+	}
+	normalized, err := NormalizeAgentDefinition(definition, false)
+	if err != nil {
+		t.Fatalf("NormalizeAgentDefinition returned error: %v", err)
+	}
+	want := []string{"beta", "alpha", "gamma"}
+	if !reflect.DeepEqual(normalized.CapsetIDs, want) {
+		t.Fatalf("normalized CapsetIDs = %#v, want %#v", normalized.CapsetIDs, want)
+	}
+}
+
+func TestNormalizeAgentDefinitionNilCapsetIDsNormalizesToEmpty(t *testing.T) {
+	definition := domain.AgentDefinition{ID: "agent-1", Name: "reviewer", Provider: "codex"}
+	normalized, err := NormalizeAgentDefinition(definition, false)
+	if err != nil {
+		t.Fatalf("NormalizeAgentDefinition returned error: %v", err)
+	}
+	if normalized.CapsetIDs == nil || len(normalized.CapsetIDs) != 0 {
+		t.Fatalf("normalized CapsetIDs = %#v, want non-nil empty slice", normalized.CapsetIDs)
 	}
 }

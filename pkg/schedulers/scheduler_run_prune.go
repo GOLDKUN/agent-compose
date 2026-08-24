@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 )
 
@@ -206,7 +207,7 @@ func removeSchedulerRunPruneArtifacts(artifactPruner SchedulerRunArtifactPruner,
 }
 
 func normalizeSchedulerRunPruneFilter(request SchedulerRunPruneRequest, now time.Time) (SchedulerRunPruneFilter, error) {
-	schedulerIDs := normalizedStrings(request.SchedulerIDs)
+	schedulerIDs := idset.Canonical(request.SchedulerIDs)
 	if request.OlderThan < 0 {
 		return SchedulerRunPruneFilter{}, domain.ClassifyError(domain.ErrInvalidArgument, "scheduler run prune older-than must not be negative", nil)
 	}
@@ -240,24 +241,6 @@ func normalizeSchedulerRunPruneFilter(request SchedulerRunPruneRequest, now time
 		OlderThan:    request.OlderThan,
 		Now:          now.UTC(),
 	}, nil
-}
-
-func normalizedStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		result = append(result, value)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func schedulerRunKeys(runs []domain.SchedulerRunSummary) []SchedulerRunKey {

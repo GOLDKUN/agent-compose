@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
 )
@@ -242,7 +243,7 @@ func (s *projectStore) ListProjectAgents(ctx context.Context, projectID string) 
 }
 
 func (s *projectStore) ListProjectAgentsByIDs(ctx context.Context, agentIDs []string) (map[string]ProjectAgentRecord, error) {
-	ids := normalizedNonEmptyStrings(agentIDs)
+	ids := idset.Normalize(agentIDs)
 	if len(ids) == 0 {
 		return map[string]ProjectAgentRecord{}, nil
 	}

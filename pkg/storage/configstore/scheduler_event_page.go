@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
 )
 
 func (s *schedulerStore) ListSchedulerEventsPage(ctx context.Context, filter schedulers.SchedulerEventPageFilter) ([]domain.SchedulerEvent, error) {
-	schedulerIDs := normalizedSchedulerRunPageIDs(filter.SchedulerIDs)
+	schedulerIDs := idset.Normalize(filter.SchedulerIDs)
 	if len(schedulerIDs) == 0 {
 		return []domain.SchedulerEvent{}, nil
 	}
@@ -88,7 +89,7 @@ func (s *schedulerStore) ListSchedulerEventsPage(ctx context.Context, filter sch
 }
 
 func (s *schedulerStore) CountSchedulerEventsPage(ctx context.Context, filter schedulers.SchedulerEventPageFilter) (int, error) {
-	schedulerIDs := normalizedSchedulerRunPageIDs(filter.SchedulerIDs)
+	schedulerIDs := idset.Normalize(filter.SchedulerIDs)
 	if len(schedulerIDs) == 0 {
 		return 0, nil
 	}

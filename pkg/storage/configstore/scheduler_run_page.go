@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
 )
 
 func (s *schedulerStore) GetSchedulerRunForSchedulers(ctx context.Context, schedulerIDs []string, runID string) (domain.SchedulerRunSummary, error) {
-	schedulerIDs = normalizedSchedulerRunPageIDs(schedulerIDs)
+	schedulerIDs = idset.Normalize(schedulerIDs)
 	runID = strings.TrimSpace(runID)
 	if len(schedulerIDs) == 0 {
 		return domain.SchedulerRunSummary{}, schedulerRunPageNotFound(runID, nil)
@@ -58,7 +59,7 @@ func schedulerRunPageNotFound(runID string, cause error) error {
 }
 
 func (s *schedulerStore) ListSchedulerRunsPage(ctx context.Context, filter schedulers.SchedulerRunPageFilter) ([]domain.SchedulerRunSummary, error) {
-	schedulerIDs := normalizedSchedulerRunPageIDs(filter.SchedulerIDs)
+	schedulerIDs := idset.Normalize(filter.SchedulerIDs)
 	if len(schedulerIDs) == 0 {
 		return []domain.SchedulerRunSummary{}, nil
 	}
@@ -111,7 +112,7 @@ func (s *schedulerStore) ListSchedulerRunsPage(ctx context.Context, filter sched
 }
 
 func (s *schedulerStore) CountSchedulerRunsPage(ctx context.Context, filter schedulers.SchedulerRunPageFilter) (int, error) {
-	schedulerIDs := normalizedSchedulerRunPageIDs(filter.SchedulerIDs)
+	schedulerIDs := idset.Normalize(filter.SchedulerIDs)
 	if len(schedulerIDs) == 0 {
 		return 0, nil
 	}
@@ -187,8 +188,8 @@ func (s *schedulerStore) ListSchedulerRunSandboxIDs(ctx context.Context, keys []
 }
 
 func (s *schedulerStore) BatchGetLatestSchedulerRunsBySandboxIDs(ctx context.Context, schedulerIDs, sandboxIDs []string) (map[string]domain.SchedulerRunSummary, error) {
-	schedulerIDs = normalizedSchedulerRunPageIDs(schedulerIDs)
-	sandboxIDs = normalizedSchedulerRunPageIDs(sandboxIDs)
+	schedulerIDs = idset.Normalize(schedulerIDs)
+	sandboxIDs = idset.Normalize(sandboxIDs)
 	result := make(map[string]domain.SchedulerRunSummary)
 	if len(schedulerIDs) == 0 || len(sandboxIDs) == 0 {
 		return result, nil
@@ -246,21 +247,4 @@ func (s *schedulerStore) BatchGetLatestSchedulerRunsBySandboxIDs(ctx context.Con
 		return nil, fmt.Errorf("iterate latest scheduler runs by sandbox ids: %w", err)
 	}
 	return result, nil
-}
-
-func normalizedSchedulerRunPageIDs(schedulerIDs []string) []string {
-	seen := make(map[string]struct{}, len(schedulerIDs))
-	result := make([]string, 0, len(schedulerIDs))
-	for _, schedulerID := range schedulerIDs {
-		schedulerID = strings.TrimSpace(schedulerID)
-		if schedulerID == "" {
-			continue
-		}
-		if _, ok := seen[schedulerID]; ok {
-			continue
-		}
-		seen[schedulerID] = struct{}{}
-		result = append(result, schedulerID)
-	}
-	return result
 }
