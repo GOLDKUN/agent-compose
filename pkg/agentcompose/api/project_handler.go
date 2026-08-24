@@ -129,6 +129,9 @@ func newProjectHandler(deps ProjectHandlerDeps) *ProjectHandler {
 	if controller, ok := deps.SchedulerRuntime.(*schedulers.Controller); ok && controller == nil {
 		deps.SchedulerRuntime = nil
 	}
+	if supervisor, ok := deps.SchedulerRuns.(*schedulers.SchedulerRunSupervisor); ok && supervisor == nil {
+		deps.SchedulerRuns = nil
+	}
 	schedulerRuns := deps.SchedulerRuns
 	if schedulerRuns == nil {
 		schedulerRuns, _ = deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
