@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
@@ -15,6 +16,116 @@ func TestNewProjectHandlerAllowsOmittedSchedulerRuntime(t *testing.T) {
 
 	if handler.schedulerRuntime != nil || handler.schedulerRuns != nil || handler.invocations != nil || handler.schedulerPrune != nil {
 		t.Fatalf("scheduler runtime dependencies = %#v", handler)
+	}
+}
+
+func TestNewProjectHandlerUsesControllerSchedulerRuns(t *testing.T) {
+	controller := schedulers.NewController(schedulers.ControllerDependencies{})
+
+	handler := NewProjectHandler(nil, nil, controller)
+
+	if handler.schedulerRuns != controller.SchedulerRuns() {
+		t.Fatalf("scheduler runs = %T, want controller scheduler runs", handler.schedulerRuns)
+	}
+}
+
+func TestNewProjectHandlerAllowsNilControllerRuntime(t *testing.T) {
+	var controller *schedulers.Controller
+	store := schedulerRuntimeProjectStore{
+		project: domain.ProjectRecord{ID: "project-1"},
+		scheduler: domain.ProjectSchedulerRecord{
+			ID:          "scheduler-1",
+			ProjectID:   "project-1",
+			AgentName:   "reviewer",
+			SchedulerID: "scheduler-1",
+		},
+	}
+
+	handler := NewProjectHandler(nil, store, controller)
+
+	if handler.schedulerRuntime != nil {
+		t.Fatalf("scheduler runtime = %T, want nil", handler.schedulerRuntime)
+	}
+	if handler.schedulerRuns != nil {
+		t.Fatalf("scheduler runs = %T, want nil", handler.schedulerRuns)
+	}
+	_, err := handler.SetSchedulerEnabled(context.Background(), connect.NewRequest(&agentcomposev2.SetSchedulerEnabledRequest{
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}},
+		AgentName: "reviewer",
+		Enabled:   true,
+	}))
+	if connect.CodeOf(err) != connect.CodeInternal || err.Error() != "internal: scheduler runtime controller is required" {
+		t.Fatalf("SetSchedulerEnabled error = %v, want missing runtime error", err)
+	}
+}
+
+func TestNewProjectHandlerWithAgentModelsFallsBackToControllerSchedulerRunsWhenSchedulerRunsIsTypedNil(t *testing.T) {
+	controller := schedulers.NewController(schedulers.ControllerDependencies{})
+	var typedNilSupervisor *schedulers.SchedulerRunSupervisor
+
+	handler := NewProjectHandlerWithAgentModels(ProjectHandlerDeps{
+		SchedulerRuntime: controller,
+		SchedulerRuns:    typedNilSupervisor,
+	})
+
+	if handler.schedulerRuns != controller.SchedulerRuns() {
+		t.Fatalf("scheduler runs = %#v, want controller scheduler runs %#v", handler.schedulerRuns, controller.SchedulerRuns())
+	}
+}
+
+// TestNewProjectHandlerWithAgentModelsAllowsControllerWithoutSchedulerRuns
+// covers a *schedulers.Controller built without NewController (so its
+// internal SchedulerRunSupervisor was never initialized): controller.
+// SchedulerRuns() itself returns a nil *SchedulerRunSupervisor here, and
+// assigning that straight into the schedulerRuns interface would silently
+// reintroduce a typed-nil that bypasses the "== nil" guard elsewhere.
+func TestNewProjectHandlerWithAgentModelsAllowsControllerWithoutSchedulerRuns(t *testing.T) {
+	controller := &schedulers.Controller{}
+
+	handler := NewProjectHandlerWithAgentModels(ProjectHandlerDeps{SchedulerRuntime: controller})
+
+	if handler.schedulerRuns != nil {
+		t.Fatalf("scheduler runs = %#v, want nil", handler.schedulerRuns)
+	}
+	if _, err := handler.schedulerRunRuntime(); err == nil {
+		t.Fatal("schedulerRunRuntime() returned no error, want missing runtime error")
+	}
+}
+
+func TestNewProjectHandlerWithAgentModelsAllowsNilControllerRuntime(t *testing.T) {
+	var controller *schedulers.Controller
+
+	handler := NewProjectHandlerWithAgentModels(ProjectHandlerDeps{SchedulerRuntime: controller})
+
+	if handler.schedulerRuntime != nil || handler.schedulerRuns != nil || handler.invocations != nil || handler.schedulerPrune != nil {
+		t.Fatalf("scheduler runtime dependencies = %#v", handler)
+	}
+}
+
+func TestNewProjectHandlerWithAgentModelsAllowsNilSchedulerRunSupervisor(t *testing.T) {
+	var supervisor *schedulers.SchedulerRunSupervisor
+	store := schedulerRuntimeProjectStore{
+		project: domain.ProjectRecord{ID: "project-1"},
+		scheduler: domain.ProjectSchedulerRecord{
+			ID:          "scheduler-1",
+			ProjectID:   "project-1",
+			AgentName:   "reviewer",
+			SchedulerID: "scheduler-1",
+		},
+	}
+
+	handler := NewProjectHandlerWithAgentModels(ProjectHandlerDeps{Store: store, SchedulerRuns: supervisor})
+
+	if handler.schedulerRuns != nil {
+		t.Fatalf("scheduler runs = %T, want nil", handler.schedulerRuns)
+	}
+	_, err := handler.RunScheduler(context.Background(), connect.NewRequest(&agentcomposev2.RunSchedulerRequest{
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}},
+		AgentName: "reviewer",
+		TriggerId: "trigger-1",
+	}))
+	if connect.CodeOf(err) != connect.CodeInternal || err.Error() != "internal: scheduler run controller is required" {
+		t.Fatalf("RunScheduler error = %v, want missing runtime error", err)
 	}
 }
 

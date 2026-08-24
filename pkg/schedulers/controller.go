@@ -90,9 +90,14 @@ type Controller struct {
 	running         map[string]int
 	runExecutor     *RunExecutor
 	invocations     *InvocationExecutor
-	schedulerRuns   *schedulerRunSupervisor
+	schedulerRuns   *SchedulerRunSupervisor
 	scheduler       *Scheduler
 	eventDispatcher *EventDispatcher
+}
+
+// SchedulerRuns returns the capability that owns scheduler-run lifecycle and state.
+func (c *Controller) SchedulerRuns() *SchedulerRunSupervisor {
+	return c.schedulerRuns
 }
 
 func NewController(deps ControllerDependencies) *Controller {

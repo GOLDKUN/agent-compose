@@ -85,7 +85,7 @@ func TestSchedulerRunSupervisorRunReturnsFinalResult(t *testing.T) {
 		},
 	})
 
-	run, err := supervisor.Run(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1"})
+	run, err := supervisor.RunScheduler(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1"})
 	if err != nil || run.Status != domain.SchedulerRunStatusSucceeded || run.ResultJSON != `{"ok":true}` {
 		t.Fatalf("Run run=%#v err=%v", run, err)
 	}
@@ -103,7 +103,7 @@ func TestSchedulerRunSupervisorRejectsEmptyTriggerWithoutPreparingRun(t *testing
 			return PreparedRun{}, nil
 		},
 	})
-	if _, err := supervisor.Run(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1"}); !errors.Is(err, domain.ErrRequired) || prepareCalls != 0 {
+	if _, err := supervisor.RunScheduler(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1"}); !errors.Is(err, domain.ErrRequired) || prepareCalls != 0 {
 		t.Fatalf("empty trigger err=%v prepareCalls=%d", err, prepareCalls)
 	}
 }
@@ -130,7 +130,7 @@ func TestSchedulerRunSupervisorTimeoutCancelsExecution(t *testing.T) {
 		},
 	})
 
-	run, err := supervisor.Run(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1", Timeout: 10 * time.Millisecond})
+	run, err := supervisor.RunScheduler(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1", Timeout: 10 * time.Millisecond})
 	if err != nil || run.Status != domain.SchedulerRunStatusCanceled || run.Error != errSchedulerRunTimedOut.Error() {
 		t.Fatalf("Run run=%#v err=%v", run, err)
 	}
@@ -162,20 +162,20 @@ func TestSchedulerRunSupervisorStopWaitsForExecutorTerminalState(t *testing.T) {
 		},
 	})
 
-	created, err := supervisor.Start(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1", PayloadJSON: `{"key":true}`})
+	created, err := supervisor.StartSchedulerRun(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1", PayloadJSON: `{"key":true}`})
 	if err != nil || created.Status != domain.SchedulerRunStatusRunning {
 		t.Fatalf("Start run=%#v err=%v", created, err)
 	}
 	<-started
-	stopped, requested, err := supervisor.Stop(context.Background(), "scheduler-1", created.ID, "user stop")
+	stopped, requested, err := supervisor.StopSchedulerRun(context.Background(), "scheduler-1", created.ID, "user stop")
 	if err != nil || !requested || stopped.Status != domain.SchedulerRunStatusCanceled || stopped.Error != "user stop" {
 		t.Fatalf("Stop run=%#v requested=%v err=%v", stopped, requested, err)
 	}
-	current, requested, err := supervisor.Stop(context.Background(), "scheduler-1", created.ID, "stop again")
+	current, requested, err := supervisor.StopSchedulerRun(context.Background(), "scheduler-1", created.ID, "stop again")
 	if err != nil || requested || current.Status != domain.SchedulerRunStatusCanceled || current.Error != "user stop" {
 		t.Fatalf("second Stop run=%#v requested=%v err=%v", current, requested, err)
 	}
-	runs, err := supervisor.List(context.Background(), "scheduler-1", 10)
+	runs, err := supervisor.ListSchedulerRuns(context.Background(), "scheduler-1", 10)
 	if err != nil || len(runs) != 1 || runs[0].ID != created.ID {
 		t.Fatalf("List runs=%#v err=%v", runs, err)
 	}
@@ -228,7 +228,7 @@ scheduler.interval("pending", async function pending() {
 		Execute: executor.Execute,
 	})
 
-	created, err := supervisor.Start(context.Background(), SchedulerRunRequest{
+	created, err := supervisor.StartSchedulerRun(context.Background(), SchedulerRunRequest{
 		SchedulerID: scheduler.Summary.ID,
 		TriggerID:   trigger.ID,
 	})
@@ -243,7 +243,7 @@ scheduler.interval("pending", async function pending() {
 
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancelStop()
-	stopped, requested, err := supervisor.Stop(stopCtx, scheduler.Summary.ID, created.ID, "operator stop")
+	stopped, requested, err := supervisor.StopSchedulerRun(stopCtx, scheduler.Summary.ID, created.ID, "operator stop")
 	if err != nil || !requested {
 		t.Fatalf("Stop run=%#v requested=%v err=%v", stopped, requested, err)
 	}
@@ -286,13 +286,13 @@ func TestSchedulerRunSupervisorRootContextStopsBackgroundRun(t *testing.T) {
 		},
 	})
 
-	if _, err := supervisor.Start(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1"}); err != nil {
+	if _, err := supervisor.StartSchedulerRun(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1"}); err != nil {
 		t.Fatalf("Start returned error: %v", err)
 	}
 	<-started
 	cancelRoot()
 	<-completed
-	run, err := supervisor.Get(context.Background(), "scheduler-1", "run-root")
+	run, err := supervisor.GetSchedulerRun(context.Background(), "scheduler-1", "run-root")
 	if err != nil || run.Status != domain.SchedulerRunStatusCanceled || run.Error != context.Canceled.Error() {
 		t.Fatalf("Get run=%#v err=%v", run, err)
 	}

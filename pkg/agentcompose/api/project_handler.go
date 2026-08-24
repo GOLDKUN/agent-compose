@@ -114,6 +114,7 @@ type ProjectHandlerDeps struct {
 	Delegate         ProjectDelegate
 	Store            ProjectStore
 	SchedulerRuntime ProjectSchedulerRuntime
+	SchedulerRuns    ProjectSchedulerRunRuntime
 	AgentModels      ProjectAgentModelResolver
 	SandboxDirs      schedulers.SandboxDirResolver
 }
@@ -125,7 +126,35 @@ func NewProjectHandlerWithAgentModels(deps ProjectHandlerDeps) *ProjectHandler {
 }
 
 func newProjectHandler(deps ProjectHandlerDeps) *ProjectHandler {
-	schedulerRuns, _ := deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
+	if controller, ok := deps.SchedulerRuntime.(*schedulers.Controller); ok && controller == nil {
+		deps.SchedulerRuntime = nil
+	}
+	if supervisor, ok := deps.SchedulerRuns.(*schedulers.SchedulerRunSupervisor); ok && supervisor == nil {
+		deps.SchedulerRuns = nil
+	}
+	schedulerRuns := deps.SchedulerRuns
+	if schedulerRuns == nil {
+		// A *schedulers.Controller no longer implements ProjectSchedulerRunRuntime
+		// directly (that capability lives on its SchedulerRunSupervisor), so callers
+		// that only set SchedulerRuntime — or that set SchedulerRuns to a typed-nil
+		// supervisor — still get the controller's real supervisor here instead of
+		// silently losing scheduler-run RPCs. The ProjectSchedulerRunRuntime
+		// assertion below remains for callers (tests, fakes) that implement the
+		// run-runtime methods directly without going through *schedulers.Controller.
+		if controller, ok := deps.SchedulerRuntime.(*schedulers.Controller); ok && controller != nil {
+			// controller.SchedulerRuns() is itself nil for a *Controller built by
+			// anything other than NewController (e.g. a zero-value struct literal
+			// in a test), so only take the concrete pointer once it's confirmed
+			// non-nil — assigning a nil *SchedulerRunSupervisor straight into the
+			// schedulerRuns interface would reintroduce the exact typed-nil footgun
+			// this fallback exists to close.
+			if runs := controller.SchedulerRuns(); runs != nil {
+				schedulerRuns = runs
+			}
+		} else {
+			schedulerRuns, _ = deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
+		}
+	}
 	invocations, _ := deps.SchedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := deps.SchedulerRuntime.(ProjectSchedulerPruneRuntime)
 	return &ProjectHandler{delegate: deps.Delegate, store: deps.Store, agentModels: deps.AgentModels, schedulerRuntime: deps.SchedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune, sandboxDirs: deps.SandboxDirs}
