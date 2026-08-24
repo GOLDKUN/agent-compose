@@ -5,21 +5,27 @@ import (
 	"testing"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
 func TestProjectReferenceFromProto(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		ref  *agentcomposev2.ProjectRef
+		name     string
+		ref      *agentcomposev2.ProjectRef
+		expected projects.ProjectRef
 	}{
-		{name: "project ID", ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}}},
-		{name: "name", ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}},
-		{name: "source path", ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_SourcePath{SourcePath: "/repo/project.yml"}}},
+		{name: "project ID", ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}}, expected: projects.ProjectRefByID("project-1")},
+		{name: "name", ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}}, expected: projects.ProjectRefByName("Project")},
+		{name: "source path", ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_SourcePath{SourcePath: "/repo/project.yml"}}, expected: projects.ProjectRefBySourcePath("/repo/project.yml")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := ProjectReferenceFromProto(tc.ref); err != nil {
+			got, err := ProjectReferenceFromProto(tc.ref)
+			if err != nil {
 				t.Fatalf("ProjectReferenceFromProto() error = %v", err)
+			}
+			if got != tc.expected {
+				t.Fatalf("ProjectReferenceFromProto() = %#v, want %#v", got, tc.expected)
 			}
 		})
 	}
