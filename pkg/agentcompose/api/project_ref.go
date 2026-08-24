@@ -9,16 +9,18 @@ import (
 )
 
 func resolveProjectReference(ctx context.Context, store projects.ProjectRefStore, ref *agentcomposev2.ProjectRef) (domain.ProjectRecord, error) {
-	projectRef, err := ProjectReferenceFromProto(ref)
+	projectRef, err := projectReferenceFromProto(ref)
 	if err != nil {
 		return domain.ProjectRecord{}, err
 	}
 	return projects.ResolveProjectRef(ctx, store, projectRef)
 }
 
-// ProjectReferenceFromProto validates and maps a transport project reference
-// to the domain representation used by project operations.
-func ProjectReferenceFromProto(ref *agentcomposev2.ProjectRef) (projects.ProjectRef, error) {
+// projectReferenceFromProto validates and maps a transport project reference
+// to the domain representation used by project operations. It is the only
+// place in the codebase that interprets the ProjectRef oneof; callers
+// outside this package receive a validated projects.ProjectRef instead.
+func projectReferenceFromProto(ref *agentcomposev2.ProjectRef) (projects.ProjectRef, error) {
 	if ref == nil {
 		return projects.ProjectRef{}, domain.ClassifyError(domain.ErrRequired, "project reference is required", nil)
 	}

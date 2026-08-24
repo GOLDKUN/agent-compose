@@ -24,8 +24,12 @@ import (
 type ProjectDelegate interface {
 	ValidateProject(context.Context, *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error)
 	ApplyProject(context.Context, *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
-	PatchProject(context.Context, *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
-	RemoveProject(context.Context, *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error)
+	// PatchProject and RemoveProject receive an already-validated domain
+	// project reference: the API boundary (ProjectHandler, below) owns
+	// interpreting the transport ProjectRef oneof, so delegates never parse
+	// or import agentcomposev2.ProjectRef.
+	PatchProject(context.Context, *connect.Request[agentcomposev2.PatchProjectRequest], projects.ProjectRef) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
+	RemoveProject(context.Context, *connect.Request[agentcomposev2.RemoveProjectRequest], projects.ProjectRef) (*connect.Response[agentcomposev2.RemoveProjectResponse], error)
 	WatchProject(context.Context, *connect.Request[agentcomposev2.WatchProjectRequest], *connect.ServerStream[agentcomposev2.WatchProjectResponse]) error
 }
 
@@ -136,11 +140,19 @@ func (h *ProjectHandler) ApplyProject(ctx context.Context, req *connect.Request[
 }
 
 func (h *ProjectHandler) PatchProject(ctx context.Context, req *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
-	return h.delegate.PatchProject(ctx, req)
+	projectRef, err := projectReferenceFromProto(req.Msg.GetProject())
+	if err != nil {
+		return nil, projectConnectError(err)
+	}
+	return h.delegate.PatchProject(ctx, req, projectRef)
 }
 
 func (h *ProjectHandler) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
-	return h.delegate.RemoveProject(ctx, req)
+	projectRef, err := projectReferenceFromProto(req.Msg.GetProject())
+	if err != nil {
+		return nil, projectConnectError(err)
+	}
+	return h.delegate.RemoveProject(ctx, req, projectRef)
 }
 
 func (h *ProjectHandler) WatchProject(ctx context.Context, req *connect.Request[agentcomposev2.WatchProjectRequest], stream *connect.ServerStream[agentcomposev2.WatchProjectResponse]) error {

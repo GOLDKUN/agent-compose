@@ -20,12 +20,12 @@ func TestProjectReferenceFromProto(t *testing.T) {
 		{name: "source path", ref: &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_SourcePath{SourcePath: "/repo/project.yml"}}, expected: projects.ProjectRefBySourcePath("/repo/project.yml")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ProjectReferenceFromProto(tc.ref)
+			got, err := projectReferenceFromProto(tc.ref)
 			if err != nil {
-				t.Fatalf("ProjectReferenceFromProto() error = %v", err)
+				t.Fatalf("projectReferenceFromProto() error = %v", err)
 			}
 			if got != tc.expected {
-				t.Fatalf("ProjectReferenceFromProto() = %#v, want %#v", got, tc.expected)
+				t.Fatalf("projectReferenceFromProto() = %#v, want %#v", got, tc.expected)
 			}
 		})
 	}
@@ -40,9 +40,9 @@ func TestProjectReferenceFromProtoRejectsMissingSelector(t *testing.T) {
 		{name: "unset selector", ref: &agentcomposev2.ProjectRef{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ProjectReferenceFromProto(tc.ref)
+			_, err := projectReferenceFromProto(tc.ref)
 			if !errors.Is(err, domain.ErrRequired) {
-				t.Fatalf("ProjectReferenceFromProto() error = %v, want ErrRequired", err)
+				t.Fatalf("projectReferenceFromProto() error = %v, want ErrRequired", err)
 			}
 		})
 	}

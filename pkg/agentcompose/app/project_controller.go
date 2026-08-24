@@ -142,11 +142,7 @@ func (d projectControllerDelegate) ApplyProject(ctx context.Context, req *connec
 	return connect.NewResponse(applyProjectResponse(result)), nil
 }
 
-func (d projectControllerDelegate) PatchProject(ctx context.Context, req *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
-	projectRef, err := api.ProjectReferenceFromProto(req.Msg.GetProject())
-	if err != nil {
-		return nil, projectConnectError(err)
-	}
+func (d projectControllerDelegate) PatchProject(ctx context.Context, req *connect.Request[agentcomposev2.PatchProjectRequest], projectRef projects.ProjectRef) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
 	raw, issues, err := parseProjectRequest(req.Msg.GetSpec())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -181,11 +177,7 @@ func applyProjectResponse(result projects.ApplyResult) *agentcomposev2.ApplyProj
 	return resp
 }
 
-func (d projectControllerDelegate) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
-	projectRef, err := api.ProjectReferenceFromProto(req.Msg.GetProject())
-	if err != nil {
-		return nil, projectConnectError(err)
-	}
+func (d projectControllerDelegate) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest], projectRef projects.ProjectRef) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
 	result, err := d.controller.RemoveProject(ctx, projects.RemoveRequest{
 		Project:       projectRef,
 		RemoveHistory: req.Msg.GetRemoveHistory(),

@@ -17,18 +17,6 @@ import (
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 
-func TestProjectControllerDelegateRejectsMissingProjectSelector(t *testing.T) {
-	delegate := projectControllerDelegate{}
-	ctx := context.Background()
-
-	if _, err := delegate.PatchProject(ctx, connect.NewRequest(&agentcomposev2.PatchProjectRequest{})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("PatchProject() code = %v, want %v (error: %v)", connect.CodeOf(err), connect.CodeInvalidArgument, err)
-	}
-	if _, err := delegate.RemoveProject(ctx, connect.NewRequest(&agentcomposev2.RemoveProjectRequest{Project: &agentcomposev2.ProjectRef{}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("RemoveProject() code = %v, want %v (error: %v)", connect.CodeOf(err), connect.CodeInvalidArgument, err)
-	}
-}
-
 func TestAppProjectControllerHelperCoverage(t *testing.T) {
 	if normalized, issues, err := normalizeProjectRequest(nil, nil, ""); err != nil || normalized.Spec != nil || len(issues) != 1 {
 		t.Fatalf("normalizeProjectRequest nil normalized=%#v issues=%#v err=%v", normalized, issues, err)
