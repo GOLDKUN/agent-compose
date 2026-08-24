@@ -59,6 +59,20 @@ func TestNewProjectHandlerAllowsNilControllerRuntime(t *testing.T) {
 	}
 }
 
+func TestNewProjectHandlerWithAgentModelsFallsBackToControllerSchedulerRunsWhenSchedulerRunsIsTypedNil(t *testing.T) {
+	controller := schedulers.NewController(schedulers.ControllerDependencies{})
+	var typedNilSupervisor *schedulers.SchedulerRunSupervisor
+
+	handler := NewProjectHandlerWithAgentModels(ProjectHandlerDeps{
+		SchedulerRuntime: controller,
+		SchedulerRuns:    typedNilSupervisor,
+	})
+
+	if handler.schedulerRuns != controller.SchedulerRuns() {
+		t.Fatalf("scheduler runs = %#v, want controller scheduler runs %#v", handler.schedulerRuns, controller.SchedulerRuns())
+	}
+}
+
 func TestNewProjectHandlerWithAgentModelsAllowsNilControllerRuntime(t *testing.T) {
 	var controller *schedulers.Controller
 

@@ -81,11 +81,7 @@ func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRu
 	if len(schedulerRuntimes) > 0 {
 		schedulerRuntime = schedulerRuntimes[0]
 	}
-	deps := ProjectHandlerDeps{Delegate: delegate, Store: store, SchedulerRuntime: schedulerRuntime}
-	if controller, ok := schedulerRuntime.(*schedulers.Controller); ok && controller != nil {
-		deps.SchedulerRuns = controller.SchedulerRuns()
-	}
-	return newProjectHandler(deps)
+	return newProjectHandler(ProjectHandlerDeps{Delegate: delegate, Store: store, SchedulerRuntime: schedulerRuntime})
 }
 
 // WithSandboxDirs injects the sandbox directory resolver ResolveEventMessage
@@ -134,7 +130,18 @@ func newProjectHandler(deps ProjectHandlerDeps) *ProjectHandler {
 	}
 	schedulerRuns := deps.SchedulerRuns
 	if schedulerRuns == nil {
-		schedulerRuns, _ = deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
+		// A *schedulers.Controller no longer implements ProjectSchedulerRunRuntime
+		// directly (that capability lives on its SchedulerRunSupervisor), so callers
+		// that only set SchedulerRuntime — or that set SchedulerRuns to a typed-nil
+		// supervisor — still get the controller's real supervisor here instead of
+		// silently losing scheduler-run RPCs. The ProjectSchedulerRunRuntime
+		// assertion below remains for callers (tests, fakes) that implement the
+		// run-runtime methods directly without going through *schedulers.Controller.
+		if controller, ok := deps.SchedulerRuntime.(*schedulers.Controller); ok && controller != nil {
+			schedulerRuns = controller.SchedulerRuns()
+		} else {
+			schedulerRuns, _ = deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
+		}
 	}
 	invocations, _ := deps.SchedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := deps.SchedulerRuntime.(ProjectSchedulerPruneRuntime)
