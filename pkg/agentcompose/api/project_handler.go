@@ -82,12 +82,8 @@ func NewProjectHandler(delegate ProjectDelegate, store ProjectStore, schedulerRu
 		schedulerRuntime = schedulerRuntimes[0]
 	}
 	deps := ProjectHandlerDeps{Delegate: delegate, Store: store, SchedulerRuntime: schedulerRuntime}
-	if controller, ok := schedulerRuntime.(*schedulers.Controller); ok {
-		if controller == nil {
-			deps.SchedulerRuntime = nil
-		} else {
-			deps.SchedulerRuns = controller.SchedulerRuns()
-		}
+	if controller, ok := schedulerRuntime.(*schedulers.Controller); ok && controller != nil {
+		deps.SchedulerRuns = controller.SchedulerRuns()
 	}
 	return newProjectHandler(deps)
 }
@@ -130,6 +126,9 @@ func NewProjectHandlerWithAgentModels(deps ProjectHandlerDeps) *ProjectHandler {
 }
 
 func newProjectHandler(deps ProjectHandlerDeps) *ProjectHandler {
+	if controller, ok := deps.SchedulerRuntime.(*schedulers.Controller); ok && controller == nil {
+		deps.SchedulerRuntime = nil
+	}
 	schedulerRuns := deps.SchedulerRuns
 	if schedulerRuns == nil {
 		schedulerRuns, _ = deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)

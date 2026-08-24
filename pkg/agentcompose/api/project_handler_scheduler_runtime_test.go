@@ -59,6 +59,16 @@ func TestNewProjectHandlerAllowsNilControllerRuntime(t *testing.T) {
 	}
 }
 
+func TestNewProjectHandlerWithAgentModelsAllowsNilControllerRuntime(t *testing.T) {
+	var controller *schedulers.Controller
+
+	handler := NewProjectHandlerWithAgentModels(ProjectHandlerDeps{SchedulerRuntime: controller})
+
+	if handler.schedulerRuntime != nil || handler.schedulerRuns != nil || handler.invocations != nil || handler.schedulerPrune != nil {
+		t.Fatalf("scheduler runtime dependencies = %#v", handler)
+	}
+}
+
 func TestProjectHandlerSchedulerUpdatesUseSchedulerRuntime(t *testing.T) {
 	const (
 		projectID   = "project-1"
