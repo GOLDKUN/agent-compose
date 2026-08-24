@@ -138,7 +138,15 @@ func newProjectHandler(deps ProjectHandlerDeps) *ProjectHandler {
 		// assertion below remains for callers (tests, fakes) that implement the
 		// run-runtime methods directly without going through *schedulers.Controller.
 		if controller, ok := deps.SchedulerRuntime.(*schedulers.Controller); ok && controller != nil {
-			schedulerRuns = controller.SchedulerRuns()
+			// controller.SchedulerRuns() is itself nil for a *Controller built by
+			// anything other than NewController (e.g. a zero-value struct literal
+			// in a test), so only take the concrete pointer once it's confirmed
+			// non-nil — assigning a nil *SchedulerRunSupervisor straight into the
+			// schedulerRuns interface would reintroduce the exact typed-nil footgun
+			// this fallback exists to close.
+			if runs := controller.SchedulerRuns(); runs != nil {
+				schedulerRuns = runs
+			}
 		} else {
 			schedulerRuns, _ = deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
 		}

@@ -73,6 +73,25 @@ func TestNewProjectHandlerWithAgentModelsFallsBackToControllerSchedulerRunsWhenS
 	}
 }
 
+// TestNewProjectHandlerWithAgentModelsAllowsControllerWithoutSchedulerRuns
+// covers a *schedulers.Controller built without NewController (so its
+// internal SchedulerRunSupervisor was never initialized): controller.
+// SchedulerRuns() itself returns a nil *SchedulerRunSupervisor here, and
+// assigning that straight into the schedulerRuns interface would silently
+// reintroduce a typed-nil that bypasses the "== nil" guard elsewhere.
+func TestNewProjectHandlerWithAgentModelsAllowsControllerWithoutSchedulerRuns(t *testing.T) {
+	controller := &schedulers.Controller{}
+
+	handler := NewProjectHandlerWithAgentModels(ProjectHandlerDeps{SchedulerRuntime: controller})
+
+	if handler.schedulerRuns != nil {
+		t.Fatalf("scheduler runs = %#v, want nil", handler.schedulerRuns)
+	}
+	if _, err := handler.schedulerRunRuntime(); err == nil {
+		t.Fatal("schedulerRunRuntime() returned no error, want missing runtime error")
+	}
+}
+
 func TestNewProjectHandlerWithAgentModelsAllowsNilControllerRuntime(t *testing.T) {
 	var controller *schedulers.Controller
 
