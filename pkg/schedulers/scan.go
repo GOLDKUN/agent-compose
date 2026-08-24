@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/storeutil"
+	"agent-compose/pkg/storedtime"
 )
 
 func ScanSchedulerTrigger(scan func(dest ...any) error) (domain.SchedulerTrigger, error) {
@@ -18,8 +18,8 @@ func ScanSchedulerTrigger(scan func(dest ...any) error) (domain.SchedulerTrigger
 	}
 	item.Enabled = enabled != 0
 	item.AutoID = autoID != 0
-	item.NextFireAt = storeutil.ParseStoredTime(nextFireAtRaw)
-	item.LastFiredAt = storeutil.ParseStoredTime(lastFiredAtRaw)
+	item.NextFireAt = storedtime.ParseStoredTime(nextFireAtRaw)
+	item.LastFiredAt = storedtime.ParseStoredTime(lastFiredAtRaw)
 	return item, nil
 }
 
@@ -30,8 +30,8 @@ func ScanSchedulerRun(scan func(dest ...any) error) (domain.SchedulerRunSummary,
 	if err := scan(&item.SchedulerID, &item.ID, &item.TriggerID, &item.TriggerKind, &item.TriggerSource, &item.Status, &startedAtRaw, &completedAtRaw, &item.DurationMs, &item.Error, &item.ResultJSON, &item.PayloadJSON, &item.SourceScriptHash, &item.ArtifactsDir); err != nil {
 		return domain.SchedulerRunSummary{}, fmt.Errorf("scan scheduler run: %w", err)
 	}
-	item.StartedAt = storeutil.ParseStoredTime(startedAtRaw)
-	item.CompletedAt = storeutil.ParseStoredTime(completedAtRaw)
+	item.StartedAt = storedtime.ParseStoredTime(startedAtRaw)
+	item.CompletedAt = storedtime.ParseStoredTime(completedAtRaw)
 	return item, nil
 }
 
@@ -41,7 +41,7 @@ func ScanSchedulerEvent(scan func(dest ...any) error) (domain.SchedulerEvent, er
 	if err := scan(&item.SchedulerID, &item.ID, &item.RunID, &item.TriggerID, &item.Type, &item.Level, &item.Message, &item.PayloadJSON, &item.LinkedSandboxID, &item.LinkedCellID, &item.LinkedAgentThreadID, &createdAtRaw); err != nil {
 		return domain.SchedulerEvent{}, fmt.Errorf("scan scheduler event: %w", err)
 	}
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
 	return item, nil
 }
 
@@ -52,8 +52,8 @@ func ScanSchedulerBinding(scan func(dest ...any) error) (domain.SchedulerBinding
 	if err := scan(&item.SchedulerID, &item.TriggerID, &item.SandboxID, &item.SandboxConfigHash, &createdAtRaw, &updatedAtRaw); err != nil {
 		return domain.SchedulerBinding{}, fmt.Errorf("scan scheduler binding: %w", err)
 	}
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAtRaw)
 	return item, nil
 }
 

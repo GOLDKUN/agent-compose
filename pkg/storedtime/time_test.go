@@ -1,4 +1,4 @@
-package storeutil
+package storedtime
 
 import (
 	"testing"

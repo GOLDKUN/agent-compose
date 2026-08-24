@@ -8,7 +8,7 @@ import (
 	pathpkg "path"
 	"strings"
 
-	"agent-compose/pkg/storage/storeutil"
+	"agent-compose/pkg/storedtime"
 )
 
 func ScanProvider(scan func(dest ...any) error) (Provider, error) {
@@ -22,8 +22,8 @@ func ScanProvider(scan func(dest ...any) error) (Provider, error) {
 	item.Enabled = enabled != 0
 	item.ProviderType = NormalizeProviderType(item.ProviderType)
 	item.DefaultWireAPI = NormalizeWireAPI(item.DefaultWireAPI)
-	item.CreatedAt = storeutil.ParseStoredTime(createdAt)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAt)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAt)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAt)
 	return item, nil
 }
 
@@ -36,8 +36,8 @@ func ScanModel(scan func(dest ...any) error) (Model, error) {
 	}
 	item.DefaultModel = defaultModel != 0
 	item.Enabled = enabled != 0
-	item.CreatedAt = storeutil.ParseStoredTime(createdAt)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAt)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAt)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAt)
 	return item, nil
 }
 
@@ -47,9 +47,9 @@ func ScanFacadeToken(scan func(dest ...any) error) (FacadeToken, error) {
 	if err := scan(&item.SandboxID, &item.TokenHash, &item.TokenFingerprint, &item.Model, &item.ProviderID, &item.WireAPI, &item.Source, &item.RunID, &issuedAt, &expiresAt, &revokedAt); err != nil {
 		return FacadeToken{}, err
 	}
-	item.IssuedAt = storeutil.ParseStoredTime(issuedAt)
-	item.ExpiresAt = storeutil.ParseStoredTime(expiresAt)
-	item.RevokedAt = storeutil.ParseStoredTime(revokedAt)
+	item.IssuedAt = storedtime.ParseStoredTime(issuedAt)
+	item.ExpiresAt = storedtime.ParseStoredTime(expiresAt)
+	item.RevokedAt = storedtime.ParseStoredTime(revokedAt)
 	return item, nil
 }
 

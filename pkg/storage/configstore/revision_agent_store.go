@@ -9,7 +9,7 @@ import (
 
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/projects"
-	"agent-compose/pkg/storage/storeutil"
+	"agent-compose/pkg/storedtime"
 )
 
 func (s *coreStore) loadRevisionAgentDefinition(ctx context.Context, agentID string) (domain.AgentDefinition, error) {
@@ -40,10 +40,10 @@ func (s *coreStore) loadRevisionAgentDefinition(ctx context.Context, agentID str
 		}
 		return domain.AgentDefinition{}, fmt.Errorf("load revision agent %s: %w", agentID, err)
 	}
-	project.CreatedAt = storeutil.ParseStoredTime(projectCreated)
-	project.UpdatedAt = storeutil.ParseStoredTime(projectUpdated)
-	project.RemovedAt = storeutil.ParseStoredTime(projectRemoved)
+	project.CreatedAt = storedtime.ParseStoredTime(projectCreated)
+	project.UpdatedAt = storedtime.ParseStoredTime(projectUpdated)
+	project.RemovedAt = storedtime.ParseStoredTime(projectRemoved)
 	revision.ProjectID = project.ID
-	revision.CreatedAt = storeutil.ParseStoredTime(revisionCreated)
+	revision.CreatedAt = storedtime.ParseStoredTime(revisionCreated)
 	return projects.AgentDefinitionFromRevision(project, revision, agentName)
 }

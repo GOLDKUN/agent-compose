@@ -2,7 +2,7 @@ package projects
 
 import (
 	"agent-compose/pkg/identity"
-	"agent-compose/pkg/storage/storeutil"
+	"agent-compose/pkg/storedtime"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -18,9 +18,9 @@ func ScanProject(scan func(dest ...any) error) (domain.ProjectRecord, error) {
 	if err := scan(&item.ID, &item.Name, &item.ShortID, &item.SourcePath, &item.SourceJSON, &item.CurrentRevision, &item.SpecHash, &createdAtRaw, &updatedAtRaw, &removedAtRaw); err != nil {
 		return domain.ProjectRecord{}, fmt.Errorf("scan project: %w", err)
 	}
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
-	item.RemovedAt = storeutil.ParseStoredTime(removedAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAtRaw)
+	item.RemovedAt = storedtime.ParseStoredTime(removedAtRaw)
 	if item.ShortID == "" {
 		item.ShortID = identity.ShortID(item.ID)
 	}
@@ -33,7 +33,7 @@ func ScanProjectRevision(scan func(dest ...any) error) (domain.ProjectRevisionRe
 	if err := scan(&item.ProjectID, &item.Revision, &item.SpecHash, &item.SpecJSON, &createdAtRaw); err != nil {
 		return domain.ProjectRevisionRecord{}, fmt.Errorf("scan project revision: %w", err)
 	}
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
 	return item, nil
 }
 
@@ -52,8 +52,8 @@ func ScanProjectAgent(scan func(dest ...any) error) (domain.ProjectAgentRecord, 
 		item.ShortID = identity.ShortID(item.ID)
 	}
 	item.SchedulerEnabled = schedulerEnabled != 0
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAtRaw)
 	return item, nil
 }
 
@@ -72,8 +72,8 @@ func ScanProjectScheduler(scan func(dest ...any) error) (domain.ProjectScheduler
 		item.ShortID = identity.ShortID(item.ID)
 	}
 	item.Enabled = enabled != 0
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAtRaw)
 	return item, nil
 }
 
@@ -93,9 +93,9 @@ func ScanProjectSchedulerPage(scan func(dest ...any) error) (domain.ProjectSched
 		item.ShortID = identity.ShortID(item.ID)
 	}
 	item.Enabled = enabled != 0
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
-	item.LatestRunAt = storeutil.ParseStoredTime(latestRunAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAtRaw)
+	item.LatestRunAt = storedtime.ParseStoredTime(latestRunAtRaw)
 	return item, nil
 }
 
@@ -114,12 +114,12 @@ func ScanProjectRun(scan func(dest ...any) error) (domain.ProjectRunRecord, erro
 	); err != nil {
 		return domain.ProjectRunRecord{}, fmt.Errorf("scan project run: %w", err)
 	}
-	item.StartedAt = storeutil.ParseStoredUnixTimeAuto(AsInt64Time(startedAtRaw))
+	item.StartedAt = storedtime.ParseStoredUnixTimeAuto(AsInt64Time(startedAtRaw))
 	item.SchedulerRunID = schedulerRunID.String
 	item.SandboxCreated = sandboxCreated != 0
-	item.CompletedAt = storeutil.ParseStoredUnixTimeAuto(AsInt64Time(completedAtRaw))
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
+	item.CompletedAt = storedtime.ParseStoredUnixTimeAuto(AsInt64Time(completedAtRaw))
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAtRaw)
 	return item, nil
 }
 
@@ -133,7 +133,7 @@ func ScanProjectAgentRunState(scan func(dest ...any) error) (domain.ProjectAgent
 	}
 	item.RunningRunCount = uint32(runningCount)
 	item.RunningSchedulerRunCount = uint32(runningSchedulerCount)
-	item.LatestAt = storeutil.ParseStoredTime(latestAtRaw)
+	item.LatestAt = storedtime.ParseStoredTime(latestAtRaw)
 	return item, nil
 }
 

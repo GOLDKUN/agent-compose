@@ -10,7 +10,7 @@ import (
 
 	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/storeutil"
+	"agent-compose/pkg/storedtime"
 )
 
 func normalizeTopicEventRecord(item domain.TopicEventRecord, assignID bool) (domain.TopicEventRecord, error) {
@@ -133,11 +133,11 @@ func scanTopicEvent(scan func(dest ...any) error) (domain.TopicEventRecord, erro
 	); err != nil {
 		return domain.TopicEventRecord{}, fmt.Errorf("scan event: %w", err)
 	}
-	item.ClaimUntil = storeutil.ParseStoredUnixTimeAuto(claimUntilRaw)
-	item.NextAttemptAt = storeutil.ParseStoredUnixTimeAuto(nextAttemptAtRaw)
-	item.DeadLetterAt = storeutil.ParseStoredUnixTimeAuto(deadLetterAtRaw)
-	item.CreatedAt = storeutil.ParseStoredUnixTimeAuto(createdAtRaw)
-	item.DispatchedAt = storeutil.ParseStoredUnixTimeAuto(dispatchedAtRaw)
+	item.ClaimUntil = storedtime.ParseStoredUnixTimeAuto(claimUntilRaw)
+	item.NextAttemptAt = storedtime.ParseStoredUnixTimeAuto(nextAttemptAtRaw)
+	item.DeadLetterAt = storedtime.ParseStoredUnixTimeAuto(deadLetterAtRaw)
+	item.CreatedAt = storedtime.ParseStoredUnixTimeAuto(createdAtRaw)
+	item.DispatchedAt = storedtime.ParseStoredUnixTimeAuto(dispatchedAtRaw)
 	return item, nil
 }
 

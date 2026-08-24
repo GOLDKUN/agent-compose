@@ -13,6 +13,7 @@ import (
 
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/storage/storeutil"
+	"agent-compose/pkg/storedtime"
 	"agent-compose/pkg/volumes"
 )
 
@@ -399,8 +400,8 @@ func scanVolume(scan func(dest ...any) error) (domain.VolumeRecord, error) {
 	}
 	item.Labels = labels
 	item.Options = options
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAtRaw)
 	return volumes.NormalizeRecord(item)
 }
 

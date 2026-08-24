@@ -1,8 +1,5 @@
-// Package storeutil holds small, dependency-free helpers shared across the
-// storage layer and its consumers, such as decoding timestamps persisted by the
-// stores. Keeping these primitives here lets packages parse stored values
-// without depending on a concrete store implementation.
-package storeutil
+// Package storedtime decodes timestamps read from persistent storage.
+package storedtime
 
 import (
 	"strconv"

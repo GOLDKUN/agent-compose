@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/storeutil"
+	"agent-compose/pkg/storedtime"
 )
 
 func NormalizeWorkspaceConfig(item domain.WorkspaceConfig, assignID bool) (domain.WorkspaceConfig, error) {
@@ -44,8 +44,8 @@ func ScanWorkspaceConfig(scan func(dest ...any) error) (domain.WorkspaceConfig, 
 	if err := scan(&item.ID, &item.Name, &item.Type, &item.ConfigJSON, &item.Comment, &createdAtRaw, &updatedAtRaw); err != nil {
 		return domain.WorkspaceConfig{}, fmt.Errorf("scan workspace config: %w", err)
 	}
-	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
+	item.CreatedAt = storedtime.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storedtime.ParseStoredTime(updatedAtRaw)
 	return item, nil
 }
 
