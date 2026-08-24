@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/volumes"
 )
@@ -27,7 +28,7 @@ func NormalizeAgentDefinition(item domain.AgentDefinition, assignDefaults bool) 
 	item.Driver = strings.TrimSpace(item.Driver)
 	item.GuestImage = strings.TrimSpace(item.GuestImage)
 	item.WorkspaceID = strings.TrimSpace(item.WorkspaceID)
-	item.CapsetIDs = normalizeCapsetIDs(item.CapsetIDs)
+	item.CapsetIDs = idset.Normalize(item.CapsetIDs)
 	item.ProjectID = strings.TrimSpace(item.ProjectID)
 	item.AgentName = strings.TrimSpace(item.AgentName)
 	item.ConfigJSON = strings.TrimSpace(item.ConfigJSON)
@@ -68,23 +69,6 @@ func NormalizeAgentDefinition(item domain.AgentDefinition, assignDefaults bool) 
 	}
 	item.Volumes = mounts
 	return item, nil
-}
-
-func normalizeCapsetIDs(ids []string) []string {
-	seen := make(map[string]struct{}, len(ids))
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
 }
 
 func isJSONObject(raw string) bool {
