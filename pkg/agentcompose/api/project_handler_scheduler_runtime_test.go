@@ -31,14 +31,31 @@ func TestNewProjectHandlerUsesControllerSchedulerRuns(t *testing.T) {
 
 func TestNewProjectHandlerAllowsNilControllerRuntime(t *testing.T) {
 	var controller *schedulers.Controller
+	store := schedulerRuntimeProjectStore{
+		project: domain.ProjectRecord{ID: "project-1"},
+		scheduler: domain.ProjectSchedulerRecord{
+			ID:          "scheduler-1",
+			ProjectID:   "project-1",
+			AgentName:   "reviewer",
+			SchedulerID: "scheduler-1",
+		},
+	}
 
-	handler := NewProjectHandler(nil, nil, controller)
+	handler := NewProjectHandler(nil, store, controller)
 
-	if handler.schedulerRuntime == nil {
-		t.Fatal("scheduler runtime lost typed nil controller")
+	if handler.schedulerRuntime != nil {
+		t.Fatalf("scheduler runtime = %T, want nil", handler.schedulerRuntime)
 	}
 	if handler.schedulerRuns != nil {
 		t.Fatalf("scheduler runs = %T, want nil", handler.schedulerRuns)
+	}
+	_, err := handler.SetSchedulerEnabled(context.Background(), connect.NewRequest(&agentcomposev2.SetSchedulerEnabledRequest{
+		Project:   &agentcomposev2.ProjectRef{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}},
+		AgentName: "reviewer",
+		Enabled:   true,
+	}))
+	if connect.CodeOf(err) != connect.CodeInternal || err.Error() != "internal: scheduler runtime controller is required" {
+		t.Fatalf("SetSchedulerEnabled error = %v, want missing runtime error", err)
 	}
 }
 
