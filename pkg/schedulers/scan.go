@@ -2,11 +2,9 @@ package schedulers
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
-	"time"
 
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/storage/storeutil"
 )
 
 func ScanSchedulerTrigger(scan func(dest ...any) error) (domain.SchedulerTrigger, error) {
@@ -20,8 +18,8 @@ func ScanSchedulerTrigger(scan func(dest ...any) error) (domain.SchedulerTrigger
 	}
 	item.Enabled = enabled != 0
 	item.AutoID = autoID != 0
-	item.NextFireAt = parseStoredSchedulerTriggerTime(nextFireAtRaw)
-	item.LastFiredAt = parseStoredSchedulerTriggerTime(lastFiredAtRaw)
+	item.NextFireAt = storeutil.ParseStoredTime(nextFireAtRaw)
+	item.LastFiredAt = storeutil.ParseStoredTime(lastFiredAtRaw)
 	return item, nil
 }
 
@@ -32,8 +30,8 @@ func ScanSchedulerRun(scan func(dest ...any) error) (domain.SchedulerRunSummary,
 	if err := scan(&item.SchedulerID, &item.ID, &item.TriggerID, &item.TriggerKind, &item.TriggerSource, &item.Status, &startedAtRaw, &completedAtRaw, &item.DurationMs, &item.Error, &item.ResultJSON, &item.PayloadJSON, &item.SourceScriptHash, &item.ArtifactsDir); err != nil {
 		return domain.SchedulerRunSummary{}, fmt.Errorf("scan scheduler run: %w", err)
 	}
-	item.StartedAt = parseStoredTime(startedAtRaw)
-	item.CompletedAt = parseStoredTime(completedAtRaw)
+	item.StartedAt = storeutil.ParseStoredTime(startedAtRaw)
+	item.CompletedAt = storeutil.ParseStoredTime(completedAtRaw)
 	return item, nil
 }
 
@@ -43,7 +41,7 @@ func ScanSchedulerEvent(scan func(dest ...any) error) (domain.SchedulerEvent, er
 	if err := scan(&item.SchedulerID, &item.ID, &item.RunID, &item.TriggerID, &item.Type, &item.Level, &item.Message, &item.PayloadJSON, &item.LinkedSandboxID, &item.LinkedCellID, &item.LinkedAgentThreadID, &createdAtRaw); err != nil {
 		return domain.SchedulerEvent{}, fmt.Errorf("scan scheduler event: %w", err)
 	}
-	item.CreatedAt = parseStoredTime(createdAtRaw)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
 	return item, nil
 }
 
@@ -54,74 +52,9 @@ func ScanSchedulerBinding(scan func(dest ...any) error) (domain.SchedulerBinding
 	if err := scan(&item.SchedulerID, &item.TriggerID, &item.SandboxID, &item.SandboxConfigHash, &createdAtRaw, &updatedAtRaw); err != nil {
 		return domain.SchedulerBinding{}, fmt.Errorf("scan scheduler binding: %w", err)
 	}
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
 	return item, nil
-}
-
-func parseStoredSchedulerTriggerTime(value any) time.Time {
-	switch typed := value.(type) {
-	case nil:
-		return time.Time{}
-	case int64:
-		return parseStoredUnixTimeAuto(typed)
-	case int:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case float64:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case []byte:
-		return parseStoredSchedulerTriggerTime(string(typed))
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed == "" {
-			return time.Time{}
-		}
-		if unixValue, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
-			return parseStoredUnixTimeAuto(unixValue)
-		}
-		return parseStoredTime(trimmed)
-	default:
-		return parseStoredTime(value)
-	}
-}
-
-func parseStoredTime(value any) time.Time {
-	switch typed := value.(type) {
-	case nil:
-		return time.Time{}
-	case int64:
-		return parseStoredUnixTimeAuto(typed)
-	case int:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case float64:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case []byte:
-		return parseStoredTime(string(typed))
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed == "" {
-			return time.Time{}
-		}
-		if unixValue, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
-			return parseStoredUnixTimeAuto(unixValue)
-		}
-		for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05.000Z"} {
-			if parsed, err := time.Parse(layout, trimmed); err == nil {
-				return parsed.UTC()
-			}
-		}
-	}
-	return time.Time{}
-}
-
-func parseStoredUnixTimeAuto(value int64) time.Time {
-	if value <= 0 {
-		return time.Time{}
-	}
-	if value >= 10_000_000_000 {
-		return time.UnixMilli(value).UTC()
-	}
-	return time.Unix(value, 0).UTC()
 }
 
 func SelectSchedulerTriggerSQL() string {

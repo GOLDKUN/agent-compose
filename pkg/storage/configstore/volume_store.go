@@ -399,8 +399,8 @@ func scanVolume(scan func(dest ...any) error) (domain.VolumeRecord, error) {
 	}
 	item.Labels = labels
 	item.Options = options
-	item.CreatedAt = ParseStoredTime(createdAtRaw)
-	item.UpdatedAt = ParseStoredTime(updatedAtRaw)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
 	return volumes.NormalizeRecord(item)
 }
 

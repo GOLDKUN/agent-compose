@@ -9,6 +9,7 @@ import (
 
 	"agent-compose/pkg/events"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/storage/storeutil"
 )
 
 type eventListQuery struct {
@@ -147,8 +148,8 @@ func scanEventSummary(scan func(dest ...any) error) (domain.EventSummary, error)
 	); err != nil {
 		return domain.EventSummary{}, fmt.Errorf("scan event summary: %w", err)
 	}
-	item.CreatedAt = ParseStoredTime(createdAt)
-	item.DispatchedAt = ParseStoredTime(dispatchedAt)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAt)
+	item.DispatchedAt = storeutil.ParseStoredTime(dispatchedAt)
 	return item, nil
 }
 
@@ -191,7 +192,7 @@ func (s *eventStore) ListEventTopics(ctx context.Context, source string, offset,
 		if err := rows.Scan(&item.Topic, &item.EventCount, &latestAt); err != nil {
 			return nil, 0, fmt.Errorf("scan event topic: %w", err)
 		}
-		item.LatestEventAt = ParseStoredTime(latestAt)
+		item.LatestEventAt = storeutil.ParseStoredTime(latestAt)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -350,8 +351,8 @@ func (s *eventStore) listEventRunTraces(ctx context.Context, eventIDs []string) 
 		); err != nil {
 			return nil, fmt.Errorf("scan event run trace: %w", err)
 		}
-		item.Delivery.CreatedAt = ParseStoredTime(deliveryCreatedAt)
-		item.Delivery.UpdatedAt = ParseStoredTime(deliveryUpdatedAt)
+		item.Delivery.CreatedAt = storeutil.ParseStoredTime(deliveryCreatedAt)
+		item.Delivery.UpdatedAt = storeutil.ParseStoredTime(deliveryUpdatedAt)
 		if schedulerID != "" {
 			item.Scheduler = &domain.EventSchedulerSummary{
 				ID:        schedulerID,
@@ -361,8 +362,8 @@ func (s *eventStore) listEventRunTraces(ctx context.Context, eventIDs []string) 
 			}
 		}
 		if run.ID != "" {
-			run.StartedAt = ParseStoredTime(runStartedAt)
-			run.CompletedAt = ParseStoredTime(runCompletedAt)
+			run.StartedAt = storeutil.ParseStoredTime(runStartedAt)
+			run.CompletedAt = storeutil.ParseStoredTime(runCompletedAt)
 			item.Run = &run
 			key := eventRunTraceKey(item.Delivery.SchedulerID, run.ID)
 			indexesByRun[key] = append(indexesByRun[key], len(items))
@@ -408,7 +409,7 @@ func (s *eventStore) attachEventSchedulerEvents(ctx context.Context, eventIDs []
 		); err != nil {
 			return fmt.Errorf("scan traced scheduler event: %w", err)
 		}
-		event.CreatedAt = ParseStoredTime(createdAt)
+		event.CreatedAt = storeutil.ParseStoredTime(createdAt)
 		for _, index := range indexesByRun[eventRunTraceKey(schedulerID, runID)] {
 			traces[index].Events = append(traces[index].Events, event)
 		}

@@ -36,18 +36,6 @@ func TestSchedulerScanFunctionsAndStoredTimeEdges(t *testing.T) {
 		t.Fatalf("binding = %#v", binding)
 	}
 
-	if got := parseStoredSchedulerTriggerTime(struct{}{}); !got.IsZero() {
-		t.Fatalf("default trigger time = %v, want zero", got)
-	}
-	if got := parseStoredSchedulerTriggerTime("not-time"); !got.IsZero() {
-		t.Fatalf("invalid trigger time = %v, want zero", got)
-	}
-	if got := parseStoredTime("not-time"); !got.IsZero() {
-		t.Fatalf("invalid stored time = %v, want zero", got)
-	}
-	if got := parseStoredUnixTimeAuto(0); !got.IsZero() {
-		t.Fatalf("zero unix time = %v, want zero", got)
-	}
 }
 
 func assignScanValues(values ...any) func(dest ...any) error {

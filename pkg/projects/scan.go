@@ -2,11 +2,10 @@ package projects
 
 import (
 	"agent-compose/pkg/identity"
+	"agent-compose/pkg/storage/storeutil"
 	"database/sql"
 	"fmt"
-	"strconv"
 	"strings"
-	"time"
 
 	domain "agent-compose/pkg/model"
 )
@@ -19,9 +18,9 @@ func ScanProject(scan func(dest ...any) error) (domain.ProjectRecord, error) {
 	if err := scan(&item.ID, &item.Name, &item.ShortID, &item.SourcePath, &item.SourceJSON, &item.CurrentRevision, &item.SpecHash, &createdAtRaw, &updatedAtRaw, &removedAtRaw); err != nil {
 		return domain.ProjectRecord{}, fmt.Errorf("scan project: %w", err)
 	}
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
-	item.RemovedAt = parseStoredTime(removedAtRaw)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
+	item.RemovedAt = storeutil.ParseStoredTime(removedAtRaw)
 	if item.ShortID == "" {
 		item.ShortID = identity.ShortID(item.ID)
 	}
@@ -34,7 +33,7 @@ func ScanProjectRevision(scan func(dest ...any) error) (domain.ProjectRevisionRe
 	if err := scan(&item.ProjectID, &item.Revision, &item.SpecHash, &item.SpecJSON, &createdAtRaw); err != nil {
 		return domain.ProjectRevisionRecord{}, fmt.Errorf("scan project revision: %w", err)
 	}
-	item.CreatedAt = parseStoredTime(createdAtRaw)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
 	return item, nil
 }
 
@@ -53,8 +52,8 @@ func ScanProjectAgent(scan func(dest ...any) error) (domain.ProjectAgentRecord, 
 		item.ShortID = identity.ShortID(item.ID)
 	}
 	item.SchedulerEnabled = schedulerEnabled != 0
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
 	return item, nil
 }
 
@@ -73,8 +72,8 @@ func ScanProjectScheduler(scan func(dest ...any) error) (domain.ProjectScheduler
 		item.ShortID = identity.ShortID(item.ID)
 	}
 	item.Enabled = enabled != 0
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
 	return item, nil
 }
 
@@ -94,9 +93,9 @@ func ScanProjectSchedulerPage(scan func(dest ...any) error) (domain.ProjectSched
 		item.ShortID = identity.ShortID(item.ID)
 	}
 	item.Enabled = enabled != 0
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
-	item.LatestRunAt = parseStoredTime(latestRunAtRaw)
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
+	item.LatestRunAt = storeutil.ParseStoredTime(latestRunAtRaw)
 	return item, nil
 }
 
@@ -115,12 +114,12 @@ func ScanProjectRun(scan func(dest ...any) error) (domain.ProjectRunRecord, erro
 	); err != nil {
 		return domain.ProjectRunRecord{}, fmt.Errorf("scan project run: %w", err)
 	}
-	item.StartedAt = parseStoredUnixTimeAuto(AsInt64Time(startedAtRaw))
+	item.StartedAt = storeutil.ParseStoredUnixTimeAuto(AsInt64Time(startedAtRaw))
 	item.SchedulerRunID = schedulerRunID.String
 	item.SandboxCreated = sandboxCreated != 0
-	item.CompletedAt = parseStoredUnixTimeAuto(AsInt64Time(completedAtRaw))
-	item.CreatedAt = parseStoredTime(createdAtRaw)
-	item.UpdatedAt = parseStoredTime(updatedAtRaw)
+	item.CompletedAt = storeutil.ParseStoredUnixTimeAuto(AsInt64Time(completedAtRaw))
+	item.CreatedAt = storeutil.ParseStoredTime(createdAtRaw)
+	item.UpdatedAt = storeutil.ParseStoredTime(updatedAtRaw)
 	return item, nil
 }
 
@@ -134,47 +133,8 @@ func ScanProjectAgentRunState(scan func(dest ...any) error) (domain.ProjectAgent
 	}
 	item.RunningRunCount = uint32(runningCount)
 	item.RunningSchedulerRunCount = uint32(runningSchedulerCount)
-	item.LatestAt = parseStoredTime(latestAtRaw)
+	item.LatestAt = storeutil.ParseStoredTime(latestAtRaw)
 	return item, nil
-}
-
-func parseStoredTime(value any) time.Time {
-	switch typed := value.(type) {
-	case nil:
-		return time.Time{}
-	case int64:
-		return parseStoredUnixTimeAuto(typed)
-	case int:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case float64:
-		return parseStoredUnixTimeAuto(int64(typed))
-	case []byte:
-		return parseStoredTime(string(typed))
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed == "" {
-			return time.Time{}
-		}
-		if unixValue, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
-			return parseStoredUnixTimeAuto(unixValue)
-		}
-		for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05.000Z"} {
-			if parsed, err := time.Parse(layout, trimmed); err == nil {
-				return parsed.UTC()
-			}
-		}
-	}
-	return time.Time{}
-}
-
-func parseStoredUnixTimeAuto(value int64) time.Time {
-	if value <= 0 {
-		return time.Time{}
-	}
-	if value >= 10_000_000_000 {
-		return time.UnixMilli(value).UTC()
-	}
-	return time.Unix(value, 0).UTC()
 }
 
 func AsInt64Time(value any) int64 {

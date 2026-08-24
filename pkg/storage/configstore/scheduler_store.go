@@ -3,6 +3,7 @@ package configstore
 import (
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
+	"agent-compose/pkg/storage/storeutil"
 	"context"
 	"database/sql"
 	"errors"
@@ -85,7 +86,7 @@ func (s *schedulerStore) hydrateSchedulerSummaryCounts(ctx context.Context, summ
 	summary.TriggerCount = triggerCount
 	summary.RunCount = runCount
 	summary.EventCount = eventCount
-	summary.LatestRunAt = ParseStoredTime(latestRunAtRaw)
+	summary.LatestRunAt = storeutil.ParseStoredTime(latestRunAtRaw)
 	return nil
 }
 
