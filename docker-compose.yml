@@ -14,6 +14,12 @@ services:
     ports:
       - 127.0.0.1:7410:7410
 
+  # fetch agent-compose-guest docker image only
+  fetch-guest-image:
+    image: ${DEFAULT_IMAGE:-chaitin/agent-compose-guest:latest}
+    command: ["true"]
+    restart: "no"
+
   agent-compose-ui:
     image: ${AGENT_COMPOSE_FRONTEND_IMAGE:-chaitin/agent-compose-ui:latest}
     container_name: agent-compose-ui
