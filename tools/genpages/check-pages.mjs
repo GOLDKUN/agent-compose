@@ -12,16 +12,19 @@ const schemaPath = path.join(repositoryRoot, "pkg", "compose", "spec.go");
 const manualNames = [
   "agent-compose-yaml-manual.md",
   "command-line-manual.md",
+  "connect-transport-matrix.md",
   "guest-image-abi.md",
 ];
 const expectedOutput = new Set([
   "agent-compose-yaml-manual.html",
   "command-line-manual.html",
+  "connect-transport-matrix.html",
   "guest-image-abi.html",
   "index.html",
   "manual.css",
   "zh-CN/agent-compose-yaml-manual.html",
   "zh-CN/command-line-manual.html",
+  "zh-CN/connect-transport-matrix.html",
   "zh-CN/guest-image-abi.html",
 ]);
 
