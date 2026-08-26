@@ -10,11 +10,25 @@ const pagesDir = path.join(repositoryRoot, "docs", "pages");
 const outputDir = path.join(repositoryRoot, "build", "pages");
 const manuals = [
   {
+    source: "connect-transport-matrix.md",
+    output: "connect-transport-matrix.html",
+    title: "Connect Transport Support Matrix",
+    lang: "en",
+    alternate: "zh-CN/connect-transport-matrix.html",
+  },
+  {
     source: "command-line-manual.md",
     output: "command-line-manual.html",
     title: "Command-line Manual",
     lang: "en",
     alternate: "zh-CN/command-line-manual.html",
+  },
+  {
+    source: "zh-CN/connect-transport-matrix.md",
+    output: "zh-CN/connect-transport-matrix.html",
+    title: "Connect 传输支持矩阵",
+    lang: "zh-CN",
+    alternate: "../connect-transport-matrix.html",
   },
   {
     source: "agent-compose-yaml-manual.md",
@@ -78,12 +92,13 @@ function renderPage(manual, body) {
   const nested = currentPage.includes("/");
   const root = nested ? "../" : "./";
   const labels = lang === "zh-CN"
-    ? ["首页", "命令行手册", "YAML 配置手册"]
-    : ["Home", "CLI Manual", "YAML Manual"];
+    ? ["首页", "命令行手册", "YAML 配置手册", "Connect 传输矩阵"]
+    : ["Home", "CLI Manual", "YAML Manual", "Connect Transport"];
   const navItems = [
     [root, labels[0], ""],
     ["command-line-manual.html", labels[1], "command-line-manual.html"],
     ["agent-compose-yaml-manual.html", labels[2], "agent-compose-yaml-manual.html"],
+    ["connect-transport-matrix.html", labels[3], "connect-transport-matrix.html"],
   ];
   const nav = navItems
     .map(([href, label, page]) => {

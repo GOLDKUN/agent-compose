@@ -182,6 +182,8 @@ agents:
 
 完整字段说明见[命令行使用手册](docs/pages/zh-CN/command-line-manual.md)。
 
+部署 unary、streaming 和双向 attach 前，请参阅 [Connect 传输支持矩阵](docs/pages/zh-CN/connect-transport-matrix.md)。
+
 ## CLI 概览
 
 | 命令 | 用途 |

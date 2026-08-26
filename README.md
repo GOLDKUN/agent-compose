@@ -222,6 +222,8 @@ agents:
 
 See the [command line manual](docs/pages/command-line-manual.md) for the full field reference.
 
+See the [Connect transport support matrix](docs/pages/connect-transport-matrix.md) for unary, streaming, and bidirectional attach deployment requirements.
+
 ## CLI overview
 
 | Command | Purpose |
