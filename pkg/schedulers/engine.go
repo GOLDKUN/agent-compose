@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	domain "agent-compose/pkg/model"
@@ -34,6 +36,18 @@ type SchedulerExecutionRequest struct {
 	Script      string
 	Trigger     *domain.SchedulerTrigger
 	PayloadJSON string
+
+	// MaxAsyncLLMConcurrency caps concurrent scheduler.llm.async calls.
+	// Zero selects DefaultMaxAsyncLLMConcurrency.
+	MaxAsyncLLMConcurrency int
+	// MaxAsyncAgentConcurrency caps concurrent scheduler.agent.async runs.
+	// Zero selects DefaultMaxAsyncAgentConcurrency.
+	MaxAsyncAgentConcurrency int
+
+	// DryRun marks an execution that runs the script only to observe what it
+	// would request, such as resolving a manual trigger's prompt. Delays are
+	// skipped so a script's own pacing cannot stall the caller.
+	DryRun bool
 }
 
 type SchedulerExecutionResult struct {
@@ -56,13 +70,37 @@ type schedulerRegistration struct {
 }
 
 type schedulerExecutionState struct {
-	ctx           context.Context
+	ctx context.Context
+	// asyncCtx scopes work started by the async bindings. Draining cancels it,
+	// which ends anything the script abandoned instead of waiting it out.
+	asyncCtx      context.Context
 	host          SchedulerHost
 	jsonEncoder   *jsValueEncoder
+	promises      *promiseAdopter
 	registrations []schedulerRegistration
 	seenIDs       map[string]struct{}
 	warnings      []string
 	warningSet    map[string]struct{}
+	dryRun        bool
+
+	// inflight tracks host calls started by the async bindings. The run must
+	// not finish while any of them is still running, or the host would keep
+	// recording events against an execution that is already torn down.
+	inflight sync.WaitGroup
+	// llmSem and agentSem cap concurrent async host calls. A script can fan
+	// out over an arbitrarily long array, and neither sandbox creation nor the
+	// SQLite connection pool has a ceiling of its own, so these are safety
+	// valves rather than tuning knobs. Agents get their own, much smaller
+	// budget because each parallel agent run is a fresh sandbox.
+	llmSem   chan struct{}
+	agentSem chan struct{}
+	// asyncCancels stops work that is only useful while the script is still
+	// running, such as the losing entries of a racing group. Only the JS thread
+	// appends to and reads this, so it needs no lock.
+	asyncCancels []context.CancelFunc
+	// outstandingAsync counts async calls started but not yet settled. The JS
+	// thread raises it and the goroutines lower it, so it is atomic.
+	outstandingAsync atomic.Int64
 }
 
 func NewSchedulerEngine(do.Injector) (SchedulerEngine, error) {
@@ -109,15 +147,29 @@ func (e *QJSSchedulerEngine) executeRuntime(ctx context.Context, request Schedul
 	if err != nil {
 		return SchedulerExecutionResult{}, err
 	}
+	promises, err := newPromiseAdopter(jsctx)
+	if err != nil {
+		return SchedulerExecutionResult{}, err
+	}
+	asyncCtx, cancelAsync := context.WithCancel(ctx)
 	state := &schedulerExecutionState{
 		ctx:           ctx,
+		asyncCtx:      asyncCtx,
 		host:          host,
 		jsonEncoder:   jsonEncoder,
+		promises:      promises,
 		registrations: make([]schedulerRegistration, 0),
 		seenIDs:       make(map[string]struct{}),
 		warningSet:    make(map[string]struct{}),
+		dryRun:        request.DryRun,
+		llmSem:        make(chan struct{}, resolveMaxAsyncConcurrency(request.MaxAsyncLLMConcurrency, DefaultMaxAsyncLLMConcurrency)),
+		agentSem:      make(chan struct{}, resolveMaxAsyncConcurrency(request.MaxAsyncAgentConcurrency, DefaultMaxAsyncAgentConcurrency)),
 	}
+	state.registerAsyncCancel(cancelAsync)
 	defer state.freeCallbacks()
+	// Registered after freeCallbacks so it runs first: in-flight goroutines are
+	// joined before any JS value is released and before the runtime is closed.
+	defer state.drainInflight()
 
 	if _, err = e.installRuntime(jsctx, state); err != nil {
 		return SchedulerExecutionResult{}, err

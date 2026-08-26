@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/schedulers"
@@ -132,20 +133,36 @@ func (c *Controller) captureManualTriggerAgentRequest(ctx context.Context, defin
 		Script:      definition.Script,
 		Trigger:     trigger,
 		PayloadJSON: payloadJSON,
+		// Capturing a prompt only observes what the trigger would request, so
+		// the script's own delays must not stall the resolve API.
+		DryRun: true,
 	}, host)
 	if err != nil {
 		return capturedManualTriggerAgentRequest{}, fmt.Errorf("%w: resolve trigger %s prompt: %w", domain.ErrInvalidArgument, trigger.ID, err)
 	}
-	if host.calls != 1 || strings.TrimSpace(host.prompt) == "" {
+	calls, prompt, request := host.captured()
+	if calls != 1 || strings.TrimSpace(prompt) == "" {
 		return capturedManualTriggerAgentRequest{}, fmt.Errorf("%w: trigger %s must call scheduler.agent exactly once", domain.ErrInvalidArgument, trigger.ID)
 	}
-	return capturedManualTriggerAgentRequest{prompt: host.prompt, request: host.request}, nil
+	return capturedManualTriggerAgentRequest{prompt: prompt, request: request}, nil
 }
 
+// manualTriggerCaptureHost records the single scheduler.agent call a manual
+// trigger is expected to make. scheduler.agent.async reaches the host from its
+// own goroutine, so several calls can arrive concurrently and the fields are
+// guarded.
 type manualTriggerCaptureHost struct {
+	mu      sync.Mutex
 	calls   int
 	prompt  string
 	request domain.SchedulerAgentRequest
+}
+
+// captured reports the recorded call count and payload.
+func (h *manualTriggerCaptureHost) captured() (int, string, domain.SchedulerAgentRequest) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.calls, h.prompt, h.request
 }
 
 func (h *manualTriggerCaptureHost) Log(context.Context, string, any) error { return nil }
@@ -155,10 +172,13 @@ func (h *manualTriggerCaptureHost) PublishEvent(context.Context, string, string)
 }
 
 func (h *manualTriggerCaptureHost) Agent(_ context.Context, prompt string, request domain.SchedulerAgentRequest) (domain.SchedulerAgentResult, error) {
+	trimmed := strings.TrimSpace(prompt)
+	h.mu.Lock()
 	h.calls++
-	h.prompt = strings.TrimSpace(prompt)
+	h.prompt = trimmed
 	h.request = request
-	return domain.SchedulerAgentResult{Text: h.prompt, FinalText: h.prompt, Success: true}, nil
+	h.mu.Unlock()
+	return domain.SchedulerAgentResult{Text: trimmed, FinalText: trimmed, Success: true}, nil
 }
 
 func (h *manualTriggerCaptureHost) Command(context.Context, domain.SchedulerCommandRequest) (domain.SchedulerCommandResult, error) {

@@ -1,7 +1,6 @@
 package schedulers
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -23,6 +22,7 @@ func (e *QJSSchedulerEngine) installRuntime(jsctx *qjs.Context, state *scheduler
 	installLogBindings(jsctx, state, schedulerObj)
 	installAgentBinding(jsctx, state, schedulerObj)
 	installCommandBindings(jsctx, state, schedulerObj)
+	installSleepBindings(jsctx, state, schedulerObj)
 	installStateBindings(jsctx, state, schedulerObj)
 	installSandboxBindings(jsctx, state, schedulerObj)
 
@@ -229,55 +229,47 @@ func installLogBindings(jsctx *qjs.Context, state *schedulerExecutionState, sche
 	schedulerObj.SetPropertyStr("event", eventObj)
 }
 
-// installAgentBinding registers scheduler.agent.
+// installAgentBinding registers scheduler.agent and scheduler.agent.async.
 func installAgentBinding(jsctx *qjs.Context, state *schedulerExecutionState, schedulerObj *qjs.Value) {
 	agentFn := jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
 		if state.host == nil {
 			return nil, fmt.Errorf("scheduler.agent is unavailable during validation")
 		}
-		args := call.Args()
-		if len(args) == 0 {
-			return nil, fmt.Errorf("scheduler.agent requires a prompt")
-		}
-		prompt := strings.TrimSpace(args[0].String())
-		if prompt == "" {
-			return nil, fmt.Errorf("scheduler.agent requires a non-empty prompt")
-		}
-		options, err := parseSchedulerAgentRequest(args, state)
+		invocation, err := parseSchedulerAgentInvocation(jsctx, state, call.Args(), "scheduler.agent")
 		if err != nil {
 			return nil, err
 		}
-		var outputSchemaValue *qjs.Value
-		options.OutputSchema, outputSchemaValue, err = parseSchedulerOutputSchema(jsctx, state.jsonEncoder, args, "scheduler.agent")
+		response, err := state.host.Agent(state.ctx, invocation.prompt, invocation.options)
 		if err != nil {
 			return nil, err
 		}
-		response, err := state.host.Agent(state.ctx, prompt, options)
-		if err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(options.OutputSchema) != "" {
-			jsonValue, err := schedulerJSONResult(firstNonEmpty(response.FinalText, response.Text, response.Output), options.OutputSchema, "agent finalText")
-			if err != nil {
-				return nil, err
-			}
-			response.JSON = jsonValue
-		}
-		data, err := json.Marshal(response)
-		if err != nil {
-			return nil, fmt.Errorf("encode scheduler.agent response: %w", err)
-		}
-		value, err := payloadValueFromJSON(jsctx, string(data))
-		if err != nil {
-			return nil, fmt.Errorf("decode scheduler.agent response: %w", err)
-		}
-		if strings.TrimSpace(options.OutputSchema) != "" {
-			if err := validateSchedulerJSONWithSchema(jsctx, outputSchemaValue, value, "agent"); err != nil {
-				return nil, err
-			}
-		}
-		return value, nil
+		return encodeSchedulerAgentResult(jsctx, response, invocation.options, invocation.outputSchemaValue)
 	})
+	// scheduler.agent.async starts the agent run and hands the script a
+	// promise, so a batch built with Promise.all overlaps instead of running
+	// serially. Each call is pinned to its own sandbox; see
+	// requireFreshSandboxForAsyncAgent.
+	agentFn.SetPropertyStr("async", jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
+		if state.host == nil {
+			return nil, fmt.Errorf("scheduler.agent.async is unavailable during validation")
+		}
+		invocation, err := parseSchedulerAgentInvocation(jsctx, state, call.Args(), "scheduler.agent.async")
+		if err != nil {
+			return nil, err
+		}
+		invocation.options, err = requireFreshSandboxForAsyncAgent(invocation.options, "scheduler.agent.async")
+		if err != nil {
+			return nil, err
+		}
+		pending, err := state.startAsyncAgent(invocation)
+		if err != nil {
+			return nil, err
+		}
+		return newAsyncPromise(state, jsctx, "scheduler.agent.async", pending,
+			func(response domain.SchedulerAgentResult) (*qjs.Value, error) {
+				return encodeSchedulerAgentResult(jsctx, response, invocation.options, invocation.outputSchemaValue)
+			})
+	}))
 	schedulerObj.SetPropertyStr("agent", agentFn)
 }
 
@@ -320,50 +312,102 @@ func installCommandBindings(jsctx *qjs.Context, state *schedulerExecutionState, 
 		if state.host == nil {
 			return nil, fmt.Errorf("scheduler.llm is unavailable during validation")
 		}
-		args := call.Args()
-		if len(args) == 0 {
-			return nil, fmt.Errorf("scheduler.llm requires a prompt")
-		}
-		prompt := strings.TrimSpace(args[0].String())
-		if prompt == "" {
-			return nil, fmt.Errorf("scheduler.llm requires a non-empty prompt")
-		}
-		options, err := parseSchedulerLLMRequest(args, state)
+		invocation, err := parseSchedulerLLMInvocation(jsctx, state, call.Args(), "scheduler.llm")
 		if err != nil {
 			return nil, err
 		}
-		var outputSchemaValue *qjs.Value
-		options.OutputSchema, outputSchemaValue, err = parseSchedulerOutputSchema(jsctx, state.jsonEncoder, args, "scheduler.llm")
+		response, err := state.host.LLM(state.ctx, invocation.prompt, invocation.options)
 		if err != nil {
 			return nil, err
 		}
-		response, err := state.host.LLM(state.ctx, prompt, options)
-		if err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(options.OutputSchema) != "" {
-			jsonValue, err := schedulerJSONResult(response.Text, options.OutputSchema, "llm text")
-			if err != nil {
-				return nil, err
-			}
-			response.JSON = jsonValue
-		}
-		data, err := json.Marshal(response)
-		if err != nil {
-			return nil, fmt.Errorf("encode scheduler.llm response: %w", err)
-		}
-		value, err := payloadValueFromJSON(jsctx, string(data))
-		if err != nil {
-			return nil, fmt.Errorf("decode scheduler.llm response: %w", err)
-		}
-		if strings.TrimSpace(options.OutputSchema) != "" {
-			if err := validateSchedulerJSONWithSchema(jsctx, outputSchemaValue, value, "llm"); err != nil {
-				return nil, err
-			}
-		}
-		return value, nil
+		return encodeSchedulerLLMResult(jsctx, response, invocation.options, invocation.outputSchemaValue)
 	})
+	// scheduler.llm.async starts the host call and hands the script a thenable,
+	// so a batch built with Promise.all overlaps instead of running serially.
+	llmFn.SetPropertyStr("async", jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
+		if state.host == nil {
+			return nil, fmt.Errorf("scheduler.llm.async is unavailable during validation")
+		}
+		invocation, err := parseSchedulerLLMInvocation(jsctx, state, call.Args(), "scheduler.llm.async")
+		if err != nil {
+			return nil, err
+		}
+		pending, err := state.startAsyncLLM(state.asyncCtx, "scheduler.llm.async", invocation, false, nil)
+		if err != nil {
+			return nil, err
+		}
+		return newAsyncPromise(state, jsctx, "scheduler.llm.async", pending,
+			func(response domain.SchedulerLLMResult) (*qjs.Value, error) {
+				return encodeSchedulerLLMResult(jsctx, response, invocation.options, invocation.outputSchemaValue)
+			})
+	}))
+	// scheduler.llm.race settles with the call that finished first. The
+	// standard Promise.race cannot: its thenable jobs run in queue order and
+	// each blocks, so it always settles with the first array entry.
+	installSchedulerLLMRaceBinding(jsctx, state, llmFn, "race", false)
+	// scheduler.llm.any skips rejected calls and settles with the first one
+	// that succeeded, rejecting only after every call has failed.
+	installSchedulerLLMRaceBinding(jsctx, state, llmFn, "any", true)
 	schedulerObj.SetPropertyStr("llm", llmFn)
+}
+
+// installSleepBindings registers scheduler.sleep and scheduler.sleep.async.
+// The global setTimeout is a trigger registrar in this runtime, so the usual
+// `await new Promise(r => setTimeout(r, ms))` idiom never settles; these are
+// the supported way for a script to wait.
+func installSleepBindings(jsctx *qjs.Context, state *schedulerExecutionState, schedulerObj *qjs.Value) {
+	sleepFn := jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
+		duration, err := parseSchedulerSleepDuration(call.Args(), "scheduler.sleep")
+		if err != nil {
+			return nil, err
+		}
+		// Neither validation nor a dry run should wait: validation evaluates the
+		// script's top level to collect triggers, and a dry run only observes
+		// what the script would request. Arguments are still checked; only the
+		// wait is skipped.
+		if state.skipsDelays() {
+			return jsctx.NewUndefined(), nil
+		}
+		if err := sleepWithContext(state.ctx, duration); err != nil {
+			return nil, err
+		}
+		return jsctx.NewUndefined(), nil
+	})
+	sleepFn.SetPropertyStr("async", jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
+		duration, err := parseSchedulerSleepDuration(call.Args(), "scheduler.sleep.async")
+		if err != nil {
+			return nil, err
+		}
+		if state.skipsDelays() {
+			duration = 0
+		}
+		pending, err := state.startAsyncSleep(duration)
+		if err != nil {
+			return nil, err
+		}
+		return newAsyncSleepPromise(state, jsctx, pending)
+	}))
+	schedulerObj.SetPropertyStr("sleep", sleepFn)
+}
+
+// installSchedulerLLMRaceBinding registers one completion-order combinator on
+// scheduler.llm under the given name.
+func installSchedulerLLMRaceBinding(jsctx *qjs.Context, state *schedulerExecutionState, llmFn *qjs.Value, name string, requireSuccess bool) {
+	apiName := "scheduler.llm." + name
+	llmFn.SetPropertyStr(name, jsctx.Function(func(call *qjs.This) (*qjs.Value, error) {
+		if state.host == nil {
+			return nil, fmt.Errorf("%s is unavailable during validation", apiName)
+		}
+		invocations, err := parseSchedulerLLMRaceList(jsctx, state, call.Args(), apiName)
+		if err != nil {
+			return nil, err
+		}
+		race, err := state.startAsyncLLMRace(apiName, invocations)
+		if err != nil {
+			return nil, err
+		}
+		return newAsyncLLMRacePromise(state, jsctx, apiName, race, requireSuccess)
+	}))
 }
 
 // installStateBindings registers scheduler.state.get/set/delete.
