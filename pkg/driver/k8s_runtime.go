@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -285,6 +286,7 @@ func (r *k8sRuntime) podVolumeSpecs(sandbox *Sandbox, vmState VMState) ([]corev1
 	if sandbox == nil || len(sandbox.VolumeMounts) == 0 {
 		return nil, nil, nil
 	}
+	appconfig.ApplyDefaultGuestPaths(r.config)
 	namespace := r.namespaceFor(vmState)
 	volumes := make([]corev1.Volume, 0, len(sandbox.VolumeMounts))
 	mounts := make([]corev1.VolumeMount, 0, len(sandbox.VolumeMounts))
@@ -299,6 +301,9 @@ func (r *k8sRuntime) podVolumeSpecs(sandbox *Sandbox, vmState VMState) ([]corev1
 		}
 		if strings.TrimSpace(mount.Driver) != RuntimeDriverK8s {
 			return nil, nil, fmt.Errorf("k8s sandbox %s volume %q uses unsupported driver %q", sandbox.Summary.ID, mount.Source, mount.Driver)
+		}
+		if err := k8sValidateVolumeMountTarget(mount.Target, r.config.GuestWorkspacePath, r.config.GuestHomePath); err != nil {
+			return nil, nil, fmt.Errorf("k8s sandbox %s volume %q: %w", sandbox.Summary.ID, mount.Source, err)
 		}
 		claimNamespace, claimName, err := parseK8sPVCRef(mount.HostPath)
 		if err != nil {
@@ -317,6 +322,37 @@ func (r *k8sRuntime) podVolumeSpecs(sandbox *Sandbox, vmState VMState) ([]corev1
 		mounts = append(mounts, corev1.VolumeMount{Name: volumeName, MountPath: mount.Target, ReadOnly: mount.ReadOnly})
 	}
 	return volumes, mounts, nil
+}
+
+// k8sValidateVolumeMountTarget rejects a volume mount target that partially
+// overlaps GuestWorkspacePath or GuestHomePath - a strict ancestor or
+// descendant of either, short of an exact match. WriteGuestDir syncs those
+// two paths wholesale (rm -rf the guest side, then restore from the
+// daemon's host-side snapshot); a mount landing anywhere inside one of them
+// other than exactly at its root would force a choice between destroying
+// the mounted volume's content (deleting under it) or silently skipping the
+// sync of everything else in that directory (leaving it stale) - neither
+// acceptable, so this configuration is rejected up front instead. Mounting
+// exactly at the workspace or home root is fine: WriteGuestDir already
+// treats that whole push as a no-op in favor of the volume's own content
+// (see k8sGuestDirOverlapsVolumeMount). A target unrelated to either path is
+// always fine too.
+func k8sValidateVolumeMountTarget(target string, guestPaths ...string) error {
+	target = filepath.Clean(strings.TrimSpace(target))
+	for _, guestPath := range guestPaths {
+		guestPath = strings.TrimSpace(guestPath)
+		if guestPath == "" {
+			continue
+		}
+		guestPath = filepath.Clean(guestPath)
+		if target == guestPath {
+			continue
+		}
+		if k8sPathIsWithin(target, guestPath) || k8sPathIsWithin(guestPath, target) {
+			return fmt.Errorf("mount target %q partially overlaps %q; mount the whole directory instead of a sub-path, or choose a target outside it", target, guestPath)
+		}
+	}
+	return nil
 }
 
 func parseK8sPVCRef(value string) (string, string, error) {

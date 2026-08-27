@@ -198,10 +198,23 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 	return nil
 }
 
-// k8sGuestDirOverlapsVolumeMount reports whether guestDir is, or contains,
-// the target of one of the sandbox's k8s named-volume (PVC) mounts. A
+// k8sGuestDirOverlapsVolumeMount reports whether guestDir is exactly the
+// target of one of the sandbox's k8s named-volume (PVC) mounts. A
 // destructive `rm -rf` push (WriteGuestDir) into such a path would delete
 // the mounted volume's actual persistent content, not just a stale copy.
+//
+// This only needs to check for an exact match: podVolumeSpecs
+// (k8sValidateVolumeMountTarget) already rejects a mount target that
+// partially overlaps GuestWorkspacePath/GuestHomePath - the paths
+// WriteGuestDir ever pushes to - at Pod-creation time, so a partial overlap
+// can never reach this far. That rejection exists precisely because there
+// is no correct way to handle a partial overlap here: excluding a mounted
+// sub-path from the rm -rf/tar-restore would leave the rest of guestDir
+// synced, but silently skipping the whole push (as an earlier version of
+// this function did for any overlap, not just an exact one) means the
+// daemon's workspace/home snapshot stops reaching the guest at all - a
+// second, quieter form of the same "data goes stale in a way nothing
+// surfaces" problem this function exists to prevent.
 func k8sGuestDirOverlapsVolumeMount(sandbox *Sandbox, guestDir string) bool {
 	if sandbox == nil {
 		return false
@@ -215,8 +228,7 @@ func k8sGuestDirOverlapsVolumeMount(sandbox *Sandbox, guestDir string) bool {
 		if target == "" {
 			continue
 		}
-		target = filepath.Clean(target)
-		if k8sPathIsWithin(target, guestDir) || k8sPathIsWithin(guestDir, target) {
+		if filepath.Clean(target) == guestDir {
 			return true
 		}
 	}

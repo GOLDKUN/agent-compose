@@ -160,7 +160,7 @@ func TestK8sEnsureSandboxCreatesPodWhenMissing(t *testing.T) {
 }
 
 func TestK8sPodVolumeSpecsMapsPVCMounts(t *testing.T) {
-	r := &k8sRuntime{defaultNamespace: "agent-compose"}
+	r := &k8sRuntime{config: &appconfig.Config{}, defaultNamespace: "agent-compose"}
 	sandbox := testSandbox(t, "sandbox-volume")
 	sandbox.VolumeMounts = []SandboxVolumeMount{
 		{ID: "mount-cache", Type: "volume", Source: "cache", Target: "/cache", Driver: RuntimeDriverK8s, HostPath: "agent-compose/claim-cache", ReadOnly: true},
@@ -179,16 +179,61 @@ func TestK8sPodVolumeSpecsMapsPVCMounts(t *testing.T) {
 }
 
 func TestK8sPodVolumeSpecsRejectsBindAndCrossNamespaceMounts(t *testing.T) {
-	r := &k8sRuntime{defaultNamespace: "agent-compose"}
+	r := &k8sRuntime{config: &appconfig.Config{}, defaultNamespace: "agent-compose"}
 	for name, mount := range map[string]SandboxVolumeMount{
 		"bind":      {Type: "bind", Source: "/host", Target: "/data", HostPath: "/host"},
 		"namespace": {Type: "volume", Source: "cache", Target: "/data", Driver: RuntimeDriverK8s, HostPath: "other/claim"},
+		"partial workspace overlap": {
+			Type: "volume", Source: "cache", Target: "/workspace/cache", Driver: RuntimeDriverK8s, HostPath: "agent-compose/claim-cache",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			sandbox := testSandbox(t, "sandbox-"+name)
 			sandbox.VolumeMounts = []SandboxVolumeMount{mount}
 			if _, _, err := r.podVolumeSpecs(sandbox, VMState{}); err == nil {
 				t.Fatal("podVolumeSpecs() error = nil")
+			}
+		})
+	}
+}
+
+func TestK8sPodVolumeSpecsAllowsWholeWorkspaceOrHomeAsAVolume(t *testing.T) {
+	r := &k8sRuntime{config: &appconfig.Config{}, defaultNamespace: "agent-compose"}
+	for name, target := range map[string]string{"workspace": "/workspace", "home": "/root"} {
+		t.Run(name, func(t *testing.T) {
+			sandbox := testSandbox(t, "sandbox-"+name)
+			sandbox.VolumeMounts = []SandboxVolumeMount{
+				{Type: "volume", Source: "data", Target: target, Driver: RuntimeDriverK8s, HostPath: "agent-compose/claim-data"},
+			}
+			if _, _, err := r.podVolumeSpecs(sandbox, VMState{}); err != nil {
+				t.Fatalf("podVolumeSpecs() error = %v, want the whole %s root to be a valid mount target", err, name)
+			}
+		})
+	}
+}
+
+func TestK8sValidateVolumeMountTarget(t *testing.T) {
+	const workspace, home = "/workspace", "/root"
+	cases := map[string]struct {
+		target  string
+		wantErr bool
+	}{
+		"exact workspace match":        {"/workspace", false},
+		"exact home match":             {"/root", false},
+		"unrelated path":               {"/data/models", false},
+		"strict descendant":            {"/workspace/cache", true},
+		"strict ancestor":              {"/", true},
+		"descendant of home":           {"/root/.cache", true},
+		"lookalike prefix, not nested": {"/workspace2", false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := k8sValidateVolumeMountTarget(tc.target, workspace, home)
+			if tc.wantErr && err == nil {
+				t.Fatalf("k8sValidateVolumeMountTarget(%q) error = nil, want an error", tc.target)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("k8sValidateVolumeMountTarget(%q) error = %v, want nil", tc.target, err)
 			}
 		})
 	}

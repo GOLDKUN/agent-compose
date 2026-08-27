@@ -153,9 +153,11 @@ func TestK8sGuestDirOverlapsVolumeMount(t *testing.T) {
 		guestDir string
 		want     bool
 	}{
-		"exact match":                {"/workspace", true},
-		"mount is under guestDir":    {"/", true},
-		"guestDir is under mount":    {"/workspace/sub/dir", true},
+		"exact match": {"/workspace", true},
+		// Partial overlaps (mount under guestDir, or guestDir under mount) are
+		// rejected at Pod-creation time by k8sValidateVolumeMountTarget and so
+		// can never legitimately reach this function - see
+		// TestK8sValidateVolumeMountTarget.
 		"no overlap":                 {"/root/.codex", false},
 		"non-k8s mount type ignored": {"/root", false},
 	}
