@@ -36,21 +36,27 @@ func WriteAgentMCPConfigFile(ctx context.Context, config *appconfig.Config, sess
 	if len(mcps) == 0 {
 		_, statErr := os.Stat(hostPath)
 		hadExisting := statErr == nil
-		if err := os.Remove(hostPath); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove agent mcp config file: %w", err)
-		}
 		// docker/boxlite see the deletion for free through their shared mount.
 		// A no-shared-mount guest (k8s) only finds out via this push, so a
 		// sandbox reused across runs must still be told when every MCP server
 		// has been removed - but only if this sandbox ever had a config
 		// pushed in the first place, so a project with no MCP servers at all
 		// doesn't pay for an exec round trip on every prepare call.
+		//
+		// Push to the guest before removing the host file: hostPath's
+		// existence is what hadExisting is derived from on the next call, so
+		// if the guest push failed and we'd already deleted hostPath, a
+		// retry would see hadExisting=false and skip clearing the guest
+		// forever, leaving it stuck with a stale config.
 		if hadExisting && writeGuestFile != nil {
 			appconfig.ApplyDefaultGuestPaths(config)
 			guestPath := filepath.Join(config.GuestStateRoot, "agents", "mcp", "config.json")
 			if err := writeGuestFile(ctx, guestPath, nil); err != nil {
 				return fmt.Errorf("clear agent mcp config file on guest: %w", err)
 			}
+		}
+		if err := os.Remove(hostPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove agent mcp config file: %w", err)
 		}
 		return nil
 	}

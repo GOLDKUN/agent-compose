@@ -131,9 +131,6 @@ func WriteAgentSkills(ctx context.Context, config *appconfig.Config, session *do
 			return nil, err
 		}
 	}
-	if err := writeAgentSkillsManifest(skillsDir, agentSkillsManifest{Names: names}); err != nil {
-		return nil, err
-	}
 	if err := reconcileClaudeSkillsLink(session, skillsDir, len(names) > 0); err != nil {
 		return nil, err
 	}
@@ -159,6 +156,15 @@ func WriteAgentSkills(ctx context.Context, config *appconfig.Config, session *do
 				return nil, fmt.Errorf("push agent skills to guest %s: %w", guestSkillsDir, err)
 			}
 		}
+	}
+	// Written only after a successful guest push: previous.Names above (read
+	// from this same file) is what gates that push on the next call, so
+	// committing it before the push could succeed would let a transient push
+	// failure permanently disable the "tell a reused sandbox's guest side
+	// skills were removed" retry - the next call would see an already-empty
+	// manifest and skip pushing again.
+	if err := writeAgentSkillsManifest(skillsDir, agentSkillsManifest{Names: names}); err != nil {
+		return nil, err
 	}
 	return names, nil
 }

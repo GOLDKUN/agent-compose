@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -200,5 +201,39 @@ func TestWriteAgentSkillsSkipsPushWhenNeverConfigured(t *testing.T) {
 	}
 	if pushCount != 0 {
 		t.Fatalf("push count = %d, want 0 (nothing was ever configured to clear)", pushCount)
+	}
+}
+
+func TestWriteAgentSkillsRetriesGuestClearAfterTransientPushFailure(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	skillSource := filepath.Join(root, "source", "pdf")
+	if err := os.MkdirAll(skillSource, 0o755); err != nil {
+		t.Fatalf("create skill source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillSource, "SKILL.md"), []byte("---\nname: pdf\n---\n"), 0o644); err != nil {
+		t.Fatalf("write skill: %v", err)
+	}
+	config := &appconfig.Config{}
+
+	if _, err := WriteAgentSkills(context.Background(), config, session, []ResolvedAgentSkill{{Name: "pdf", LocalDir: skillSource}}, func(context.Context, string, string) error { return nil }); err != nil {
+		t.Fatalf("WriteAgentSkills (populate) returned error: %v", err)
+	}
+
+	failing := func(context.Context, string, string) error { return fmt.Errorf("transient exec failure") }
+	if _, err := WriteAgentSkills(context.Background(), config, session, nil, failing); err == nil {
+		t.Fatal("WriteAgentSkills (clear, guest push fails) returned nil error, want the push failure")
+	}
+
+	var pushCount int
+	retry := func(context.Context, string, string) error {
+		pushCount++
+		return nil
+	}
+	if _, err := WriteAgentSkills(context.Background(), config, session, nil, retry); err != nil {
+		t.Fatalf("WriteAgentSkills (clear, retry) returned error: %v", err)
+	}
+	if pushCount != 2 {
+		t.Fatalf("push count on retry after a prior transient failure = %d, want 2 (.agents/skills and .claude/skills)", pushCount)
 	}
 }

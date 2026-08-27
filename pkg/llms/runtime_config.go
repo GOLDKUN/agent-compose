@@ -143,9 +143,6 @@ func WriteCodexMCPConfig(ctx context.Context, config *appconfig.Config, session 
 	managed := buildCodexManagedMCPBlock(mcps)
 	merged := replaceManagedTextBlock(string(existing), codexManagedMCPStart, codexManagedMCPEnd, managed)
 	if strings.TrimSpace(merged) == "" {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove codex mcp config: %w", err)
-		}
 		// Deleting the daemon's own copy is enough for docker/boxlite, whose
 		// guest sees the same file through the shared mount. A no-shared-mount
 		// guest (k8s) has no such link: without also pushing the now-empty
@@ -154,12 +151,20 @@ func WriteCodexMCPConfig(ctx context.Context, config *appconfig.Config, session 
 		// since been removed from the project. Gated on hadExisting so a
 		// session that never had anything written here (no managed provider,
 		// nothing to clear) doesn't pay for an exec round trip on every call.
+		//
+		// Push before removing path: hadExisting is derived from path's
+		// existence, so if path were removed first and the guest push then
+		// failed, a retry would see hadExisting=false and skip clearing the
+		// guest forever.
 		if hadExisting && writeGuestFile != nil {
 			appconfig.ApplyDefaultGuestPaths(config)
 			guestPath := filepath.Join(config.GuestHomePath, ".codex", "config.toml")
 			if err := writeGuestFile(ctx, guestPath, nil); err != nil {
 				return fmt.Errorf("clear codex mcp config on guest: %w", err)
 			}
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove codex mcp config: %w", err)
 		}
 		return nil
 	}

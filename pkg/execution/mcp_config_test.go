@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,5 +87,37 @@ func TestWriteAgentMCPConfigFileClearsGuestOnlyWhenPreviouslyPushed(t *testing.T
 	}
 	if pushCount != 1 {
 		t.Fatalf("push count clearing a previously-populated config = %d, want 1", pushCount)
+	}
+}
+
+func TestWriteAgentMCPConfigFileRetriesGuestClearAfterTransientPushFailure(t *testing.T) {
+	root := t.TempDir()
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}},
+	}
+	config := &appconfig.Config{}
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "reused")}}
+	if err := WriteAgentMCPConfigFile(context.Background(), config, session, mcps, func(context.Context, string, []byte) error { return nil }); err != nil {
+		t.Fatalf("WriteAgentMCPConfigFile (populate) returned error: %v", err)
+	}
+
+	failing := func(context.Context, string, []byte) error { return fmt.Errorf("transient exec failure") }
+	if err := WriteAgentMCPConfigFile(context.Background(), config, session, nil, failing); err == nil {
+		t.Fatal("WriteAgentMCPConfigFile (clear, guest push fails) returned nil error, want the push failure")
+	}
+	if _, err := os.Stat(HostAgentMCPConfigPath(session)); err != nil {
+		t.Fatalf("host config file after a failed guest push, stat error = %v, want the file to still exist so a retry sees hadExisting=true", err)
+	}
+
+	var pushCount int
+	retry := func(context.Context, string, []byte) error {
+		pushCount++
+		return nil
+	}
+	if err := WriteAgentMCPConfigFile(context.Background(), config, session, nil, retry); err != nil {
+		t.Fatalf("WriteAgentMCPConfigFile (clear, retry) returned error: %v", err)
+	}
+	if pushCount != 1 {
+		t.Fatalf("push count on retry after a prior transient failure = %d, want 1", pushCount)
 	}
 }

@@ -147,6 +147,8 @@ func TestK8sGuestDirOverlapsVolumeMount(t *testing.T) {
 	sandbox := testSandbox(t, "sandbox-overlap-cases")
 	sandbox.VolumeMounts = []SandboxVolumeMount{
 		{Type: "volume", Driver: RuntimeDriverK8s, Target: "/workspace", HostPath: "agent-compose/claim-a"},
+		{Type: "volume", Driver: RuntimeDriverK8s, Target: "/data/cache", HostPath: "agent-compose/claim-b"},
+		{Type: "volume", Driver: RuntimeDriverK8s, Target: "/big-volume", HostPath: "agent-compose/claim-c"},
 		{Type: "bind", Target: "/root", HostPath: "/host/root"},
 	}
 	cases := map[string]struct {
@@ -154,12 +156,16 @@ func TestK8sGuestDirOverlapsVolumeMount(t *testing.T) {
 		want     bool
 	}{
 		"exact match": {"/workspace", true},
-		// Partial overlaps (mount under guestDir, or guestDir under mount) are
-		// rejected at Pod-creation time by k8sValidateVolumeMountTarget and so
-		// can never legitimately reach this function - see
-		// TestK8sValidateVolumeMountTarget.
-		"no overlap":                 {"/root/.codex", false},
-		"non-k8s mount type ignored": {"/root", false},
+		// Partial overlaps are rejected at Pod-creation time by
+		// k8sValidateVolumeMountTarget for any Pod this daemon creates (see
+		// TestK8sValidateVolumeMountTarget), but this function still must
+		// catch them at runtime too, as a safety net for a reused Pod whose
+		// mounts were never validated (created before that check existed, or
+		// out-of-band).
+		"mount is a descendant of guestDir": {"/data", true},
+		"guestDir is a descendant of mount": {"/big-volume/subdir", true},
+		"no overlap":                        {"/root/.codex", false},
+		"non-k8s mount type ignored":        {"/root", false},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -2,6 +2,7 @@ package llms
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -266,6 +267,39 @@ func TestWriteCodexMCPConfigSkipsGuestPushWhenNothingWasEverWritten(t *testing.T
 	}
 	if pushCount != 0 {
 		t.Fatalf("guest write callback invoked %d times, want 0 (nothing to clear)", pushCount)
+	}
+}
+
+func TestWriteCodexMCPConfigRetriesGuestClearAfterTransientPushFailure(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}},
+	}
+	if err := WriteCodexMCPConfig(context.Background(), config, session, mcps, func(context.Context, string, []byte) error { return nil }); err != nil {
+		t.Fatalf("WriteCodexMCPConfig (populate) returned error: %v", err)
+	}
+	localPath := filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")
+
+	failing := func(context.Context, string, []byte) error { return fmt.Errorf("transient exec failure") }
+	if err := WriteCodexMCPConfig(context.Background(), config, session, nil, failing); err == nil {
+		t.Fatal("WriteCodexMCPConfig (clear, guest push fails) returned nil error, want the push failure")
+	}
+	if _, err := os.Stat(localPath); err != nil {
+		t.Fatalf("local codex config after a failed guest push, stat error = %v, want the file to still exist so a retry sees hadExisting=true", err)
+	}
+
+	var pushCount int
+	retry := func(context.Context, string, []byte) error {
+		pushCount++
+		return nil
+	}
+	if err := WriteCodexMCPConfig(context.Background(), config, session, nil, retry); err != nil {
+		t.Fatalf("WriteCodexMCPConfig (clear, retry) returned error: %v", err)
+	}
+	if pushCount != 1 {
+		t.Fatalf("push count on retry after a prior transient failure = %d, want 1", pushCount)
 	}
 }
 
