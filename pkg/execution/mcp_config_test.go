@@ -52,3 +52,39 @@ func TestWriteAgentMCPConfigFile(t *testing.T) {
 		t.Fatalf("expected config file removed, stat err=%v", err)
 	}
 }
+
+func TestWriteAgentMCPConfigFileClearsGuestOnlyWhenPreviouslyPushed(t *testing.T) {
+	root := t.TempDir()
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}},
+	}
+	var pushCount int
+	writer := func(context.Context, string, []byte) error {
+		pushCount++
+		return nil
+	}
+
+	// Never had any MCP servers configured: clearing must not push at all.
+	fresh := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "fresh")}}
+	config := &appconfig.Config{}
+	if err := WriteAgentMCPConfigFile(context.Background(), config, fresh, nil, writer); err != nil {
+		t.Fatalf("WriteAgentMCPConfigFile (fresh) returned error: %v", err)
+	}
+	if pushCount != 0 {
+		t.Fatalf("push count for a sandbox that never had MCP servers = %d, want 0", pushCount)
+	}
+
+	// Reused sandbox transitioning from having a server to having none: the
+	// guest's stale copy must be cleared.
+	reused := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "reused")}}
+	if err := WriteAgentMCPConfigFile(context.Background(), config, reused, mcps, writer); err != nil {
+		t.Fatalf("WriteAgentMCPConfigFile (populate) returned error: %v", err)
+	}
+	pushCount = 0
+	if err := WriteAgentMCPConfigFile(context.Background(), config, reused, nil, writer); err != nil {
+		t.Fatalf("WriteAgentMCPConfigFile (clear) returned error: %v", err)
+	}
+	if pushCount != 1 {
+		t.Fatalf("push count clearing a previously-populated config = %d, want 1", pushCount)
+	}
+}

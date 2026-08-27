@@ -247,6 +247,28 @@ func TestWriteCodexMCPConfigClearsGuestWhenAllServersRemoved(t *testing.T) {
 	}
 }
 
+func TestWriteCodexMCPConfigSkipsGuestPushWhenNothingWasEverWritten(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+
+	var pushCount int
+	// No prior WriteCodexRuntimeConfig/WriteCodexMCPConfig call ever touched
+	// this sandbox's .codex/config.toml (e.g. no managed LLM provider - see
+	// EnsureCodexFacadeConfig's "let Codex use its own login" no-op path).
+	// Calling with zero MCP servers must not push an empty file to a guest
+	// that never had anything pushed there in the first place.
+	if err := WriteCodexMCPConfig(context.Background(), config, session, nil, func(context.Context, string, []byte) error {
+		pushCount++
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteCodexMCPConfig returned error: %v", err)
+	}
+	if pushCount != 0 {
+		t.Fatalf("guest write callback invoked %d times, want 0 (nothing to clear)", pushCount)
+	}
+}
+
 func TestConfigHelperEdgeBranches(t *testing.T) {
 	if got := NormalizeWireAPI("chat-completion"); got != APIProtocolChatCompletions {
 		t.Fatalf("NormalizeWireAPI chat-completion = %q", got)

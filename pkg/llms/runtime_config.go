@@ -135,8 +135,10 @@ func WriteCodexMCPConfig(ctx context.Context, config *appconfig.Config, session 
 		return fmt.Errorf("create codex config dir: %w", err)
 	}
 	existing := []byte{}
+	hadExisting := false
 	if data, err := os.ReadFile(path); err == nil {
 		existing = data
+		hadExisting = len(strings.TrimSpace(string(data))) > 0
 	}
 	managed := buildCodexManagedMCPBlock(mcps)
 	merged := replaceManagedTextBlock(string(existing), codexManagedMCPStart, codexManagedMCPEnd, managed)
@@ -149,8 +151,10 @@ func WriteCodexMCPConfig(ctx context.Context, config *appconfig.Config, session 
 		// guest (k8s) has no such link: without also pushing the now-empty
 		// content, a sandbox Pod reused across runs would keep whatever MCP
 		// config an earlier run pushed here, even after every MCP server has
-		// since been removed from the project.
-		if writeGuestFile != nil {
+		// since been removed from the project. Gated on hadExisting so a
+		// session that never had anything written here (no managed provider,
+		// nothing to clear) doesn't pay for an exec round trip on every call.
+		if hadExisting && writeGuestFile != nil {
 			appconfig.ApplyDefaultGuestPaths(config)
 			guestPath := filepath.Join(config.GuestHomePath, ".codex", "config.toml")
 			if err := writeGuestFile(ctx, guestPath, nil); err != nil {

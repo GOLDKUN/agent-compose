@@ -168,12 +168,37 @@ func TestWriteAgentSkillsPushesToGuestWhenPresent(t *testing.T) {
 		t.Fatalf("pushes = %#v, want %#v", pushes, wantPushes)
 	}
 
-	// No skills configured: nothing should be pushed.
+	// Reused sandbox transitioning from having a skill to having none: the
+	// guest copy from the first call above must still be cleared, not left
+	// stale, so this still pushes (now-empty skillsDir, holding just the
+	// manifest) even though names is empty this time.
 	pushes = nil
 	if _, err := WriteAgentSkills(context.Background(), config, session, nil, writer); err != nil {
-		t.Fatalf("WriteAgentSkills (no skills) returned error: %v", err)
+		t.Fatalf("WriteAgentSkills (clearing) returned error: %v", err)
 	}
-	if len(pushes) != 0 {
-		t.Fatalf("pushes with no skills = %#v, want none", pushes)
+	if len(pushes) != len(wantPushes) || pushes[0] != wantPushes[0] || pushes[1] != wantPushes[1] {
+		t.Fatalf("clearing pushes = %#v, want %#v", pushes, wantPushes)
+	}
+}
+
+func TestWriteAgentSkillsSkipsPushWhenNeverConfigured(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+
+	var pushCount int
+	writer := func(context.Context, string, string) error {
+		pushCount++
+		return nil
+	}
+
+	// A sandbox that never had any skills configured must not pay for an
+	// exec round trip on every call just to push an empty directory nothing
+	// ever populated.
+	if _, err := WriteAgentSkills(context.Background(), config, session, nil, writer); err != nil {
+		t.Fatalf("WriteAgentSkills returned error: %v", err)
+	}
+	if pushCount != 0 {
+		t.Fatalf("push count = %d, want 0 (nothing was ever configured to clear)", pushCount)
 	}
 }

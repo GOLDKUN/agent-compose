@@ -143,11 +143,13 @@ func WriteAgentSkills(ctx context.Context, config *appconfig.Config, session *do
 	// independent copies (.agents/skills and .claude/skills) rather than a
 	// symlink - the guest has no use for reconcileClaudeSkillsLink's
 	// managed-marker/symlink-vs-copy-fallback bookkeeping, since a fresh Pod
-	// has no pre-existing content to be careful not to clobber. Known gap:
-	// on a *reused* sandbox transitioning from having skills to having none,
-	// this doesn't clear whatever was pushed on a previous run - there's no
-	// "remove a guest path" primitive yet, only push/pull.
-	if writeGuestDir != nil && len(names) > 0 {
+	// has no pre-existing content to be careful not to clobber. Still push
+	// (skillsDir now near-empty, holding just the manifest) when transitioning
+	// from having skills to having none, so a *reused* sandbox's guest copy
+	// doesn't keep serving skills the project no longer declares; gated on
+	// previously having pushed something so a project with no skills at all
+	// never pays for the exec round trip.
+	if writeGuestDir != nil && (len(names) > 0 || len(previous.Names) > 0) {
 		appconfig.ApplyDefaultGuestPaths(config)
 		for _, guestSkillsDir := range []string{
 			filepath.Join(config.GuestHomePath, ".agents", "skills"),
