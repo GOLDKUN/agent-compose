@@ -24,6 +24,10 @@ func TestIntegrationRuntimeDriverWorkflow(t *testing.T) {
 	testConsumeDockerPullStream(t)
 	testExecOutputFilterWorkflows(t)
 	testJupyterGuestCoverageWorkflow(t)
+	TestValidateRuntimeDriverK8s(t)
+	TestRuntimeDriverSupportsStoppedRuntimeRetention(t)
+	TestDriverDefaultsForK8s(t)
+	TestPrepareRuntimeMountManifestForK8sHasNoMounts(t)
 }
 
 func TestE2ERuntimeDriverWorkflow(t *testing.T) {
@@ -36,4 +40,8 @@ func TestE2ERuntimeDriverWorkflow(t *testing.T) {
 	testConsumeDockerPullStream(t)
 	testExecOutputFilterWorkflows(t)
 	testJupyterGuestCoverageWorkflow(t)
+	TestValidateRuntimeDriverK8s(t)
+	TestRuntimeDriverSupportsStoppedRuntimeRetention(t)
+	TestDriverDefaultsForK8s(t)
+	TestPrepareRuntimeMountManifestForK8sHasNoMounts(t)
 }

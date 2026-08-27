@@ -5,6 +5,15 @@ import "testing"
 func TestIntegrationExecutionHelperWorkflows(t *testing.T) {
 	TestDriverConversionWorkflows(t)
 	TestWriteAgentMCPConfigFile(t)
+	TestWriteAgentSkillsPushesToGuestWhenPresent(t)
+	TestWriteAgentSkillsSkipsPushWhenNeverConfigured(t)
+	TestWriteAgentSkillsRetriesGuestClearAfterTransientPushFailure(t)
+	TestCollectAgentResumeInfoWithGuestFileReader(t)
+	TestCollectAgentResumeInfoSkipsGuestReadWhenThreadIDAlreadyKnown(t)
+	TestSyncHostFileToGuestUsesPersistedContent(t)
+	TestGuestArtifactSyncOptionalCapabilitiesAndErrors(t)
+	TestWriteAgentMCPConfigFileClearsGuestOnlyWhenPreviouslyPushed(t)
+	TestWriteAgentMCPConfigFileRetriesGuestClearAfterTransientPushFailure(t)
 }
 
 func TestE2EExecutionHelperWorkflows(t *testing.T) {

@@ -2498,6 +2498,14 @@ func TestE2ERunsControllerHelperEdgeWorkflows(t *testing.T) {
 	TestRunsControllerHelperEdgeWorkflows(t)
 }
 
+func TestIntegrationRunsGuestFileWorkflows(t *testing.T) {
+	t.Run("command execution guest files", TestExecuteProjectRunCommandTransfersGuestRequestAndArtifacts)
+}
+
+func TestE2ERunsGuestFileWorkflows(t *testing.T) {
+	TestIntegrationRunsGuestFileWorkflows(t)
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
