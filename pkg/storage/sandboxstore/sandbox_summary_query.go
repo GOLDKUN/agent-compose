@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 )
 
@@ -17,7 +18,7 @@ const sandboxSummaryQueryBatchSize = 500
 // SQLite projection serves the normal path in batches; filesystem reads are a
 // best-effort fallback when the rebuildable projection is unavailable.
 func (s *Store) ListSandboxSummaries(ctx context.Context, sandboxIDs []string) (map[string]domain.SandboxSummary, error) {
-	ids := normalizeSandboxSummaryIDs(sandboxIDs)
+	ids := idset.Normalize(sandboxIDs)
 	if len(ids) == 0 {
 		return map[string]domain.SandboxSummary{}, nil
 	}
@@ -99,23 +100,6 @@ func (x *sandboxCache) listSummaries(ctx context.Context, ids []string, sandboxD
 		}
 	}
 	return summaries, nil
-}
-
-func normalizeSandboxSummaryIDs(ids []string) []string {
-	seen := make(map[string]struct{}, len(ids))
-	normalized := make([]string, 0, len(ids))
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		normalized = append(normalized, id)
-	}
-	return normalized
 }
 
 func sandboxSummaryPlaceholders(count int) string {

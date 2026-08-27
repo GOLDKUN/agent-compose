@@ -155,7 +155,7 @@ func (h *ImageHandler) BuildImage(ctx context.Context, req *connect.Request[agen
 		ContextDir: strings.TrimSpace(req.Msg.GetContextDir()),
 		Dockerfile: strings.TrimSpace(req.Msg.GetDockerfile()),
 		Tags:       tags,
-		BuildArgs:  cloneImageBuildArgs(req.Msg.GetBuildArgs()),
+		BuildArgs:  req.Msg.GetBuildArgs(),
 		Target:     strings.TrimSpace(req.Msg.GetTarget()),
 		Platform:   req.Msg.GetPlatform(),
 		NoCache:    req.Msg.GetNoCache(),
@@ -212,21 +212,6 @@ func normalizeImageBuildStrings(values []string) []string {
 		}
 		seen[value] = struct{}{}
 		result = append(result, value)
-	}
-	return result
-}
-
-func cloneImageBuildArgs(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(values))
-	for key, value := range values {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		result[key] = value
 	}
 	return result
 }

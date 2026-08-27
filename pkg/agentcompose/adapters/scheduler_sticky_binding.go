@@ -23,7 +23,7 @@ func (r *SchedulerSandboxRunner) reuseCompatibleSchedulerBinding(ctx context.Con
 		if err != nil || !found {
 			return nil, "", false, nil, err
 		}
-		binding, current, err := r.claimLegacySchedulerBindingConfigHash(ctx, binding, configHash)
+		binding, current, err := schedulers.ClaimLegacySchedulerBindingConfigHash(ctx, r.ConfigDB, binding, configHash)
 		if err != nil {
 			return nil, "", false, &binding, err
 		}
@@ -92,25 +92,13 @@ func (r *SchedulerSandboxRunner) bindSchedulerSandbox(ctx context.Context, desir
 	return r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, expected, desired)
 }
 
-func (r *SchedulerSandboxRunner) claimLegacySchedulerBindingConfigHash(ctx context.Context, binding domain.SchedulerBinding, configHash string) (domain.SchedulerBinding, bool, error) {
-	replacement, legacy := schedulers.AdoptLegacySchedulerBindingConfigHash(binding, configHash)
-	if !legacy {
-		return binding, true, nil
-	}
-	claimed, err := r.ConfigDB.CompareAndSwapSchedulerBinding(ctx, &binding, replacement)
-	if err != nil {
-		return binding, false, err
-	}
-	return replacement, claimed, nil
-}
-
 func (r *SchedulerSandboxRunner) reuseWinningSchedulerBinding(ctx context.Context, schedulerID, triggerID, configHash string) (*domain.Sandbox, string, bool, error) {
 	for range 3 {
 		binding, found, err := r.ConfigDB.GetSchedulerBinding(ctx, schedulerID, triggerID)
 		if err != nil || !found {
 			return nil, "", false, err
 		}
-		binding, current, err := r.claimLegacySchedulerBindingConfigHash(ctx, binding, configHash)
+		binding, current, err := schedulers.ClaimLegacySchedulerBindingConfigHash(ctx, r.ConfigDB, binding, configHash)
 		if err != nil {
 			return nil, "", false, err
 		}

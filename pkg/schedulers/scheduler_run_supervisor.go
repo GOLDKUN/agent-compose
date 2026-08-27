@@ -34,7 +34,8 @@ type schedulerRunSupervisorDependencies struct {
 	RunTimeout          func(override time.Duration) time.Duration
 }
 
-type schedulerRunSupervisor struct {
+// SchedulerRunSupervisor owns scheduler-run execution, cancellation, and lookup.
+type SchedulerRunSupervisor struct {
 	deps schedulerRunSupervisorDependencies
 
 	mu     sync.Mutex
@@ -49,17 +50,17 @@ type activeSchedulerRun struct {
 	err         error
 }
 
-func newSchedulerRunSupervisor(deps schedulerRunSupervisorDependencies) *schedulerRunSupervisor {
+func newSchedulerRunSupervisor(deps schedulerRunSupervisorDependencies) *SchedulerRunSupervisor {
 	if deps.RootCtx == nil {
 		deps.RootCtx = context.Background()
 	}
-	return &schedulerRunSupervisor{
+	return &SchedulerRunSupervisor{
 		deps:   deps,
 		active: map[string]*activeSchedulerRun{},
 	}
 }
 
-func (s *schedulerRunSupervisor) Run(ctx context.Context, request SchedulerRunRequest) (domain.SchedulerRunSummary, error) {
+func (s *SchedulerRunSupervisor) RunScheduler(ctx context.Context, request SchedulerRunRequest) (domain.SchedulerRunSummary, error) {
 	started, active, err := s.start(ctx, request)
 	if err != nil || active == nil {
 		return started, err
@@ -73,12 +74,12 @@ func (s *schedulerRunSupervisor) Run(ctx context.Context, request SchedulerRunRe
 	}
 }
 
-func (s *schedulerRunSupervisor) Start(ctx context.Context, request SchedulerRunRequest) (domain.SchedulerRunSummary, error) {
+func (s *SchedulerRunSupervisor) StartSchedulerRun(ctx context.Context, request SchedulerRunRequest) (domain.SchedulerRunSummary, error) {
 	started, _, err := s.start(ctx, request)
 	return started, err
 }
 
-func (s *schedulerRunSupervisor) start(ctx context.Context, request SchedulerRunRequest) (domain.SchedulerRunSummary, *activeSchedulerRun, error) {
+func (s *SchedulerRunSupervisor) start(ctx context.Context, request SchedulerRunRequest) (domain.SchedulerRunSummary, *activeSchedulerRun, error) {
 	request.SchedulerID = strings.TrimSpace(request.SchedulerID)
 	request.TriggerID = strings.TrimSpace(request.TriggerID)
 	if request.SchedulerID == "" {
@@ -122,33 +123,33 @@ func (s *schedulerRunSupervisor) start(ctx context.Context, request SchedulerRun
 	return prepared.Run, active, nil
 }
 
-func (s *schedulerRunSupervisor) execute(ctx context.Context, cleanup func(), prepared PreparedRun, active *activeSchedulerRun) {
+func (s *SchedulerRunSupervisor) execute(ctx context.Context, cleanup func(), prepared PreparedRun, active *activeSchedulerRun) {
 	defer cleanup()
 	active.result, active.err = s.deps.Execute(ctx, prepared)
 	close(active.done)
 	s.unregister(prepared.Run.ID, active)
 }
 
-func (s *schedulerRunSupervisor) Get(ctx context.Context, schedulerID, runID string) (domain.SchedulerRunSummary, error) {
+func (s *SchedulerRunSupervisor) GetSchedulerRun(ctx context.Context, schedulerID, runID string) (domain.SchedulerRunSummary, error) {
 	if s.deps.Store == nil {
 		return domain.SchedulerRunSummary{}, fmt.Errorf("scheduler run store is unavailable")
 	}
 	return s.deps.Store.GetSchedulerRun(ctx, strings.TrimSpace(schedulerID), strings.TrimSpace(runID))
 }
 
-func (s *schedulerRunSupervisor) List(ctx context.Context, schedulerID string, limit int) ([]domain.SchedulerRunSummary, error) {
+func (s *SchedulerRunSupervisor) ListSchedulerRuns(ctx context.Context, schedulerID string, limit int) ([]domain.SchedulerRunSummary, error) {
 	if s.deps.Store == nil {
 		return nil, fmt.Errorf("scheduler run store is unavailable")
 	}
 	return s.deps.Store.ListSchedulerRuns(ctx, strings.TrimSpace(schedulerID), limit)
 }
 
-func (s *schedulerRunSupervisor) Stop(ctx context.Context, schedulerID, runID, reason string) (domain.SchedulerRunSummary, bool, error) {
+func (s *SchedulerRunSupervisor) StopSchedulerRun(ctx context.Context, schedulerID, runID, reason string) (domain.SchedulerRunSummary, bool, error) {
 	schedulerID = strings.TrimSpace(schedulerID)
 	runID = strings.TrimSpace(runID)
 	active := s.lookup(schedulerID, runID)
 	if active == nil {
-		current, err := s.Get(ctx, schedulerID, runID)
+		current, err := s.GetSchedulerRun(ctx, schedulerID, runID)
 		if err != nil || SchedulerRunStatusIsTerminal(current.Status) {
 			return current, false, err
 		}
@@ -168,13 +169,13 @@ func (s *schedulerRunSupervisor) Stop(ctx context.Context, schedulerID, runID, r
 	}
 }
 
-func (s *schedulerRunSupervisor) register(runID string, active *activeSchedulerRun) {
+func (s *SchedulerRunSupervisor) register(runID string, active *activeSchedulerRun) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.active[strings.TrimSpace(runID)] = active
 }
 
-func (s *schedulerRunSupervisor) unregister(runID string, active *activeSchedulerRun) {
+func (s *SchedulerRunSupervisor) unregister(runID string, active *activeSchedulerRun) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	runID = strings.TrimSpace(runID)
@@ -183,7 +184,7 @@ func (s *schedulerRunSupervisor) unregister(runID string, active *activeSchedule
 	}
 }
 
-func (s *schedulerRunSupervisor) lookup(schedulerID, runID string) *activeSchedulerRun {
+func (s *SchedulerRunSupervisor) lookup(schedulerID, runID string) *activeSchedulerRun {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	active := s.active[runID]
@@ -193,7 +194,7 @@ func (s *schedulerRunSupervisor) lookup(schedulerID, runID string) *activeSchedu
 	return active
 }
 
-func (s *schedulerRunSupervisor) runTimeout(override time.Duration) time.Duration {
+func (s *SchedulerRunSupervisor) runTimeout(override time.Duration) time.Duration {
 	if s.deps.RunTimeout == nil {
 		return override
 	}

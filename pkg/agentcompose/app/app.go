@@ -96,11 +96,13 @@ func RegisterDependencies(di do.Injector) {
 
 func RegisterRoutes(di do.Injector) {
 	app := do.MustInvoke[*echo.Echo](di)
+	schedulerController := do.MustInvoke[*schedulers.Controller](di)
 
 	projectHandler := api.NewProjectHandlerWithAgentModels(api.ProjectHandlerDeps{
 		Delegate:         projectControllerDelegate{controller: do.MustInvoke[*projects.Controller](di)},
 		Store:            do.MustInvoke[*configstore.ConfigStore](di),
-		SchedulerRuntime: do.MustInvoke[*schedulers.Controller](di),
+		SchedulerRuntime: schedulerController,
+		SchedulerRuns:    schedulerController.SchedulerRuns(),
 		AgentModels:      newProjectAgentModelResolver(do.MustInvoke[*appconfig.Config](di), do.MustInvoke[*configstore.ConfigStore](di)),
 		SandboxDirs:      do.MustInvoke[*sandboxstore.Store](di),
 	})

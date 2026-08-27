@@ -24,8 +24,12 @@ import (
 type ProjectDelegate interface {
 	ValidateProject(context.Context, *connect.Request[agentcomposev2.ValidateProjectRequest]) (*connect.Response[agentcomposev2.ValidateProjectResponse], error)
 	ApplyProject(context.Context, *connect.Request[agentcomposev2.ApplyProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
-	PatchProject(context.Context, *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
-	RemoveProject(context.Context, *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error)
+	// PatchProject and RemoveProject receive an already-validated domain
+	// project reference: the API boundary (ProjectHandler, below) owns
+	// interpreting the transport ProjectRef oneof, so delegates never parse
+	// or import agentcomposev2.ProjectRef.
+	PatchProject(context.Context, *connect.Request[agentcomposev2.PatchProjectRequest], projects.ProjectRef) (*connect.Response[agentcomposev2.ApplyProjectResponse], error)
+	RemoveProject(context.Context, *connect.Request[agentcomposev2.RemoveProjectRequest], projects.ProjectRef) (*connect.Response[agentcomposev2.RemoveProjectResponse], error)
 	WatchProject(context.Context, *connect.Request[agentcomposev2.WatchProjectRequest], *connect.ServerStream[agentcomposev2.WatchProjectResponse]) error
 }
 
@@ -110,6 +114,7 @@ type ProjectHandlerDeps struct {
 	Delegate         ProjectDelegate
 	Store            ProjectStore
 	SchedulerRuntime ProjectSchedulerRuntime
+	SchedulerRuns    ProjectSchedulerRunRuntime
 	AgentModels      ProjectAgentModelResolver
 	SandboxDirs      schedulers.SandboxDirResolver
 }
@@ -121,7 +126,35 @@ func NewProjectHandlerWithAgentModels(deps ProjectHandlerDeps) *ProjectHandler {
 }
 
 func newProjectHandler(deps ProjectHandlerDeps) *ProjectHandler {
-	schedulerRuns, _ := deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
+	if controller, ok := deps.SchedulerRuntime.(*schedulers.Controller); ok && controller == nil {
+		deps.SchedulerRuntime = nil
+	}
+	if supervisor, ok := deps.SchedulerRuns.(*schedulers.SchedulerRunSupervisor); ok && supervisor == nil {
+		deps.SchedulerRuns = nil
+	}
+	schedulerRuns := deps.SchedulerRuns
+	if schedulerRuns == nil {
+		// A *schedulers.Controller no longer implements ProjectSchedulerRunRuntime
+		// directly (that capability lives on its SchedulerRunSupervisor), so callers
+		// that only set SchedulerRuntime — or that set SchedulerRuns to a typed-nil
+		// supervisor — still get the controller's real supervisor here instead of
+		// silently losing scheduler-run RPCs. The ProjectSchedulerRunRuntime
+		// assertion below remains for callers (tests, fakes) that implement the
+		// run-runtime methods directly without going through *schedulers.Controller.
+		if controller, ok := deps.SchedulerRuntime.(*schedulers.Controller); ok && controller != nil {
+			// controller.SchedulerRuns() is itself nil for a *Controller built by
+			// anything other than NewController (e.g. a zero-value struct literal
+			// in a test), so only take the concrete pointer once it's confirmed
+			// non-nil — assigning a nil *SchedulerRunSupervisor straight into the
+			// schedulerRuns interface would reintroduce the exact typed-nil footgun
+			// this fallback exists to close.
+			if runs := controller.SchedulerRuns(); runs != nil {
+				schedulerRuns = runs
+			}
+		} else {
+			schedulerRuns, _ = deps.SchedulerRuntime.(ProjectSchedulerRunRuntime)
+		}
+	}
 	invocations, _ := deps.SchedulerRuntime.(ProjectSchedulerInvocationRuntime)
 	schedulerPrune, _ := deps.SchedulerRuntime.(ProjectSchedulerPruneRuntime)
 	return &ProjectHandler{delegate: deps.Delegate, store: deps.Store, agentModels: deps.AgentModels, schedulerRuntime: deps.SchedulerRuntime, schedulerRuns: schedulerRuns, invocations: invocations, schedulerPrune: schedulerPrune, sandboxDirs: deps.SandboxDirs}
@@ -136,11 +169,19 @@ func (h *ProjectHandler) ApplyProject(ctx context.Context, req *connect.Request[
 }
 
 func (h *ProjectHandler) PatchProject(ctx context.Context, req *connect.Request[agentcomposev2.PatchProjectRequest]) (*connect.Response[agentcomposev2.ApplyProjectResponse], error) {
-	return h.delegate.PatchProject(ctx, req)
+	projectRef, err := projectReferenceFromProto(req.Msg.GetProject())
+	if err != nil {
+		return nil, projectConnectError(err)
+	}
+	return h.delegate.PatchProject(ctx, req, projectRef)
 }
 
 func (h *ProjectHandler) RemoveProject(ctx context.Context, req *connect.Request[agentcomposev2.RemoveProjectRequest]) (*connect.Response[agentcomposev2.RemoveProjectResponse], error) {
-	return h.delegate.RemoveProject(ctx, req)
+	projectRef, err := projectReferenceFromProto(req.Msg.GetProject())
+	if err != nil {
+		return nil, projectConnectError(err)
+	}
+	return h.delegate.RemoveProject(ctx, req, projectRef)
 }
 
 func (h *ProjectHandler) WatchProject(ctx context.Context, req *connect.Request[agentcomposev2.WatchProjectRequest], stream *connect.ServerStream[agentcomposev2.WatchProjectResponse]) error {

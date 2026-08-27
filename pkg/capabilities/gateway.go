@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"agent-compose/pkg/capproxy"
+	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
 )
 
@@ -20,20 +21,7 @@ const (
 )
 
 func NormalizeCapsetIDs(ids []string) []string {
-	seen := make(map[string]struct{}, len(ids))
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
+	return idset.Normalize(ids)
 }
 
 func EncodeCapsetIDs(ids []string) (string, error) {

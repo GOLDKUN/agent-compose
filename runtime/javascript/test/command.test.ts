@@ -80,6 +80,8 @@ describe("runtime command execution", () => {
         HOME: process.env.HOME,
         SESSION_WORKSPACE: process.env.SESSION_WORKSPACE,
         ARTIFACT_DIR: process.env.ARTIFACT_DIR,
+        RUNTIME_ROOT: process.env.RUNTIME_ROOT,
+        AGENT_COMPOSE_RUNTIME_ROOT: process.env.AGENT_COMPOSE_RUNTIME_ROOT,
       };
       const workspace = path.join(root, "workspace");
       const stateRoot = path.join(root, "state");
@@ -88,6 +90,8 @@ describe("runtime command execution", () => {
       process.env.HOME = "/native/home";
       delete process.env.SESSION_WORKSPACE;
       delete process.env.ARTIFACT_DIR;
+      delete process.env.RUNTIME_ROOT;
+      delete process.env.AGENT_COMPOSE_RUNTIME_ROOT;
       try {
         const requestFile = await writeRequest(root, {
           mode: "exec",

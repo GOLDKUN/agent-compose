@@ -48,18 +48,6 @@ func TestAppProjectControllerHelperCoverage(t *testing.T) {
 	if normalizedSpecToProto(nil) != nil {
 		t.Fatalf("normalizedSpecToProto nil returned non-nil")
 	}
-	for _, ref := range []*agentcomposev2.ProjectRef{
-		{Selector: &agentcomposev2.ProjectRef_ProjectId{ProjectId: "project-1"}},
-		{Selector: &agentcomposev2.ProjectRef_Name{Name: "Project"}},
-		{Selector: &agentcomposev2.ProjectRef_SourcePath{SourcePath: "/repo"}},
-	} {
-		if got := projectRefFromProto(ref); got == (projects.ProjectRef{}) {
-			t.Fatalf("projectRefFromProto(%T) returned empty ref", ref.GetSelector())
-		}
-	}
-	if ref := projectRefFromProto(nil); ref != (projects.ProjectRef{}) {
-		t.Fatalf("projectRefFromProto nil = %#v", ref)
-	}
 	protoIssues := validationIssuesToProto([]projects.ValidationIssue{{Path: "path", Message: "bad"}})
 	if got := validationIssuesFromProto(append(protoIssues, nil)); len(got) != 2 || got[0].Path != "path" {
 		t.Fatalf("validationIssues round trip = %#v", got)

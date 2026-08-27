@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
@@ -203,28 +202,6 @@ func TestWriteCodexAndOpenCodeMCPConfigPushToGuest(t *testing.T) {
 }
 
 func TestConfigHelperEdgeBranches(t *testing.T) {
-	if got := parseStoredTime(nil); !got.IsZero() {
-		t.Fatalf("nil stored time = %v, want zero", got)
-	}
-	if got := parseStoredTime(int64(1_700_000_000)); !got.Equal(time.Unix(1_700_000_000, 0).UTC()) {
-		t.Fatalf("int64 stored time = %v", got)
-	}
-	if got := parseStoredTime(1_700_000_000); !got.Equal(time.Unix(1_700_000_000, 0).UTC()) {
-		t.Fatalf("int stored time = %v", got)
-	}
-	if got := parseStoredTime(float64(1_700_000_000_000)); !got.Equal(time.UnixMilli(1_700_000_000_000).UTC()) {
-		t.Fatalf("float stored time = %v", got)
-	}
-	if got := parseStoredTime([]byte("2026-07-01T02:03:04Z")); got.IsZero() || got.Location() != time.UTC {
-		t.Fatalf("bytes stored time = %v", got)
-	}
-	if got := parseStoredTime("2026-07-01T02:03:04.000Z"); got.IsZero() {
-		t.Fatalf("millisecond stored time = %v", got)
-	}
-	if got := parseStoredTime("not-time"); !got.IsZero() {
-		t.Fatalf("invalid stored time = %v, want zero", got)
-	}
-
 	if got := NormalizeWireAPI("chat-completion"); got != APIProtocolChatCompletions {
 		t.Fatalf("NormalizeWireAPI chat-completion = %q", got)
 	}

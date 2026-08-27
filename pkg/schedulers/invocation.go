@@ -73,3 +73,11 @@ func (e *InvocationExecutor) Invoke(ctx context.Context, scheduler domain.Schedu
 		Warnings:   append([]string(nil), execution.Warnings...),
 	}, nil
 }
+
+func (c *Controller) InvokeScheduler(ctx context.Context, schedulerID, payloadJSON string) (InvocationResult, error) {
+	scheduler, _, err := c.LoadSchedulerForRun(ctx, schedulerID, "")
+	if err != nil {
+		return InvocationResult{}, err
+	}
+	return c.invocations.Invoke(ctx, scheduler, payloadJSON)
+}
