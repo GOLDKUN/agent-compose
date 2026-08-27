@@ -133,7 +133,9 @@ func (e *AgentExecutor) ExecuteAgentRequest(ctx context.Context, session *domain
 			return domain.NotebookCell{}, userEvent, domain.SandboxEvent{}, err
 		}
 		threadArtifactPath := filepath.Join(hostCellDir, "agent-thread.json")
-		resumeInfo := execution.CollectAgentResumeInfo(session, firstNonEmpty(result.Agent, cell.Agent, agent), result.ThreadID, threadArtifactPath)
+		resumeInfo := execution.CollectAgentResumeInfo(ctx, execution.AgentResumeInfoRequest{
+			Config: e.config, Sandbox: session, Agent: firstNonEmpty(result.Agent, cell.Agent, agent), ThreadID: result.ThreadID, ManifestPath: threadArtifactPath, ReadGuestFile: e.runner.guestFileReaderFor(session),
+		})
 		if err := execution.WriteAgentThreadArtifact(threadArtifactPath, resumeInfo); err != nil {
 			return domain.NotebookCell{}, userEvent, domain.SandboxEvent{}, err
 		}
@@ -234,7 +236,9 @@ func (e *AgentExecutor) ExecuteAgentRequest(ctx context.Context, session *domain
 		return domain.NotebookCell{}, userEvent, domain.SandboxEvent{}, err
 	}
 	threadArtifactPath := filepath.Join(hostCellDir, "agent-thread.json")
-	resumeInfo := execution.CollectAgentResumeInfo(session, firstNonEmpty(result.Agent, cell.Agent), result.ThreadID, threadArtifactPath)
+	resumeInfo := execution.CollectAgentResumeInfo(ctx, execution.AgentResumeInfoRequest{
+		Config: e.config, Sandbox: session, Agent: firstNonEmpty(result.Agent, cell.Agent), ThreadID: result.ThreadID, ManifestPath: threadArtifactPath, ReadGuestFile: e.runner.guestFileReaderFor(session),
+	})
 	if err := execution.WriteAgentThreadArtifact(threadArtifactPath, resumeInfo); err != nil {
 		return domain.NotebookCell{}, userEvent, domain.SandboxEvent{}, err
 	}

@@ -77,3 +77,30 @@ func TestNormalizeAgentRejectsUnknownStoppedRuntimePolicy(t *testing.T) {
 		t.Fatalf("Normalize error = %v, want stopped runtime policy path", err)
 	}
 }
+
+func TestNormalizeAgentRejectsK8sStoppedRuntimeRetention(t *testing.T) {
+	_, err := Normalize(&ProjectSpec{Name: "project", Agents: map[string]AgentSpec{
+		"worker": {
+			Driver:  &DriverSpec{K8s: &K8sDriverSpec{}},
+			Sandbox: &SandboxSpec{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRetain},
+		},
+	}}, NormalizeOptions{})
+	if err == nil || !strings.Contains(err.Error(), "agents.worker.sandbox.stopped_runtime_policy") || !strings.Contains(err.Error(), "k8s does not support retain") {
+		t.Fatalf("Normalize error = %v, want k8s retain validation error", err)
+	}
+}
+
+func TestNormalizeAgentAllowsK8sStoppedRuntimeRemoval(t *testing.T) {
+	normalized, err := Normalize(&ProjectSpec{Name: "project", Agents: map[string]AgentSpec{
+		"worker": {
+			Driver:  &DriverSpec{K8s: &K8sDriverSpec{}},
+			Sandbox: &SandboxSpec{StoppedRuntimePolicy: domain.StoppedRuntimePolicyRemove},
+		},
+	}}, NormalizeOptions{})
+	if err != nil {
+		t.Fatalf("Normalize returned error: %v", err)
+	}
+	if got := normalized.Agents[0].Sandbox.StoppedRuntimePolicy; got != domain.StoppedRuntimePolicyRemove {
+		t.Fatalf("stopped runtime policy = %q, want %q", got, domain.StoppedRuntimePolicyRemove)
+	}
+}

@@ -515,6 +515,8 @@ type VMState struct {
 	StoppedAt        time.Time `json:"stopped_at,omitempty"`
 	LastError        string    `json:"last_error,omitempty"`
 	BootstrapRef     string    `json:"bootstrap_ref,omitempty"`
+	K8sContext       string    `json:"k8s_context,omitempty"`
+	K8sNamespace     string    `json:"k8s_namespace,omitempty"`
 }
 
 type ProxyState struct {

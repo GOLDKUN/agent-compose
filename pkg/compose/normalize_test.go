@@ -776,6 +776,26 @@ agents:
 	}
 }
 
+func TestNormalizeRejectsK8sLocalBindMount(t *testing.T) {
+	spec := mustParseCompose(t, `
+name: k8s-bind
+agents:
+  worker:
+    provider: codex
+    driver:
+      k8s: {}
+    volumes:
+      - type: bind
+        source: ./fixtures
+        target: /fixtures
+`)
+
+	_, err := Normalize(spec, NormalizeOptions{})
+	if err == nil || !strings.Contains(err.Error(), "agents.worker.volumes[0].type") || !strings.Contains(err.Error(), "does not support local bind mounts") {
+		t.Fatalf("Normalize error = %v", err)
+	}
+}
+
 func TestNormalizePreservesJupyterConfig(t *testing.T) {
 	spec := mustParseCompose(t, `
 name: jupyter

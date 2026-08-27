@@ -1,0 +1,14 @@
+Agent-Compose has been installed in namespace {{ .Release.Namespace }}.
+
+Check the daemon:
+
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Access the API locally:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "agent-compose.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  agent-compose --host http://127.0.0.1:{{ .Values.service.port }} status
+
+The default sandbox namespace is {{ include "agent-compose.sandboxNamespace" . }}.
+Set agents.<name>.driver.k8s.namespace to target another namespace; the
+namespace must already exist and the daemon ServiceAccount must have access.

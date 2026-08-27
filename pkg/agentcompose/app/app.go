@@ -380,7 +380,7 @@ func NewResourceLocator(di do.Injector) (*resources.Locator, error) {
 func NewVolumeManager(di do.Injector) (*volumes.Manager, error) {
 	config := do.MustInvoke[*appconfig.Config](di)
 	store := do.MustInvoke[*configstore.ConfigStore](di)
-	manager := volumes.NewManager(store, volumes.NewLocalDriver(config))
+	manager := volumes.NewManager(store, volumes.NewLocalDriver(config), volumes.NewK8sDriver(config))
 	manager.Sandboxes = do.MustInvoke[*sandboxstore.Store](di)
 	return manager, nil
 }

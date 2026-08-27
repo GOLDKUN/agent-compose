@@ -232,13 +232,13 @@ func (l Lifecycle) ResumeLoaded(ctx context.Context, session *domain.Sandbox, ca
 	if err := l.ensureWorkspace(ctx, session); err != nil {
 		return nil, err
 	}
+	if l.GuideWriter != nil {
+		l.GuideWriter(ctx, session, capsetIDs)
+	}
 	if err := l.prepareFreshStartAgentEnvironment(ctx, session); err != nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = l.Store.UpdateSandbox(ctx, session)
 		return nil, err
-	}
-	if l.GuideWriter != nil {
-		l.GuideWriter(ctx, session, capsetIDs)
 	}
 	if err := l.Driver.StartSandboxVM(ctx, session); err != nil {
 		return nil, err

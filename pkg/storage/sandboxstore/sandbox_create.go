@@ -31,6 +31,11 @@ type CreateSandboxOptions struct {
 	JupyterExpose        bool
 	VolumeMounts         []domain.SandboxVolumeMount
 	StoppedRuntimePolicy string
+	// DriverK8sContext and DriverK8sNamespace carry the agent's `driver.k8s`
+	// override into the sandbox's VMState. Empty means the k8s driver falls
+	// back to its daemon-wide defaults (see driverpkg k8sRuntime).
+	DriverK8sContext   string
+	DriverK8sNamespace string
 }
 
 //nolint:revive // exported store API with ~75 call sites across many packages (and test/e2e, outside pkg/); the private chain beneath it (sandboxCreateSpec) is already bundled, but changing this signature means updating every caller in one pass rather than incrementally.
@@ -171,11 +176,13 @@ func (s *Store) prepareSandboxCreateSession(spec sandboxCreateSpec) (preparedSan
 	}
 
 	vmState := VMState{
-		Driver:      session.Summary.Driver,
-		Mode:        session.Summary.Driver,
-		BoxName:     session.Summary.RuntimeRef,
-		Image:       guestImage,
-		RuntimeHome: driverpkg.RuntimeHomeForDriver(s.config, driver),
+		Driver:       session.Summary.Driver,
+		Mode:         session.Summary.Driver,
+		BoxName:      session.Summary.RuntimeRef,
+		Image:        guestImage,
+		RuntimeHome:  driverpkg.RuntimeHomeForDriver(s.config, driver),
+		K8sContext:   options.DriverK8sContext,
+		K8sNamespace: options.DriverK8sNamespace,
 	}
 	if driver == driverpkg.RuntimeDriverBoxlite {
 		vmState.Registry = s.config.ImageRegistry

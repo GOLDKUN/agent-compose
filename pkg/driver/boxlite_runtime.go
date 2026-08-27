@@ -15,3 +15,7 @@ func NewDockerRuntime(config *appconfig.Config) (SandboxRuntime, error) {
 func NewMicrosandboxRuntime(config *appconfig.Config) (SandboxRuntime, error) {
 	return newMicrosandboxRuntime(config)
 }
+
+func NewK8sRuntime(config *appconfig.Config) (SandboxRuntime, error) {
+	return newK8sRuntime(config)
+}

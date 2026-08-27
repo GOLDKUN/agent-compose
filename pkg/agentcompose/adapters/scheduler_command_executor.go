@@ -183,6 +183,14 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 	if err := execution.WriteJSONArtifact(hostRequestPath, runtimeRequest); err != nil {
 		return domain.SchedulerCommandResult{}, fmt.Errorf("write scheduler command request artifact: %w", err)
 	}
+	if writer, ok := runtime.(GuestFileWriter); ok {
+		writeGuestFile := func(ctx context.Context, guestPath string, content []byte) error {
+			return writer.WriteGuestFile(ctx, execSession, vmState, guestPath, content)
+		}
+		if err := execution.SyncHostFileToGuest(ctx, hostRequestPath, filepath.Join(guestCellDir, "command-request.json"), writeGuestFile); err != nil {
+			return domain.SchedulerCommandResult{}, fmt.Errorf("push scheduler command request: %w", err)
+		}
+	}
 
 	streamWriter := func(chunk domain.ExecChunk) {
 		filtered, visible := execution.FilterCommandStreamChunk(chunk)
@@ -208,12 +216,20 @@ func (e *SchedulerCommandExecutor) ExecuteSchedulerCommand(ctx context.Context, 
 	}
 	commandHome := e.Config.GuestHomePath
 	execResult, err := runtime.ExecStream(execCtx, execSession, vmState, execution.BuildSchedulerCommandExecSpec(e.Config, execSession, filepath.Join(guestCellDir, "command-request.json"), commandHome), streamWriter)
+	if reader, ok := runtime.(GuestDirReader); ok {
+		readGuestDir := func(ctx context.Context, guestDir, hostDestDir string) error {
+			return reader.ReadGuestDir(ctx, execSession, vmState, guestDir, hostDestDir)
+		}
+		if pullErr := execution.SyncGuestDirToHost(ctx, guestCellDir, hostCellDir, readGuestDir); pullErr != nil {
+			err = errors.Join(err, fmt.Errorf("pull scheduler command artifacts: %w", pullErr))
+		}
+	}
 	retainFacadeTokens = errors.Is(err, domain.ErrExecTerminationUnconfirmed)
 	streamErrMu.Lock()
 	deferredStreamErr := streamErr
 	streamErrMu.Unlock()
 	if deferredStreamErr != nil {
-		return persistFailedCell(execResult, deferredStreamErr)
+		return persistFailedCell(execResult, errors.Join(deferredStreamErr, err))
 	}
 	if err != nil {
 		return persistFailedCell(execResult, err)

@@ -1,0 +1,44 @@
+package runs
+
+import (
+	"context"
+
+	"agent-compose/pkg/execution"
+	domain "agent-compose/pkg/model"
+)
+
+// guestFileWriterFor returns an execution.GuestFileWriterFunc that pushes a
+// file into sandbox's Pod over Exec, or nil if runtime's driver has a real
+// shared filesystem with the daemon and has no need for one (docker/
+// boxlite/microsandbox today - see
+// docs/design/k8s_pod_runtime_driver_design.md §2.1). runtime is typed as
+// this package's own Runtime interface (only ExecStream), so the type
+// assertion below is against the concrete value it holds - the same
+// pattern pkg/agentcompose/adapters.driverRuntimeAdapter uses internally
+// for Stats/IsSandboxAlive - not against Runtime's declared method set.
+func guestFileWriterFor(runtime Runtime, sandbox *domain.Sandbox, vmState domain.VMState) execution.GuestFileWriterFunc {
+	writer, ok := runtime.(interface {
+		WriteGuestFile(context.Context, *domain.Sandbox, domain.VMState, string, []byte) error
+	})
+	if !ok {
+		return nil
+	}
+	return func(ctx context.Context, guestPath string, content []byte) error {
+		return writer.WriteGuestFile(ctx, sandbox, vmState, guestPath, content)
+	}
+}
+
+// guestDirReaderFor returns the pull-side directory capability for runtimes
+// without a shared filesystem. A nil result means the guest artifact
+// directory is already visible at its daemon-local path.
+func guestDirReaderFor(runtime Runtime, sandbox *domain.Sandbox, vmState domain.VMState) execution.GuestDirReaderFunc {
+	reader, ok := runtime.(interface {
+		ReadGuestDir(context.Context, *domain.Sandbox, domain.VMState, string, string) error
+	})
+	if !ok {
+		return nil
+	}
+	return func(ctx context.Context, guestDir, hostDestDir string) error {
+		return reader.ReadGuestDir(ctx, sandbox, vmState, guestDir, hostDestDir)
+	}
+}

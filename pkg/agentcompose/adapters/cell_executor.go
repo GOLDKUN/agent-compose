@@ -85,6 +85,15 @@ func (e *CellExecutor) prepareCellExecution(ctx context.Context, req CellExecuti
 	if err := os.WriteFile(hostScriptPath, []byte(source), 0o644); err != nil {
 		return preparedCellExecution{}, fmt.Errorf("write cell script: %w", err)
 	}
+	if writer, ok := runtime.(GuestFileWriter); ok {
+		guestScriptPath := filepath.Join(guestCellDir, scriptName)
+		writeGuestFile := func(ctx context.Context, guestPath string, content []byte) error {
+			return writer.WriteGuestFile(ctx, session, vmState, guestPath, content)
+		}
+		if err := execution.SyncHostFileToGuest(ctx, hostScriptPath, guestScriptPath, writeGuestFile); err != nil {
+			return preparedCellExecution{}, fmt.Errorf("push cell script to guest: %w", err)
+		}
+	}
 
 	startedCell := domain.NotebookCell{
 		ID:        cellID,

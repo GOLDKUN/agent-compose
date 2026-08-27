@@ -10,6 +10,9 @@ func buildCompiledRuntimeDrivers() []string {
 	if microsandboxCompiled {
 		drivers = append(drivers, RuntimeDriverMicrosandbox)
 	}
+	if k8sCompiled {
+		drivers = append(drivers, RuntimeDriverK8s)
+	}
 	return drivers
 }
 

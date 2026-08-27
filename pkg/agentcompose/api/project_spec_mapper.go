@@ -246,6 +246,13 @@ func DriverSpecToProto(driver *compose.NormalizedDriverSpec) *agentcomposev2.Dri
 			config.Profile = driver.Microsandbox.Profile
 		}
 		result.Config = &agentcomposev2.DriverSpec_Microsandbox{Microsandbox: config}
+	case compose.DriverK8s:
+		config := &agentcomposev2.K8SDriverSpec{}
+		if driver.K8s != nil {
+			config.Context = driver.K8s.Context
+			config.Namespace = driver.K8s.Namespace
+		}
+		result.Config = &agentcomposev2.DriverSpec_K8S{K8S: config}
 	}
 	return result
 }

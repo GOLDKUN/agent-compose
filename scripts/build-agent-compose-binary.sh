@@ -154,8 +154,8 @@ case "$profile" in
   linux-full)
     goos=linux
     cgo_enabled=1
-    tags=netgo,osusergo,boxlitecgo,microsandboxcgo
-    compiled_drivers=docker,boxlite,microsandbox
+    tags=netgo,osusergo,boxlitecgo,microsandboxcgo,k8scompose
+    compiled_drivers=docker,boxlite,microsandbox,k8s
     ;;
 esac
 

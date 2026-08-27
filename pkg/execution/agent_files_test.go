@@ -1,10 +1,12 @@
 package execution
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
+	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
 )
 
@@ -29,7 +31,7 @@ func TestWriteAgentSkillsReconcilesManagedProjection(t *testing.T) {
 		t.Fatalf("write old manifest: %v", err)
 	}
 
-	names, err := WriteAgentSkills(session, []ResolvedAgentSkill{{Name: "pdf", LocalDir: skillSource}})
+	names, err := WriteAgentSkills(context.Background(), &appconfig.Config{}, session, []ResolvedAgentSkill{{Name: "pdf", LocalDir: skillSource}}, nil)
 	if err != nil {
 		t.Fatalf("WriteAgentSkills returned error: %v", err)
 	}
@@ -66,7 +68,7 @@ func TestWriteAgentSkillsIgnoresInvalidManifestNames(t *testing.T) {
 		t.Fatalf("write old manifest: %v", err)
 	}
 
-	if _, err := WriteAgentSkills(session, nil); err != nil {
+	if _, err := WriteAgentSkills(context.Background(), &appconfig.Config{}, session, nil, nil); err != nil {
 		t.Fatalf("WriteAgentSkills returned error: %v", err)
 	}
 	if _, err := os.Stat(outside); err != nil {
@@ -85,7 +87,7 @@ func TestWriteAgentSkillsDoesNotRemoveUserClaudeSkillsWithoutConfiguredSkills(t 
 		t.Fatalf("write user claude skill: %v", err)
 	}
 
-	names, err := WriteAgentSkills(session, nil)
+	names, err := WriteAgentSkills(context.Background(), &appconfig.Config{}, session, nil, nil)
 	if err != nil {
 		t.Fatalf("WriteAgentSkills returned error: %v", err)
 	}
@@ -115,11 +117,63 @@ func TestWriteAgentSkillsRejectsUserClaudeSkillsDirectory(t *testing.T) {
 		t.Fatalf("write user claude skill: %v", err)
 	}
 
-	_, err := WriteAgentSkills(session, []ResolvedAgentSkill{{Name: "pdf", LocalDir: skillSource}})
+	_, err := WriteAgentSkills(context.Background(), &appconfig.Config{}, session, []ResolvedAgentSkill{{Name: "pdf", LocalDir: skillSource}}, nil)
 	if err == nil {
 		t.Fatalf("expected WriteAgentSkills to reject user claude skills directory")
 	}
 	if got, readErr := os.ReadFile(userSkill); readErr != nil || string(got) != "user skill" {
 		t.Fatalf("user claude skill was modified: %q err=%v", got, readErr)
+	}
+}
+
+// No-shared-mount path (k8s - see docs/design/k8s_pod_runtime_driver_design.md
+// §2.1): the reconciled skills directory must be pushed to both guest
+// locations a mount would otherwise expose it at for free.
+func TestWriteAgentSkillsPushesToGuestWhenPresent(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	skillSource := filepath.Join(root, "source", "pdf")
+	if err := os.MkdirAll(skillSource, 0o755); err != nil {
+		t.Fatalf("create skill source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillSource, "SKILL.md"), []byte("---\nname: pdf\n---\n"), 0o644); err != nil {
+		t.Fatalf("write skill: %v", err)
+	}
+	config := &appconfig.Config{}
+
+	type push struct {
+		hostSrcDir string
+		guestDir   string
+	}
+	var pushes []push
+	writer := func(_ context.Context, hostSrcDir, guestDir string) error {
+		pushes = append(pushes, push{hostSrcDir: hostSrcDir, guestDir: guestDir})
+		return nil
+	}
+
+	names, err := WriteAgentSkills(context.Background(), config, session, []ResolvedAgentSkill{{Name: "pdf", LocalDir: skillSource}}, writer)
+	if err != nil {
+		t.Fatalf("WriteAgentSkills returned error: %v", err)
+	}
+	if len(names) != 1 || names[0] != "pdf" {
+		t.Fatalf("names = %#v, want pdf", names)
+	}
+	appconfig.ApplyDefaultGuestPaths(config)
+	skillsDir := HostAgentSkillsDir(session)
+	wantPushes := []push{
+		{hostSrcDir: skillsDir, guestDir: filepath.Join(config.GuestHomePath, ".agents", "skills")},
+		{hostSrcDir: skillsDir, guestDir: filepath.Join(config.GuestHomePath, ".claude", "skills")},
+	}
+	if len(pushes) != len(wantPushes) || pushes[0] != wantPushes[0] || pushes[1] != wantPushes[1] {
+		t.Fatalf("pushes = %#v, want %#v", pushes, wantPushes)
+	}
+
+	// No skills configured: nothing should be pushed.
+	pushes = nil
+	if _, err := WriteAgentSkills(context.Background(), config, session, nil, writer); err != nil {
+		t.Fatalf("WriteAgentSkills (no skills) returned error: %v", err)
+	}
+	if len(pushes) != 0 {
+		t.Fatalf("pushes with no skills = %#v, want none", pushes)
 	}
 }

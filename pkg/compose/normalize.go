@@ -1,7 +1,6 @@
 package compose
 
 import (
-	"agent-compose/pkg/sources"
 	"context"
 	"fmt"
 	"net/url"
@@ -13,6 +12,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/sources"
+
 	"github.com/robfig/cron/v3"
 )
 
@@ -21,6 +23,7 @@ const (
 	DriverDocker       = "docker"
 	DriverMicrosandbox = "microsandbox"
 	DriverFirecracker  = "firecracker"
+	DriverK8s          = "k8s"
 )
 
 var stableIdentifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
@@ -133,6 +136,7 @@ type NormalizedDriverSpec struct {
 	Boxlite      *BoxliteDriverSpec      `yaml:"boxlite,omitempty" json:"boxlite,omitempty"`
 	Docker       *DockerDriverSpec       `yaml:"docker,omitempty" json:"docker,omitempty"`
 	Microsandbox *MicrosandboxDriverSpec `yaml:"microsandbox,omitempty" json:"microsandbox,omitempty"`
+	K8s          *K8sDriverSpec          `yaml:"k8s,omitempty" json:"k8s,omitempty"`
 }
 
 type NormalizedSchedulerSpec struct {
@@ -288,6 +292,17 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 	if err != nil {
 		return NormalizedAgentSpec{}, err
 	}
+	if driver != nil && driver.Name == DriverK8s {
+		for index, mount := range volumes {
+			if mount.Type != "bind" {
+				continue
+			}
+			return NormalizedAgentSpec{}, &ValidationError{
+				Path:    fmt.Sprintf("agents.%s.volumes[%d].type", name, index),
+				Message: "k8s driver does not support local bind mounts; use a named volume instead",
+			}
+		}
+	}
 	skills, err := normalizeSkillSpecs(joinPath("agents", name)+".skills", agent.Skills, options)
 	if err != nil {
 		return NormalizedAgentSpec{}, err
@@ -303,6 +318,12 @@ func normalizeAgent(name string, agent AgentSpec, options NormalizeOptions, proj
 	sandbox, err := normalizeSandboxSpec(joinPath("agents", name)+".sandbox", agent.Sandbox)
 	if err != nil {
 		return NormalizedAgentSpec{}, err
+	}
+	if driver != nil && driver.Name == DriverK8s && sandbox != nil && sandbox.StoppedRuntimePolicy == domain.StoppedRuntimePolicyRetain {
+		return NormalizedAgentSpec{}, &ValidationError{
+			Path:    joinPath("agents", name) + ".sandbox.stopped_runtime_policy",
+			Message: "k8s does not support retain because stopping a Pod deletes it; use remove and sandbox_policy=sticky when the Pod must stay running",
+		}
 	}
 	capsetIDs := normalizeStringList(agent.CapsetIDs)
 	if err := validateAgentCapsetReferences(joinPath("agents", name)+".capset_ids", capsetIDs, project.OctoBusServers); err != nil {
@@ -852,8 +873,8 @@ func normalizeProjectVolumes(values map[string]VolumeSpec) (map[string]Normalize
 		if driver == "" {
 			driver = "local"
 		}
-		if driver != "local" {
-			return nil, &ValidationError{Path: joinPath(joinPath("volumes", key), "driver"), Message: "only local volume driver is supported"}
+		if driver != "local" && driver != "k8s" {
+			return nil, &ValidationError{Path: joinPath(joinPath("volumes", key), "driver"), Message: "volume driver must be local or k8s"}
 		}
 		normalized[key] = NormalizedVolumeSpec{
 			Name:     strings.TrimSpace(value.Name),
@@ -1065,7 +1086,7 @@ func normalizeDriverSpec(path string, driver *DriverSpec) (*NormalizedDriverSpec
 		return &NormalizedDriverSpec{Name: DriverDocker, Docker: &DockerDriverSpec{}}, nil
 	}
 
-	enabled := make([]string, 0, 4)
+	enabled := make([]string, 0, 5)
 	if driver.Boxlite != nil {
 		enabled = append(enabled, DriverBoxlite)
 	}
@@ -1077,6 +1098,9 @@ func normalizeDriverSpec(path string, driver *DriverSpec) (*NormalizedDriverSpec
 	}
 	if driver.Firecracker != nil {
 		enabled = append(enabled, DriverFirecracker)
+	}
+	if driver.K8s != nil {
+		enabled = append(enabled, DriverK8s)
 	}
 	if len(enabled) == 0 {
 		return nil, &ValidationError{Path: path, Message: "driver requires exactly one runtime"}
@@ -1096,6 +1120,8 @@ func normalizeDriverSpec(path string, driver *DriverSpec) (*NormalizedDriverSpec
 		normalized.Docker = cloneDockerDriverSpec(driver.Docker)
 	case DriverMicrosandbox:
 		normalized.Microsandbox = cloneMicrosandboxDriverSpec(driver.Microsandbox)
+	case DriverK8s:
+		normalized.K8s = cloneK8sDriverSpec(driver.K8s)
 	}
 	return normalized, nil
 }
@@ -1503,6 +1529,16 @@ func cloneDockerDriverSpec(value *DockerDriverSpec) *DockerDriverSpec {
 	}
 	cloned := *value
 	cloned.Host = strings.TrimSpace(cloned.Host)
+	return &cloned
+}
+
+func cloneK8sDriverSpec(value *K8sDriverSpec) *K8sDriverSpec {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	cloned.Context = strings.TrimSpace(cloned.Context)
+	cloned.Namespace = strings.TrimSpace(cloned.Namespace)
 	return &cloned
 }
 

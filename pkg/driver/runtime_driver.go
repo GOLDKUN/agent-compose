@@ -10,6 +10,7 @@ const (
 	RuntimeDriverBoxlite      = "boxlite"
 	RuntimeDriverDocker       = "docker"
 	RuntimeDriverMicrosandbox = "microsandbox"
+	RuntimeDriverK8s          = "k8s"
 )
 
 func resolveRuntimeDriver(value string) string {
@@ -22,6 +23,8 @@ func resolveRuntimeDriver(value string) string {
 		return RuntimeDriverDocker
 	case "msb", RuntimeDriverMicrosandbox:
 		return RuntimeDriverMicrosandbox
+	case RuntimeDriverK8s, "kubernetes", "pod":
+		return RuntimeDriverK8s
 	default:
 		return strings.ToLower(strings.TrimSpace(value))
 	}
@@ -33,7 +36,7 @@ func ResolveRuntimeDriver(value string) string {
 
 func validateRuntimeDriver(value string) error {
 	switch resolveRuntimeDriver(value) {
-	case RuntimeDriverBoxlite, RuntimeDriverDocker, RuntimeDriverMicrosandbox:
+	case RuntimeDriverBoxlite, RuntimeDriverDocker, RuntimeDriverMicrosandbox, RuntimeDriverK8s:
 		return nil
 	default:
 		return fmt.Errorf("unsupported agent-compose runtime driver %q", strings.TrimSpace(value))
@@ -42,6 +45,14 @@ func validateRuntimeDriver(value string) error {
 
 func ValidateRuntimeDriver(value string) error {
 	return validateRuntimeDriver(value)
+}
+
+// RuntimeDriverSupportsStoppedRuntimeRetention reports whether a driver can
+// stop a sandbox while preserving the same private writable runtime for a
+// later resume. Kubernetes Pods have no stopped-but-retained lifecycle state:
+// stopping a Pod deletes it, and resume creates a new Pod from the image.
+func RuntimeDriverSupportsStoppedRuntimeRetention(driver string) bool {
+	return resolveRuntimeDriver(driver) != RuntimeDriverK8s
 }
 
 func resolveSandboxRuntimeDriver(value, fallback string) (string, error) {
@@ -66,6 +77,8 @@ func defaultGuestImageForDriver(config *appconfig.Config, driver string) string 
 		return config.MicrosandboxDefaultImage
 	case RuntimeDriverDocker:
 		return firstNonEmpty(config.DockerDefaultImage, config.DefaultImage)
+	case RuntimeDriverK8s:
+		return firstNonEmpty(config.K8sDefaultImage, config.DefaultImage)
 	}
 	return config.DefaultImage
 }
@@ -80,6 +93,8 @@ func runtimeHomeForDriver(config *appconfig.Config, driver string) string {
 		return config.MicrosandboxHome
 	case RuntimeDriverDocker:
 		return config.DockerHome
+	case RuntimeDriverK8s:
+		return config.K8sHome
 	}
 	return config.BoxliteHome
 }

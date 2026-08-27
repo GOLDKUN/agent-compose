@@ -480,6 +480,7 @@ func cloneNormalizedDriverSpec(value *NormalizedDriverSpec) *NormalizedDriverSpe
 	cloned.Boxlite = cloneBoxliteDriverSpec(value.Boxlite)
 	cloned.Docker = cloneDockerDriverSpec(value.Docker)
 	cloned.Microsandbox = cloneMicrosandboxDriverSpec(value.Microsandbox)
+	cloned.K8s = cloneK8sDriverSpec(value.K8s)
 	return &cloned
 }
 

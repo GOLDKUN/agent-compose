@@ -81,6 +81,8 @@ func prepareSandboxStartWithResolver(ctx context.Context, config *appconfig.Conf
 		}
 	case RuntimeDriverMicrosandbox:
 		vmState.Registry = ""
+	case RuntimeDriverK8s:
+		vmState.Registry = ""
 	default:
 		return vmState, fmt.Errorf("unsupported agent-compose runtime driver %q", driver)
 	}
@@ -115,7 +117,7 @@ func (r dockerFirstRuntimeImageResolver) ResolvePrepareImage(ctx context.Context
 			ensure = ensureDockerImage
 		}
 		return ensure(ctx, imageRef, request.PullPolicy, request.PullTimeout)
-	case RuntimeDriverBoxlite, RuntimeDriverMicrosandbox:
+	case RuntimeDriverBoxlite, RuntimeDriverMicrosandbox, RuntimeDriverK8s:
 		return imageRef, nil
 	default:
 		return "", fmt.Errorf("unsupported agent-compose runtime driver %q", request.Driver)

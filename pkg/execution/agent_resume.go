@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
 )
 
@@ -32,11 +34,26 @@ type storedAgentThreadState struct {
 	LegacySessionID string `json:"sessionId"`
 }
 
+// AgentResumeInfoRequest identifies the provider state used to reconstruct
+// resumable agent metadata after an execution.
+type AgentResumeInfoRequest struct {
+	Config        *appconfig.Config
+	Sandbox       *domain.Sandbox
+	Agent         string
+	ThreadID      string
+	ManifestPath  string
+	ReadGuestFile GuestFileReaderFunc
+}
+
 func LoadStoredAgentThreadID(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
+	return parseStoredAgentThreadID(data)
+}
+
+func parseStoredAgentThreadID(data []byte) string {
 	var state storedAgentThreadState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return ""
@@ -47,7 +64,10 @@ func LoadStoredAgentThreadID(path string) string {
 	return strings.TrimSpace(state.LegacySessionID)
 }
 
-func CollectAgentResumeInfo(session *domain.Sandbox, agent, threadID, manifestPath string) *domain.AgentResumeInfo {
+func CollectAgentResumeInfo(ctx context.Context, req AgentResumeInfoRequest) *domain.AgentResumeInfo {
+	config, session := req.Config, req.Sandbox
+	agent, threadID, manifestPath := req.Agent, req.ThreadID, req.ManifestPath
+	readGuestFile := req.ReadGuestFile
 	provider := domain.NormalizeAgentKind(agent)
 	info := &domain.AgentResumeInfo{
 		Provider:           provider,
@@ -55,14 +75,31 @@ func CollectAgentResumeInfo(session *domain.Sandbox, agent, threadID, manifestPa
 		ThreadManifestPath: manifestPath,
 		UpdatedAt:          time.Now().UTC(),
 	}
-	statePath := filepath.Join(HostSandboxDir(session), "state", "agents", "providers", provider+".json")
-	if stat, err := os.Stat(statePath); err == nil && !stat.IsDir() {
-		info.ThreadStatePath = statePath
+	if readGuestFile != nil {
+		// No shared filesystem: only resolve the thread ID, by pulling the
+		// provider's state file over Exec when the caller didn't already
+		// report one. ThreadStatePath/ProviderLogPaths need a host-local
+		// path to mean anything to a later reader and are deliberately left
+		// unset here rather than reporting a path nothing exists at - see
+		// design doc §6 for the FindAgentThreadLogPaths directory-scan gap
+		// this doesn't attempt to close.
 		if info.ThreadID == "" {
-			info.ThreadID = LoadStoredAgentThreadID(statePath)
+			appconfig.ApplyDefaultGuestPaths(config)
+			guestStatePath := filepath.Join(config.GuestStateRoot, "agents", "providers", provider+".json")
+			if data, err := readGuestFile(ctx, guestStatePath); err == nil {
+				info.ThreadID = parseStoredAgentThreadID(data)
+			}
 		}
+	} else {
+		statePath := filepath.Join(HostSandboxDir(session), "state", "agents", "providers", provider+".json")
+		if stat, err := os.Stat(statePath); err == nil && !stat.IsDir() {
+			info.ThreadStatePath = statePath
+			if info.ThreadID == "" {
+				info.ThreadID = LoadStoredAgentThreadID(statePath)
+			}
+		}
+		info.ProviderLogPaths = FindAgentThreadLogPaths(HostSandboxHome(session), provider, info.ThreadID)
 	}
-	info.ProviderLogPaths = FindAgentThreadLogPaths(HostSandboxHome(session), provider, info.ThreadID)
 	if info.Provider == "" && info.ThreadID == "" && info.ThreadStatePath == "" && info.ThreadManifestPath == "" && len(info.ProviderLogPaths) == 0 {
 		return nil
 	}

@@ -1,15 +1,17 @@
 package execution
 
 import (
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/workspaces"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	appconfig "agent-compose/pkg/config"
+	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/workspaces"
 )
 
 const AgentSystemPromptFileName = "system-prompt.txt"
@@ -23,6 +25,26 @@ type ResolvedAgentSkill struct {
 
 type agentSkillsManifest struct {
 	Names []string `json:"names"`
+}
+
+// AgentPromptFileRequest describes the daemon and optional guest copies of an
+// agent prompt.
+type AgentPromptFileRequest struct {
+	Config         *appconfig.Config
+	Sandbox        *domain.Sandbox
+	Agent          string
+	Message        string
+	WriteGuestFile GuestFileWriterFunc
+}
+
+// AgentOutputSchemaFileRequest describes the daemon and optional guest copies
+// of an agent output schema.
+type AgentOutputSchemaFileRequest struct {
+	Config         *appconfig.Config
+	Sandbox        *domain.Sandbox
+	Agent          string
+	SchemaJSON     string
+	WriteGuestFile GuestFileWriterFunc
 }
 
 func HostAgentSystemPromptPath(session *domain.Sandbox) string {
@@ -39,7 +61,9 @@ func HostAgentSkillsDir(session *domain.Sandbox) string {
 	return filepath.Join(HostSandboxDir(session), "home", ".agents", "skills")
 }
 
-func WriteAgentPromptFile(config *appconfig.Config, session *domain.Sandbox, agent, message string) (string, error) {
+func WriteAgentPromptFile(ctx context.Context, req AgentPromptFileRequest) (string, error) {
+	config, session := req.Config, req.Sandbox
+	agent, message, writeGuestFile := req.Agent, req.Message, req.WriteGuestFile
 	hostSandboxDir := filepath.Dir(session.Summary.WorkspacePath)
 	promptDir := filepath.Join(hostSandboxDir, "state", "agents", "prompts")
 	if err := os.MkdirAll(promptDir, 0o755); err != nil {
@@ -50,10 +74,19 @@ func WriteAgentPromptFile(config *appconfig.Config, session *domain.Sandbox, age
 	if err := os.WriteFile(hostPath, []byte(message), 0o644); err != nil {
 		return "", fmt.Errorf("write agent prompt file: %w", err)
 	}
-	return filepath.Join(config.GuestStateRoot, "agents", "prompts", name), nil
+	guestPath := filepath.Join(config.GuestStateRoot, "agents", "prompts", name)
+	// No shared filesystem (k8s - see design doc §2.1): the local write above
+	// is daemon-side bookkeeping only, and the guest process reading
+	// guestPath needs the content pushed there separately.
+	if writeGuestFile != nil {
+		if err := writeGuestFile(ctx, guestPath, []byte(message)); err != nil {
+			return "", fmt.Errorf("push agent prompt file to guest: %w", err)
+		}
+	}
+	return guestPath, nil
 }
 
-func WriteAgentSkills(session *domain.Sandbox, skills []ResolvedAgentSkill) ([]string, error) {
+func WriteAgentSkills(ctx context.Context, config *appconfig.Config, session *domain.Sandbox, skills []ResolvedAgentSkill, writeGuestDir GuestDirWriterFunc) ([]string, error) {
 	skillsDir := HostAgentSkillsDir(session)
 	if skillsDir == "" {
 		if len(skills) == 0 {
@@ -103,6 +136,27 @@ func WriteAgentSkills(session *domain.Sandbox, skills []ResolvedAgentSkill) ([]s
 	}
 	if err := reconcileClaudeSkillsLink(session, skillsDir, len(names) > 0); err != nil {
 		return nil, err
+	}
+	// No shared filesystem (k8s - see design doc §2.1): push the reconciled
+	// skills directory to the guest paths a mount would otherwise expose it
+	// at for free. Simplification vs. the host path above: pushed as two
+	// independent copies (.agents/skills and .claude/skills) rather than a
+	// symlink - the guest has no use for reconcileClaudeSkillsLink's
+	// managed-marker/symlink-vs-copy-fallback bookkeeping, since a fresh Pod
+	// has no pre-existing content to be careful not to clobber. Known gap:
+	// on a *reused* sandbox transitioning from having skills to having none,
+	// this doesn't clear whatever was pushed on a previous run - there's no
+	// "remove a guest path" primitive yet, only push/pull.
+	if writeGuestDir != nil && len(names) > 0 {
+		appconfig.ApplyDefaultGuestPaths(config)
+		for _, guestSkillsDir := range []string{
+			filepath.Join(config.GuestHomePath, ".agents", "skills"),
+			filepath.Join(config.GuestHomePath, ".claude", "skills"),
+		} {
+			if err := writeGuestDir(ctx, skillsDir, guestSkillsDir); err != nil {
+				return nil, fmt.Errorf("push agent skills to guest %s: %w", guestSkillsDir, err)
+			}
+		}
 	}
 	return names, nil
 }
@@ -246,7 +300,7 @@ func managedClaudeSkillsPath(path string) (bool, error) {
 
 // WriteAgentSystemPromptFile materializes agent identity for the guest runtime at a
 // fixed convention path under the sandbox state tree.
-func WriteAgentSystemPromptFile(session *domain.Sandbox, systemPrompt string) error {
+func WriteAgentSystemPromptFile(ctx context.Context, config *appconfig.Config, session *domain.Sandbox, systemPrompt string, writeGuestFile GuestFileWriterFunc) error {
 	systemPrompt = strings.TrimSpace(systemPrompt)
 	hostPath := HostAgentSystemPromptPath(session)
 	if hostPath == "" {
@@ -259,6 +313,9 @@ func WriteAgentSystemPromptFile(session *domain.Sandbox, systemPrompt string) er
 		if err := os.Remove(hostPath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove agent system prompt file: %w", err)
 		}
+		// No-shared-mount drivers (k8s) start each sandbox from a fresh Pod,
+		// so there's nothing stale on the guest side to remove there - the
+		// local remove above is enough.
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
@@ -267,10 +324,19 @@ func WriteAgentSystemPromptFile(session *domain.Sandbox, systemPrompt string) er
 	if err := os.WriteFile(hostPath, []byte(systemPrompt), 0o644); err != nil {
 		return fmt.Errorf("write agent system prompt file: %w", err)
 	}
+	if writeGuestFile != nil {
+		appconfig.ApplyDefaultGuestPaths(config)
+		guestPath := filepath.Join(config.GuestStateRoot, "agents", "system-prompts", AgentSystemPromptFileName)
+		if err := writeGuestFile(ctx, guestPath, []byte(systemPrompt)); err != nil {
+			return fmt.Errorf("push agent system prompt file to guest: %w", err)
+		}
+	}
 	return nil
 }
 
-func WriteAgentOutputSchemaFile(config *appconfig.Config, session *domain.Sandbox, agent, schemaJSON string) (string, error) {
+func WriteAgentOutputSchemaFile(ctx context.Context, req AgentOutputSchemaFileRequest) (string, error) {
+	config, session := req.Config, req.Sandbox
+	agent, schemaJSON, writeGuestFile := req.Agent, req.SchemaJSON, req.WriteGuestFile
 	schemaJSON = strings.TrimSpace(schemaJSON)
 	if schemaJSON == "" {
 		return "", nil
@@ -292,5 +358,11 @@ func WriteAgentOutputSchemaFile(config *appconfig.Config, session *domain.Sandbo
 	if err := os.WriteFile(hostPath, []byte(schemaJSON), 0o644); err != nil {
 		return "", fmt.Errorf("write agent schema file: %w", err)
 	}
-	return filepath.Join(config.GuestStateRoot, "agents", "schemas", name), nil
+	guestPath := filepath.Join(config.GuestStateRoot, "agents", "schemas", name)
+	if writeGuestFile != nil {
+		if err := writeGuestFile(ctx, guestPath, []byte(schemaJSON)); err != nil {
+			return "", fmt.Errorf("push agent schema file to guest: %w", err)
+		}
+	}
+	return guestPath, nil
 }

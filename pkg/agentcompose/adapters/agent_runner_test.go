@@ -635,7 +635,7 @@ func TestAgentRunnerPrepareManagedMCPConfigForProviders(t *testing.T) {
 			t.Fatalf("Marshal returned error: %v", err)
 		}
 		definition := &domain.AgentDefinition{ConfigJSON: string(payload)}
-		if err := prepareAgentMCPConfig(session, "codex", definition); err != nil {
+		if err := (&AgentRunner{}).prepareAgentMCPConfig(context.Background(), session, "codex", definition); err != nil {
 			t.Fatalf("prepareAgentMCPConfig returned error: %v", err)
 		}
 		stateConfig, err := os.ReadFile(execution.HostAgentMCPConfigPath(session))
@@ -660,7 +660,7 @@ func TestAgentRunnerPrepareManagedMCPConfigForProviders(t *testing.T) {
 			t.Fatalf("Marshal returned error: %v", err)
 		}
 		definition := &domain.AgentDefinition{ConfigJSON: string(payload)}
-		if err := prepareAgentMCPConfig(session, "opencode", definition); err != nil {
+		if err := (&AgentRunner{}).prepareAgentMCPConfig(context.Background(), session, "opencode", definition); err != nil {
 			t.Fatalf("prepareAgentMCPConfig returned error: %v", err)
 		}
 		openCodeConfig, err := os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
@@ -681,7 +681,7 @@ func TestAgentRunnerPrepareManagedMCPConfigForProviders(t *testing.T) {
 			t.Fatalf("Marshal returned error: %v", err)
 		}
 		definition := &domain.AgentDefinition{ConfigJSON: string(payload)}
-		if err := prepareAgentMCPConfig(session, "claude", definition); err != nil {
+		if err := (&AgentRunner{}).prepareAgentMCPConfig(context.Background(), session, "claude", definition); err != nil {
 			t.Fatalf("prepareAgentMCPConfig returned error: %v", err)
 		}
 		if _, err := os.Stat(execution.HostAgentMCPConfigPath(session)); err != nil {
@@ -704,7 +704,7 @@ func TestAgentRunnerPrepareManagedMCPConfigForProviders(t *testing.T) {
 			t.Fatalf("Marshal returned error: %v", err)
 		}
 		definition := &domain.AgentDefinition{ConfigJSON: string(payload)}
-		if err := prepareAgentMCPConfig(session, "dsh", definition); err != nil {
+		if err := (&AgentRunner{}).prepareAgentMCPConfig(context.Background(), session, "dsh", definition); err != nil {
 			t.Fatalf("prepareAgentMCPConfig returned error: %v", err)
 		}
 		stateConfig, err := os.ReadFile(execution.HostAgentMCPConfigPath(session))
@@ -726,7 +726,7 @@ func TestAgentRunnerPrepareManagedMCPConfigForProviders(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"), []byte("# agent-compose managed mcp start\n[mcp_servers.old]\ncommand = \"old\"\n# agent-compose managed mcp end\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile returned error: %v", err)
 		}
-		if err := prepareAgentMCPConfig(session, "codex", nil); err != nil {
+		if err := (&AgentRunner{}).prepareAgentMCPConfig(context.Background(), session, "codex", nil); err != nil {
 			t.Fatalf("prepareAgentMCPConfig returned error: %v", err)
 		}
 		if _, err := os.Stat(execution.HostAgentMCPConfigPath(session)); !os.IsNotExist(err) {

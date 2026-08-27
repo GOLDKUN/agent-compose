@@ -403,10 +403,10 @@ volumes:
 | Field | Type | Default | Purpose |
 | --- | --- | --- | --- |
 | `name` | string | Derived from project and key | Explicit underlying volume name. |
-| `driver` | string | `local` | Volume driver. Only `local` is currently supported. |
+| `driver` | string | `local` | Volume driver. `local` uses a daemon-host directory; `k8s` creates a Kubernetes PersistentVolumeClaim when the agent uses the k8s runtime. |
 | `external` | bool | `false` | References an existing volume instead of creating a project-owned volume. |
 | `labels` | map[string]string | Empty | Volume labels. Keys and values are trimmed. |
-| `options` | map[string]string | Empty | Options passed to the local volume driver. |
+| `options` | map[string]string | Empty | Driver options. For `k8s`, supported keys are `size` (default `1Gi`), `storage_class`, `access_mode` (default `ReadWriteOnce`), and `namespace` (default `K8S_NAMESPACE`/`default`). PVCs use the daemon's Kubernetes cluster. |
 
 The volume map key must be a stable identifier. Agents mount project volumes through `agents.<name>.volumes`.
 
@@ -589,12 +589,37 @@ driver:
     profile: secure
 ```
 
+```yaml
+driver:
+  k8s:
+    context: production
+    namespace: agent-compose
+```
+
 | Driver | Child fields | Current status |
 | --- | --- | --- |
 | `docker` | `host` | Stable supported driver. `host` is parsed and retained; the daemon's Docker boundary is still controlled by deployment configuration. |
 | `boxlite` | `kernel`, `rootfs` | Compiled into full Linux builds; runtime initialization is lazy. Child strings are trimmed. |
 | `microsandbox` | `profile` | Compiled into full Linux builds; runtime initialization is lazy. The profile string is trimmed. |
+| `k8s` | `context`, `namespace` | Creates sandbox Pods through Kubernetes. `context` selects a kubeconfig context; when omitted, client-go uses the kubeconfig current context or in-cluster configuration. `namespace` overrides `K8S_NAMESPACE`, whose final fallback is `default`. |
 | `firecracker` | `kernel`, `rootfs` | Reserved in the parser schema. Normalization currently returns `unsupported runtime driver firecracker`, so it cannot be used. |
+
+The k8s driver requires the daemon to run inside the target cluster. The
+supported installation entry point is the Helm chart at
+`charts/agent-compose`:
+
+```bash
+helm install agent-compose ./charts/agent-compose \
+  --kube-context prod-cluster \
+  --namespace team-a \
+  --create-namespace
+```
+
+The release namespace becomes the default `K8S_NAMESPACE`; the chart also
+renders the daemon Service DNS callback URL and the ClusterRoleBinding subject
+from that namespace. Sandbox Pods do not mount the daemon data PVC or use
+`hostPath`; provisioned workspace and provider home configuration are
+streamed into the Pod over Kubernetes Exec.
 
 For completeness, this shape is recognized by the parser but is currently invalid during normalization:
 
@@ -749,6 +774,11 @@ volumes:
 
 An agent cannot mount multiple entries at the same target. Because short syntax uses `:`, use the long form when a source or target contains a colon.
 
+The Kubernetes (`k8s`) driver does not support local `bind` mounts. Bind sources
+refer to paths on the daemon host, which are not available inside a Pod. Use a
+named project volume with `driver: k8s` (backed by a PVC) instead; a bind mount
+is rejected during project validation.
+
 ### `workspace`: agent selection or inline workspace
 
 This singular key is inside an agent and is distinct from the plural top-level `workspaces` map.
@@ -793,6 +823,13 @@ sandbox:
 
 - `retain` keeps the stopped runtime and its private writable layer. Resume requires that same runtime; unexpected runtime loss is not silently recreated.
 - `remove` explicitly deletes the stopped container, BoxLite box/private disk, or Microsandbox sandbox/private qcow2 overlay. Sandbox metadata, events, logs, workspace, and declared durable mounts remain. Resume creates a new runtime, so data stored only in the private writable layer is lost.
+
+The Kubernetes driver does not accept `retain`: Kubernetes Pods have no
+stopped-but-retained state, so stopping a sandbox deletes its Pod. Use `remove`
+to recreate a Pod from its image and durable mounts on resume. When subsequent
+scheduler runs must reuse the same running Pod, use `sandbox_policy: sticky`;
+sticky completion keeps the Pod running and is distinct from stopped-runtime
+retention.
 
 The effective policy is snapshotted when the sandbox is created. Editing the project changes only new sandboxes. Legacy sandboxes without a policy snapshot continue to retain their runtime. `agent-compose inspect sandbox <sandbox> --json` exposes the lifecycle record through `stopped_runtime_policy`, `stopped_runtime_state`, `stopped_runtime_last_error`, and `stopped_runtime_released_at`. The states are:
 

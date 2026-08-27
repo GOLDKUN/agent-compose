@@ -49,7 +49,7 @@ func NormalizeRecord(item domain.VolumeRecord) (domain.VolumeRecord, error) {
 	if item.ID == "" {
 		return domain.VolumeRecord{}, fmt.Errorf("volume id is required")
 	}
-	if item.Driver != domain.VolumeDriverLocal {
+	if item.Driver != domain.VolumeDriverLocal && item.Driver != domain.VolumeDriverK8s {
 		return domain.VolumeRecord{}, fmt.Errorf("volume driver %q is not supported", item.Driver)
 	}
 	return item, nil
@@ -108,6 +108,42 @@ func NormalizeMountSpecs(items []domain.VolumeMountSpec) ([]domain.VolumeMountSp
 		normalized = append(normalized, current)
 	}
 	return normalized, nil
+}
+
+// ValidateDriverMountSpecs rejects mount types that cannot be represented by a
+// runtime driver. K8s Pods do not share the daemon's filesystem, so a local
+// bind source has no meaningful path inside the Pod.
+func ValidateDriverMountSpecs(driver string, items []domain.VolumeMountSpec) error {
+	if strings.ToLower(strings.TrimSpace(driver)) != domain.VolumeDriverK8s {
+		return nil
+	}
+	for _, item := range items {
+		if strings.ToLower(strings.TrimSpace(item.Type)) != domain.VolumeMountTypeBind {
+			continue
+		}
+		return fmt.Errorf("k8s driver does not support local bind mounts (source %q, target %q); use a named volume instead", strings.TrimSpace(item.Source), strings.TrimSpace(item.Target))
+	}
+	return nil
+}
+
+// ValidateResolvedDriverMounts applies the same restriction after volume
+// records have been looked up. This catches a named volume that still uses the
+// local driver before a sandbox is created.
+func ValidateResolvedDriverMounts(driver string, items []domain.SandboxVolumeMount) error {
+	if strings.ToLower(strings.TrimSpace(driver)) != domain.VolumeDriverK8s {
+		return nil
+	}
+	for _, item := range items {
+		switch strings.ToLower(strings.TrimSpace(item.Type)) {
+		case domain.VolumeMountTypeBind:
+			return fmt.Errorf("k8s driver does not support local bind mounts (source %q, target %q); use a named volume instead", strings.TrimSpace(item.Source), strings.TrimSpace(item.Target))
+		case domain.VolumeMountTypeVolume:
+			if NormalizeDriver(item.Driver) != domain.VolumeDriverK8s {
+				return fmt.Errorf("k8s driver does not support volume driver %q for source %q; use a volume with driver k8s", NormalizeDriver(item.Driver), strings.TrimSpace(item.Source))
+			}
+		}
+	}
+	return nil
 }
 
 // NormalizeSandboxMounts drops resolved mounts that lost a field they cannot

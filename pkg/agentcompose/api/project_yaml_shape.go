@@ -381,6 +381,12 @@ func DriverYAMLShape(path string, driver *agentcomposev2.DriverSpec) (map[string
 	case *agentcomposev2.DriverSpec_Microsandbox:
 		configName = compose.DriverMicrosandbox
 		config = map[string]any{"profile": driver.GetMicrosandbox().GetProfile()}
+	case *agentcomposev2.DriverSpec_K8S:
+		configName = compose.DriverK8s
+		config = map[string]any{
+			"context":   driver.GetK8S().GetContext(),
+			"namespace": driver.GetK8S().GetNamespace(),
+		}
 	default:
 		return nil, []*agentcomposev2.ProjectValidationIssue{ProjectValidationIssue(path, "driver requires exactly one runtime config")}
 	}

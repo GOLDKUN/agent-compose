@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,27 +65,66 @@ func TestCellArtifactsAndAgentFilesWorkflows(t *testing.T) {
 
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "session", "workspace")}}
 	config := &appconfig.Config{GuestStateRoot: "/guest/state"}
-	promptPath, err := WriteAgentPromptFile(config, session, "codex", "hello")
+	promptPath, err := WriteAgentPromptFile(context.Background(), AgentPromptFileRequest{Config: config, Sandbox: session, Agent: "codex", Message: "hello"})
 	if err != nil || !strings.HasPrefix(promptPath, "/guest/state/agents/prompts/") {
 		t.Fatalf("WriteAgentPromptFile path=%q err=%v", promptPath, err)
 	}
-	if err := WriteAgentSystemPromptFile(session, "system prompt"); err != nil {
+
+	// No-shared-mount path (k8s - see design doc §2.1): the content must
+	// also be pushed via the GuestFileWriterFunc, at the same guest path
+	// the mount-based drivers would have made it appear at for free.
+	var pushedPath string
+	var pushedContent []byte
+	pushSession := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "push-session", "workspace")}}
+	pushedPromptPath, err := WriteAgentPromptFile(context.Background(), AgentPromptFileRequest{
+		Config: config, Sandbox: pushSession, Agent: "codex", Message: "pushed hello",
+		WriteGuestFile: func(_ context.Context, guestPath string, content []byte) error {
+			pushedPath = guestPath
+			pushedContent = content
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteAgentPromptFile with writer returned error: %v", err)
+	}
+	if pushedPath != pushedPromptPath {
+		t.Fatalf("pushed guest path = %q, want it to match the returned path %q", pushedPath, pushedPromptPath)
+	}
+	if string(pushedContent) != "pushed hello" {
+		t.Fatalf("pushed content = %q, want %q", pushedContent, "pushed hello")
+	}
+	if err := WriteAgentSystemPromptFile(context.Background(), config, session, "system prompt", nil); err != nil {
 		t.Fatalf("WriteAgentSystemPromptFile returned error: %v", err)
 	}
 	if data, err := os.ReadFile(HostAgentSystemPromptPath(session)); err != nil || string(data) != "system prompt" {
 		t.Fatalf("system prompt data=%q err=%v", string(data), err)
 	}
-	if err := WriteAgentSystemPromptFile(session, ""); err != nil {
+	if err := WriteAgentSystemPromptFile(context.Background(), config, session, "", nil); err != nil {
 		t.Fatalf("remove system prompt returned error: %v", err)
 	}
-	if err := WriteAgentSystemPromptFile(&domain.Sandbox{}, "system"); err == nil {
+	if err := WriteAgentSystemPromptFile(context.Background(), config, &domain.Sandbox{}, "system", nil); err == nil {
 		t.Fatalf("expected missing workspace path error")
 	}
-	schemaPath, err := WriteAgentOutputSchemaFile(config, session, "codex", `{"type":"object"}`)
+	var pushedSystemPromptPath string
+	var pushedSystemPromptContent []byte
+	if err := WriteAgentSystemPromptFile(context.Background(), config, session, "pushed system prompt", func(_ context.Context, guestPath string, content []byte) error {
+		pushedSystemPromptPath = guestPath
+		pushedSystemPromptContent = content
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteAgentSystemPromptFile with writer returned error: %v", err)
+	}
+	if pushedSystemPromptPath != "/guest/state/agents/system-prompts/"+AgentSystemPromptFileName {
+		t.Fatalf("pushed system prompt guest path = %q", pushedSystemPromptPath)
+	}
+	if string(pushedSystemPromptContent) != "pushed system prompt" {
+		t.Fatalf("pushed system prompt content = %q", pushedSystemPromptContent)
+	}
+	schemaPath, err := WriteAgentOutputSchemaFile(context.Background(), AgentOutputSchemaFileRequest{Config: config, Sandbox: session, Agent: "codex", SchemaJSON: `{"type":"object"}`})
 	if err != nil || !strings.HasPrefix(schemaPath, "/guest/state/agents/schemas/") {
 		t.Fatalf("WriteAgentOutputSchemaFile path=%q err=%v", schemaPath, err)
 	}
-	if _, err := WriteAgentOutputSchemaFile(config, session, "codex", `[]`); err == nil {
+	if _, err := WriteAgentOutputSchemaFile(context.Background(), AgentOutputSchemaFileRequest{Config: config, Sandbox: session, Agent: "codex", SchemaJSON: `[]`}); err == nil {
 		t.Fatalf("expected non-object schema error")
 	}
 }

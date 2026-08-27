@@ -532,7 +532,7 @@ func TestLifecycleResumeLoadedWorkspaceEnsurerOrdering(t *testing.T) {
 	if ensurer.calls != 1 || driver.calls != 1 {
 		t.Fatalf("ensure/start calls = %d/%d, want 1/1", ensurer.calls, driver.calls)
 	}
-	wantOrder := "ensure,agent.prepare,guide,driver.start,store.update,notify.updated,notify.dashboard,event.persist,notify.event"
+	wantOrder := "ensure,guide,agent.prepare,driver.start,store.update,notify.updated,notify.dashboard,event.persist,notify.event"
 	if got := strings.Join(order, ","); got != wantOrder {
 		t.Fatalf("call order = %q, want %q", got, wantOrder)
 	}

@@ -2,6 +2,7 @@ package runs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,9 +72,16 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, exec projectR
 		Cwd:    c.config.GuestWorkspacePath,
 		Env:    execEnvMap(req.Env),
 	}, guestArtifactsDir)
-	if err := execution.WriteJSONArtifact(filepath.Join(artifactsDir, "command-request.json"), runtimeRequest); err != nil {
+	hostRequestPath := filepath.Join(artifactsDir, "command-request.json")
+	guestRequestPath := filepath.Join(guestArtifactsDir, "command-request.json")
+	if err := execution.WriteJSONArtifact(hostRequestPath, runtimeRequest); err != nil {
 		transition.ExitCode = 1
 		transition.Error = fmt.Sprintf("command execution failed: %v", err)
+		return transition, err
+	}
+	if err := execution.SyncHostFileToGuest(ctx, hostRequestPath, guestRequestPath, guestFileWriterFor(runtime, sandbox, vmState)); err != nil {
+		transition.ExitCode = 1
+		transition.Error = fmt.Sprintf("command execution failed: push command request: %v", err)
 		return transition, err
 	}
 	var sendErr error
@@ -97,8 +105,12 @@ func (c *Controller) executeProjectRunCommand(ctx context.Context, exec projectR
 	}
 	execCtx, cancel := execution.ExecContext(ctx, 0)
 	defer cancel()
-	result, execErr := runtime.ExecStream(execCtx, sandbox, vmState, execution.BuildRuntimeCommandExecSpec(c.config, sandbox, filepath.Join(guestArtifactsDir, "command-request.json"), c.config.GuestHomePath), writer)
+	result, execErr := runtime.ExecStream(execCtx, sandbox, vmState, execution.BuildRuntimeCommandExecSpec(c.config, sandbox, guestRequestPath, c.config.GuestHomePath), writer)
+	if pullErr := execution.SyncGuestDirToHost(ctx, guestArtifactsDir, artifactsDir, guestDirReaderFor(runtime, sandbox, vmState)); pullErr != nil {
+		execErr = errors.Join(execErr, fmt.Errorf("pull command artifacts: %w", pullErr))
+	}
 	if sendErr != nil {
+		sendErr = errors.Join(sendErr, execErr)
 		transition.ExitCode = 1
 		transition.Error = fmt.Sprintf("command execution failed: %v", sendErr)
 		return transition, sendErr

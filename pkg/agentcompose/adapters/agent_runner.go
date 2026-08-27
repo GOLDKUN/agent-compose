@@ -87,11 +87,16 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, req AgentRunRequest, 
 	if err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
-	promptPath, err := execution.WriteAgentPromptFile(r.config, session, agent, message)
+	guestFileWriter := r.guestFileWriterFor(session)
+	promptPath, err := execution.WriteAgentPromptFile(ctx, execution.AgentPromptFileRequest{
+		Config: r.config, Sandbox: session, Agent: agent, Message: message, WriteGuestFile: guestFileWriter,
+	})
 	if err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
-	schemaPath, err := execution.WriteAgentOutputSchemaFile(r.config, session, agent, outputSchemaJSON)
+	schemaPath, err := execution.WriteAgentOutputSchemaFile(ctx, execution.AgentOutputSchemaFileRequest{
+		Config: r.config, Sandbox: session, Agent: agent, SchemaJSON: outputSchemaJSON, WriteGuestFile: guestFileWriter,
+	})
 	if err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
@@ -146,7 +151,7 @@ func (r *AgentRunner) ExecuteAgentRun(ctx context.Context, req AgentRunRequest, 
 			}
 		}
 	}
-	if err := prepareAgentMCPConfig(session, agent, agentDef); err != nil {
+	if err := r.prepareAgentMCPConfig(ctx, session, agent, agentDef); err != nil {
 		return domain.ExecResult{}, domain.AgentRunResult{}, err
 	}
 	result, err := runtime.ExecStream(ctx, session, vmState, spec, stream)
@@ -210,7 +215,7 @@ func (r *AgentRunner) PrepareSandboxAgentEnvironment(ctx context.Context, sessio
 		}
 		return err
 	}
-	if err := prepareAgentMCPConfig(session, agent.Provider, definition); err != nil {
+	if err := r.prepareAgentMCPConfig(ctx, session, agent.Provider, definition); err != nil {
 		if r.configDB != nil {
 			_ = r.configDB.RevokeLLMFacadeTokensForSandbox(context.WithoutCancel(ctx), session.Summary.ID)
 		}
@@ -221,6 +226,12 @@ func (r *AgentRunner) PrepareSandboxAgentEnvironment(ctx context.Context, sessio
 	}
 	if len(managedEnv) > 0 {
 		session.RuntimeEnvItems = domain.MergeEnvItems(session.RuntimeEnvItems, llms.EnvItemsFromMap(managedEnv, true))
+	}
+	if err := r.syncSandboxGuestDirectories(ctx, session); err != nil {
+		if r.configDB != nil {
+			_ = r.configDB.RevokeLLMFacadeTokensForSandbox(context.WithoutCancel(ctx), session.Summary.ID)
+		}
+		return err
 	}
 	return nil
 }
@@ -265,7 +276,7 @@ func (r *AgentRunner) prepareAgentFiles(ctx context.Context, session *domain.San
 	if definition != nil {
 		systemPrompt = strings.TrimSpace(definition.SystemPrompt)
 	}
-	if err := execution.WriteAgentSystemPromptFile(session, systemPrompt); err != nil {
+	if err := execution.WriteAgentSystemPromptFile(ctx, r.config, session, systemPrompt, r.guestFileWriterFor(session)); err != nil {
 		return nil, err
 	}
 	var skillNames []string
@@ -276,11 +287,11 @@ func (r *AgentRunner) prepareAgentFiles(ctx context.Context, session *domain.San
 		if err != nil {
 			return nil, err
 		}
-		skillNames, err = execution.WriteAgentSkills(session, resolver.Projected(resolvedSkills))
+		skillNames, err = execution.WriteAgentSkills(ctx, r.config, session, resolver.Projected(resolvedSkills), r.guestDirWriterFor(session))
 		if err != nil {
 			return nil, err
 		}
-	} else if _, err := execution.WriteAgentSkills(session, nil); err != nil {
+	} else if _, err := execution.WriteAgentSkills(ctx, r.config, session, nil, r.guestDirWriterFor(session)); err != nil {
 		return nil, err
 	}
 	return skillNames, nil
@@ -294,19 +305,20 @@ func agentSkillEnv(items []domain.SandboxEnvVar) map[string]string {
 	return env
 }
 
-func prepareAgentMCPConfig(session *domain.Sandbox, agent string, definition *domain.AgentDefinition) error {
+func (r *AgentRunner) prepareAgentMCPConfig(ctx context.Context, session *domain.Sandbox, agent string, definition *domain.AgentDefinition) error {
 	var mcps map[string]compose.NormalizedMCPServerSpec
 	if definition != nil {
 		mcps = llms.AgentMCPConfig(*definition)
 	}
-	if err := execution.WriteAgentMCPConfigFile(session, mcps); err != nil {
+	guestFileWriter := r.guestFileWriterFor(session)
+	if err := execution.WriteAgentMCPConfigFile(ctx, r.config, session, mcps, guestFileWriter); err != nil {
 		return err
 	}
 	switch domain.NormalizeAgentKind(agent) {
 	case "codex":
-		return llms.WriteCodexMCPConfig(session, mcps)
+		return llms.WriteCodexMCPConfig(ctx, r.config, session, mcps, guestFileWriter)
 	case "opencode":
-		return llms.WriteOpenCodeMCPConfig(session, mcps)
+		return llms.WriteOpenCodeMCPConfig(ctx, r.config, session, mcps, guestFileWriter)
 	default:
 		return nil
 	}

@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -125,7 +126,7 @@ persistence = "save-all"
 	return nil
 }
 
-func WriteCodexMCPConfig(session *domain.Sandbox, mcps map[string]compose.NormalizedMCPServerSpec) error {
+func WriteCodexMCPConfig(ctx context.Context, config *appconfig.Config, session *domain.Sandbox, mcps map[string]compose.NormalizedMCPServerSpec, writeGuestFile execution.GuestFileWriterFunc) error {
 	if session == nil {
 		return nil
 	}
@@ -147,6 +148,18 @@ func WriteCodexMCPConfig(session *domain.Sandbox, mcps map[string]compose.Normal
 	}
 	if err := os.WriteFile(path, []byte(merged), 0o644); err != nil {
 		return fmt.Errorf("write codex mcp config: %w", err)
+	}
+	// The merge above always operates on the daemon's own local copy of this
+	// file (updated by this same push on every prior call), so pushing the
+	// freshly merged result keeps a no-shared-mount guest (k8s) in sync the
+	// same way a mount would, regardless of how many times this has run for
+	// this sandbox before.
+	if writeGuestFile != nil {
+		appconfig.ApplyDefaultGuestPaths(config)
+		guestPath := filepath.Join(config.GuestHomePath, ".codex", "config.toml")
+		if err := writeGuestFile(ctx, guestPath, []byte(merged)); err != nil {
+			return fmt.Errorf("push codex mcp config to guest: %w", err)
+		}
 	}
 	return nil
 }
@@ -256,7 +269,7 @@ func WriteOpenCodeRuntimeConfig(session *domain.Sandbox, providerID, model, base
 	return nil
 }
 
-func WriteOpenCodeMCPConfig(session *domain.Sandbox, mcps map[string]compose.NormalizedMCPServerSpec) error {
+func WriteOpenCodeMCPConfig(ctx context.Context, config *appconfig.Config, session *domain.Sandbox, mcps map[string]compose.NormalizedMCPServerSpec, writeGuestFile execution.GuestFileWriterFunc) error {
 	if session == nil {
 		return nil
 	}
@@ -294,8 +307,18 @@ func WriteOpenCodeMCPConfig(session *domain.Sandbox, mcps map[string]compose.Nor
 	if err != nil {
 		return fmt.Errorf("encode opencode mcp config: %w", err)
 	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write opencode mcp config: %w", err)
+	}
+	// Same "always push the daemon's freshly merged local copy" reasoning as
+	// WriteCodexMCPConfig above.
+	if writeGuestFile != nil {
+		appconfig.ApplyDefaultGuestPaths(config)
+		guestPath := filepath.Join(config.GuestHomePath, ".config", "opencode", "opencode.json")
+		if err := writeGuestFile(ctx, guestPath, data); err != nil {
+			return fmt.Errorf("push opencode mcp config to guest: %w", err)
+		}
 	}
 	return nil
 }

@@ -233,6 +233,8 @@ Bearer Token 不会加密网络流量。跨机器连接时，请使用 HTTPS、S
 
 ## Runtime Driver
 
+- **`k8s`**：每个 guest 运行在一个 Kubernetes Pod 中；daemon 必须运行在目标集群内，并通过 Helm Chart 部署。
+
 - **`docker`**（默认）：使用 Docker 容器运行 guest，需要可用的 Docker daemon。
 - **`boxlite`**：使用 BoxLite runtime artifact 以 microVM 运行 guest。
 - **`microsandbox`**：使用 Microsandbox VM runtime 运行 guest。
@@ -278,6 +280,20 @@ ANTHROPIC_MODEL=claude-...
 完整变量（超时、endpoint 别名、`OPENAI_API_KEY` / `ANTHROPIC_AUTH_TOKEN` 等）见 [`.env.example`](.env.example)。
 
 ## 部署与配置
+
+如果要把 daemon 部署到 Kubernetes 集群，使用 Helm Chart，并在安装时决定目标
+context 和 namespace：
+
+```bash
+helm install agent-compose ./charts/agent-compose \
+  --kube-context prod-cluster \
+  --namespace team-a \
+  --create-namespace
+```
+
+Helm release 的 namespace 会作为默认 sandbox namespace。Chart 会根据选定的
+namespace 渲染 Service DNS 回调地址和 RBAC subject；镜像、PVC 和升级参数见
+[`charts/agent-compose/README.md`](charts/agent-compose/README.md)。
 
 使用已发布镜像部署到服务器：
 

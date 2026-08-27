@@ -236,8 +236,8 @@ linux_config=$(printf '%s\n' \
   'goos=linux' \
   'goarch=amd64' \
   'cgo_enabled=1' \
-  'tags=netgo,osusergo,boxlitecgo,microsandboxcgo' \
-  'compiled_drivers=docker,boxlite,microsandbox' \
+  'tags=netgo,osusergo,boxlitecgo,microsandboxcgo,k8scompose' \
+  'compiled_drivers=docker,boxlite,microsandbox,k8s' \
   'version=auto')
 
 # Explicit Darwin builds must not inspect or require native runtime artifacts.
@@ -335,7 +335,7 @@ assert_success
 assert_contains "$FAKE_GO_LOG" 'ENV_GOOS=linux'
 assert_contains "$FAKE_GO_LOG" 'ENV_GOARCH=amd64'
 assert_contains "$FAKE_GO_LOG" 'ENV_CGO_ENABLED=1'
-assert_build_arg 'netgo,osusergo,boxlitecgo,microsandboxcgo'
+assert_build_arg 'netgo,osusergo,boxlitecgo,microsandboxcgo,k8scompose'
 assert_build_arg '-X agent-compose/pkg/config.BuildVersion=test-linux'
 
 # auto dispatch uses the Go host OS and defaults architecture from GOHOSTARCH.

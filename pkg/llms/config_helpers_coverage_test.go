@@ -45,38 +45,38 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}, Env: map[string]compose.EnvVarSpec{"TOKEN": {Value: "secret"}}},
 		"docs":       {Type: "remote", Transport: "http", URL: "https://docs.example/mcp", Headers: map[string]compose.EnvVarSpec{"Authorization": {Value: "Bearer token"}}},
 	}
-	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+	if err := WriteCodexMCPConfig(context.Background(), &appconfig.Config{}, session, mcps, nil); err != nil {
 		t.Fatalf("WriteCodexMCPConfig returned error: %v", err)
 	}
-	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+	if err := WriteCodexMCPConfig(context.Background(), &appconfig.Config{}, session, mcps, nil); err != nil {
 		t.Fatalf("second WriteCodexMCPConfig returned error: %v", err)
 	}
 	configPath := filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")
 	if err := os.WriteFile(configPath, []byte("model = \"gpt\"\n\n"+codexManagedMCPStart+"\n[mcp_servers.stale]\ncommand = \"old\"\n"), 0o644); err != nil {
 		t.Fatalf("seed malformed codex mcp config: %v", err)
 	}
-	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+	if err := WriteCodexMCPConfig(context.Background(), &appconfig.Config{}, session, mcps, nil); err != nil {
 		t.Fatalf("rewrite malformed WriteCodexMCPConfig returned error: %v", err)
 	}
 	codexConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
 	if err != nil || strings.Count(string(codexConfig), `[mcp_servers.filesystem]`) != 1 || !strings.Contains(string(codexConfig), `[mcp_servers.docs.http_headers]`) || strings.Contains(string(codexConfig), `[mcp_servers.stale]`) {
 		t.Fatalf("codex mcp config=%q err=%v", string(codexConfig), err)
 	}
-	if err := WriteOpenCodeMCPConfig(session, mcps); err != nil {
+	if err := WriteOpenCodeMCPConfig(context.Background(), &appconfig.Config{}, session, mcps, nil); err != nil {
 		t.Fatalf("WriteOpenCodeMCPConfig returned error: %v", err)
 	}
 	openCodeConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
 	if err != nil || !strings.Contains(string(openCodeConfig), `"mcp"`) || !strings.Contains(string(openCodeConfig), `"filesystem"`) {
 		t.Fatalf("opencode mcp config=%q err=%v", string(openCodeConfig), err)
 	}
-	if err := WriteCodexMCPConfig(session, nil); err != nil {
+	if err := WriteCodexMCPConfig(context.Background(), &appconfig.Config{}, session, nil, nil); err != nil {
 		t.Fatalf("clear WriteCodexMCPConfig returned error: %v", err)
 	}
 	codexConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
 	if err != nil || strings.Contains(string(codexConfig), `[mcp_servers.`) {
 		t.Fatalf("cleared codex mcp config=%q err=%v", string(codexConfig), err)
 	}
-	if err := WriteOpenCodeMCPConfig(session, nil); err != nil {
+	if err := WriteOpenCodeMCPConfig(context.Background(), &appconfig.Config{}, session, nil, nil); err != nil {
 		t.Fatalf("clear WriteOpenCodeMCPConfig returned error: %v", err)
 	}
 	openCodeConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
@@ -144,6 +144,62 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 
 func TestE2ERuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	TestRuntimeConfigAndEnvHelperWorkflows(t)
+}
+
+// No-shared-mount path (k8s - see docs/design/k8s_pod_runtime_driver_design.md
+// §2.1): both codex and opencode MCP config still merge against the
+// daemon's own local copy of the file, but must also push the resulting
+// merged content to the guest path a mount would otherwise have made it
+// appear at for free.
+func TestWriteCodexAndOpenCodeMCPConfigPushToGuest(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}},
+	}
+
+	var codexPushedPath string
+	var codexPushedContent []byte
+	if err := WriteCodexMCPConfig(context.Background(), config, session, mcps, func(_ context.Context, guestPath string, content []byte) error {
+		codexPushedPath = guestPath
+		codexPushedContent = content
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteCodexMCPConfig returned error: %v", err)
+	}
+	appconfig.ApplyDefaultGuestPaths(config)
+	wantCodexPath := filepath.Join(config.GuestHomePath, ".codex", "config.toml")
+	if codexPushedPath != wantCodexPath {
+		t.Fatalf("codex pushed path = %q, want %q", codexPushedPath, wantCodexPath)
+	}
+	localCodexConfig, err := os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
+	if err != nil {
+		t.Fatalf("read local codex config: %v", err)
+	}
+	if string(codexPushedContent) != string(localCodexConfig) {
+		t.Fatalf("codex pushed content = %q, want it to match the local merged file %q", codexPushedContent, localCodexConfig)
+	}
+	if !strings.Contains(string(codexPushedContent), "[mcp_servers.filesystem]") {
+		t.Fatalf("codex pushed content missing mcp block: %q", codexPushedContent)
+	}
+
+	var openCodePushedPath string
+	var openCodePushedContent []byte
+	if err := WriteOpenCodeMCPConfig(context.Background(), config, session, mcps, func(_ context.Context, guestPath string, content []byte) error {
+		openCodePushedPath = guestPath
+		openCodePushedContent = content
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteOpenCodeMCPConfig returned error: %v", err)
+	}
+	wantOpenCodePath := filepath.Join(config.GuestHomePath, ".config", "opencode", "opencode.json")
+	if openCodePushedPath != wantOpenCodePath {
+		t.Fatalf("opencode pushed path = %q, want %q", openCodePushedPath, wantOpenCodePath)
+	}
+	if !strings.Contains(string(openCodePushedContent), `"filesystem"`) {
+		t.Fatalf("opencode pushed content missing mcp entry: %q", openCodePushedContent)
+	}
 }
 
 func TestConfigHelperEdgeBranches(t *testing.T) {

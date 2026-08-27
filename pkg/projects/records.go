@@ -153,17 +153,28 @@ type agentDefinitionConfig struct {
 	// to actually resolve the declared workspace instead of looking it up as
 	// a preset.
 	Workspace *compose.WorkspaceSpec `json:"workspace,omitempty"`
+
+	// DriverK8s carries the agent's `driver.k8s` override (cluster context,
+	// namespace). It has no dedicated AgentDefinition column, same as
+	// Jupyter/Sandbox/Workspace above; runtime code decodes it back out of
+	// ConfigJSON where it's needed (see driverK8sOptionsFromAgentDefinition).
+	DriverK8s *compose.K8sDriverSpec `json:"driver_k8s,omitempty"`
 }
 
 func agentDefinitionConfigJSON(agent compose.NormalizedAgentSpec, projectMCPServers map[string]compose.NormalizedMCPServerSpec, projectOctoBusServers map[string]compose.NormalizedOctoBusServerSpec) (string, error) {
+	var driverK8s *compose.K8sDriverSpec
+	if agent.Driver != nil {
+		driverK8s = agent.Driver.K8s
+	}
 	payload := agentDefinitionConfig{
 		Jupyter:        agent.Jupyter,
 		Sandbox:        agent.Sandbox,
 		MCPServers:     selectedAgentMCPServers(agent, projectMCPServers),
 		OctoBusServers: selectedAgentOctoBusServers(agent, projectOctoBusServers),
 		Workspace:      agent.Workspace,
+		DriverK8s:      driverK8s,
 	}
-	if payload.Jupyter == nil && payload.Sandbox == nil && payload.Workspace == nil && len(payload.MCPServers) == 0 && len(payload.OctoBusServers) == 0 {
+	if payload.Jupyter == nil && payload.Sandbox == nil && payload.Workspace == nil && payload.DriverK8s == nil && len(payload.MCPServers) == 0 && len(payload.OctoBusServers) == 0 {
 		return "{}", nil
 	}
 	data, err := MarshalCanonicalJSON(payload)

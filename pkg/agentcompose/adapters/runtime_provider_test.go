@@ -58,11 +58,20 @@ func TestNewRuntimeProviderConstructionIsLazy(t *testing.T) {
 	if !ok {
 		t.Fatalf("NewRuntimeProvider() = %T, want *runtimeProvider", provider)
 	}
-	if len(resolved.runtimes) != 3 {
-		t.Fatalf("registered runtimes = %d, want 3 lazy wrappers", len(resolved.runtimes))
+	if len(resolved.runtimes) != 4 {
+		t.Fatalf("registered runtimes = %d, want 4 lazy wrappers", len(resolved.runtimes))
 	}
 	if _, err := provider.ForDriver(driverpkg.RuntimeDriverDocker); err != nil {
 		t.Fatalf("ForDriver(docker) after lazy construction returned error: %v", err)
+	}
+	if _, ok := resolved.runtimes[driverpkg.RuntimeDriverDocker].(GuestFileWriter); ok {
+		t.Fatal("Docker runtime unexpectedly exposes direct guest file writes")
+	}
+	if _, ok := resolved.runtimes[driverpkg.RuntimeDriverK8s].(GuestFileWriter); !ok {
+		t.Fatal("k8s runtime does not expose direct guest file writes")
+	}
+	if _, ok := resolved.runtimes[driverpkg.RuntimeDriverK8s].(GuestDirWriter); !ok {
+		t.Fatal("k8s runtime does not expose direct guest directory writes")
 	}
 }
 

@@ -14,6 +14,9 @@ func TestCompiledRuntimeDriversStableOrder(t *testing.T) {
 	if microsandboxCompiled {
 		want = append(want, RuntimeDriverMicrosandbox)
 	}
+	if k8sCompiled {
+		want = append(want, RuntimeDriverK8s)
+	}
 
 	if got := CompiledRuntimeDrivers(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("CompiledRuntimeDrivers() = %v, want %v", got, want)
@@ -33,6 +36,9 @@ func TestCompiledRuntimeDriversReturnsCopy(t *testing.T) {
 	}
 	if microsandboxCompiled {
 		want = append(want, RuntimeDriverMicrosandbox)
+	}
+	if k8sCompiled {
+		want = append(want, RuntimeDriverK8s)
 	}
 	if got := CompiledRuntimeDrivers(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("CompiledRuntimeDrivers() after caller mutation = %v, want %v", got, want)

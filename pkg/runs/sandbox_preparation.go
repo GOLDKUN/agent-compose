@@ -74,7 +74,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 	var volumeWarnings []string
 	volumesResolved := false
 	if strings.TrimSpace(req.SandboxID) == "" && strings.TrimSpace(req.StickyBindingConfigHash) != "" {
-		volumeMounts, volumeWarnings, err = c.resolveProjectRunVolumeMounts(ctx, prepared, req)
+		volumeMounts, volumeWarnings, err = c.resolveProjectRunVolumeMounts(ctx, driver, prepared, req)
 		if err != nil {
 			return SandboxResult{}, err
 		}
@@ -215,7 +215,7 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 		}
 	}
 	if !volumesResolved {
-		volumeMounts, volumeWarnings, err = c.resolveProjectRunVolumeMounts(ctx, prepared, req)
+		volumeMounts, volumeWarnings, err = c.resolveProjectRunVolumeMounts(ctx, driver, prepared, req)
 		if err != nil {
 			return SandboxResult{}, err
 		}
@@ -228,6 +228,10 @@ func (c *Controller) ensureProjectRunSandbox(ctx context.Context, run domain.Pro
 		AgentName:   run.AgentName,
 	}); err != nil {
 		return SandboxResult{}, err
+	}
+	if driverK8s := driverK8sOptionsFromAgentDefinition(prepared.AgentDefinition); driverK8s != nil {
+		jupyterOptions.DriverK8sContext = driverK8s.Context
+		jupyterOptions.DriverK8sNamespace = driverK8s.Namespace
 	}
 	sandbox, err := c.store.CreateSandboxWithOptions(ctx,
 		SandboxTitle(run),
@@ -325,7 +329,7 @@ func (c *Controller) validateSandboxRuntimeDriver(driver string) error {
 	return err
 }
 
-func (c *Controller) resolveProjectRunVolumeMounts(ctx context.Context, prepared Preparation, req RunAgentRequest) ([]domain.SandboxVolumeMount, []string, error) {
+func (c *Controller) resolveProjectRunVolumeMounts(ctx context.Context, driver string, prepared Preparation, req RunAgentRequest) ([]domain.SandboxVolumeMount, []string, error) {
 	specs := prepared.Volumes
 	if len(req.Volumes) > 0 {
 		specs = req.Volumes
@@ -333,13 +337,23 @@ func (c *Controller) resolveProjectRunVolumeMounts(ctx context.Context, prepared
 	if len(specs) == 0 {
 		return nil, nil, nil
 	}
+	if err := volumes.ValidateDriverMountSpecs(driver, specs); err != nil {
+		return nil, nil, err
+	}
 	if c.volumes == nil {
 		return nil, nil, fmt.Errorf("volume resolver is required")
 	}
-	return c.volumes.ResolveMounts(ctx, specs, volumes.ResolveOptions{
+	mounts, warnings, err := c.volumes.ResolveMounts(ctx, specs, volumes.ResolveOptions{
 		ProjectRoot:    prepared.ProjectRoot,
 		ProjectVolumes: prepared.ProjectVolumes,
 	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := volumes.ValidateResolvedDriverMounts(driver, mounts); err != nil {
+		return nil, nil, err
+	}
+	return mounts, warnings, nil
 }
 
 func (c *Controller) applyJupyterOptionsToSandbox(sandbox *domain.Sandbox, options sandboxstore.CreateSandboxOptions) error {

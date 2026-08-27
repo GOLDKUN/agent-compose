@@ -55,6 +55,13 @@ type VMState struct {
 	StoppedAt        time.Time `json:"stopped_at,omitempty"`
 	LastError        string    `json:"last_error,omitempty"`
 	BootstrapRef     string    `json:"bootstrap_ref,omitempty"`
+	// K8sContext and K8sNamespace override which cluster/namespace the k8s
+	// driver targets for this sandbox. Empty means "use the daemon's
+	// K8S_KUBECONFIG current-context / K8S_NAMESPACE default" (see
+	// k8sRuntime.client and k8sRuntime.namespaceFor). Other drivers ignore
+	// these fields.
+	K8sContext   string `json:"k8s_context,omitempty"`
+	K8sNamespace string `json:"k8s_namespace,omitempty"`
 }
 
 type ProxyState struct {
@@ -215,5 +222,5 @@ func hostSandboxHome(session *Sandbox) string {
 }
 
 func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `"'"'"'`) + "'"
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }
