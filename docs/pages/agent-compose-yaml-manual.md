@@ -819,6 +819,15 @@ A scheduler uses either declarative `triggers` or JavaScript `script`; the two f
 
 `concurrency_policy` applies to the whole agent scheduler, including all declarative or script-registered triggers and manual scheduler invocations. With `skip`, a run that overlaps another run from the same scheduler is recorded as `skipped` and is not queued. With `parallel`, overlapping runs may execute concurrently. It is not a per-trigger policy.
 
+Script schedulers can run host calls in parallel with `scheduler.llm.async` and `scheduler.agent.async`. Two scheduler env values cap how many run at once:
+
+| Env | Default | Purpose |
+| --- | --- | --- |
+| `LLM_MAX_CONCURRENCY` | `8` | Concurrent `scheduler.llm.async` calls. |
+| `AGENT_MAX_CONCURRENCY` | `3` | Concurrent `scheduler.agent.async` runs. |
+
+The agent limit is much lower because every parallel agent run creates its own sandbox, sandbox creation has no ceiling of its own, and each run writes through the SQLite pool (`SQLITE_MAX_OPEN_CONNS`, four connections by default). A value that is not a positive integer is ignored and the default applies. `scheduler.agent.async` always uses the `new` sandbox policy: parallel agents cannot share one.
+
 #### Declarative triggers
 
 Each trigger must set exactly one kind field: `cron`, `interval`, `timeout`, or `event`.

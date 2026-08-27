@@ -183,6 +183,121 @@ const result = scheduler.llm(prompt, {
 // => { text, model, responseId, finishReason, json }
 ```
 
+## 并行调用
+
+`scheduler.llm` 和 `scheduler.agent` 是同步阻塞的，`for` 循环里逐个调用会串行等待。加 `.async` 可以让它们并行：调用立即返回一个 Promise，真正的请求在后台进行。
+
+```js
+async function main() {
+  const topics = ["a", "b", "c"];
+  const results = await Promise.all(
+    topics.map((t) => scheduler.llm.async(`summarize ${t}`))
+  );
+  return results.map((r) => r.text);
+}
+```
+
+`.async` 返回的是标准 Promise，`await`、`Promise.all`、`Promise.allSettled`、`.catch()`、`.finally()` 都可以正常使用。结果和错误的形状与同步版完全一致。
+
+**但句柄的 settle 是按创建顺序串行的。** 引擎没有事件循环，每个句柄在创建时就把自己的结算任务排进队列，泵队列时按顺序执行，且每个任务都会阻塞 JS 线程直到对应调用完成。后果是：**先创建但没有 await 的慢调用，会挡住之后创建的句柄**。
+
+```js
+scheduler.llm.async("慢的");              // 没有 await
+const r = await scheduler.llm.async("快的"); // 仍然要等「慢的」先结算
+```
+
+实测：单独 await「快的」11ms；前面挂一个 300ms 的弃用调用，就变成 301ms。
+
+所以需要结果的调用请**全部放进同一个 `Promise.all`**（它们会真正并行），不要留下不 await 的句柄。这也和上面「未 await 的句柄」一节的建议一致。
+
+同步版本保持不变，现有脚本无需改动。
+
+### 取最快或最先成功的结果
+
+**不要对 `.async` 句柄使用 `Promise.race` 或 `Promise.any`**。引擎没有事件循环，这两个内置组合子会退化成「取数组里的第一个」，而不是「取最快的那个」——它们会静默返回错误的结果。请改用：
+
+```js
+// 取最先完成的（无论成功失败）
+const fastest = await scheduler.llm.race(["prompt-a", "prompt-b"]);
+
+// 取最先成功的，全部失败时才 reject
+const winner = await scheduler.llm.any([
+  { prompt: "同一个问题", model: "model-a" },
+  { prompt: "同一个问题", model: "model-b" },
+]);
+```
+
+数组元素必须是 prompt 字符串，或带 `prompt` 字段的对象——对象本身同时用作 options，因此 `model`、`outputSchema` 的写法与 `scheduler.llm` 一致。其他类型（`null`、数字、数组等）会直接报错，不会被转成字符串当作 prompt 发出去。
+
+胜负一旦确定，落败的调用会被取消，run 不会再为它们等待——这也是 `.any` 能真正当作 failover 用的原因：即使某个 provider 卡住，只要有一个先成功，整个 run 就不必等它。
+
+「最先」指的是**引擎先观察到谁完成**，不是严格的完成时刻。两个条目在几乎同一瞬间完成时，谁被选中取决于 goroutine 调度，可能不是快了几微秒的那个。这和 JS 里 `Promise.race` 的语义一致——任何 Promise 实现都只保证「先被观察到」，不保证严格时序。差距明显时（例如一个 provider 卡住、另一个正常返回）选择是可靠的。
+
+### 并行 agent 必须使用独立 sandbox
+
+`scheduler.agent.async` 会把每次调用固定为 `sandboxPolicy: "new"`。并行 agent 无法共享 sandbox：它们会同时写同一个 workspace，而且先跑完的那个会把 sandbox 关掉。
+
+未指定 `sandboxPolicy` 时自动使用 `"new"`；显式传入 `"sticky"` 或 `"reuse"` 会直接报错，而不是被悄悄改写。
+
+**副作用**：如果一个触发器把它唯一的 `scheduler.agent(prompt)` 改成 `scheduler.agent.async(prompt)`，那么即使 Scheduler 配的是 `sandbox_policy: sticky`，该触发器的手动运行也不会再建立 sticky binding——因为它实际用的就是 `new`。这是并行 agent 的必然结果，不是可以绕开的。
+
+```js
+const reviews = await Promise.all(
+  files.map((f) => scheduler.agent.async(`review ${f}`))
+);
+```
+
+### 并发上限
+
+并行调用有上限，防止脚本对一个长数组扇出时耗尽资源。可通过 Scheduler 的 env 覆盖：
+
+| env | 默认值 | 说明 |
+| --- | --- | --- |
+| `LLM_MAX_CONCURRENCY` | 8 | 同时进行的 `scheduler.llm.async` 调用数 |
+| `AGENT_MAX_CONCURRENCY` | 3 | 同时进行的 `scheduler.agent.async` 运行数 |
+
+agent 的默认值明显更低，因为每个并行 agent 都是一个新 sandbox，而 sandbox 创建本身没有数量限制，且每次运行都要写数据库（SQLite 连接池默认 4 条，见 `SQLITE_MAX_OPEN_CONNS`）。
+
+非法值或非正数会被忽略并回退到默认值。
+
+此外，单次执行**同时未完成**的异步调用总数上限为 4096（含 `llm`、`agent`、`sleep`）。上面两个 env 控制的是同时**运行**的数量，但每个待处理句柄仍占一个 goroutine 及其栈，而这部分内存不受 QuickJS 的内存上限约束。超过时会抛错，提示先 await 当前这批。正常脚本不会碰到这个值。
+
+### 未 await 的句柄
+
+run 收尾时，**仍未完成的异步调用会被取消**，而不是被等到跑完。收尾发生在脚本返回之后，所以此刻还在飞的调用按定义就是被遗弃的。
+
+```js
+async function main() {
+  scheduler.agent.async("长任务");   // 没有 await —— 会在 run 收尾时被取消
+  return "done";
+}
+```
+
+之所以是取消而不是等待：scheduler 的并发槽要等 run 结束才释放，如果 fire-and-forget 一个跑十分钟的 agent，run 就会保持 running 十分钟，期间 `concurrency_policy: skip` 会把后续触发全部跳过。
+
+需要结果就 `await` 它。需要「发出去就不管」的语义，请用 `scheduler.event.publish` 触发另一个 Scheduler，而不是靠不 await 的句柄。
+
+不认 ctx 取消的下游会被放弃而不是无限等待，代价是它的结果可能在 run 收尾之后才落到事件表里。
+
+另外，被弃用的句柄会把已经拿到的响应体一直持有到本次 run 结束（引擎所依赖的 QuickJS 绑定不会提前注销这些对象）。这不会跨 run 泄漏，但如果一次 run 里弃用了大量大响应的调用，内存峰值会被明显抬高。
+
+### 超时行为
+
+Scheduler run 超时会中止整个执行，**已完成的并行结果不会被返回**。需要「尽力而为、收集部分结果」的场景，请自行缩小每批的规模。
+
+## 等待
+
+全局 `setTimeout` 在本运行时里是触发器注册器，因此 `await new Promise((r) => setTimeout(r, ms))` 永远不会 settle。请使用：
+
+```js
+scheduler.sleep(500);              // 同步阻塞 500ms
+await scheduler.sleep.async(500);  // 返回 Promise，可参与 Promise.all
+```
+
+`scheduler.sleep.async` 不占用并发额度，因此不会挤占真正的 host 调用；它也不会在 run 收尾时被等待，所以没有 await 的 sleep 不会拖住整个 run。
+
+时长必须是正整数毫秒，上限约 9.2 万亿毫秒（约 292 年，即 `time.Duration` 能表示的最大值）；超出范围会报错，而不是静默变成立即返回。
+
 ## 命令执行
 
 `scheduler.exec(...)` 和 `scheduler.shell(...)` 会在 Scheduler 关联的 notebook runtime 里执行命令。
@@ -300,8 +415,9 @@ scheduler.runtime.name; // "scheduler"
 
 保存或校验 Scheduler 时，脚本会被求值以收集触发器。此时不要在顶层调用会执行副作用的 host API。
 
-- `scheduler.agent`、`scheduler.llm`、`scheduler.exec`、`scheduler.shell`、`scheduler.event.publish`、`scheduler.sandbox.*` 在校验阶段不可用。
+- `scheduler.agent`、`scheduler.llm`、`scheduler.exec`、`scheduler.shell`、`scheduler.event.publish`、`scheduler.sandbox.*` 在校验阶段不可用，它们的 `.async`、`.race`、`.any` 变体同样不可用。
 - `scheduler.log` 在校验阶段是 no-op。
+- `scheduler.sleep` 和 `scheduler.sleep.async` 在校验阶段不会真的等待（参数仍然会校验），避免顶层 sleep 拖住保存。
 - `scheduler.state.*` 在校验阶段不会访问持久状态。
 
 把这些调用放进 `main()` 或触发器 callback 里。
@@ -314,3 +430,4 @@ scheduler.runtime.name; // "scheduler"
 - `04-cron-daily-summary.js`：定时 agent 任务，并记录最近运行状态。
 - `05-router-with-multiple-triggers.js`：多个触发器共享一个 workflow 的推荐结构。
 - `06-conditional-triggers.js`：按条件注册或清除 interval/timeout 触发器。
+- `07-parallel-fanout.js`：用 `scheduler.llm.async` + `Promise.all` 并行扇出一批调用。

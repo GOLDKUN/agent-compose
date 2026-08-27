@@ -102,8 +102,8 @@ func validateStandaloneSchedulerExamples(t *testing.T, root string, engine *sche
 	if err != nil {
 		t.Fatalf("glob scheduler examples: %v", err)
 	}
-	if len(files) != 6 {
-		t.Fatalf("standalone scheduler example count = %d, want 6", len(files))
+	if len(files) != 7 {
+		t.Fatalf("standalone scheduler example count = %d, want 7", len(files))
 	}
 	for _, file := range files {
 		script, err := os.ReadFile(file)

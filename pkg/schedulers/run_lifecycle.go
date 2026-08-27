@@ -190,11 +190,14 @@ func (e *RunExecutor) Execute(ctx context.Context, prepared PreparedRun) (domain
 		TriggerID: run.TriggerID,
 		Kind:      ExecutionKindTrigger,
 	}, ParseTriggerEventMetadata(prepared.PayloadJSON))
+	maxAsyncLLM, maxAsyncAgent := AsyncConcurrencyFromSchedulerEnv(prepared.Scheduler.EnvItems)
 	execution, execErr := e.deps.Engine.Execute(ctx, SchedulerExecutionRequest{
-		Runtime:     prepared.Scheduler.Summary.Runtime,
-		Script:      prepared.Scheduler.Script,
-		Trigger:     prepared.Trigger,
-		PayloadJSON: prepared.PayloadJSON,
+		Runtime:                  prepared.Scheduler.Summary.Runtime,
+		Script:                   prepared.Scheduler.Script,
+		Trigger:                  prepared.Trigger,
+		PayloadJSON:              prepared.PayloadJSON,
+		MaxAsyncLLMConcurrency:   maxAsyncLLM,
+		MaxAsyncAgentConcurrency: maxAsyncAgent,
 	}, host)
 
 	writeCtx := context.WithoutCancel(ctx)

@@ -824,6 +824,15 @@ Scheduler 可以使用声明式 `triggers`，也可以使用 JavaScript `script`
 
 `concurrency_policy` 作用于整个 Agent Scheduler，包括全部声明式或脚本注册的 Trigger，以及手动 Scheduler 调用。`skip` 会把与同一 Scheduler 既有运行重叠的新 run 记录为 `skipped`，且不会排队补跑；`parallel` 允许重叠 run 并行执行。它不是 Trigger 级策略。
 
+脚本型 scheduler 可以用 `scheduler.llm.async` 和 `scheduler.agent.async` 并行发起 host 调用。两个 scheduler env 用于限制同时进行的数量：
+
+| Env | 默认值 | 说明 |
+| --- | --- | --- |
+| `LLM_MAX_CONCURRENCY` | `8` | 同时进行的 `scheduler.llm.async` 调用数。 |
+| `AGENT_MAX_CONCURRENCY` | `3` | 同时进行的 `scheduler.agent.async` 运行数。 |
+
+agent 的上限明显更低：每个并行 agent 运行都会创建独立 sandbox，而 sandbox 创建本身没有数量限制，且每次运行都要经由 SQLite 连接池写入（`SQLITE_MAX_OPEN_CONNS`，默认 4 条）。非正整数会被忽略并回退到默认值。`scheduler.agent.async` 始终使用 `new` sandbox 策略：并行 agent 无法共享同一个 sandbox。
+
 #### 声明式 Trigger
 
 每个 Trigger 必须且只能写一个 kind 字段：`cron`、`interval`、`timeout` 或 `event`。

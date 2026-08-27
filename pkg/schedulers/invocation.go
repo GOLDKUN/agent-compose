@@ -56,10 +56,13 @@ func (e *InvocationExecutor) Invoke(ctx context.Context, scheduler domain.Schedu
 	}
 	host := e.deps.HostFactory(scheduler, RuntimeExecutionContext{ID: correlationID, Kind: ExecutionKindInvocation}, TriggerEventMetadata{})
 	startedAt := time.Now().UTC()
+	maxAsyncLLM, maxAsyncAgent := AsyncConcurrencyFromSchedulerEnv(scheduler.EnvItems)
 	execution, execErr := e.deps.Engine.Execute(ctx, SchedulerExecutionRequest{
-		Runtime:     scheduler.Summary.Runtime,
-		Script:      scheduler.Script,
-		PayloadJSON: payloadJSON,
+		Runtime:                  scheduler.Summary.Runtime,
+		Script:                   scheduler.Script,
+		PayloadJSON:              payloadJSON,
+		MaxAsyncLLMConcurrency:   maxAsyncLLM,
+		MaxAsyncAgentConcurrency: maxAsyncAgent,
 	}, host)
 	if host != nil {
 		host.CleanupCommandSessions(context.WithoutCancel(ctx))
