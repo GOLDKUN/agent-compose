@@ -201,6 +201,52 @@ func TestWriteCodexAndOpenCodeMCPConfigPushToGuest(t *testing.T) {
 	}
 }
 
+func TestWriteCodexMCPConfigClearsGuestWhenAllServersRemoved(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}},
+	}
+
+	if err := WriteCodexMCPConfig(context.Background(), config, session, mcps, func(context.Context, string, []byte) error { return nil }); err != nil {
+		t.Fatalf("WriteCodexMCPConfig (populate) returned error: %v", err)
+	}
+	localPath := filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")
+	if _, err := os.Stat(localPath); err != nil {
+		t.Fatalf("expected local codex config to exist after populating: %v", err)
+	}
+
+	var pushCount int
+	var lastPushedPath string
+	var lastPushedContent []byte
+	// Docker/boxlite's guest sees the host file disappear for free through
+	// their shared mount; a no-shared-mount guest (k8s) only ever finds out
+	// via this callback, so removing every MCP server must still push a
+	// clearing write, not just delete the daemon's own copy.
+	if err := WriteCodexMCPConfig(context.Background(), config, session, nil, func(_ context.Context, guestPath string, content []byte) error {
+		pushCount++
+		lastPushedPath, lastPushedContent = guestPath, content
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteCodexMCPConfig (clear) returned error: %v", err)
+	}
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Fatalf("expected local codex config to be removed after clearing, stat err = %v", err)
+	}
+	if pushCount != 1 {
+		t.Fatalf("guest write callback invoked %d times, want exactly 1 (must still clear the guest)", pushCount)
+	}
+	appconfig.ApplyDefaultGuestPaths(config)
+	wantPath := filepath.Join(config.GuestHomePath, ".codex", "config.toml")
+	if lastPushedPath != wantPath {
+		t.Fatalf("cleared guest path = %q, want %q", lastPushedPath, wantPath)
+	}
+	if len(lastPushedContent) != 0 {
+		t.Fatalf("cleared guest content = %q, want empty", lastPushedContent)
+	}
+}
+
 func TestConfigHelperEdgeBranches(t *testing.T) {
 	if got := NormalizeWireAPI("chat-completion"); got != APIProtocolChatCompletions {
 		t.Fatalf("NormalizeWireAPI chat-completion = %q", got)

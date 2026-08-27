@@ -144,6 +144,19 @@ func WriteCodexMCPConfig(ctx context.Context, config *appconfig.Config, session 
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove codex mcp config: %w", err)
 		}
+		// Deleting the daemon's own copy is enough for docker/boxlite, whose
+		// guest sees the same file through the shared mount. A no-shared-mount
+		// guest (k8s) has no such link: without also pushing the now-empty
+		// content, a sandbox Pod reused across runs would keep whatever MCP
+		// config an earlier run pushed here, even after every MCP server has
+		// since been removed from the project.
+		if writeGuestFile != nil {
+			appconfig.ApplyDefaultGuestPaths(config)
+			guestPath := filepath.Join(config.GuestHomePath, ".codex", "config.toml")
+			if err := writeGuestFile(ctx, guestPath, nil); err != nil {
+				return fmt.Errorf("clear codex mcp config on guest: %w", err)
+			}
+		}
 		return nil
 	}
 	if err := os.WriteFile(path, []byte(merged), 0o644); err != nil {
