@@ -130,6 +130,13 @@ func TestK8sEnsureSandboxCreatesPodWhenMissing(t *testing.T) {
 	if info.BoxID == "" {
 		t.Fatal("EnsureSandbox() returned empty BoxID")
 	}
+	// "agent-compose-sandbox-", not bare "agent-compose-": the daemon's own
+	// Deployment-managed Pod is typically also named "agent-compose-<hash>-
+	// <random>", so a distinct prefix keeps the two apart in `kubectl get
+	// pods` without requiring a label selector.
+	if !strings.HasPrefix(info.BoxID, "agent-compose-sandbox-") {
+		t.Fatalf("EnsureSandbox() BoxID = %q, want \"agent-compose-sandbox-\" prefix", info.BoxID)
+	}
 
 	pod, err := clientset.CoreV1().Pods("default").Get(context.Background(), info.BoxID, metav1.GetOptions{})
 	if err != nil {

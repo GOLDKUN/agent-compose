@@ -411,8 +411,13 @@ func (r *k8sRuntime) waitForPodRunning(ctx context.Context, clientset kubernetes
 	}
 }
 
+// podName picks the sandbox Pod's name. The generated fallback is prefixed
+// "agent-compose-sandbox-" rather than bare "agent-compose-" so it reads
+// distinctly from the daemon's own Deployment-managed Pod name (which
+// Kubernetes derives from the Helm release name, typically also
+// "agent-compose-<hash>-<random>") in a plain `kubectl get pods`.
 func (r *k8sRuntime) podName(sandbox *Sandbox, vmState VMState) string {
-	return firstNonEmpty(strings.TrimSpace(vmState.BoxName), strings.TrimSpace(sandbox.Summary.RuntimeRef), "agent-compose-"+sanitizeDockerContainerName(sandbox.Summary.ID))
+	return firstNonEmpty(strings.TrimSpace(vmState.BoxName), strings.TrimSpace(sandbox.Summary.RuntimeRef), "agent-compose-sandbox-"+sanitizeDockerContainerName(sandbox.Summary.ID))
 }
 
 // findPod resolves a sandbox's Pod by previously known name, then by the

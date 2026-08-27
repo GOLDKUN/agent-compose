@@ -36,8 +36,8 @@ func TestExtractTarArchiveWritesFilesAndSubdirs(t *testing.T) {
 		"nested/output.md": "# result",
 	})
 
-	if err := extractTarArchive(bytes.NewReader(data), dest); err != nil {
-		t.Fatalf("extractTarArchive() error = %v", err)
+	if err := k8sExtractTarArchive(bytes.NewReader(data), dest); err != nil {
+		t.Fatalf("k8sExtractTarArchive() error = %v", err)
 	}
 
 	got, err := os.ReadFile(filepath.Join(dest, "exitcode.txt"))
@@ -75,8 +75,8 @@ func TestBuildTarArchiveRoundTripsThroughExtractTarArchive(t *testing.T) {
 	}
 
 	dest := t.TempDir()
-	if err := extractTarArchive(bytes.NewReader(archive), dest); err != nil {
-		t.Fatalf("extractTarArchive() error = %v", err)
+	if err := k8sExtractTarArchive(bytes.NewReader(archive), dest); err != nil {
+		t.Fatalf("k8sExtractTarArchive() error = %v", err)
 	}
 
 	got, err := os.ReadFile(filepath.Join(dest, "SKILL.md"))
@@ -110,8 +110,8 @@ func TestWriteTarArchiveSupportsWorkspaceLargerThanLegacyArgLimit(t *testing.T) 
 		t.Fatalf("writeTarArchive() error = %v", err)
 	}
 	dest := t.TempDir()
-	if err := extractTarArchive(bytes.NewReader(archive.Bytes()), dest); err != nil {
-		t.Fatalf("extractTarArchive() error = %v", err)
+	if err := k8sExtractTarArchive(bytes.NewReader(archive.Bytes()), dest); err != nil {
+		t.Fatalf("k8sExtractTarArchive() error = %v", err)
 	}
 	got, err := os.ReadFile(filepath.Join(dest, "large.txt"))
 	if err != nil {
@@ -130,13 +130,51 @@ func TestWriteGuestDirRefusesGuestRootReplacement(t *testing.T) {
 	}
 }
 
+func TestWriteGuestDirSkipsPushWhenGuestDirOverlapsVolumeMount(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-volume-overlap")
+	sandbox.VolumeMounts = []SandboxVolumeMount{
+		{Type: "volume", Driver: RuntimeDriverK8s, Target: "/workspace", HostPath: "agent-compose/claim-workspace"},
+	}
+	// Zero-value runtime: if the overlap guard did not short-circuit before
+	// EnsureSandbox, this would fail trying to build a real k8s client.
+	runtime := &k8sRuntime{}
+	if err := runtime.WriteGuestDir(context.Background(), sandbox, VMState{}, t.TempDir(), "/workspace"); err != nil {
+		t.Fatalf("WriteGuestDir() error = %v, want nil (push into a PVC-mounted target must be skipped, not attempted)", err)
+	}
+}
+
+func TestK8sGuestDirOverlapsVolumeMount(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-overlap-cases")
+	sandbox.VolumeMounts = []SandboxVolumeMount{
+		{Type: "volume", Driver: RuntimeDriverK8s, Target: "/workspace", HostPath: "agent-compose/claim-a"},
+		{Type: "bind", Target: "/root", HostPath: "/host/root"},
+	}
+	cases := map[string]struct {
+		guestDir string
+		want     bool
+	}{
+		"exact match":                {"/workspace", true},
+		"mount is under guestDir":    {"/", true},
+		"guestDir is under mount":    {"/workspace/sub/dir", true},
+		"no overlap":                 {"/root/.codex", false},
+		"non-k8s mount type ignored": {"/root", false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := k8sGuestDirOverlapsVolumeMount(sandbox, tc.guestDir); got != tc.want {
+				t.Fatalf("k8sGuestDirOverlapsVolumeMount(%q) = %v, want %v", tc.guestDir, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestExtractTarArchiveRejectsPathTraversal(t *testing.T) {
 	dest := t.TempDir()
 	data := buildTestTar(t, map[string]string{"../escape.txt": "nope"})
 
-	err := extractTarArchive(bytes.NewReader(data), dest)
+	err := k8sExtractTarArchive(bytes.NewReader(data), dest)
 	if err == nil {
-		t.Fatal("extractTarArchive() error = nil, want a path-traversal error")
+		t.Fatal("k8sExtractTarArchive() error = nil, want a path-traversal error")
 	}
 	if _, statErr := os.Stat(filepath.Join(filepath.Dir(dest), "escape.txt")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected escape.txt to not be written outside dest, stat err = %v", statErr)

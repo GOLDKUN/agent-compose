@@ -70,7 +70,7 @@ func (r *k8sRuntime) ReadGuestDir(ctx context.Context, sandbox *Sandbox, vmState
 	if err := os.MkdirAll(hostDestDir, 0o755); err != nil {
 		return fmt.Errorf("create host destination %s: %w", hostDestDir, err)
 	}
-	if err := extractTarArchive(bytes.NewReader(stdout), hostDestDir); err != nil {
+	if err := k8sExtractTarArchive(bytes.NewReader(stdout), hostDestDir); err != nil {
 		return fmt.Errorf("extract guest dir %s into %s: %w", guestDir, hostDestDir, err)
 	}
 	return nil
@@ -147,6 +147,16 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 	if filepath.Clean(guestDir) == string(filepath.Separator) {
 		return fmt.Errorf("write guest dir: refusing to replace guest root")
 	}
+	if k8sGuestDirOverlapsVolumeMount(sandbox, guestDir) {
+		// guestDir is (or contains) a PVC-backed named volume mount. The
+		// script below does `rm -rf` on guestDir before restoring it from
+		// the daemon's host-side snapshot; running that against a mounted
+		// volume would destroy whatever the guest itself already persisted
+		// there across Pod recreations - exactly the durable state a PVC
+		// mount is for. Skip the push and leave the volume's own content as
+		// the source of truth.
+		return nil
+	}
 	info, err := os.Stat(hostSrcDir)
 	if err != nil {
 		return fmt.Errorf("write guest dir %s: inspect host source %s: %w", guestDir, hostSrcDir, err)
@@ -186,6 +196,41 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 		return fmt.Errorf("write guest dir %s: exit code %d: %s", guestDir, result.ExitCode, strings.TrimSpace(result.Stderr))
 	}
 	return nil
+}
+
+// k8sGuestDirOverlapsVolumeMount reports whether guestDir is, or contains,
+// the target of one of the sandbox's k8s named-volume (PVC) mounts. A
+// destructive `rm -rf` push (WriteGuestDir) into such a path would delete
+// the mounted volume's actual persistent content, not just a stale copy.
+func k8sGuestDirOverlapsVolumeMount(sandbox *Sandbox, guestDir string) bool {
+	if sandbox == nil {
+		return false
+	}
+	guestDir = filepath.Clean(guestDir)
+	for _, mount := range sandbox.VolumeMounts {
+		if strings.ToLower(strings.TrimSpace(mount.Type)) != "volume" || strings.TrimSpace(mount.Driver) != RuntimeDriverK8s {
+			continue
+		}
+		target := strings.TrimSpace(mount.Target)
+		if target == "" {
+			continue
+		}
+		target = filepath.Clean(target)
+		if k8sPathIsWithin(target, guestDir) || k8sPathIsWithin(guestDir, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// k8sPathIsWithin reports whether the cleaned absolute path is equal to, or
+// a descendant of, root. Plain string concatenation (root+separator) mishandles
+// root == "/", where the join would otherwise require a "//" prefix.
+func k8sPathIsWithin(path, root string) bool {
+	if path == root || root == string(filepath.Separator) {
+		return true
+	}
+	return strings.HasPrefix(path, root+string(filepath.Separator))
 }
 
 // buildTarArchive packs hostSrcDir's contents (relative paths, no leading
@@ -269,12 +314,12 @@ func writeTarArchive(destination io.Writer, hostSrcDir string) error {
 	return nil
 }
 
-// extractTarArchive extracts a tar stream into destDir, rejecting any entry
+// k8sExtractTarArchive extracts a tar stream into destDir, rejecting any entry
 // whose path would resolve outside destDir (a defensively-applied guard
 // against a malicious/corrupt archive, same class of check `tar`/`kubectl
 // cp` itself applies - not expected to trigger against a well-formed
 // archive from our own ReadGuestDir tar call).
-func extractTarArchive(r io.Reader, destDir string) error {
+func k8sExtractTarArchive(r io.Reader, destDir string) error {
 	reader := tar.NewReader(r)
 	for {
 		header, err := reader.Next()
