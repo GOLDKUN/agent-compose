@@ -143,7 +143,7 @@ func TestWriteGuestDirSkipsPushWhenGuestDirOverlapsVolumeMount(t *testing.T) {
 	}
 }
 
-func TestK8sGuestDirOverlapsVolumeMount(t *testing.T) {
+func TestK8sGuestDirVolumeMountOverlapKind(t *testing.T) {
 	sandbox := testSandbox(t, "sandbox-overlap-cases")
 	sandbox.VolumeMounts = []SandboxVolumeMount{
 		{Type: "volume", Driver: RuntimeDriverK8s, Target: "/workspace", HostPath: "agent-compose/claim-a"},
@@ -153,24 +153,24 @@ func TestK8sGuestDirOverlapsVolumeMount(t *testing.T) {
 	}
 	cases := map[string]struct {
 		guestDir string
-		want     bool
+		want     k8sGuestDirVolumeMountOverlap
 	}{
-		"exact match": {"/workspace", true},
+		"exact match": {"/workspace", k8sGuestDirVolumeMountOverlapExact},
 		// Partial overlaps are rejected at Pod-creation time by
 		// k8sValidateVolumeMountTarget for any Pod this daemon creates (see
 		// TestK8sValidateVolumeMountTarget), but this function still must
 		// catch them at runtime too, as a safety net for a reused Pod whose
 		// mounts were never validated (created before that check existed, or
 		// out-of-band).
-		"mount is a descendant of guestDir": {"/data", true},
-		"guestDir is a descendant of mount": {"/big-volume/subdir", true},
-		"no overlap":                        {"/root/.codex", false},
-		"non-k8s mount type ignored":        {"/root", false},
+		"mount is a descendant of guestDir": {"/data", k8sGuestDirVolumeMountOverlapPartial},
+		"guestDir is a descendant of mount": {"/big-volume/subdir", k8sGuestDirVolumeMountOverlapPartial},
+		"no overlap":                        {"/root/.codex", k8sGuestDirVolumeMountOverlapNone},
+		"non-k8s mount type ignored":        {"/root", k8sGuestDirVolumeMountOverlapNone},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if got := k8sGuestDirOverlapsVolumeMount(sandbox, tc.guestDir); got != tc.want {
-				t.Fatalf("k8sGuestDirOverlapsVolumeMount(%q) = %v, want %v", tc.guestDir, got, tc.want)
+			if got := k8sGuestDirVolumeMountOverlapKind(sandbox, tc.guestDir); got != tc.want {
+				t.Fatalf("k8sGuestDirVolumeMountOverlapKind(%q) = %v, want %v", tc.guestDir, got, tc.want)
 			}
 		})
 	}

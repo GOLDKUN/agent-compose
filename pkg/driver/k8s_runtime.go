@@ -335,7 +335,7 @@ func (r *k8sRuntime) podVolumeSpecs(sandbox *Sandbox, vmState VMState) ([]corev1
 // acceptable, so this configuration is rejected up front instead. Mounting
 // exactly at the workspace or home root is fine: WriteGuestDir already
 // treats that whole push as a no-op in favor of the volume's own content
-// (see k8sGuestDirOverlapsVolumeMount). A target unrelated to either path is
+// (see k8sGuestDirVolumeMountOverlapKind). A target unrelated to either path is
 // always fine too.
 func k8sValidateVolumeMountTarget(target string, guestPaths ...string) error {
 	target = filepath.Clean(strings.TrimSpace(target))
