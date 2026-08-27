@@ -86,7 +86,7 @@ case "${1:-}:${2:-}" in
       if [[ $mode == bad-version ]]; then
         printf '%s\n' '{"version":"fake","os":"linux","arch":"amd64","compiled_drivers":["docker"]}'
       else
-        printf '%s\n' '{"version":"fake","os":"linux","arch":"amd64","compiled_drivers":["docker","boxlite","microsandbox"]}'
+        printf '%s\n' '{"version":"fake","os":"linux","arch":"amd64","compiled_drivers":["docker","boxlite","microsandbox","k8s"]}'
       fi
     else
       printf 'start-runtime\n' >>"$FAKE_DOCKER_SEQUENCE"

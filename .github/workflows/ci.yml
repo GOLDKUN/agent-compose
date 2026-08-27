@@ -332,4 +332,4 @@ jobs:
             --binary ./build/agent-compose \
             --os linux \
             --arch "$TARGET_ARCH" \
-            --drivers docker,boxlite,microsandbox
+            --drivers docker,boxlite,microsandbox,k8s
