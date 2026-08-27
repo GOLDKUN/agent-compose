@@ -350,7 +350,11 @@ func positiveEnvInt(items []domain.SandboxEnvVar, name string) int {
 		}
 		value, err := strconv.Atoi(strings.TrimSpace(item.Value))
 		if err != nil || value <= 0 {
-			return 0
+			// Keep scanning: NormalizeEnvItems dedupes by exact name, so a
+			// scheduler can carry both LLM_MAX_CONCURRENCY and
+			// llm_max_concurrency with different values. An invalid early
+			// entry must not hide a valid later one.
+			continue
 		}
 		return value
 	}

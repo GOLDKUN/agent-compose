@@ -494,6 +494,8 @@ func TestAsyncConcurrencyFromSchedulerEnv(t *testing.T) {
 		{name: "name matching ignores case", items: env("llm_max_concurrency", "5"), wantLLM: 5},
 		{name: "non numeric is ignored", items: env("LLM_MAX_CONCURRENCY", "lots")},
 		{name: "non positive is ignored", items: env("AGENT_MAX_CONCURRENCY", "0")},
+		{name: "invalid exact-name entry does not hide valid case variant", items: env("LLM_MAX_CONCURRENCY", "lots", "llm_max_concurrency", "6"), wantLLM: 6},
+		{name: "invalid later entry does not override valid earlier one", items: env("LLM_MAX_CONCURRENCY", "7", "llm_max_concurrency", "lots"), wantLLM: 7},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			llm, agent := AsyncConcurrencyFromSchedulerEnv(tc.items)
