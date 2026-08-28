@@ -13,11 +13,6 @@ guest-sync path that has no shared filesystem to fall back on (see
 - `mcp-enabled`: a project-level MCP server reference, verifying the managed
   MCP config block is pushed into the guest Pod's `~/.codex/config.toml`.
 
-Verified against a live k3d cluster with this branch's `k8s` driver: the
-scheduler fired and released its sandbox, the `pdf` skill landed in
-`~/.agents/skills` and `~/.claude/skills` in the guest Pod, and the
-`filesystem` MCP server started successfully over stdio inside the Pod.
-
 ## Prerequisites
 
 - An `agent-compose` daemon running with `driver: k8s` (see

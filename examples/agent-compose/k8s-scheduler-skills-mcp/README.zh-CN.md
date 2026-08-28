@@ -10,10 +10,6 @@ Languages: [English](README.md) | 中文
 - `mcp-enabled`：项目级 MCP server 引用，验证 managed MCP 配置块被推送到 guest
   Pod 的 `~/.codex/config.toml`。
 
-已在真实 k3d 集群上用本分支的 k8s driver 验证过：scheduler 正常触发并释放
-sandbox，`pdf` skill 落到了 guest Pod 的 `~/.agents/skills` 和 `~/.claude/skills`，
-`filesystem` MCP server 在 Pod 内通过 stdio 正常启动。
-
 ## 前置条件
 
 - 一个以 `driver: k8s` 运行的 `agent-compose` daemon（参考 `charts/agent-compose`），
