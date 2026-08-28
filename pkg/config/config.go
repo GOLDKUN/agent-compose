@@ -594,7 +594,7 @@ func loadDriverHomesConfig(logger *slog.Logger, dataRoot string) (driverHomesCon
 	// client-go's own default loading rules (KUBECONFIG env, then ~/.kube/config),
 	// the same resolution kubectl uses.
 	k8sKubeconfigPath := getenvFirst("K8S_KUBECONFIG", "KUBECONFIG")
-	k8sNamespace := os.Getenv("K8S_NAMESPACE")
+	k8sNamespace := strings.TrimSpace(os.Getenv("K8S_NAMESPACE"))
 	if k8sNamespace == "" {
 		k8sNamespace = "default"
 	}

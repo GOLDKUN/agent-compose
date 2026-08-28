@@ -368,6 +368,27 @@ func TestNewConfigTrimsSandboxRootEnvironment(t *testing.T) {
 	}
 }
 
+func TestNewConfigDefaultsK8sNamespaceForWhitespaceOnlyEnvironment(t *testing.T) {
+	// A whitespace-only K8S_NAMESPACE must still fall back to "default", not
+	// pass through as a blank namespace: k8sRuntime trusts config.K8sNamespace
+	// is always non-empty (see newK8sRuntime) rather than re-defaulting it
+	// itself, and an empty namespace sent to the k8s API breaks every Pod
+	// operation for that sandbox.
+	root := t.TempDir()
+	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
+	t.Setenv("K8S_NAMESPACE", "   ")
+	di := do.New()
+	do.ProvideValue(di, slog.Default())
+
+	config, err := NewConfig(di)
+	if err != nil {
+		t.Fatalf("NewConfig returned error: %v", err)
+	}
+	if config.K8sNamespace != "default" {
+		t.Fatalf("K8sNamespace = %q, want \"default\"", config.K8sNamespace)
+	}
+}
+
 func TestNewConfigUsesNonEmptyLegacySessionsRootByDefault(t *testing.T) {
 	dataRoot := filepath.Join(t.TempDir(), "data")
 	legacyRoot := filepath.Join(dataRoot, "sessions")
