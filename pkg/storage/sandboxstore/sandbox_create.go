@@ -155,7 +155,7 @@ func (s *Store) prepareSandboxCreateSession(spec sandboxCreateSpec) (preparedSan
 			Driver:        driver,
 			VMStatus:      VMStatusPending,
 			GuestImage:    guestImage,
-			RuntimeRef:    "agent-compose-" + shortID,
+			RuntimeRef:    driverpkg.RuntimeRefPrefix(driver) + shortID,
 			WorkspacePath: workspaceDir,
 			ProxyPath:     proxyPath,
 			CreatedAt:     now,

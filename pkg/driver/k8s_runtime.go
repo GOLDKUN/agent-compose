@@ -114,13 +114,11 @@ type k8sRuntime struct {
 // startup for anyone who compiled in k8s support but runs a different
 // driver. Clients are built lazily on first use instead.
 func newK8sRuntime(config *appconfig.Config) (SandboxRuntime, error) {
-	namespace := strings.TrimSpace(config.K8sNamespace)
-	if namespace == "" {
-		namespace = "default"
-	}
+	// config.K8sNamespace is never empty here: pkg/config already defaults it
+	// to "default" when K8S_NAMESPACE is unset.
 	return &k8sRuntime{
 		config:           config,
-		defaultNamespace: namespace,
+		defaultNamespace: strings.TrimSpace(config.K8sNamespace),
 		clients:          make(map[string]*k8sClientEntry),
 		newExecutor:      remotecommand.NewSPDYExecutor,
 	}, nil

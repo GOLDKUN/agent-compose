@@ -55,6 +55,22 @@ func RuntimeDriverSupportsStoppedRuntimeRetention(driver string) bool {
 	return resolveRuntimeDriver(driver) != RuntimeDriverK8s
 }
 
+// RuntimeRefPrefix returns the prefix sandboxstore uses to precompute a new
+// sandbox's RuntimeRef (and, for every driver, the resulting container/Pod
+// name each driver's own naming fallback would otherwise compute) before the
+// driver itself has run. The k8s driver's Pod name is deliberately prefixed
+// "agent-compose-sandbox-" rather than bare "agent-compose-" so it reads
+// distinctly from the daemon's own Deployment-managed Pod name in a plain
+// `kubectl get pods` (see k8sRuntime.podName) - this must return the same
+// prefix that fallback would, or the precomputed RuntimeRef silently wins
+// over it via firstNonEmpty and the k8s-specific naming never takes effect.
+func RuntimeRefPrefix(driver string) string {
+	if resolveRuntimeDriver(driver) == RuntimeDriverK8s {
+		return "agent-compose-sandbox-"
+	}
+	return "agent-compose-"
+}
+
 func resolveSandboxRuntimeDriver(value, fallback string) (string, error) {
 	input := value
 	if strings.TrimSpace(input) == "" {
