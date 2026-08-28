@@ -6,6 +6,10 @@ mcp_servers:
     command: npx
     args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
 
+volumes:
+  cache:
+    driver: k8s
+
 agents:
   scheduled:
     provider: codex
@@ -37,3 +41,11 @@ agents:
       k8s: {}
     mcp_servers:
       - filesystem
+
+  volumed:
+    provider: codex
+    image: agent-compose-guest:latest
+    driver:
+      k8s: {}
+    volumes:
+      - cache:/cache

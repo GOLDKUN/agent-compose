@@ -48,6 +48,24 @@ func TestK8sDriverCreatesAndRemovesPVC(t *testing.T) {
 	}
 }
 
+func TestK8sDriverCreateWithoutOptionsUsesDefaults(t *testing.T) {
+	// Options nil/empty is the common case (no options: block declared at
+	// all), and volumeOptions writes resolved namespace/size/access_mode
+	// back into its result regardless - regression test for a nil map
+	// write panic ("assignment to entry in nil map") when input is empty.
+	client := fake.NewSimpleClientset()
+	driver := NewK8sDriver(&appconfig.Config{K8sNamespace: "agent-compose"})
+	driver.clients[""] = client
+
+	record, err := driver.Create(context.Background(), domain.VolumeRecord{ID: "volume-defaults", Name: "cache"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if record.Options["namespace"] != "agent-compose" || record.Options["size"] != "1Gi" || record.Options["access_mode"] != "ReadWriteOnce" {
+		t.Fatalf("default options = %#v", record.Options)
+	}
+}
+
 func TestK8sDriverRejectsInvalidPVCOptions(t *testing.T) {
 	driver := NewK8sDriver(&appconfig.Config{K8sNamespace: "agent-compose"})
 	driver.clients[""] = fake.NewSimpleClientset()

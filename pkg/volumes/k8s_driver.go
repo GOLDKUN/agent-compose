@@ -113,7 +113,14 @@ func (d *K8sDriver) ResolveMountSource(ctx context.Context, record domain.Volume
 }
 
 func (d *K8sDriver) volumeOptions(input map[string]string) (map[string]string, string, error) {
+	// NormalizeStringMap returns nil for an empty/absent options block (the
+	// common case - most k8s volumes declare no options at all), but this
+	// function always writes resolved namespace/size/access_mode back into
+	// its result below, so it needs an allocated map even then.
 	options := NormalizeStringMap(input)
+	if options == nil {
+		options = make(map[string]string)
+	}
 	if strings.TrimSpace(options["context"]) != "" {
 		return nil, "", fmt.Errorf("k8s volume context override is not supported; PVCs use the daemon cluster")
 	}
