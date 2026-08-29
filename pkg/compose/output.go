@@ -491,6 +491,7 @@ func cloneNormalizedSchedulerSpec(value *NormalizedSchedulerSpec) *NormalizedSch
 		Enabled:           value.Enabled,
 		SandboxPolicy:     value.SandboxPolicy,
 		ConcurrencyPolicy: value.ConcurrencyPolicy,
+		RunTimeout:        value.RunTimeout,
 		DisplayName:       value.DisplayName,
 		Description:       value.Description,
 		Model:             value.Model,

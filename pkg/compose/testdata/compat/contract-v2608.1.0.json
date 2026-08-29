@@ -278,6 +278,11 @@
       "optional": true
     },
     {
+      "path": "agents.*.scheduler.run_timeout",
+      "go_type": "string",
+      "optional": true
+    },
+    {
       "path": "agents.*.scheduler.sandbox_policy",
       "go_type": "optional\u003cstring\u003e",
       "optional": true

@@ -980,6 +980,8 @@ message SchedulerSpec {
   string description = 6;
   SchedulerConcurrencyPolicy concurrency_policy = 7;
   string model = 8;
+  // Optional per-scheduler run timeout. Empty inherits the daemon default.
+  string run_timeout = 9;
 }
 
 message TriggerSpec {

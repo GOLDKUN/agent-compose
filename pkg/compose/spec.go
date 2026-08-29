@@ -146,6 +146,7 @@ type SchedulerSpec struct {
 	Enabled           *bool         `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	SandboxPolicy     *string       `yaml:"sandbox_policy,omitempty" json:"sandbox_policy,omitempty"`
 	ConcurrencyPolicy *string       `yaml:"concurrency_policy,omitempty" json:"concurrency_policy,omitempty"`
+	RunTimeout        string        `yaml:"run_timeout,omitempty" json:"run_timeout,omitempty"`
 	DisplayName       string        `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 	Description       string        `yaml:"description,omitempty" json:"description,omitempty"`
 	Model             string        `yaml:"model,omitempty" json:"model,omitempty"`
@@ -702,6 +703,7 @@ func validateScheduler(node *yaml.Node, path string) error {
 		"enabled":            validateBool,
 		"sandbox_policy":     validateScalar,
 		"concurrency_policy": validateScalar,
+		"run_timeout":        validateScalar,
 		"display_name":       validateScalar,
 		"description":        validateScalar,
 		"model":              validateScalar,

@@ -105,7 +105,7 @@ func (s *SchedulerRunSupervisor) start(ctx context.Context, request SchedulerRun
 
 	runCtx, cancel := context.WithCancelCause(s.deps.RootCtx)
 	cleanup := func() { cancel(context.Canceled) }
-	if timeout := s.runTimeout(request.Timeout); timeout > 0 {
+	if timeout := effectiveSchedulerRunTimeout(scheduler, request.Timeout, s.deps.RunTimeout); timeout > 0 {
 		var timeoutCancel context.CancelFunc
 		runCtx, timeoutCancel = context.WithTimeoutCause(runCtx, timeout, errSchedulerRunTimedOut)
 		cleanup = func() {

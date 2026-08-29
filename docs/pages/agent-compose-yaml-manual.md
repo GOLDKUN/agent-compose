@@ -811,6 +811,7 @@ A scheduler uses either declarative `triggers` or JavaScript `script`; the two f
 | `enabled` | bool | `true` | Enables this agent's scheduler. Disabling the Agent also prevents its scheduler from being enabled. |
 | `sandbox_policy` | string | `new` | Scheduler default sandbox policy: `new` or `sticky`. |
 | `concurrency_policy` | string | `skip` | Overlapping run policy for the entire agent scheduler: `skip` or `parallel`. |
+| `run_timeout` | duration | Empty | Maximum duration of one scheduler run. Empty inherits `SCHEDULER_RUN_TIMEOUT`; accepts Go durations such as `30m` or `2h`. |
 | `model` | string | Agent model | Default `provider/model` used by `scheduler.llm`; a call-level `model` or `LLM_MODEL` takes precedence. |
 | `triggers` | list | Empty | Declarative triggers. |
 | `script` | string/object | Empty | Inline JavaScript or a flat `file`/`http`/`git` source mapping. Cannot coexist with `triggers`. |
