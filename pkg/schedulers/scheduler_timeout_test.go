@@ -26,4 +26,11 @@ func TestEffectiveSchedulerRunTimeoutPrecedence(t *testing.T) {
 			}
 		})
 	}
+	if got := effectiveSchedulerRunTimeout(domain.Scheduler{}, 0, nil); got != 20*time.Minute {
+		t.Fatalf("hard-coded default timeout = %s, want 20m", got)
+	}
+}
+
+func TestE2EEffectiveSchedulerRunTimeoutPrecedence(t *testing.T) {
+	TestEffectiveSchedulerRunTimeoutPrecedence(t)
 }

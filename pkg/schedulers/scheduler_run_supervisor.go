@@ -194,13 +194,6 @@ func (s *SchedulerRunSupervisor) lookup(schedulerID, runID string) *activeSchedu
 	return active
 }
 
-func (s *SchedulerRunSupervisor) runTimeout(override time.Duration) time.Duration {
-	if s.deps.RunTimeout == nil {
-		return override
-	}
-	return s.deps.RunTimeout(override)
-}
-
 func SchedulerRunStatusIsTerminal(status string) bool {
 	switch NormalizeRunStatus(status) {
 	case domain.SchedulerRunStatusSucceeded, domain.SchedulerRunStatusFailed, domain.SchedulerRunStatusCanceled, domain.SchedulerRunStatusSkipped:
