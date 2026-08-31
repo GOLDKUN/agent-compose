@@ -1,14 +1,14 @@
 package main
 
 import (
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/agentcompose/api"
-	"agent-compose/pkg/compose"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/agentcompose/api"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -219,7 +219,7 @@ func testCLIUpAppliesProjectFirstRepeatedModifiedAndJSON(t *testing.T) {
 		stop()
 		waitForDaemonExit(t, errCh)
 	})
-	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
 	t.Setenv("AGENT_COMPOSE_SOCKET", socketPath)
 	t.Setenv("AGENT_COMPOSE_HOST", "")
 

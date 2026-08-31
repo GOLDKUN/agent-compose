@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 type SchedulerHostEvents struct {

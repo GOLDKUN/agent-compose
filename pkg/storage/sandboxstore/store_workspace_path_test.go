@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
 )
 
 func TestGetSandboxRebasesPersistedWorkspacePathToActiveRoot(t *testing.T) {

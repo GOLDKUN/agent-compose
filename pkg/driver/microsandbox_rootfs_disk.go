@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 )
 
 type microsandboxRootfsDiskResult struct {

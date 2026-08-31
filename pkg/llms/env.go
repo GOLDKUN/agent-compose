@@ -3,8 +3,8 @@ package llms
 import (
 	"strings"
 
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const RuntimeBaseURLEnvName = "AGENT_COMPOSE_RUNTIME_BASE_URL"

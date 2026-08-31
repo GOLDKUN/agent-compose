@@ -7,10 +7,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-compose/pkg/capabilities"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/volumes"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/volumes"
 )
 
 func NormalizeScheduler(item domain.Scheduler, assignID bool) (domain.Scheduler, error) {

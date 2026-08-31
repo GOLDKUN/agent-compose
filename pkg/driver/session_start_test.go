@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 func TestDockerFirstRuntimeImageResolverSkipsDockerForNonDockerPrepare(t *testing.T) {

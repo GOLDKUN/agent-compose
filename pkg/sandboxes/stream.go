@@ -6,7 +6,7 @@ import (
 
 	"github.com/samber/do/v2"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const streamBufferSize = 256

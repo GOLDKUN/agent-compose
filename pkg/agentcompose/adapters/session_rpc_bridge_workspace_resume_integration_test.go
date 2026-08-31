@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"testing"
 
-	testutil "agent-compose/pkg/internal/testutil"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/workspaces"
+	testutil "github.com/chaitin/agent-compose/pkg/internal/testutil"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 func TestIntegrationSandboxRPCBridgeResumePreservesReadyFileWorkspace(t *testing.T) {

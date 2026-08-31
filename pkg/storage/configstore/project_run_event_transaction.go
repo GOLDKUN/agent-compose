@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"agent-compose/internal/projects"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/internal/projects"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func (s *projectStore) CreateProjectRunWithEvents(ctx context.Context, run ProjectRunRecord, events []domain.ProjectRunEventRecord) (ProjectRunRecord, error) {

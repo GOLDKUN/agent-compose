@@ -9,18 +9,18 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/capabilities"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/images"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storage/sandboxstore"
-	"agent-compose/pkg/volumes"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/images"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/volumes"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func (c *Controller) prepareProjectRun(ctx context.Context, run domain.ProjectRunRecord, requestEnv []*agentcomposev2.EnvVarSpec) (Preparation, error) {

@@ -1,9 +1,9 @@
 package schedulers
 
 import (
-	domain "agent-compose/pkg/model"
 	"encoding/json"
 	"fmt"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	"strings"
 	"time"
 

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/capproxy"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/capproxy"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type CapabilitySandboxStore interface {

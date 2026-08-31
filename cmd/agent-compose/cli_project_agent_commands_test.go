@@ -9,7 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestCLIProjectAndAgentCommandLayout(t *testing.T) {

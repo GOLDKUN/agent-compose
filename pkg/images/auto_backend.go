@@ -8,7 +8,7 @@ import (
 
 	"github.com/docker/docker/client"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 const DefaultDockerPingTimeout = 750 * time.Millisecond

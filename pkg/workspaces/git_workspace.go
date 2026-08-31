@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 const GitWorkspaceTempDirName = ".agent-compose-git-clone"

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func NormalizeRuntime(runtime string) (string, error) {

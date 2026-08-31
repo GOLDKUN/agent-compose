@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 func TestIntegrationSandboxRetentionExcludesMountedExternalVolume(t *testing.T) {

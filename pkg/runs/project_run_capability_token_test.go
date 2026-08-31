@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/capabilities"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 type recordingCapabilitySandboxIndexer struct {

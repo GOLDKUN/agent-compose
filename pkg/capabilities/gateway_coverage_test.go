@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/capability"
-	"agent-compose/pkg/capproxy"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capability"
+	"github.com/chaitin/agent-compose/pkg/capproxy"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestCapabilityGatewayCoverage(t *testing.T) {

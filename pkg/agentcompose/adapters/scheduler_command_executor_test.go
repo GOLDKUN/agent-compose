@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/internal/testutil"
-	"agent-compose/pkg/llms"
-	"agent-compose/pkg/llms/runtimefacade"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sandboxstore"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/internal/testutil"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	"github.com/chaitin/agent-compose/pkg/llms/runtimefacade"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 type fakeSchedulerCommandRuntime struct{}
@@ -104,7 +104,7 @@ func TestSchedulerCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t 
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/agent-compose/session",
+		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)
@@ -291,7 +291,7 @@ func schedulerCommandFacadeTestConfig(root string) *appconfig.Config {
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
 		RuntimeBaseURL:       "http://agent-compose.test:7410",
-		JupyterProxyBasePath: "/agent-compose/session",
+		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 }

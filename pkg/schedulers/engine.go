@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 
 	"github.com/fastschema/qjs"
 	"github.com/samber/do/v2"

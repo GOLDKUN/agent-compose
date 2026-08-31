@@ -3,7 +3,7 @@ package runs
 import (
 	"testing"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestSandboxTagsPersistCapabilityScope(t *testing.T) {

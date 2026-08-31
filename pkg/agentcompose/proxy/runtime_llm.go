@@ -13,8 +13,8 @@ import (
 	protocolbridge "github.com/chaitin/ai-api-protocol-bridge"
 	"github.com/labstack/echo/v4"
 
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type RuntimeLLMTokenStore interface {

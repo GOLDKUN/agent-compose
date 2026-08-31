@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storedtime"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storedtime"
 )
 
 func (s *schedulerStore) loadSchedulerDefinition(ctx context.Context, schedulerID string) (domain.Scheduler, error) {

@@ -8,7 +8,7 @@ import (
 	pathpkg "path"
 	"strings"
 
-	"agent-compose/pkg/storedtime"
+	"github.com/chaitin/agent-compose/pkg/storedtime"
 )
 
 func ScanProvider(scan func(dest ...any) error) (Provider, error) {

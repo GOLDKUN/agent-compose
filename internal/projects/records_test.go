@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestNewAgentDefinitionFromSpecPreservesJupyterConfig(t *testing.T) {

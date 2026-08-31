@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type coverageEngineHost struct {
@@ -90,7 +90,7 @@ func (h *coverageEngineHost) CallSandboxRPC(_ context.Context, method, requestJS
 	case "ListSandboxes":
 		return `{"sandboxes":[{"sandboxId":"` + sandboxID + `","vmStatus":"RUNNING"}]}`, nil
 	case "GetSandboxProxy":
-		return `{"sandboxId":"` + sandboxID + `","proxyPath":"/agent-compose/sandbox/` + sandboxID + `/lab","notebookUrl":"/agent-compose/sandbox/` + sandboxID + `/lab?token=t","driver":"boxlite","vmStatus":"RUNNING"}`, nil
+		return `{"sandboxId":"` + sandboxID + `","proxyPath":"/github.com/chaitin/agent-compose/sandbox/` + sandboxID + `/lab","notebookUrl":"/github.com/chaitin/agent-compose/sandbox/` + sandboxID + `/lab?token=t","driver":"boxlite","vmStatus":"RUNNING"}`, nil
 	case "StopSandbox":
 		return `{"sandbox":{"summary":{"sandboxId":"` + sandboxID + `","vmStatus":"STOPPED"}}}`, nil
 	default:

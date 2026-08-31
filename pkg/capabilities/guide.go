@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/capability"
+	"github.com/chaitin/agent-compose/pkg/capability"
 )
 
 const capsetMetadataName = "x-octobus-capset"

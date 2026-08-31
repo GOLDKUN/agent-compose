@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/identity"
 )
 
 var (

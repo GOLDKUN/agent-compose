@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/idset"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/idset"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 func (s *schedulerStore) GetSchedulerRunForSchedulers(ctx context.Context, schedulerIDs []string, runID string) (domain.SchedulerRunSummary, error) {

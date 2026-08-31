@@ -7,11 +7,11 @@ import (
 
 	"github.com/samber/do/v2"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/internal/testutil"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/internal/testutil"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestIntegrationEnsureSessionOpenCodeKeepsResponsesIngressForChatUpstream(t *testing.T) {
@@ -52,7 +52,7 @@ func TestIntegrationEnsureSessionOpenCodeKeepsResponsesIngressForChatUpstream(t 
 	if env["LLM_API_PROTOCOL"] != llms.APIProtocolResponses {
 		t.Fatalf("OpenCode ingress protocol = %q, want responses", env["LLM_API_PROTOCOL"])
 	}
-	if runtimeConfig.Model != "agent-compose/gpt-chat" {
+	if runtimeConfig.Model != "github.com/chaitin/agent-compose/gpt-chat" {
 		t.Fatalf("OpenCode runtime model = %q, want facade model", runtimeConfig.Model)
 	}
 	token, err := store.GetLLMFacadeToken(ctx, env["AGENT_COMPOSE_SANDBOX_TOKEN"])
@@ -126,7 +126,7 @@ func TestIntegrationEnsureSessionOpenCodeKeepsConfiguredProviderInMixedEnvironme
 		if err != nil {
 			t.Fatalf("EnsureSessionAgentRuntimeConfig(%q) returned error: %v", reference, err)
 		}
-		if runtimeConfig.Env["LLM_API_PROTOCOL"] != protocol || runtimeConfig.Model != "agent-compose/"+model {
+		if runtimeConfig.Env["LLM_API_PROTOCOL"] != protocol || runtimeConfig.Model != "github.com/chaitin/agent-compose/"+model {
 			t.Fatalf("OpenCode runtime config for %q = %#v", reference, runtimeConfig)
 		}
 		token, err := store.GetLLMFacadeToken(ctx, runtimeConfig.Env["AGENT_COMPOSE_SANDBOX_TOKEN"])

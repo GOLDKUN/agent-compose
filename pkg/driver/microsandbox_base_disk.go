@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 	containerapi "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"golang.org/x/sys/unix"

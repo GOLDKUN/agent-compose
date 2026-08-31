@@ -12,15 +12,15 @@ import (
 
 	"github.com/google/uuid"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/llms"
-	"agent-compose/pkg/llms/runtimefacade"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sandboxstore"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	"github.com/chaitin/agent-compose/pkg/llms/runtimefacade"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 type SchedulerCommandExecutor struct {

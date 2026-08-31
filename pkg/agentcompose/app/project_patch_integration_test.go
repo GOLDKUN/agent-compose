@@ -12,14 +12,14 @@ import (
 	"github.com/samber/do/v2"
 	"google.golang.org/protobuf/proto"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/agentcompose/api"
-	"agent-compose/pkg/compose"
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/internal/testutil"
-	"agent-compose/pkg/volumes"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/agentcompose/api"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/internal/testutil"
+	"github.com/chaitin/agent-compose/pkg/volumes"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func TestIntegrationPatchProjectReplacementAndConcurrency(t *testing.T) {

@@ -1,8 +1,8 @@
 package driver
 
 import (
-	"agent-compose/pkg/cache"
-	appconfig "agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/cache"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 func NewRuntimeCacheSources(config *appconfig.Config) []cache.Source {

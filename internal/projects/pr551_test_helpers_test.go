@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 
-	"agent-compose/pkg/images"
-	domain "agent-compose/pkg/model"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/images"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 // pr551NoopImagesBackend satisfies images.Backend and reports every image as

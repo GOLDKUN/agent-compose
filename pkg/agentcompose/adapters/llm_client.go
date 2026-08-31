@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/configstore"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
 )
 
 type LLMClient struct {

@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/compose"
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
 )
 
 type projectAgentModelResolver struct {

@@ -7,9 +7,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 
 	"github.com/spf13/cobra"
 )

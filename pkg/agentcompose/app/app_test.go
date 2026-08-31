@@ -17,19 +17,19 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/samber/do/v2"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/agentcompose/adapters"
-	"agent-compose/pkg/cleanup"
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/volumes"
-	"agent-compose/pkg/workspaces"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/agentcompose/adapters"
+	"github.com/chaitin/agent-compose/pkg/cleanup"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/volumes"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func TestSetupRegistersServiceGraph(t *testing.T) {
@@ -40,7 +40,7 @@ func TestSetupRegistersServiceGraph(t *testing.T) {
 	t.Setenv("DOCKER_IMAGE", "guest:latest")
 	t.Setenv("SANDBOX_START_TIMEOUT", "1s")
 	t.Setenv("SANDBOX_STOP_TIMEOUT", "1s")
-	t.Setenv("JUPYTER_PROXY_BASE", "/agent-compose/jupyter/")
+	t.Setenv("JUPYTER_PROXY_BASE", "/github.com/chaitin/agent-compose/jupyter/")
 	t.Setenv("LLM_API_ENDPOINT", "")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,8 +73,8 @@ func TestSetupRegistersServiceGraph(t *testing.T) {
 		{method: http.MethodPost, path: "/agentcompose.v2.CacheService/*"},
 		{method: http.MethodPost, path: "/agentcompose.v2.VolumeService/*"},
 		{method: http.MethodPost, path: "/agentcompose.v2.SandboxService/*"},
-		{method: http.MethodGet, path: "/agent-compose/jupyter/:sessionID"},
-		{method: http.MethodPost, path: "/agent-compose/jupyter/:sessionID/*"},
+		{method: http.MethodGet, path: "/github.com/chaitin/agent-compose/jupyter/:sessionID"},
+		{method: http.MethodPost, path: "/github.com/chaitin/agent-compose/jupyter/:sessionID/*"},
 	} {
 		if !hasEchoRoute(app, route.method, route.path) {
 			t.Fatalf("%s %s route was not registered", route.method, route.path)
@@ -265,7 +265,7 @@ func TestCacheServiceRouteUsesRuntimeCacheController(t *testing.T) {
 	t.Setenv("DOCKER_IMAGE", "guest:latest")
 	t.Setenv("SANDBOX_START_TIMEOUT", "1s")
 	t.Setenv("SANDBOX_STOP_TIMEOUT", "1s")
-	t.Setenv("JUPYTER_PROXY_BASE", "/agent-compose/jupyter/")
+	t.Setenv("JUPYTER_PROXY_BASE", "/github.com/chaitin/agent-compose/jupyter/")
 	t.Setenv("LLM_API_ENDPOINT", "")
 
 	materializedRootFS := filepath.Join(root, "image-cache", "sha256-test", "rootfs")

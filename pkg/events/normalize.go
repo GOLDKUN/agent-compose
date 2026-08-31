@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func NormalizeTopicEventRecord(item domain.TopicEventRecord, assignID bool) (domain.TopicEventRecord, error) {

@@ -3,8 +3,8 @@ package api
 import (
 	"strings"
 
-	domain "agent-compose/pkg/model"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func ExecEnvMap(items []*agentcomposev2.EnvVarSpec) map[string]string {

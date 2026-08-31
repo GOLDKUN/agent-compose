@@ -1,12 +1,12 @@
 package main
 
 import (
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/compose"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"strings"
 
 	"connectrpc.com/connect"

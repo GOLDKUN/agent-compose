@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 func manualTriggerCaptureFixture(script string) (*Controller, domain.Scheduler, *domain.SchedulerTrigger) {

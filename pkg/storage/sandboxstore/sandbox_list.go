@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 func (s *Store) GetSandbox(_ context.Context, id string) (*Sandbox, error) {

@@ -1,9 +1,9 @@
 package main
 
 import (
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"fmt"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"strings"
 	"testing"
 
@@ -11,7 +11,7 @@ import (
 )
 
 func TestJoinBaseURLAndPathPreservesAbsoluteNotebookURLWithoutHTTPTransport(t *testing.T) {
-	want := "https://notebooks.example/agent-compose/session/sandbox/lab?token=absolute-token"
+	want := "https://notebooks.example/github.com/chaitin/agent-compose/session/sandbox/lab?token=absolute-token"
 	if got := joinBaseURLAndPath("", want); got != want {
 		t.Fatalf("absolute notebook URL = %q, want %q", got, want)
 	}

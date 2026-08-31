@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/compose"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sandboxstore"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

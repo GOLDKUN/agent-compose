@@ -1,9 +1,9 @@
 package main
 
 import (
-	"agent-compose/pkg/identity"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"io"
 	"strings"
 	"text/tabwriter"

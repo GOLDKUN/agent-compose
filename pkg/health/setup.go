@@ -18,9 +18,9 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"agent-compose/pkg/config"
-	healthv1 "agent-compose/proto/health/v1"
-	"agent-compose/proto/health/v1/healthv1connect"
+	"github.com/chaitin/agent-compose/pkg/config"
+	healthv1 "github.com/chaitin/agent-compose/proto/health/v1"
+	"github.com/chaitin/agent-compose/proto/health/v1/healthv1connect"
 )
 
 type Service struct {

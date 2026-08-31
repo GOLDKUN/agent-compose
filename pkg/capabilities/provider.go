@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/capability"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capability"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // GatewaySource supplies the page-configured OctoBus connection.

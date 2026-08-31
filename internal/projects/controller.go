@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/capability"
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/images"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projectdef"
-	"agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/capability"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/images"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/projectdef"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 var (

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 type composeDisplayChangeBuilder struct {

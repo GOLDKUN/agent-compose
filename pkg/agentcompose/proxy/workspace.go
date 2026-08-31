@@ -11,9 +11,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/workspaces"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 type WorkspaceLoader func(ctx context.Context, workspaceID string) (domain.WorkspaceConfig, workspaces.FileWorkspaceContent, error)
@@ -29,7 +29,7 @@ type WorkspaceFilesResponse struct {
 }
 
 func RegisterWorkspaceRoutes(app *echo.Echo, opts WorkspaceOptions) {
-	base := "/api/agent-compose/workspaces"
+	base := "/api/github.com/chaitin/agent-compose/workspaces"
 	app.GET(base+"/:workspaceID/files", func(c echo.Context) error {
 		workspace, content, err := opts.Load(c.Request().Context(), c.Param("workspaceID"))
 		if err != nil {

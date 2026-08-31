@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // ProjectRef identifies a project through exactly one stable selector.

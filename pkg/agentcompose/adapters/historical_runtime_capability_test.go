@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sandboxstore"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestHistoricalUncompiledRuntimeOperationsPreserveState(t *testing.T) {
@@ -125,7 +125,7 @@ func newHistoricalUncompiledRuntimeFixture(t *testing.T) (*appconfig.Config, *sa
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/agent-compose/session",
+		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
 		SandboxStartTimeout:  time.Second,
 		SandboxStopTimeout:   time.Second,
 		AgentTimeout:         time.Second,

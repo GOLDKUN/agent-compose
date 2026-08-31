@@ -17,15 +17,15 @@ import (
 
 	"connectrpc.com/connect"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/imagecache"
-	"agent-compose/pkg/images"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/images"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func TestTranscriptEventFromExecChunkMapsStdioStream(t *testing.T) {

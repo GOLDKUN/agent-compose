@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/cleanup"
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/imagecache"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/cleanup"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestImageCacheCleanerProtectsResumableSandboxAndReleasesReclaimedSandbox(t *testing.T) {

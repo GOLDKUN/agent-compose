@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-compose/pkg/cleanup"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/cleanup"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type WorkspaceCleanupStore interface {

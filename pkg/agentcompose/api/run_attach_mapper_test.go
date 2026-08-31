@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
 )
 
 func TestRunAttachOutputToProtoMapsFrames(t *testing.T) {

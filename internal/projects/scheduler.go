@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projectdef"
-	"agent-compose/pkg/schedulers"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/projectdef"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 func ProjectSchedulerTriggersAndScript(projectID, agentName, schedulerName string, scheduler *projectdef.NormalizedSchedulerSpec) ([]domain.SchedulerTrigger, string, error) {

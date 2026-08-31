@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 
 	"github.com/google/uuid"
 )

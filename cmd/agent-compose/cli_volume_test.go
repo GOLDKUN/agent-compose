@@ -1,11 +1,11 @@
 package main
 
 import (
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"encoding/json"
 	"fmt"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"strings"
 	"testing"
 
@@ -158,7 +158,7 @@ func testCLIVolume(name string) *agentcomposev2.Volume {
 	return &agentcomposev2.Volume{
 		Name:      name,
 		Driver:    "local",
-		Path:      "/tmp/agent-compose/volumes/local/11111111-1111-4111-8111-111111111111/data",
+		Path:      "/tmp/github.com/chaitin/agent-compose/volumes/local/11111111-1111-4111-8111-111111111111/data",
 		Labels:    map[string]string{"purpose": "cache"},
 		ProjectId: "project-1",
 		CreatedAt: mustProtoTimestamp("2026-07-07T12:00:00Z"),

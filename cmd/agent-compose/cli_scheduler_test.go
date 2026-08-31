@@ -1,14 +1,14 @@
 package main
 
 import (
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/compose"
-	"agent-compose/pkg/identity"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -174,7 +174,7 @@ func TestIntegrationCLIUpAppliesInlineSchedulerScriptAndPSJSON(t *testing.T) {
 		stop()
 		waitForDaemonExit(t, errCh)
 	})
-	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
 	t.Setenv("AGENT_COMPOSE_SOCKET", socketPath)
 	t.Setenv("AGENT_COMPOSE_HOST", "")
 

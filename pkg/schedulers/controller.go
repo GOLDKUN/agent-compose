@@ -1,10 +1,10 @@
 package schedulers
 
 import (
-	"agent-compose/pkg/events/webhooks"
-	domain "agent-compose/pkg/model"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/events/webhooks"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	"log/slog"
 	"os"
 	"path/filepath"

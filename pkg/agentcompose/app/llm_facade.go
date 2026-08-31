@@ -3,7 +3,7 @@ package app
 import (
 	"net/http"
 
-	"agent-compose/pkg/agentcompose/proxy"
+	"github.com/chaitin/agent-compose/pkg/agentcompose/proxy"
 )
 
 func IsRuntimeLLMFacadeRequest(r *http.Request) bool {

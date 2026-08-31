@@ -8,13 +8,13 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/internal/projects"
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/events/webhooks"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sandboxes"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/internal/projects"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/events/webhooks"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestAppProjectControllerHelperCoverage(t *testing.T) {

@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/internal/projects"
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/internal/projects"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // startedRunAttachContext bundles the started run's state and the first

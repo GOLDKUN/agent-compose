@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/compose"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/workspaces"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 // createNativeTestSchedulerWithWorkspace mirrors createNativeTestScheduler

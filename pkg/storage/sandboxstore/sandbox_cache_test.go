@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	storagesqlite "agent-compose/pkg/storage/sqlite"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
 )
 
 func newTestIndex(t *testing.T) *sandboxCache {

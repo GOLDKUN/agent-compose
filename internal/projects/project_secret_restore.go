@@ -3,7 +3,7 @@ package projects
 import (
 	"fmt"
 
-	"agent-compose/pkg/projectdef"
+	"github.com/chaitin/agent-compose/pkg/projectdef"
 
 	"gopkg.in/yaml.v3"
 )

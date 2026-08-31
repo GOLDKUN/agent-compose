@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 type fakeSandboxDirResolver struct {

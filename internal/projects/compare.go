@@ -4,8 +4,8 @@ import (
 	"slices"
 	"strings"
 
-	"agent-compose/pkg/capabilities"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func SameSandboxEnvItems(a, b []domain.SandboxEnvVar) bool {

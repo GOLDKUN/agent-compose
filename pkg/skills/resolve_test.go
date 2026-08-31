@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 func TestResolverResolvesFileSkill(t *testing.T) {

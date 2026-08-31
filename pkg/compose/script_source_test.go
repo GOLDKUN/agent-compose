@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 func TestDefaultScriptSourceResolverReadsFilesAndFileURLs(t *testing.T) {

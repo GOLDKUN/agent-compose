@@ -8,8 +8,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/images"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/images"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 type ImageBackendSelector interface {

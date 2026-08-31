@@ -5,10 +5,10 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func ProjectRunDetailToProto(run domain.ProjectRunRecord) *agentcomposev2.RunDetail {

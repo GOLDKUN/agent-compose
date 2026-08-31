@@ -1,15 +1,15 @@
 package driver
 
 import (
-	appconfig "agent-compose/pkg/config"
 	"encoding/json"
 	"fmt"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	defaultassets "agent-compose/assets"
+	defaultassets "github.com/chaitin/agent-compose/assets"
 )
 
 const runtimeMountManifestVersion = 1

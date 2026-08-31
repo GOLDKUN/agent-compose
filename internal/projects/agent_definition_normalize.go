@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/idset"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/volumes"
+	"github.com/chaitin/agent-compose/pkg/idset"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/volumes"
 )
 
 // NormalizeAgentDefinition enforces the invariants an agent definition must

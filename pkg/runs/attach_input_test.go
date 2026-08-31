@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	driverpkg "agent-compose/pkg/driver"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
 )
 
 func TestAttachInputPumpsCloseRuntimeInputOnReceiveError(t *testing.T) {

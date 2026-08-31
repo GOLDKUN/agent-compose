@@ -1,7 +1,7 @@
 package main
 
 import (
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"os"
 	"strings"
 	"time"

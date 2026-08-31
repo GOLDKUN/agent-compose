@@ -1,10 +1,10 @@
 package main
 
 import (
-	"agent-compose/pkg/compose"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/compose"
 	"os"
 	"path/filepath"
 	"strings"

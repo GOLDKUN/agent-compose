@@ -57,9 +57,9 @@ agent-compose ls
 如果没有安装二进制，也可以在仓库根目录执行：
 
 ```bash
-go run ./cmd/agent-compose --file examples/agent-compose/docker-minimal/agent-compose.yml config
-go run ./cmd/agent-compose --file examples/agent-compose/docker-minimal/agent-compose.yml up
-go run ./cmd/agent-compose --file examples/agent-compose/docker-minimal/agent-compose.yml ls
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-minimal/agent-compose.yml config
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-minimal/agent-compose.yml up
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-minimal/agent-compose.yml ls
 ```
 
 预期结果：

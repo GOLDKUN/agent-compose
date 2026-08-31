@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-const generatedProtoImportPrefix = "agent-compose/proto/"
+const generatedProtoImportPrefix = "github.com/chaitin/agent-compose/proto/"
 
 func TestProductionCodeDoesNotDependOnTransportPackages(t *testing.T) {
 	t.Parallel()

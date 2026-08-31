@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/imagecache"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func OCIMetadataToProtoImage(image imagecache.ImageMetadata, inspectedAt time.Time) *agentcomposev2.Image {

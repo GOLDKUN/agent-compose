@@ -11,12 +11,12 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestJupyterProxyRouteCoverage(t *testing.T) {
 	e := echo.New()
-	store := &fakeJupyterStore{state: domain.ProxyState{ProxyPath: "/agent-compose/session/session-1", Token: "token value"}}
+	store := &fakeJupyterStore{state: domain.ProxyState{ProxyPath: "/github.com/chaitin/agent-compose/session/session-1", Token: "token value"}}
 	var ensureCalls int
 	RegisterJupyterRoutes(e, JupyterOptions{
 		BasePath: "/jupyter/",

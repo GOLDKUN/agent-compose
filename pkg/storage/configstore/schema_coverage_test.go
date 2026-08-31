@@ -9,11 +9,11 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/events"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/events"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestConfigStoreProjectSchemaMigrationWorkflows(t *testing.T) {

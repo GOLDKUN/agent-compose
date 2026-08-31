@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	driverpkg "agent-compose/pkg/driver"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestPumpExecAttachInputClosesRuntimeInputOnReceiveError(t *testing.T) {

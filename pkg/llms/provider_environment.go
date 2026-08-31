@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // SetSandboxProviderEnvItems assigns the transient sandbox-owned provider

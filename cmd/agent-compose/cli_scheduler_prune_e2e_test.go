@@ -12,11 +12,11 @@ import (
 
 	"github.com/samber/do/v2"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
 )
 
 type schedulerPruneE2EFixture struct {

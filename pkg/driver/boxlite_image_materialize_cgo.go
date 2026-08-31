@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"strings"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/imagecache"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 )
 
 func materializeBoxliteOCIImageLayout(ctx context.Context, config *appconfig.Config, imageRef string, pullPolicy string) (boxliteImageLayoutResult, bool, error) {

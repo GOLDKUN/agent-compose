@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestWriteCodexRuntimeConfigRendersRetryPolicy(t *testing.T) {

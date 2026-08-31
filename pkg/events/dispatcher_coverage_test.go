@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 
 	_ "modernc.org/sqlite"
 )

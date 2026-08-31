@@ -1,11 +1,11 @@
 package main
 
 import (
-	"agent-compose/pkg/config"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/config"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"net/http"
 	"net/http/httptest"
 	"strings"

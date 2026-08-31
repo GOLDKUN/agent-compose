@@ -11,11 +11,11 @@ import (
 
 	"github.com/samber/do/v2"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/internal/testutil"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	"agent-compose/pkg/storage/configstore"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/internal/testutil"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
 )
 
 func TestRunSupervisorAttachMapsMissingStartFrameToInvalidRequest(t *testing.T) {

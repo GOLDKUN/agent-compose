@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/identity"
 )
 
 var testCacheIDRE = regexp.MustCompile(`^[a-f0-9]{64}$`)

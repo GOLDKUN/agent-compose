@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"agent-compose/pkg/compose"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func OctoBusServerSpecsToProto(values map[string]compose.NormalizedOctoBusServerSpec) []*agentcomposev2.OctoBusServerSpec {

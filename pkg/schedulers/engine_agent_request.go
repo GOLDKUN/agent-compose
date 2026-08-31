@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 
 	"github.com/fastschema/qjs"
 )

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/cleanup"
-	"agent-compose/pkg/imagecache"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/cleanup"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 type cleanupSandboxStore interface {

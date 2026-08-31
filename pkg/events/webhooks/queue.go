@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/events"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/events"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const DefaultQueueName = "default"

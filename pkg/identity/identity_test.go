@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/identity"
 )
 
 func TestNewIDAndShortID(t *testing.T) {

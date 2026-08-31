@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const interruptedSchedulerRunError = "daemon interrupted scheduler trigger run before reaching terminal state"

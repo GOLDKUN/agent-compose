@@ -59,9 +59,9 @@ agent-compose ls
 From the repository root without installing the binary:
 
 ```bash
-go run ./cmd/agent-compose --file examples/agent-compose/docker-minimal/agent-compose.yml config
-go run ./cmd/agent-compose --file examples/agent-compose/docker-minimal/agent-compose.yml up
-go run ./cmd/agent-compose --file examples/agent-compose/docker-minimal/agent-compose.yml ls
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-minimal/agent-compose.yml config
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-minimal/agent-compose.yml up
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-minimal/agent-compose.yml ls
 ```
 
 Expected result:

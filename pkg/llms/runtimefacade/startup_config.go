@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // EnsureSessionStartupFacadeConfig creates the short-lived environment needed

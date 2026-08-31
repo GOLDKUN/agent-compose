@@ -3,8 +3,8 @@
 package driver
 
 import (
-	appconfig "agent-compose/pkg/config"
 	"context"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -118,7 +118,7 @@ func newRuntimeSmokeConfig(t *testing.T, driver string) *appconfig.Config {
 		GuestRuntimeRoot:         "/data/runtime",
 		GuestLogRoot:             "/data/logs",
 		JupyterGuestPort:         8888,
-		JupyterProxyBasePath:     "/agent-compose/session",
+		JupyterProxyBasePath:     "/github.com/chaitin/agent-compose/session",
 		SandboxStartTimeout:      3 * time.Minute,
 		SandboxStopTimeout:       30 * time.Second,
 	}

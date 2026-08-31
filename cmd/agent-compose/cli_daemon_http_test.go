@@ -1,11 +1,11 @@
 package main
 
 import (
-	"agent-compose/pkg/config"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/config"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -59,7 +59,7 @@ func testStatusCommandUsesDefaultUnixSocket(t *testing.T) {
 	defer cancel()
 	runCtx, stop := context.WithCancel(context.Background())
 	errCh := runDaemonAppAsync(app, runCtx)
-	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
 
 	stdout, stderr, runCount, err := executeCommand("status")
 	stop()
@@ -235,7 +235,7 @@ func TestBrowserBaseURLForCLIUnixSocketDoesNotGuessHTTPAddress(t *testing.T) {
 	if err != nil || baseURL != "" {
 		t.Fatalf("browser base URL = %q, err = %v; want empty Unix socket fallback", baseURL, err)
 	}
-	if got := joinBaseURLAndPath(baseURL, "/agent-compose/session/sandbox/lab?token=socket-token"); got != "/agent-compose/session/sandbox/lab?token=socket-token" {
+	if got := joinBaseURLAndPath(baseURL, "/github.com/chaitin/agent-compose/session/sandbox/lab?token=socket-token"); got != "/github.com/chaitin/agent-compose/session/sandbox/lab?token=socket-token" {
 		t.Fatalf("Unix socket notebook URL = %q, want relative URL with token", got)
 	}
 }

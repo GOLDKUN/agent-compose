@@ -14,11 +14,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	testutil "agent-compose/pkg/internal/testutil"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
-	"agent-compose/pkg/storage/sandboxstore"
-	"agent-compose/pkg/workspaces"
+	testutil "github.com/chaitin/agent-compose/pkg/internal/testutil"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 func TestIntegrationSandboxRPCBridgeFileWorkspaceProvisioningFailureRetry(t *testing.T) {

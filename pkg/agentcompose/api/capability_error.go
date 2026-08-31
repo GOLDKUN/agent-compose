@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/capability"
+	"github.com/chaitin/agent-compose/pkg/capability"
 )
 
 type CapabilityRuntimeConfig interface {

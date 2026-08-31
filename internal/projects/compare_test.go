@@ -3,7 +3,7 @@ package projects
 import (
 	"testing"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestManagedAgentDefinitionChangeActionComparesEnabledState(t *testing.T) {

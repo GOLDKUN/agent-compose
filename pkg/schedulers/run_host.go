@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type HostStore interface {

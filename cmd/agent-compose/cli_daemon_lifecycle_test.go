@@ -1,17 +1,17 @@
 package main
 
 import (
-	"agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/configstore"
-	storagesqlite "agent-compose/pkg/storage/sqlite"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
-	"agent-compose/proto/health/v1/healthv1connect"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	"github.com/chaitin/agent-compose/proto/health/v1/healthv1connect"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -353,7 +353,7 @@ agents:
 		stopDaemon()
 		waitForDaemonExit(t, errCh)
 	})
-	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
 
 	runCtx, cancelRun := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelRun()
@@ -445,7 +445,7 @@ func testDaemonAppRegistersCoreRoutes(t *testing.T) {
 		{method: http.MethodPost, path: "/agentcompose.v2.ExecService/*"},
 		{method: http.MethodPost, path: "/agentcompose.v2.ImageService/*"},
 		{method: http.MethodGet, path: "/api/webhook-sources"},
-		{method: http.MethodGet, path: "/api/agent-compose/workspaces/:workspaceID/files"},
+		{method: http.MethodGet, path: "/api/github.com/chaitin/agent-compose/workspaces/:workspaceID/files"},
 		{method: http.MethodGet, path: "/jupyter/:sessionID"},
 	} {
 		if !hasRoute(app, route.method, route.path) {

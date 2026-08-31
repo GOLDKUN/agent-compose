@@ -1,13 +1,13 @@
 package projects
 
 import (
-	"agent-compose/pkg/identity"
 	"encoding/json"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/identity"
 	"strings"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projectdef"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/projectdef"
 )
 
 func NormalizeRecord(project domain.ProjectRecord) (domain.ProjectRecord, error) {

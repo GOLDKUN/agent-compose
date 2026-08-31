@@ -1,11 +1,11 @@
 package main
 
 import (
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/identity"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"encoding/json"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"strings"
 	"testing"
 
@@ -119,7 +119,7 @@ agents:
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("run -d --jupyter-expose code/stderr = %d / %q", exitCode, stderr)
 	}
-	if want := "Jupyter: " + server.URL + "/agent-compose/session/sandbox-detached-jupyter/lab?token=detached-token"; !strings.Contains(stdout, want) {
+	if want := "Jupyter: " + server.URL + "/github.com/chaitin/agent-compose/session/sandbox-detached-jupyter/lab?token=detached-token"; !strings.Contains(stdout, want) {
 		t.Fatalf("run -d --jupyter-expose stdout %q does not contain %q", stdout, want)
 	}
 }
@@ -216,7 +216,7 @@ agents:
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("run --jupyter-expose code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 	}
-	if want := "Jupyter: " + server.URL + "/agent-compose/session/sandbox-jupyter/lab?token=sync-token\n"; stdout != want {
+	if want := "Jupyter: " + server.URL + "/github.com/chaitin/agent-compose/session/sandbox-jupyter/lab?token=sync-token\n"; stdout != want {
 		t.Fatalf("run --jupyter-expose stdout = %q, want %q", stdout, want)
 	}
 	if !sawRequest {
@@ -257,7 +257,7 @@ agents:
 			getSessionProxy: func(ctx context.Context, req *connect.Request[agentcomposev2.GetSandboxRequest]) (*connect.Response[agentcomposev2.GetSandboxResponse], error) {
 				return connect.NewResponse(&agentcomposev2.GetSandboxResponse{Sandbox: &agentcomposev2.Sandbox{
 					SandboxId: req.Msg.GetSandboxId(),
-					ProxyPath: "/agent-compose/session/" + req.Msg.GetSandboxId() + "/lab",
+					ProxyPath: "/github.com/chaitin/agent-compose/session/" + req.Msg.GetSandboxId() + "/lab",
 					Status:    agentcomposev2.SandboxStatus_SANDBOX_STATUS_RUNNING,
 				}}), nil
 			},
@@ -269,7 +269,7 @@ agents:
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("run --jupyter code/stdout/stderr = %d / %q / %q", exitCode, stdout, stderr)
 	}
-	want := "Jupyter: " + server.URL + "/agent-compose/session/sandbox-jupyter-private\n"
+	want := "Jupyter: " + server.URL + "/github.com/chaitin/agent-compose/session/sandbox-jupyter-private\n"
 	if stdout != want {
 		t.Fatalf("run --jupyter stdout = %q, want %q", stdout, want)
 	}
@@ -367,7 +367,7 @@ agents:
 	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
 		t.Fatalf("decode jupyter run JSON: %v\n%s", err, stdout)
 	}
-	if decoded.JupyterPath != "/agent-compose/session/sandbox-jupyter-json/lab" || decoded.JupyterURL != server.URL+"/agent-compose/session/sandbox-jupyter-json/lab?token=json-token" {
+	if decoded.JupyterPath != "/github.com/chaitin/agent-compose/session/sandbox-jupyter-json/lab" || decoded.JupyterURL != server.URL+"/github.com/chaitin/agent-compose/session/sandbox-jupyter-json/lab?token=json-token" {
 		t.Fatalf("jupyter JSON fields = %q / %q", decoded.JupyterPath, decoded.JupyterURL)
 	}
 }

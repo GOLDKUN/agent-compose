@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/compose"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/volumes"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/volumes"
 
 	"github.com/google/uuid"
 )

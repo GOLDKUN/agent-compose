@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"agent-compose/pkg/compose"
-	"agent-compose/pkg/storage/storeutil"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/storage/storeutil"
 )
 
 const uniqueProjectNameMigrationVersion int64 = 9

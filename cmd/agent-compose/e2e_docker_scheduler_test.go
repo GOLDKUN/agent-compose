@@ -20,10 +20,10 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/samber/do/v2"
 
-	agentcomposeapp "agent-compose/pkg/agentcompose/app"
-	"agent-compose/pkg/config"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	agentcomposeapp "github.com/chaitin/agent-compose/pkg/agentcompose/app"
+	"github.com/chaitin/agent-compose/pkg/config"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func TestE2EDockerSchedulerScriptHelloWorldFlow(t *testing.T) {
@@ -69,7 +69,7 @@ func TestE2EDockerSchedulerScriptHelloWorldFlow(t *testing.T) {
 		waitForDaemonExit(t, errCh)
 	})
 	client := newUnixHTTPClient(socketPath)
-	waitForHTTPStatus(t, client, "http://agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, client, "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
 
 	t.Setenv("AGENT_COMPOSE_SOCKET", socketPath)
 	projectDir := filepath.Join(root, "project")

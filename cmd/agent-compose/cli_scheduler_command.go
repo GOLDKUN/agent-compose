@@ -1,13 +1,13 @@
 package main
 
 import (
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	"strings"
 
 	"github.com/spf13/cobra"

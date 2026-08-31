@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const FileWorkspaceContentDirName = "content"

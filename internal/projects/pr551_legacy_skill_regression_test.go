@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/compose"
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestPR551SkillLegacyPasswordTokenReferencesSurvivePatch(t *testing.T) {

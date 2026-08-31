@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 )
 
 func TestMaterializedScannerListsReferencedItemsAndMetadataWarnings(t *testing.T) {

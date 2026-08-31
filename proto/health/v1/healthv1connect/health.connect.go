@@ -5,7 +5,7 @@
 package healthv1connect
 
 import (
-	v1 "agent-compose/proto/health/v1"
+	v1 "github.com/chaitin/agent-compose/proto/health/v1"
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"

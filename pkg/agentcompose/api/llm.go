@@ -7,8 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/llms"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 type LLMGenerator interface {

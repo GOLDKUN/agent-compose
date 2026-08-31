@@ -13,10 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	storagesqlite "agent-compose/pkg/storage/sqlite"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
 )
 
 const (

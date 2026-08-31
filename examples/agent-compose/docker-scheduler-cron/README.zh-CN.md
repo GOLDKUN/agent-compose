@@ -61,12 +61,12 @@ agent-compose down
 如果没有安装二进制，也可以在仓库根目录执行：
 
 ```bash
-go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml config
-go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml up
-go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml ls
-go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml scheduler ls
-go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml inspect project
-go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml down
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml config
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml up
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml ls
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml scheduler ls
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml inspect project
+go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml down
 ```
 
 预期结果：

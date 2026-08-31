@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func upsertNativeTestScheduler(ctx context.Context, store *ConfigStore, scheduler domain.Scheduler) (domain.Scheduler, error) {

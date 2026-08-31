@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/compose"
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sources"
-	"agent-compose/pkg/workspaces"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 // agentDefinitionInlineWorkspace decodes the yaml `workspace:` declaration

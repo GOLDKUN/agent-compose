@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 func TestWorkspaceFileAndPathWorkflows(t *testing.T) {

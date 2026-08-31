@@ -3,9 +3,9 @@
 package driver
 
 import (
-	appconfig "agent-compose/pkg/config"
 	"context"
 	"fmt"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 type stubSandboxRuntime struct{}

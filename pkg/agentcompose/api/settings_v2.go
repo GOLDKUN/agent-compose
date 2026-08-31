@@ -9,9 +9,9 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 type SettingsV2Handler struct {

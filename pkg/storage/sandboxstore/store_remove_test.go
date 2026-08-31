@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 func TestRemoveSessionDeletesSessionDirectory(t *testing.T) {

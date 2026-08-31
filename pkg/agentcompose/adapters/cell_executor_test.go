@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sandboxstore"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 type fakeCellRuntime struct {
@@ -73,7 +73,7 @@ func TestCellExecutorExecuteCellPersistsCellAndEvent(t *testing.T) {
 		DefaultImage:         "guest:latest",
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/state",
-		JupyterProxyBasePath: "/agent-compose/session",
+		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)

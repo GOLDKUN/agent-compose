@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type workspace interface {

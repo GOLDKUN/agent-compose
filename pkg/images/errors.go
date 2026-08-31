@@ -7,7 +7,7 @@ import (
 
 	cerrdefs "github.com/containerd/errdefs"
 
-	"agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 )
 
 var ErrBuildUnsupported = errors.New("image build is not supported by selected image backend")

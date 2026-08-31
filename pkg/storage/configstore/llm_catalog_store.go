@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/llms"
+	"github.com/chaitin/agent-compose/pkg/llms"
 )
 
 // ApplyModelCatalog atomically projects models.json into the runtime

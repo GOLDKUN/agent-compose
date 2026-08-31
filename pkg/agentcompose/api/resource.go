@@ -8,8 +8,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/resources"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/resources"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 type ResourceLocator interface {

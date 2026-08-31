@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type AgentMCPConfigPayload struct {

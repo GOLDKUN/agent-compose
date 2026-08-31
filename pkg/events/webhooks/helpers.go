@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-compose/pkg/events"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/events"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const defaultWebhookBodyLimit int64 = 1 << 20

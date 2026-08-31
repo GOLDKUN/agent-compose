@@ -5,8 +5,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 
-	"agent-compose/pkg/runs"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func RunAttachOutputToProto(output runs.RunAttachOutput) *agentcomposev2.AttachAgentRunResponse {

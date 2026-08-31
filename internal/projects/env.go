@@ -3,8 +3,8 @@ package projects
 import (
 	"slices"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projectdef"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/projectdef"
 )
 
 func SandboxEnvItemsFromCompose(values map[string]projectdef.EnvVarSpec) []domain.SandboxEnvVar {

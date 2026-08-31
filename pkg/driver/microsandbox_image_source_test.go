@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 func stubMicrosandboxImageSourceOps(t *testing.T, dockerAvailable bool, dockerFound bool) (microsandboxImageSourceOps, *[]string) {

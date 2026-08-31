@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/internal/testutil"
-	"agent-compose/pkg/llms"
-	"agent-compose/pkg/llms/runtimefacade"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/internal/testutil"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	"github.com/chaitin/agent-compose/pkg/llms/runtimefacade"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestE2EModelCatalogConfiguresOpenCodeFacadeTarget(t *testing.T) {
@@ -81,7 +81,7 @@ func TestE2EModelCatalogConfiguresOpenCodeFacadeTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configure OpenCode facade: %v", err)
 	}
-	if runtimeConfig.Model != "agent-compose/deepseek-v4-flash" || runtimeConfig.Env["LLM_API_PROTOCOL"] != llms.APIProtocolChatCompletions {
+	if runtimeConfig.Model != "github.com/chaitin/agent-compose/deepseek-v4-flash" || runtimeConfig.Env["LLM_API_PROTOCOL"] != llms.APIProtocolChatCompletions {
 		t.Fatalf("OpenCode runtime config = %#v", runtimeConfig)
 	}
 

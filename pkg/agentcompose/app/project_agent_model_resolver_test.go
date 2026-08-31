@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/compose"
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func newProjectAgentModelResolverFixture(t *testing.T, yaml string, config appconfig.Config) (domain.ProjectRecord, []domain.ProjectAgentRecord, *projectAgentModelResolver) {

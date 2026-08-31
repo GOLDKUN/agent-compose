@@ -5,8 +5,8 @@ package driver
 import (
 	"context"
 
-	"agent-compose/pkg/cache"
-	appconfig "agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/cache"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 type boxliteRuntimeCacheSource struct {

@@ -8,9 +8,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/internal/projects"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	"github.com/chaitin/agent-compose/internal/projects"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func TestSchedulerProjectOutput(t *testing.T) {

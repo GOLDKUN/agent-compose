@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func ConnectErrorForDomain(err error) error {

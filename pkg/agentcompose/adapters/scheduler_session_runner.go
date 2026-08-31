@@ -11,19 +11,19 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-compose/pkg/capabilities"
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sandboxstore"
-	"agent-compose/pkg/volumes"
-	"agent-compose/pkg/workspaces"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/volumes"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 type SchedulerVolumeResolver interface {

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/projectdef"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/projectdef"
 )
 
 func StableProjectID(name, _ string) (string, error) {

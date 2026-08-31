@@ -1,12 +1,12 @@
 package driver
 
 import (
-	appconfig "agent-compose/pkg/config"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 	"io"
 	"log/slog"
 	"math"

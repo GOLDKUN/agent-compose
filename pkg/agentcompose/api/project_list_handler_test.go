@@ -6,8 +6,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	domain "agent-compose/pkg/model"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestListProjectsUsesAggregatedResourceCounts(t *testing.T) {

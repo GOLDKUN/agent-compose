@@ -166,7 +166,7 @@ agent-compose down                                # stop sandboxes, disable sche
 ```
 
 More runnable examples (cron, timeout, scheduler scripts) live in
-[examples/agent-compose/](examples/agent-compose/).
+[examples/github.com/chaitin/agent-compose/](examples/github.com/chaitin/agent-compose/).
 
 ## The compose file
 
@@ -453,7 +453,7 @@ components live under `runtime/`.
 
 ## Documentation
 
-- [Documentation homepage](https://chaitin.github.io/agent-compose/)
+- [Documentation homepage](https://chaitin.github.io/github.com/chaitin/agent-compose/)
 - [Command line manual](docs/pages/command-line-manual.md)
 - [agent-compose.yml manual](docs/pages/agent-compose-yaml-manual.md)
 
@@ -524,7 +524,7 @@ running sandbox IDs, then stop those IDs with the old CLI as described above.
 After stopping the old daemon, run the same dry run again before migration:
 
 ```bash
-DATA_ROOT=/opt/agent-compose/data
+DATA_ROOT=/opt/github.com/chaitin/agent-compose/data
 RUNTIME_ROOT=/data
 "$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
   --runtime-root "$RUNTIME_ROOT" --dry-run

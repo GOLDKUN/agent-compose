@@ -10,10 +10,10 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 type Store interface {

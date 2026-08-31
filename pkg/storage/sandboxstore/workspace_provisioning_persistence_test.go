@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestWorkspaceProvisioningPersistenceSurvivesSaveGetAndStoreRebuild(t *testing.T) {
@@ -187,7 +187,7 @@ func newWorkspaceProvisioningPersistenceStore(t *testing.T, sandboxRoot string) 
 		DefaultImage:         "workspace-provisioning-test:latest",
 		BoxliteHome:          filepath.Join(filepath.Dir(sandboxRoot), "boxlite-home"),
 		JupyterGuestPort:     8888,
-		JupyterProxyBasePath: "/agent-compose/session",
+		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
 	})
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)

@@ -1,7 +1,7 @@
 package driver
 
 import (
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 func NewBoxliteRuntime(config *appconfig.Config) (SandboxRuntime, error) {

@@ -1,10 +1,10 @@
 package main
 
 import (
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"fmt"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"strings"
 	"testing"
 	"time"
@@ -199,7 +199,7 @@ func testCLISessionSummary(sessionID, vmStatus, projectID, agentName, runID stri
 		Driver:        "boxlite",
 		Status:        sandboxStatusFromText(strings.ToLower(strings.TrimSpace(vmStatus))),
 		WorkspacePath: "/workspace/" + sessionID,
-		ProxyPath:     "/agent-compose/session/" + sessionID + "/lab",
+		ProxyPath:     "/github.com/chaitin/agent-compose/session/" + sessionID + "/lab",
 		Image:         "guest:latest",
 		TriggerSource: "manual",
 		CreatedAt:     timestamppb.New(time.Date(2026, 6, 11, 0, 0, 0, 0, time.UTC)),

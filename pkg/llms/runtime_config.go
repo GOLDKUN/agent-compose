@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/compose"
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const (

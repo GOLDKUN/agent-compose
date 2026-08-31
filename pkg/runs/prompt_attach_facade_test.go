@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type promptAttachFacadeStore struct {
@@ -191,8 +191,8 @@ func TestEnsurePromptAttachLLMFacadeEnvOpenCodeUsesSharedRuntimeConfig(t *testin
 	}
 	if env["LLM_API_PROTOCOL"] != llms.APIProtocolResponses ||
 		env["OPENCODE_CONFIG"] != "/root/.config/opencode/opencode.json" ||
-		env["LLM_MODEL"] != "agent-compose/gpt-test" ||
-		env["OPENCODE_MODEL"] != "agent-compose/gpt-test" {
+		env["LLM_MODEL"] != "github.com/chaitin/agent-compose/gpt-test" ||
+		env["OPENCODE_MODEL"] != "github.com/chaitin/agent-compose/gpt-test" {
 		t.Fatalf("OpenCode facade env = %#v", env)
 	}
 	if env["AGENT_COMPOSE_SANDBOX_TOKEN"] == "" || len(store.tokens) != 1 {

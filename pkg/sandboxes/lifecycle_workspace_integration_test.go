@@ -1,9 +1,9 @@
 package sandboxes_test
 
 import (
-	"agent-compose/pkg/sandboxes"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 	"net"
 	"os"
 	"path/filepath"
@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/internal/testutil"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sandboxstore"
-	"agent-compose/pkg/workspaces"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/internal/testutil"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 func TestIntegrationJupyterWorkspaceProxyResumePreservesState(t *testing.T) {
@@ -29,7 +29,7 @@ func TestIntegrationJupyterWorkspaceProxyResumePreservesState(t *testing.T) {
 		RuntimeDriver:        driverpkg.RuntimeDriverDocker,
 		DefaultImage:         "guest:latest",
 		JupyterGuestPort:     8888,
-		JupyterProxyBasePath: "/agent-compose/session",
+		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 

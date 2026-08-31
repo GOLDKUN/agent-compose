@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/capabilities"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/volumes"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/volumes"
 )
 
 func TestSchedulerSandboxRunnerLoadResumeAndShutdownCoverage(t *testing.T) {

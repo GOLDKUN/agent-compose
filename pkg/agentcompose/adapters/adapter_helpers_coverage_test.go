@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/capabilities"
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 func TestAdapterHelperCoverage(t *testing.T) {

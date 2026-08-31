@@ -74,7 +74,7 @@ func TestWorkspaceHTTPHelpersUsePublicRouteContracts(t *testing.T) {
 	var uploadSeen atomic.Bool
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wantPrefix := "/api/agent-compose/workspaces/" + url.PathEscape(workspaceID) + "/"
+		wantPrefix := "/api/github.com/chaitin/agent-compose/workspaces/" + url.PathEscape(workspaceID) + "/"
 		if !strings.HasPrefix(r.URL.EscapedPath(), wantPrefix) {
 			t.Errorf("workspace request escaped path = %q, want prefix %q", r.URL.EscapedPath(), wantPrefix)
 			http.Error(w, "wrong route", http.StatusNotFound)
@@ -365,7 +365,7 @@ func downloadE2EWorkspaceFile(
 }
 
 func e2eWorkspaceHTTPEndpoint(baseURL, workspaceID, operation string, query url.Values) string {
-	endpoint := strings.TrimRight(baseURL, "/") + "/api/agent-compose/workspaces/" + url.PathEscape(workspaceID) + "/" + operation
+	endpoint := strings.TrimRight(baseURL, "/") + "/api/github.com/chaitin/agent-compose/workspaces/" + url.PathEscape(workspaceID) + "/" + operation
 	if len(query) != 0 {
 		endpoint += "?" + query.Encode()
 	}

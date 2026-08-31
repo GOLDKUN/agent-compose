@@ -1,9 +1,9 @@
 package schedulers_test
 
 import (
-	"agent-compose/pkg/events"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/events"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 	"os"
 	"os/exec"
 	"strings"

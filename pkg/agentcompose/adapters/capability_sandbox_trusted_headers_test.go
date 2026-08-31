@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"agent-compose/pkg/capabilities"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type trustedHeaderSandboxStore struct {

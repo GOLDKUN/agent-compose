@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/compose"
 )
 
 func TestUniqueProjectNameMigrationRenamesDuplicatesInStableOrder(t *testing.T) {

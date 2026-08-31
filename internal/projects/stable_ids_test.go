@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestProjectStableIDHelpers(t *testing.T) {

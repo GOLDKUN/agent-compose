@@ -3,8 +3,8 @@ package sandboxes
 import (
 	"strings"
 
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // EffectiveStoppedRuntimePolicy reports the policy that applies to one sandbox.

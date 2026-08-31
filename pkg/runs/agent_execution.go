@@ -1,11 +1,11 @@
 package runs
 
 import (
-	"agent-compose/internal/projects"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	"path/filepath"
 	"strings"
 	"time"

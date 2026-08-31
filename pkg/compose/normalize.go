@@ -3,6 +3,7 @@ package compose
 import (
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/sources"
 	"net/url"
 	"os"
 	"path/filepath"

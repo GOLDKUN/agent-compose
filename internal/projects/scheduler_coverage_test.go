@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestManagedSchedulerTriggerRegistrationCoverage(t *testing.T) {

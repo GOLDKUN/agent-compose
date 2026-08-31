@@ -9,7 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestIntegrationCLIUpAppliesYAMLSourceCredentialsFromProjectEnv(t *testing.T) {
@@ -23,7 +23,7 @@ func TestIntegrationCLIUpAppliesYAMLSourceCredentialsFromProjectEnv(t *testing.T
 		stop()
 		waitForDaemonExit(t, errCh)
 	})
-	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
 	t.Setenv("AGENT_COMPOSE_SOCKET", socketPath)
 	t.Setenv("AGENT_COMPOSE_HOST", "")
 

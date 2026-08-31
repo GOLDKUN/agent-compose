@@ -1,9 +1,9 @@
 package main
 
 import (
-	"agent-compose/pkg/compose"
-	"agent-compose/pkg/identity"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/identity"
 	"strings"
 )
 

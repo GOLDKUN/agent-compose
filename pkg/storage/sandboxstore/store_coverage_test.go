@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestStoreAgentRunLegacyVMAndListWorkflows(t *testing.T) {
@@ -97,7 +97,7 @@ func TestStoreCreateSessionUsesConfiguredJupyterProxyBase(t *testing.T) {
 			t.Fatalf("sandbox layout missing %s: %v", rel, err)
 		}
 	}
-	wantProxyPath := "/agent-compose/session/" + session.Summary.ID + "/lab"
+	wantProxyPath := "/github.com/chaitin/agent-compose/session/" + session.Summary.ID + "/lab"
 	if session.Summary.ProxyPath != wantProxyPath {
 		t.Fatalf("session proxy path = %q, want %q", session.Summary.ProxyPath, wantProxyPath)
 	}
@@ -892,7 +892,7 @@ func newCoverageStore(t *testing.T) *Store {
 		GuestHomePath:        "/home/agent-compose",
 		MicrosandboxHome:     filepath.Join(t.TempDir(), "microsandbox"),
 		JupyterGuestPort:     8888,
-		JupyterProxyBasePath: "/agent-compose/session",
+		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
 	})
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)

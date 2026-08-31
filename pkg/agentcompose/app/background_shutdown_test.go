@@ -9,8 +9,8 @@ import (
 
 	"github.com/samber/do/v2"
 
-	"agent-compose/pkg/cleanup"
-	"agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/cleanup"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 func TestStopBackgroundComponentsCancelsComponentsConcurrently(t *testing.T) {

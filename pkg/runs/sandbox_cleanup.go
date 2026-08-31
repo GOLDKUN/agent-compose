@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func (c *Controller) cleanupProjectRunSandboxByPolicy(ctx context.Context, sandboxResult SandboxResult, policy agentcomposev2.RunSandboxCleanupPolicy) error {

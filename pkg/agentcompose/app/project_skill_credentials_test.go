@@ -3,8 +3,8 @@ package app
 import (
 	"testing"
 
-	"agent-compose/pkg/agentcompose/api"
-	"agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/agentcompose/api"
+	"github.com/chaitin/agent-compose/pkg/compose"
 )
 
 func TestNormalizeProjectRequestAcceptsCLIResolvedSkillCredentials(t *testing.T) {

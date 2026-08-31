@@ -1,6 +1,6 @@
 package main
 
-import agentcomposev2 "agent-compose/proto/agentcompose/v2"
+import agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 
 func sandboxStatusText(value agentcomposev2.SandboxStatus) string {
 	switch value {

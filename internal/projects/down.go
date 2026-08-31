@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const (

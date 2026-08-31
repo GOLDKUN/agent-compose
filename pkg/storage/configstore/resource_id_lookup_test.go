@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/resources"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/resources"
 )
 
 func TestFindResourceIDsReturnsStoredPrefixCandidates(t *testing.T) {

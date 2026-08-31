@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/events/webhooks"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/events/webhooks"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 func TestRunExecutorLifecycleWorkflows(t *testing.T) {

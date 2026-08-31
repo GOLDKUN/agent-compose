@@ -6,7 +6,7 @@
 // definition parsing, normalization, and canonical serialization.
 package projectdef
 
-import "agent-compose/pkg/compose"
+import "github.com/chaitin/agent-compose/pkg/compose"
 
 type ProjectSpec = compose.ProjectSpec
 type AgentSpec = compose.AgentSpec

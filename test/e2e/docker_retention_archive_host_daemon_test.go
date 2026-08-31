@@ -14,12 +14,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/klauspost/compress/zstd"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/storage/sandboxstore"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 const dockerRetentionArchiveE2EImageEnv = "AGENT_COMPOSE_E2E_DOCKER_RETENTION_IMAGE"

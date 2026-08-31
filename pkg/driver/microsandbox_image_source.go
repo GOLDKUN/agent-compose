@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/imagecache"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 	"github.com/docker/docker/client"
 )
 

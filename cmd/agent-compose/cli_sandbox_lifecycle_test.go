@@ -1,10 +1,10 @@
 package main
 
 import (
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"fmt"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"strings"
 	"testing"
 	"time"
@@ -216,7 +216,7 @@ func TestE2ECLIResolveSandboxRefAfterProjectDown(t *testing.T) {
 }
 
 func testCLISandboxProxy(sessionID, token string) *agentcomposev2.Sandbox {
-	proxyPath := "/agent-compose/session/" + sessionID + "/lab"
+	proxyPath := "/github.com/chaitin/agent-compose/session/" + sessionID + "/lab"
 	return &agentcomposev2.Sandbox{
 		SandboxId:   sessionID,
 		ProxyPath:   proxyPath,

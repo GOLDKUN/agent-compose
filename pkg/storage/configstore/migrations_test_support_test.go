@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	storagesqlite "agent-compose/pkg/storage/sqlite"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
 )
 
 func (s *ConfigStore) initSchema(ctx context.Context) error {

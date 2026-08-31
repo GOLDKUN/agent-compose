@@ -23,7 +23,7 @@ npm install @chaitin-ai/agent-compose-runtime-sdk
 Guest images can also install the SDK from an offline tarball:
 
 ```bash
-npm install --offline /opt/agent-compose/npm/agent-compose-runtime-sdk.tgz
+npm install --offline /opt/github.com/chaitin/agent-compose/npm/agent-compose-runtime-sdk.tgz
 ```
 
 ## Quick Start

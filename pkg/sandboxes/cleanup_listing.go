@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const cleanupSandboxPageSize = 200

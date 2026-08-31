@@ -8,13 +8,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-compose/pkg/agentcompose/adapters"
-	"agent-compose/pkg/capproxy"
-	"agent-compose/pkg/events"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/agentcompose/adapters"
+	"github.com/chaitin/agent-compose/pkg/capproxy"
+	"github.com/chaitin/agent-compose/pkg/events"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 const stalePendingSandboxLastError = "sandbox startup interrupted before runtime reached running state"

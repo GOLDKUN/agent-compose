@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestListProjectRunsByOptionsFiltersInclusiveStartRange(t *testing.T) {

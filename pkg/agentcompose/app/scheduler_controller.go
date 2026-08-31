@@ -7,15 +7,15 @@ import (
 
 	"github.com/samber/do/v2"
 
-	"agent-compose/pkg/agentcompose/adapters"
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/dashboard"
-	"agent-compose/pkg/events/webhooks"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storage/configstore"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/agentcompose/adapters"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/dashboard"
+	"github.com/chaitin/agent-compose/pkg/events/webhooks"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func NewSchedulerController(di do.Injector) (*schedulers.Controller, error) {

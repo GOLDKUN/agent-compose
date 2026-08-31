@@ -1,13 +1,13 @@
 package projects
 
 import (
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/storedtime"
 	"database/sql"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/storedtime"
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func ScanProject(scan func(dest ...any) error) (domain.ProjectRecord, error) {

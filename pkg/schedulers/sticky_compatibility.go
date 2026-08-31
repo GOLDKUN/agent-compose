@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"agent-compose/pkg/capabilities"
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/volumes"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/volumes"
 )
 
 type schedulerSandboxConfig struct {

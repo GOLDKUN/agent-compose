@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/storage/storeutil"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/storage/storeutil"
 )
 
 const sandboxCacheVersion = 2

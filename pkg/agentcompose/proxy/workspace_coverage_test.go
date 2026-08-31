@@ -16,8 +16,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/workspaces"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 func TestWorkspaceRoutesCoverageWorkflow(t *testing.T) {
@@ -37,7 +37,7 @@ func TestWorkspaceRoutesCoverageWorkflow(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/agent-compose/workspaces/ws-1/files", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/github.com/chaitin/agent-compose/workspaces/ws-1/files", nil)
 	rec := httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "existing.txt") {
@@ -59,7 +59,7 @@ func TestWorkspaceRoutesCoverageWorkflow(t *testing.T) {
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	req = httptest.NewRequest(http.MethodPost, "/api/agent-compose/workspaces/ws-1/upload", &body)
+	req = httptest.NewRequest(http.MethodPost, "/api/github.com/chaitin/agent-compose/workspaces/ws-1/upload", &body)
 	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
 	rec = httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
@@ -95,7 +95,7 @@ func TestWorkspaceRoutesCoverageWorkflow(t *testing.T) {
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	req = httptest.NewRequest(http.MethodPost, "/api/agent-compose/workspaces/ws-1/upload", &body)
+	req = httptest.NewRequest(http.MethodPost, "/api/github.com/chaitin/agent-compose/workspaces/ws-1/upload", &body)
 	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
 	rec = httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
@@ -103,7 +103,7 @@ func TestWorkspaceRoutesCoverageWorkflow(t *testing.T) {
 		t.Fatalf("archive upload status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/agent-compose/workspaces/ws-1/download?path=existing.txt", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/github.com/chaitin/agent-compose/workspaces/ws-1/download?path=existing.txt", nil)
 	rec = httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || rec.Body.String() != "existing" {

@@ -1,13 +1,13 @@
 package main
 
 import (
-	"agent-compose/pkg/compose"
-	"agent-compose/pkg/identity"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"io"
 	"os"
 	"sort"

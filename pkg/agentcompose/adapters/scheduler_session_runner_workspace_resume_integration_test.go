@@ -7,10 +7,10 @@ import (
 	"reflect"
 	"testing"
 
-	driverpkg "agent-compose/pkg/driver"
-	testutil "agent-compose/pkg/internal/testutil"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/workspaces"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	testutil "github.com/chaitin/agent-compose/pkg/internal/testutil"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 func TestIntegrationSchedulerStickyResumePreservesReadyFileWorkspace(t *testing.T) {

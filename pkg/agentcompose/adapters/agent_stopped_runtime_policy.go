@@ -1,9 +1,9 @@
 package adapters
 
 import (
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
 	"encoding/json"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	"strings"
 )
 

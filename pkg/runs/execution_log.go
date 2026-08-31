@@ -1,9 +1,9 @@
 package runs
 
 import (
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	"io"
 	"os"
 	"path/filepath"

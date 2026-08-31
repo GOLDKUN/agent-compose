@@ -1,12 +1,12 @@
 package configstore
 
 import (
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	"strings"
 	"time"
 )

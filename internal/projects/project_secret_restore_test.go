@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/compose"
 )
 
 func TestRestoreProjectSecretsPreservesStableRedactedValues(t *testing.T) {

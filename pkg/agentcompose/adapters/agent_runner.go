@@ -7,15 +7,15 @@ import (
 	"log/slog"
 	"strings"
 
-	"agent-compose/pkg/compose"
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/llms"
-	"agent-compose/pkg/llms/runtimefacade"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/skills"
-	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	"github.com/chaitin/agent-compose/pkg/llms/runtimefacade"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/skills"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 type AgentDefinitionStore interface {

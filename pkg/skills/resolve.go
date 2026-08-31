@@ -17,11 +17,11 @@ import (
 	"syscall"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
-	"agent-compose/pkg/workspaces"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 const (

@@ -1,19 +1,19 @@
 package projects
 
 import (
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projectdef"
-	"agent-compose/pkg/schedulers"
 	"encoding/json"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/projectdef"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"agent-compose/pkg/capability"
+	"github.com/chaitin/agent-compose/pkg/capability"
 )
 
 func NewRecordFromSpec(spec *projectdef.NormalizedProjectSpec, sourcePath string) (domain.ProjectRecord, error) {

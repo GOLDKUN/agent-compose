@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projectdef"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/projectdef"
 )
 
 func (c *Controller) ensureProjectVolumes(ctx context.Context, project domain.ProjectRecord, spec *projectdef.NormalizedProjectSpec) error {
