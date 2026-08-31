@@ -678,6 +678,90 @@ func TestK8sWaitForPodDeletedTimesOutIfPodNeverGoesAway(t *testing.T) {
 	}
 }
 
+// TestK8sEnsureSandboxWaitsForStalePodNameToFreeUpBeforeRecreating is the
+// integration-level counterpart to TestK8sWaitForPodDeleted*: those two
+// only call waitForPodDeleted directly, which proves the helper itself
+// works but not that EnsureSandbox actually calls it, in the right order
+// relative to createPod. Every other EnsureSandbox-level recreate test
+// uses a plain fake clientset, whose Delete() removes the object from the
+// tracker synchronously - so those tests pass identically whether or not
+// EnsureSandbox waits at all, and would not catch that call being dropped
+// or reordered in a future refactor.
+//
+// This test instead makes Delete a no-op (the object stays in the tracker,
+// simulating a real cluster's Terminating window) and only actually
+// removes it from the tracker after a few polls - so if EnsureSandbox
+// called createPod before waiting for that, the fake tracker's own name
+// conflict check would produce a genuine AlreadyExists, the same way a
+// real apiserver would.
+func TestK8sEnsureSandboxWaitsForStalePodNameToFreeUpBeforeRecreating(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-recreate-race")
+	name := (&k8sRuntime{}).podName(sandbox, VMState{})
+	existing := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Labels: map[string]string{
+				k8sSandboxLabelID:     sandbox.Summary.ID,
+				k8sSandboxLabelDriver: RuntimeDriverK8s,
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodFailed},
+	}
+	r, clientset := newTestK8sRuntime(existing)
+
+	var deleteCalled bool
+	clientset.PrependReactor("delete", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		deleteCalled = true
+		return true, nil, nil // handled: swallow the delete, object stays in the tracker
+	})
+	var gets int
+	var terminatedFromTracker bool
+	clientset.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		getAction, ok := action.(k8stesting.GetAction)
+		if !ok || getAction.GetName() != name || terminatedFromTracker {
+			// Once the stale Pod has actually been removed below, every
+			// later Get (waitForPodDeleted's own confirmation, the new
+			// Pod's readiness check, this test's final assertion) must
+			// fall straight through to the tracker's real state - not run
+			// this counting logic again and delete the *new* same-named
+			// Pod out from under those later calls.
+			return false, nil, nil
+		}
+		gets++
+		if gets < 3 {
+			return false, nil, nil // fall through to the tracker, which still has it
+		}
+		// "Finish" the termination on this poll, then fall through so this
+		// and every later Get sees it gone via the tracker's own NotFound,
+		// not a canned response.
+		terminatedFromTracker = true
+		_ = clientset.Tracker().Delete(corev1.SchemeGroupVersion.WithResource("pods"), "default", name)
+		return false, nil, nil
+	})
+
+	info, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{})
+	if err != nil {
+		t.Fatalf("EnsureSandbox() error = %v, want the stale pod replaced once its name actually frees up", err)
+	}
+	if !deleteCalled {
+		t.Fatal("Delete was never called on the stale pod")
+	}
+	if gets < 3 {
+		t.Fatalf("Get was called %d time(s), want at least 3 (EnsureSandbox must actually wait for the name to free up, not create right after Delete returns)", gets)
+	}
+	if info.BoxID != name {
+		t.Fatalf("EnsureSandbox() BoxID = %q, want %q", info.BoxID, name)
+	}
+	pod, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
+	if getErr != nil {
+		t.Fatalf("get recreated pod: %v", getErr)
+	}
+	if pod.Status.Phase != corev1.PodRunning {
+		t.Fatalf("recreated pod phase = %s, want Running", pod.Status.Phase)
+	}
+}
+
 func TestK8sWaitForPodRunningFailsFastOnImagePullBackOff(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "agent-compose-sandbox-bad-image", Namespace: "default"},
