@@ -1,6 +1,12 @@
 package projectdef
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"agent-compose/pkg/sources"
+)
 
 func TestParseNormalizeAndCanonicalRoundTrip(t *testing.T) {
 	spec, err := Parse([]byte("name: demo\nagents:\n  worker:\n    provider: test\n"))
@@ -40,9 +46,18 @@ func TestValidateRejectsInvalidDefinition(t *testing.T) {
 }
 
 func TestValidateDoesNotResolveRuntimeSources(t *testing.T) {
-	spec := &ProjectSpec{Name: "demo"}
-	err := Validate(spec, NormalizeOptions{ResolveScriptURLs: true})
+	spec := &ProjectSpec{Name: "demo", Agents: map[string]AgentSpec{
+		"worker": {Scheduler: &SchedulerSpec{Script: ScriptSource{Source: sources.Source{Provider: "http", URL: "https://example.invalid/script.sh"}}}},
+	}}
+	called := false
+	err := Validate(spec, NormalizeOptions{ResolveScriptURLs: true, ScriptSourceResolver: ScriptSourceResolverFunc(func(context.Context, sources.Source) ([]byte, error) {
+		called = true
+		return nil, errors.New("resolver must not be called")
+	})})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("Validate must not resolve script sources")
 	}
 }
