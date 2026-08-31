@@ -6,10 +6,12 @@ import (
 	appconfig "agent-compose/pkg/config"
 	"bytes"
 	"context"
+	"fmt"
 	"net/url"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -227,18 +229,34 @@ func TestK8sEnsureSandboxRecreatesPodWhenJupyterConfigChanges(t *testing.T) {
 			return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
 		}
 		r.config.JupyterReadyTimeout = 50 * time.Millisecond
+		// The fake cluster never answers waitForJupyterProxy, so this
+		// EnsureSandbox call fails and the newly (re)created Pod is cleaned
+		// up as part of that failure (see ensureSandboxResult) - capture the
+		// recreated Pod's Command as it's created, before that cleanup runs,
+		// rather than Get-ing it back afterward.
+		var createdCommand []string
+		clientset.PrependReactor("create", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, ok := action.(k8stesting.CreateAction)
+			if !ok {
+				return false, nil, nil
+			}
+			pod, ok := createAction.GetObject().(*corev1.Pod)
+			if !ok {
+				return false, nil, nil
+			}
+			createdCommand = append([]string(nil), pod.Spec.Containers[0].Command...)
+			return false, nil, nil
+		})
 
 		if _, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{}); err == nil {
 			t.Fatal("EnsureSandbox() error = nil, want a jupyter-readiness failure (nothing is listening in this fake cluster)")
 		}
 
-		pod, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
-		if getErr != nil {
-			t.Fatalf("get recreated pod: %v", getErr)
+		if len(createdCommand) != 3 || !strings.Contains(createdCommand[2], "jupyterlab") {
+			t.Fatalf("recreated pod command = %+v, want a jupyterlab launch command (the mismatched Pod should have been recreated)", createdCommand)
 		}
-		container := pod.Spec.Containers[0]
-		if len(container.Command) != 3 || !strings.Contains(container.Command[2], "jupyterlab") {
-			t.Fatalf("pod command = %+v, want a jupyterlab launch command (the mismatched Pod should have been recreated)", container.Command)
+		if _, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{}); !apierrors.IsNotFound(getErr) {
+			t.Fatalf("get pod after jupyter-readiness failure: err = %v, want NotFound (a Pod that can't bring up jupyter must not be left behind)", getErr)
 		}
 	})
 
@@ -296,21 +314,30 @@ func TestK8sEnsureSandboxLaunchesJupyterEvenWhenPodFirstCreatedWithZeroProxyStat
 	// Nothing in this fake cluster actually answers on the jupyter port, so
 	// the readiness wait is expected to fail - keep it short so the test
 	// doesn't hang. What's under test is what Command the Pod got, not
-	// whether EnsureSandbox reports overall success.
+	// whether EnsureSandbox reports overall success. That failure also
+	// deletes the Pod (see ensureSandboxResult), so capture its Command as
+	// it's created rather than Get-ing it back afterward.
 	r.config.JupyterReadyTimeout = 50 * time.Millisecond
+	var createdCommand []string
+	clientset.PrependReactor("create", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		createAction, ok := action.(k8stesting.CreateAction)
+		if !ok {
+			return false, nil, nil
+		}
+		pod, ok := createAction.GetObject().(*corev1.Pod)
+		if !ok {
+			return false, nil, nil
+		}
+		createdCommand = append([]string(nil), pod.Spec.Containers[0].Command...)
+		return false, nil, nil
+	})
 
 	if _, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{}); err == nil {
 		t.Fatal("EnsureSandbox() error = nil, want a jupyter-readiness failure (nothing is listening in this fake cluster)")
 	}
 
-	name := (&k8sRuntime{}).podName(sandbox, VMState{})
-	pod, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
-	if getErr != nil {
-		t.Fatalf("get created pod: %v", getErr)
-	}
-	container := pod.Spec.Containers[0]
-	if len(container.Command) != 3 || !strings.Contains(container.Command[2], "jupyterlab") {
-		t.Fatalf("pod command = %+v, want a jupyterlab launch command even though EnsureSandbox received ProxyState{}", container.Command)
+	if len(createdCommand) != 3 || !strings.Contains(createdCommand[2], "jupyterlab") {
+		t.Fatalf("created pod command = %+v, want a jupyterlab launch command even though EnsureSandbox received ProxyState{}", createdCommand)
 	}
 }
 
@@ -467,6 +494,62 @@ func TestK8sEnsureSandboxFindsExistingPod(t *testing.T) {
 	}
 }
 
+// TestK8sEnsureSandboxSelfHealsWhenReusedPodsJupyterNeverBecomesReady is the
+// regression test for the k8s-runtime PR's #9 finding: a Pod whose jupyter
+// label already matches the requested state (so k8sPodNeedsRecreate finds
+// nothing stale) but whose jupyter server never actually answers looks
+// identical to a healthy Pod to every check EnsureSandbox has. Left in
+// place, every future EnsureSandbox call for this sandbox (including the
+// ones WriteGuestFile/WriteGuestDir trigger internally) would burn a full
+// JupyterReadyTimeout and fail again, forever, with no way to self-heal
+// short of a manual kubectl delete - this asserts the Pod is torn down
+// instead, and that a subsequent call can actually make progress.
+func TestK8sEnsureSandboxSelfHealsWhenReusedPodsJupyterNeverBecomesReady(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-jupyter-stuck")
+	name := (&k8sRuntime{}).podName(sandbox, VMState{})
+	existing := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Labels: map[string]string{
+				k8sSandboxLabelID:      sandbox.Summary.ID,
+				k8sSandboxLabelDriver:  RuntimeDriverK8s,
+				k8sSandboxLabelJupyter: "true",
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	r, clientset := newTestK8sRuntime(existing)
+	r.proxyStateReader = func(string) (ProxyState, error) {
+		return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
+	}
+	r.config.JupyterReadyTimeout = 50 * time.Millisecond
+
+	if _, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{}); err == nil {
+		t.Fatal("EnsureSandbox() error = nil, want a jupyter-readiness failure (nothing is listening in this fake cluster)")
+	}
+	if _, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{}); !apierrors.IsNotFound(getErr) {
+		t.Fatalf("get pod after jupyter-readiness failure: err = %v, want NotFound (a stuck Pod must not be left behind to fail every future call)", getErr)
+	}
+
+	// The self-heal only matters if the next call can actually make
+	// progress rather than hanging on the same stuck Pod: it must create a
+	// fresh one (which then also fails readiness and gets cleaned up in
+	// turn, since this fake cluster still answers nothing - the point is
+	// that a create happens at all, not that a Pod survives).
+	createCount := 0
+	clientset.PrependReactor("create", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		createCount++
+		return false, nil, nil
+	})
+	if _, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{}); err == nil {
+		t.Fatal("EnsureSandbox() (second call) error = nil, want the same jupyter-readiness failure (still nothing listening)")
+	}
+	if createCount != 1 {
+		t.Fatalf("pod creates during second EnsureSandbox() = %d, want 1 (a fresh Pod, not a hang on the first call's cleaned-up Pod)", createCount)
+	}
+}
+
 func TestK8sStopAndRemoveSandboxDeletePod(t *testing.T) {
 	sandbox := testSandbox(t, "sandbox-3")
 	existing := &corev1.Pod{
@@ -525,6 +608,57 @@ func TestK8sClientDoesNotCacheBuildFailure(t *testing.T) {
 	// A second call must retry from scratch, not return a cached error.
 	if _, _, err := r.client(""); err == nil {
 		t.Fatal("client() (second call) error = nil, want the same load-config failure retried, not a cached success")
+	}
+}
+
+// concurrentK8sExecutor mimics what k8s.io/client-go/tools/remotecommand's
+// real streamProtocolV2.stream does against a live apiserver: copyStdout
+// and copyStderr each run in their own goroutine (see client-go
+// tools/remotecommand/v2.go), unlike fakeK8sExecutor above, which writes
+// stdout then stderr sequentially on a single goroutine and so never
+// exercises this.
+type concurrentK8sExecutor struct{}
+
+func (concurrentK8sExecutor) Stream(options remotecommand.StreamOptions) error {
+	return concurrentK8sExecutor{}.StreamWithContext(context.Background(), options)
+}
+
+func (concurrentK8sExecutor) StreamWithContext(_ context.Context, options remotecommand.StreamOptions) error {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			_, _ = options.Stdout.Write([]byte(fmt.Sprintf("out-%d\n", i)))
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			_, _ = options.Stderr.Write([]byte(fmt.Sprintf("err-%d\n", i)))
+		}
+	}()
+	wg.Wait()
+	return nil
+}
+
+// TestK8sExecConcurrentStdoutStderrRace is the regression test for the
+// data race dockerExecCollector.mu fixes: this driver hands the same
+// collector's Stdout/Stderr writers to remotecommand.StreamWithContext,
+// whose real executor (unlike fakeK8sExecutor) writes both concurrently.
+// Run with -race, this failed before the mu field existed.
+func TestK8sExecConcurrentStdoutStderrRace(t *testing.T) {
+	r, _ := newTestK8sRuntime()
+	sandbox := testSandbox(t, "sandbox-race")
+	if _, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{}); err != nil {
+		t.Fatalf("EnsureSandbox() error = %v", err)
+	}
+	r.newExecutor = func(*rest.Config, string, *url.URL) (remotecommand.Executor, error) {
+		return concurrentK8sExecutor{}, nil
+	}
+
+	if _, err := r.Exec(context.Background(), sandbox, VMState{}, ExecSpec{Command: "echo hi"}); err != nil {
+		t.Fatalf("Exec() error = %v", err)
 	}
 }
 
@@ -883,6 +1017,61 @@ func TestK8sReadGuestFileReportsNonZeroExitCode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "exit code 1") || !strings.Contains(err.Error(), "No such file or directory") {
 		t.Fatalf("ReadGuestFile() error = %q, want it to surface the exit code and stderr", err.Error())
+	}
+}
+
+// TestK8sWriteGuestFileDeletesRatherThanTruncatesOnNilContent is the
+// regression test for the k8s-runtime PR's #2 finding: callers (see
+// mcp_config.go, agent_files.go, runtime_config.go) pass content == nil to
+// mean "this file should no longer exist" - the same signal that gets
+// os.Remove on docker/boxlite's shared mount. A plain "cat > path" instead
+// leaves a 0-byte file behind, which a guest-side JSON/TOML reader treats
+// as invalid content (a parse error) rather than "nothing configured" (the
+// ENOENT case such readers actually handle).
+func TestK8sWriteGuestFileDeletesRatherThanTruncatesOnNilContent(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-write-guest-file")
+	existing := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "agent-compose-sandbox-write-guest-file",
+			Namespace: "default",
+			Labels: map[string]string{
+				k8sSandboxLabelID:     sandbox.Summary.ID,
+				k8sSandboxLabelDriver: RuntimeDriverK8s,
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	for _, tc := range []struct {
+		name         string
+		content      []byte
+		wantContains string
+		wantExcludes string
+	}{
+		{name: "nil content deletes", content: nil, wantContains: "rm -f", wantExcludes: "cat >"},
+		{name: "non-nil content writes", content: []byte("{}"), wantContains: "cat >", wantExcludes: "rm -f"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, _ := newTestK8sRuntime(existing)
+			var gotScript string
+			r.newExecutor = func(_ *rest.Config, _ string, u *url.URL) (remotecommand.Executor, error) {
+				command := u.Query()["command"]
+				if len(command) == 3 {
+					gotScript = command[2]
+				}
+				return fakeK8sExecutor{}, nil
+			}
+
+			if err := r.WriteGuestFile(context.Background(), sandbox, VMState{}, "/data/state/agents/mcp/config.json", tc.content); err != nil {
+				t.Fatalf("WriteGuestFile() error = %v", err)
+			}
+			if !strings.Contains(gotScript, tc.wantContains) {
+				t.Fatalf("script = %q, want it to contain %q", gotScript, tc.wantContains)
+			}
+			if strings.Contains(gotScript, tc.wantExcludes) {
+				t.Fatalf("script = %q, want it to not contain %q", gotScript, tc.wantExcludes)
+			}
+		})
 	}
 }
 

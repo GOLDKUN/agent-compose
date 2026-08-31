@@ -51,7 +51,16 @@ jobs:
         run: go install github.com/bufbuild/buf/cmd/buf@v1.68.1
       - name: Generate Protobuf sources
         run: buf generate
-      - run: go test ./cmd/... ./pkg/...
+      # k8scompose gates every k8s-runtime-driver test (see
+      # pkg/driver/k8s_runtime_test.go and friends) - without it, this step
+      # silently ran zero of them.
+      - run: go test -tags k8scompose ./cmd/... ./pkg/...
+      # A dedicated -race pass scoped to pkg/driver: the k8s driver hands
+      # remotecommand.StreamWithContext two writers (Stdout/Stderr) that its
+      # real SPDY executor fills from two concurrent goroutines, unlike the
+      # sequential fake used above - see TestK8sExecConcurrentStdoutStderrRace.
+      # Scoped rather than -race on the whole matrix above to keep this fast.
+      - run: go test -tags k8scompose -race ./pkg/driver/...
 
   installer-build:
     name: Installer binaries

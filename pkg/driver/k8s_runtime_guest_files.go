@@ -112,11 +112,22 @@ func (r *k8sRuntime) WriteGuestFile(ctx context.Context, sandbox *Sandbox, vmSta
 	if _, err := r.EnsureSandbox(ctx, sandbox, vmState, ProxyState{}); err != nil {
 		return fmt.Errorf("write guest file %s: ensure sandbox: %w", guestPath, err)
 	}
-	script := fmt.Sprintf(
-		"mkdir -p %s && cat > %s",
-		shellQuote(filepath.Dir(guestPath)),
-		shellQuote(guestPath),
-	)
+	// content == nil is callers' (see execution.GuestFileWriterFunc, and
+	// e.g. mcp_config.go's clear-on-remove path) way of saying "this file
+	// should no longer exist" - a plain "cat > path" would instead leave a
+	// 0-byte file behind, which is not the same thing to a guest-side
+	// reader: an empty file still exists and still parses as invalid JSON/
+	// TOML/whatever, where a missing file reads as "nothing configured".
+	// docker/boxlite get this for free from os.Remove on their shared
+	// mount (see mcp_config.go); rm -f is the k8s equivalent.
+	script := fmt.Sprintf("rm -f %s", shellQuote(guestPath))
+	if content != nil {
+		script = fmt.Sprintf(
+			"mkdir -p %s && cat > %s",
+			shellQuote(filepath.Dir(guestPath)),
+			shellQuote(guestPath),
+		)
+	}
 	result, err := r.execWithInput(ctx, k8sExecRequest{
 		Sandbox: sandbox,
 		VMState: vmState,

@@ -284,7 +284,7 @@ func (r *k8sRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmStat
 			return SandboxVMInfo{}, r.cleanupK8sPodAfterEnsureFailure(ctx, clientset, attempt, err)
 		}
 	}
-	return r.ensureSandboxResult(ctx, pod, effective)
+	return r.ensureSandboxResult(ctx, clientset, r.namespaceFor(vmState), pod, effective)
 }
 
 // k8sPodNeedsRecreate reports whether pod cannot serve as-is and must be
@@ -306,7 +306,18 @@ func k8sPodNeedsRecreate(pod *corev1.Pod, effective ProxyState) (reason string, 
 // ensureSandboxResult builds EnsureSandbox's return value once pod is
 // Running. When jupyter is enabled, this also waits for it to actually be
 // answering before reporting success, mirroring the microsandbox driver.
-func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, pod *corev1.Pod, effective ProxyState) (SandboxVMInfo, error) {
+//
+// A Pod whose jupyter never comes up is force-deleted here rather than left
+// in place: k8sPodNeedsRecreate only compares Phase and the jupyter label,
+// both of which still read "fine" on a Pod stuck like this (Running,
+// jupyter label matching effective) - so without this, every future
+// EnsureSandbox call for this sandbox (including the ones
+// WriteGuestFile/WriteGuestDir trigger internally) would burn a full
+// JupyterReadyTimeout and fail again, forever, with no way to self-heal
+// short of a manual kubectl delete. This applies regardless of whether this
+// call created pod itself or found it already Running: a Pod that can't
+// bring up jupyter can't serve this sandbox either way.
+func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, clientset kubernetes.Interface, namespace string, pod *corev1.Pod, effective ProxyState) (SandboxVMInfo, error) {
 	if !jupyterEnabled(effective) {
 		return SandboxVMInfo{BoxID: pod.Name}, nil
 	}
@@ -314,7 +325,13 @@ func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, pod *corev1.Pod, e
 	readyCtx, cancel := context.WithTimeout(ctx, r.config.JupyterReadyTimeout)
 	defer cancel()
 	if err := waitForJupyterProxy(readyCtx, effective); err != nil {
-		return SandboxVMInfo{}, fmt.Errorf("wait for jupyter on k8s pod %s: %w", pod.Name, err)
+		cause := fmt.Errorf("wait for jupyter on k8s pod %s: %w", pod.Name, err)
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), k8sCleanupTimeout)
+		defer cancelCleanup()
+		if delErr := clientset.CoreV1().Pods(namespace).Delete(cleanupCtx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); delErr != nil && !apierrors.IsNotFound(delErr) {
+			return SandboxVMInfo{}, fmt.Errorf("%w; cleanup jupyter-unready k8s pod %s: %w", cause, pod.Name, delErr)
+		}
+		return SandboxVMInfo{}, cause
 	}
 	return SandboxVMInfo{BoxID: pod.Name, ProxyState: &effective}, nil
 }
@@ -351,7 +368,16 @@ func (r *k8sRuntime) cleanupK8sPodAfterEnsureFailure(ctx context.Context, client
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), k8sCleanupTimeout)
 	defer cancel()
-	if err := clientset.CoreV1().Pods(attempt.Namespace).Delete(cleanupCtx, attempt.PodName, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+	// GracePeriodSeconds: new(int64) (i.e. 0) - a plain Delete only requests
+	// graceful termination and waits out terminationGracePeriodSeconds (30s
+	// unless set, which this Pod spec doesn't) before the object actually
+	// disappears. Left at the default, a Pod that failed to reach Running
+	// stays visible as Terminating for that whole window: findPod would
+	// still report it ok on a call that lands inside it, and since
+	// k8sPodNeedsRecreate has no notion of "already being deleted", that
+	// call would wait out this same waitForPodRunning failure again instead
+	// of proceeding straight to createPod.
+	if err := clientset.CoreV1().Pods(attempt.Namespace).Delete(cleanupCtx, attempt.PodName, metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("%w; cleanup newly created k8s pod %s: %w", cause, attempt.PodName, err)
 	}
 	return cause

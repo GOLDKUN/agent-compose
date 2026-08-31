@@ -79,7 +79,17 @@ type dockerDaemonTopology struct {
 	containerized bool
 }
 
+// dockerExecCollector accumulates one exec call's stdout/stderr. Docker's
+// own caller (stdcopy.StdCopy demultiplexing a single stream) only ever
+// touches it from one goroutine at a time, so it originally carried no
+// lock. The k8s driver reuses it for remotecommand.StreamWithContext,
+// whose SPDY executor copies stdout and stderr concurrently in two
+// goroutines (see k8s.io/client-go/tools/remotecommand/v2.go
+// copyStdout/copyStderr) - without mu, that's a data race on stdout/
+// stderr/output below (and on filter's internal state), caught by
+// TestK8sExecConcurrentStdoutStderrRace under -race.
 type dockerExecCollector struct {
+	mu            sync.Mutex
 	stream        ExecStreamWriter
 	filter        *execOutputFilter
 	stdoutDecoder utf8StreamDecoder
@@ -140,6 +150,8 @@ func (c *dockerExecCollector) writeChunk(chunk ExecChunk) {
 }
 
 func (c *dockerExecCollector) finish() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.writeChunk(ExecChunk{Text: c.stdoutDecoder.Finish(), Stream: StdioStdout})
 	c.writeChunk(ExecChunk{Text: c.stderrDecoder.Finish(), Stream: StdioStderr})
 	if c.filter == nil {
@@ -149,6 +161,8 @@ func (c *dockerExecCollector) finish() {
 }
 
 func (c *dockerExecCollector) writeBytes(data []byte, stream StdioStream) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	decoder := &c.stdoutDecoder
 	if NormalizeStdioStream(stream) == StdioStderr {
 		decoder = &c.stderrDecoder
