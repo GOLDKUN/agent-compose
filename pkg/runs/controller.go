@@ -372,12 +372,23 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 }
 
 func (c *Controller) attachExistingInteractiveSession(ctx context.Context, runID string, receive RunAttachReceiver, send RunAttachSender) error {
-	attachment, err := c.interactiveSessions.Attach(strings.TrimSpace(runID))
+	runID = strings.TrimSpace(runID)
+	if c.configDB == nil {
+		return fmt.Errorf("config store is required")
+	}
+	run, err := c.configDB.GetProjectRun(ctx, runID)
 	if err != nil {
 		return err
 	}
+	if StatusIsTerminal(run.Status) {
+		return fmt.Errorf("%w: run %s is terminal", domain.ErrFailedPrecondition, runID)
+	}
+	attachment, err := c.interactiveSessions.Attach(runID)
+	if err != nil {
+		return interactiveSessionDomainError(err)
+	}
 	defer attachment.Close()
-	session, err := c.interactiveSessions.Get(strings.TrimSpace(runID))
+	session, err := c.interactiveSessions.Get(runID)
 	if err != nil {
 		return err
 	}
@@ -422,6 +433,19 @@ func (c *Controller) attachExistingInteractiveSession(ctx context.Context, runID
 				return err
 			}
 		}
+	}
+}
+
+func interactiveSessionDomainError(err error) error {
+	switch {
+	case errors.Is(err, ErrInteractiveSessionNotFound):
+		return fmt.Errorf("%w: %w", domain.ErrNotFound, err)
+	case errors.Is(err, ErrInteractiveSessionClosed):
+		return fmt.Errorf("%w: %w", domain.ErrFailedPrecondition, err)
+	case errors.Is(err, ErrInteractiveSessionAttached):
+		return fmt.Errorf("%w: %w", domain.ErrConflict, err)
+	default:
+		return err
 	}
 }
 

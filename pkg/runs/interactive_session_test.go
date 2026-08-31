@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	driverpkg "agent-compose/pkg/driver"
+	domain "agent-compose/pkg/model"
 )
 
 type sessionTestInteraction struct{ closed bool }
@@ -87,6 +88,7 @@ func TestControllerAttachesExistingInteractiveSession(t *testing.T) {
 		return request, nil
 	}
 	controller := NewController(ControllerDependencies{InteractiveSessions: m})
+	controller.configDB = &fakeControllerStore{runs: map[string]domain.ProjectRunRecord{"run-1": {RunID: "run-1", Status: domain.ProjectRunStatusRunning}}}
 	err = controller.RunProjectCommandAttach(context.Background(), receive, func(RunAttachOutput) error { return nil })
 	if err == nil || err.Error() != "done" {
 		t.Fatalf("attach error = %v", err)
