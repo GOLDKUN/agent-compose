@@ -16,7 +16,7 @@ import (
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	sessionstream "agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"

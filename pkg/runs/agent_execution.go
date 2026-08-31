@@ -3,7 +3,7 @@ package runs
 import (
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"context"
 	"fmt"
 	"path/filepath"

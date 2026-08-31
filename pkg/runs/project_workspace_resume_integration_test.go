@@ -17,7 +17,7 @@ import (
 	"agent-compose/pkg/images"
 	"agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/storage/configstore"

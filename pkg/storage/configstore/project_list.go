@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/storage/storeutil"
 )
 

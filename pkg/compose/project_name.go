@@ -7,7 +7,7 @@ const ProjectNamePattern = `^[a-z0-9][a-z0-9_-]*$`
 
 // IsProjectName reports whether value follows the Docker Compose project-name
 // character contract. Other project-scoped resource names intentionally keep
-// the stricter stable-identifier contract enforced in pkg/projects.
+// the stricter stable-identifier contract enforced in internal/projects.
 func IsProjectName(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" {

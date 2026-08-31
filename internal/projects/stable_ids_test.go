@@ -6,7 +6,7 @@ import (
 
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 )
 
 func TestProjectStableIDHelpers(t *testing.T) {

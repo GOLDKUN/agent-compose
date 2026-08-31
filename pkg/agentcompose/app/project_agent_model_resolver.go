@@ -10,7 +10,7 @@ import (
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/storage/configstore"
 )
 

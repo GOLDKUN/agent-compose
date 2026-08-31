@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 

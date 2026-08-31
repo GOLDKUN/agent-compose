@@ -14,7 +14,7 @@ import (
 
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
 )

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 )
 
 func TestProjectRunEventsAreOrderedIdempotentAndCascade(t *testing.T) {

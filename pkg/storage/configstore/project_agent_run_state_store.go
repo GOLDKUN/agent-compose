@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 )
 
 // agentRunningCounts tracks the non-scheduler and scheduler runs currently in

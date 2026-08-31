@@ -3,7 +3,7 @@ package runs
 import (
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"context"
 	"database/sql"
 	"errors"

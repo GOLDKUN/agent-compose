@@ -3,7 +3,7 @@ package main
 import (
 	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"context"
 	"encoding/json"
 	"errors"

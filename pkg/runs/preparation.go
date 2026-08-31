@@ -11,7 +11,7 @@ import (
 	"agent-compose/pkg/compose"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/storage/sandboxstore"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"google.golang.org/protobuf/encoding/protojson"

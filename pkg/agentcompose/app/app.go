@@ -27,7 +27,7 @@ import (
 	"agent-compose/pkg/imagecache"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/resources"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"

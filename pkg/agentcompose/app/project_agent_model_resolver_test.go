@@ -7,7 +7,7 @@ import (
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 )
 
 func newProjectAgentModelResolverFixture(t *testing.T, yaml string, config appconfig.Config) (domain.ProjectRecord, []domain.ProjectAgentRecord, *projectAgentModelResolver) {

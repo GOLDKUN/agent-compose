@@ -3,7 +3,7 @@ package main
 import (
 	"agent-compose/pkg/compose"
 	"agent-compose/pkg/identity"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	"context"
 	"fmt"
 	"io"

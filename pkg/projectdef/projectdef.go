@@ -13,6 +13,7 @@ type NormalizeOptions = compose.NormalizeOptions
 type NormalizedProjectSpec = compose.NormalizedProjectSpec
 type ValidationError = compose.ValidationError
 
+
 // Parse decodes a project definition from YAML or JSON.
 func Parse(data []byte) (*ProjectSpec, error) { return compose.Parse(data) }
 

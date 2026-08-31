@@ -11,7 +11,7 @@ import (
 
 	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 )
 
 // projectStore owns projects, revisions, agents, schedulers, runs, and sandboxes.

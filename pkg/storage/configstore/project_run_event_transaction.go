@@ -7,7 +7,7 @@ import (
 	"time"
 
 	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 )
 
 func (s *projectStore) CreateProjectRunWithEvents(ctx context.Context, run ProjectRunRecord, events []domain.ProjectRunEventRecord) (ProjectRunRecord, error) {

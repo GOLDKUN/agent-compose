@@ -2,7 +2,7 @@ package main
 
 import (
 	"agent-compose/pkg/compose"
-	"agent-compose/pkg/projects"
+	"agent-compose/internal/projects"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
