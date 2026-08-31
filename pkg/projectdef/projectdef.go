@@ -80,6 +80,6 @@ func IsProjectName(value string) bool { return compose.IsProjectName(value) }
 const ProjectNamePattern = compose.ProjectNamePattern
 
 const (
-	SourceCredentialsUnresolved = compose.SourceCredentialsUnresolved
-	SourceCredentialsResolved   = compose.SourceCredentialsResolved
+	SourceCredentialsFromReferences = compose.SourceCredentialsFromReferences
+	SourceCredentialsResolved       = compose.SourceCredentialsResolved
 )
