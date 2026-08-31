@@ -318,6 +318,9 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	if mode == RunAttachModePrompt && strings.TrimSpace(req.Prompt) == "" {
 		return fmt.Errorf("%w: run attach prompt is required", ErrInvalidRequest)
 	}
+	if first.RunID != "" {
+		return fmt.Errorf("%w: attaching to an existing interactive session is not yet available", domain.ErrUnsupported)
+	}
 	started, err := c.StartProjectRun(ctx, req)
 	if err != nil {
 		return err

@@ -23,6 +23,7 @@ const (
 
 type RunAttachInput struct {
 	Kind          RunAttachInputKind
+	RunID         string
 	Mode          RunAttachMode
 	Request       RunAgentRequest
 	AttachStdin   bool
