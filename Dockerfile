@@ -40,6 +40,7 @@ COPY go.mod go.sum ./
 RUN go env -w GOPROXY="${GOPROXY}" && go mod download
 RUN GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
 COPY cmd ./cmd
+COPY internal ./internal
 COPY pkg ./pkg
 COPY assets ./assets
 COPY proto ./proto
