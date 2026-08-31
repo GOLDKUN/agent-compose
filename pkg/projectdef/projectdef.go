@@ -9,10 +9,42 @@ package projectdef
 import "agent-compose/pkg/compose"
 
 type ProjectSpec = compose.ProjectSpec
+type AgentSpec = compose.AgentSpec
+type AgentMCPEntriesSpec = compose.AgentMCPEntriesSpec
+type AgentMCPEntrySpec = compose.AgentMCPEntrySpec
+type BuildSpec = compose.BuildSpec
+type DriverSpec = compose.DriverSpec
+type DockerDriverSpec = compose.DockerDriverSpec
+type BoxliteDriverSpec = compose.BoxliteDriverSpec
+type MicrosandboxDriverSpec = compose.MicrosandboxDriverSpec
+type FirecrackerDriverSpec = compose.FirecrackerDriverSpec
+type EnvFileSpec = compose.EnvFileSpec
+type EnvVarSpec = compose.EnvVarSpec
+type EventTriggerSpec = compose.EventTriggerSpec
+type JupyterSpec = compose.JupyterSpec
+type MCPServerSpec = compose.MCPServerSpec
+type OctoBusServerSpec = compose.OctoBusServerSpec
+type SandboxSpec = compose.SandboxSpec
+type SchedulerSpec = compose.SchedulerSpec
+type SkillSpec = compose.SkillSpec
+type TriggerSpec = compose.TriggerSpec
+type VolumeMountSpec = compose.VolumeMountSpec
+type VolumeSpec = compose.VolumeSpec
+type WorkspaceSpec = compose.WorkspaceSpec
 type NormalizeOptions = compose.NormalizeOptions
+type NormalizedAgentSpec = compose.NormalizedAgentSpec
+type NormalizedBuildSpec = compose.NormalizedBuildSpec
+type NormalizedDriverSpec = compose.NormalizedDriverSpec
+type NormalizedMCPServerSpec = compose.NormalizedMCPServerSpec
+type NormalizedOctoBusServerSpec = compose.NormalizedOctoBusServerSpec
 type NormalizedProjectSpec = compose.NormalizedProjectSpec
+type NormalizedSandboxSpec = compose.NormalizedSandboxSpec
+type NormalizedSchedulerSpec = compose.NormalizedSchedulerSpec
+type NormalizedSkillSpec = compose.NormalizedSkillSpec
+type NormalizedTriggerSpec = compose.NormalizedTriggerSpec
+type NormalizedVolumeMountSpec = compose.NormalizedVolumeMountSpec
+type NormalizedVolumeSpec = compose.NormalizedVolumeSpec
 type ValidationError = compose.ValidationError
-
 
 // Parse decodes a project definition from YAML or JSON.
 func Parse(data []byte) (*ProjectSpec, error) { return compose.Parse(data) }
