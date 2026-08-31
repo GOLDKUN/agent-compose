@@ -304,6 +304,12 @@ enum AttachRunMode {
   ATTACH_RUN_MODE_PROMPT = 2;
 }
 
+enum AttachDisconnectPolicy {
+  ATTACH_DISCONNECT_POLICY_UNSPECIFIED = 0;
+  ATTACH_DISCONNECT_POLICY_CANCEL = 1;
+  ATTACH_DISCONNECT_POLICY_DETACH = 2;
+}
+
 enum StdioStream {
   STDIO_STREAM_UNSPECIFIED = 0;
   STDIO_STREAM_STDOUT = 1;
@@ -1103,6 +1109,9 @@ message AttachAgentRunStart {
   bool attach_stdin = 3;
   bool tty = 4;
   AttachTerminalSize terminal_size = 5;
+  // When set, attach to an existing interactive session instead of creating a run.
+  string run_id = 6;
+  AttachDisconnectPolicy disconnect_policy = 7;
 }
 
 message TranscriptEvent {
