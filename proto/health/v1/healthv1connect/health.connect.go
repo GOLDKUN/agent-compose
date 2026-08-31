@@ -5,10 +5,10 @@
 package healthv1connect
 
 import (
+	v1 "agent-compose/proto/health/v1"
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/chaitin/agent-compose/proto/health/v1"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	http "net/http"
 	strings "strings"
