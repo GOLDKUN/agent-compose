@@ -64,7 +64,7 @@ func TestNewConfigNormalizesJupyterProxyBase(t *testing.T) {
 	}{
 		{name: "default", raw: "", want: "/jupyter"},
 		{name: "trims whitespace", raw: "  /agent-compose/jupyter  ", want: "/agent-compose/jupyter"},
-		{name: "adds leading slash", raw: "github.com/chaitin/agent-compose/jupyter", want: "/agent-compose/jupyter"},
+		{name: "adds leading slash", raw: "jupyter", want: "/jupyter"},
 		{name: "trims trailing slash", raw: "/agent-compose/jupyter/", want: "/agent-compose/jupyter"},
 		{name: "root falls back to default", raw: "/", want: "/jupyter"},
 	} {

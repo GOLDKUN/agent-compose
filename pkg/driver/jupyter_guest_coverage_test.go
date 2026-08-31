@@ -22,7 +22,7 @@ func testJupyterGuestCoverageWorkflow(t *testing.T) {
 		t.Fatalf("kernelspecPayloadReady returned unexpected values")
 	}
 
-	proxyState := ProxyState{Enabled: true, HostPort: 7410, GuestPort: 8888, ProxyPath: "github.com/chaitin/agent-compose/session/session-1/lab/", Token: "token value"}
+	proxyState := ProxyState{Enabled: true, HostPort: 7410, GuestPort: 8888, ProxyPath: "/agent-compose/session/session-1/lab/", Token: "token value"}
 	if got := jupyterBaseURL(proxyState); got != "/agent-compose/session/session-1/" {
 		t.Fatalf("jupyterBaseURL = %q", got)
 	}
