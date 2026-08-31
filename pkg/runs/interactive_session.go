@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	driverpkg "agent-compose/pkg/driver"
 )
 
 var (
@@ -31,6 +33,31 @@ type InteractiveSession struct {
 	input     chan RunAttachInput
 	attached  bool
 	closeOnce sync.Once
+	runtime   driverpkg.RuntimeInteraction
+}
+
+// BindRuntime transfers ownership of the runtime interaction to the session.
+// It may only be called once, before the session is closed.
+func (s *InteractiveSession) BindRuntime(interaction driverpkg.RuntimeInteraction) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.runtime != nil {
+		return fmt.Errorf("runtime interaction already bound")
+	}
+	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
+		return ErrInteractiveSessionClosed
+	}
+	s.runtime = driverpkg.GuardRuntimeInteractionInput(interaction)
+	return nil
+}
+
+func (s *InteractiveSession) Runtime() (driverpkg.RuntimeInteraction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.runtime == nil {
+		return nil, fmt.Errorf("runtime interaction is not bound")
+	}
+	return s.runtime, nil
 }
 
 func NewInteractiveSession(runID string) *InteractiveSession {
@@ -84,7 +111,16 @@ func (s *InteractiveSession) Send(ctx context.Context, input RunAttachInput) err
 }
 
 func (s *InteractiveSession) Close(state InteractiveSessionState) {
-	s.closeOnce.Do(func() { s.mu.Lock(); s.state = state; s.mu.Unlock(); close(s.input) })
+	s.closeOnce.Do(func() {
+		s.mu.Lock()
+		s.state = state
+		runtime := s.runtime
+		s.mu.Unlock()
+		close(s.input)
+		if runtime != nil {
+			_ = runtime.CloseSend()
+		}
+	})
 }
 
 type InteractiveSessionManager struct {
