@@ -167,21 +167,17 @@ func TestK8sEnsureSandboxCreatesPodWhenMissing(t *testing.T) {
 	}
 }
 
-func TestK8sCreatePodLaunchesJupyterWhenReaderReportsEnabled(t *testing.T) {
+func TestK8sCreatePodLaunchesJupyterWhenEnabled(t *testing.T) {
 	r, clientset := newTestK8sRuntime()
 	sandbox := testSandbox(t, "sandbox-jupyter")
-	r.proxyStateReader = func(sandboxID string) (ProxyState, error) {
-		if sandboxID != sandbox.Summary.ID {
-			t.Fatalf("proxyStateReader called with sandbox ID = %q, want %q", sandboxID, sandbox.Summary.ID)
-		}
-		return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
-	}
 
-	// The proxyState parameter passed here is deliberately zero-value: the
-	// point of resolveProxyState is that createPod's jupyter decision must
-	// come from the reader, not from whatever a given caller happens to
-	// pass in (see the ProxyStateReader doc comment).
-	pod, err := r.createPod(context.Background(), clientset, sandbox, VMState{}, ProxyState{})
+	// createPod trusts its effective parameter directly - resolving it from
+	// the durable store (rather than an ad-hoc caller-supplied proxyState)
+	// is EnsureSandbox's job, exercised by
+	// TestK8sEnsureSandboxLaunchesJupyterEvenWhenPodFirstCreatedWithZeroProxyState
+	// below.
+	effective := ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}
+	pod, err := r.createPod(context.Background(), clientset, sandbox, VMState{}, effective)
 	if err != nil {
 		t.Fatalf("createPod() error = %v", err)
 	}
@@ -195,6 +191,91 @@ func TestK8sCreatePodLaunchesJupyterWhenReaderReportsEnabled(t *testing.T) {
 	if len(container.Ports) != 1 || container.Ports[0].ContainerPort != 8888 {
 		t.Fatalf("pod container ports = %+v, want [{ContainerPort: 8888}]", container.Ports)
 	}
+	if pod.Labels[k8sSandboxLabelJupyter] != "true" {
+		t.Fatalf("pod label %s = %q, want \"true\"", k8sSandboxLabelJupyter, pod.Labels[k8sSandboxLabelJupyter])
+	}
+}
+
+// TestK8sEnsureSandboxRecreatesPodWhenJupyterConfigChanges is the
+// regression test for the "jupyter enabled but Pod never got the jupyter
+// command" failure mode: a Pod's Command is fixed at creation, so if the
+// sandbox's persisted jupyter config changes afterward (or the Pod predates
+// the k8sSandboxLabelJupyter label entirely), EnsureSandbox must detect the
+// mismatch and recreate the Pod instead of endlessly waiting on a Pod that
+// can never satisfy waitForJupyterProxy.
+func TestK8sEnsureSandboxRecreatesPodWhenJupyterConfigChanges(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-jupyter-config-change")
+	name := (&k8sRuntime{}).podName(sandbox, VMState{})
+
+	t.Run("pod predates the jupyter label", func(t *testing.T) {
+		existing := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "default",
+				Labels: map[string]string{
+					k8sSandboxLabelID:     sandbox.Summary.ID,
+					k8sSandboxLabelDriver: RuntimeDriverK8s,
+					// No k8sSandboxLabelJupyter - as if this Pod predates
+					// jupyter support entirely.
+				},
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		}
+		r, clientset := newTestK8sRuntime(existing)
+		r.proxyStateReader = func(string) (ProxyState, error) {
+			return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
+		}
+		r.config.JupyterReadyTimeout = 50 * time.Millisecond
+
+		if _, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{}); err == nil {
+			t.Fatal("EnsureSandbox() error = nil, want a jupyter-readiness failure (nothing is listening in this fake cluster)")
+		}
+
+		pod, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
+		if getErr != nil {
+			t.Fatalf("get recreated pod: %v", getErr)
+		}
+		container := pod.Spec.Containers[0]
+		if len(container.Command) != 3 || !strings.Contains(container.Command[2], "jupyterlab") {
+			t.Fatalf("pod command = %+v, want a jupyterlab launch command (the mismatched Pod should have been recreated)", container.Command)
+		}
+	})
+
+	t.Run("jupyter turned back off leaves a plain pod alone on retry, not stuck waiting", func(t *testing.T) {
+		jupyterPod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "default",
+				Labels: map[string]string{
+					k8sSandboxLabelID:     sandbox.Summary.ID,
+					k8sSandboxLabelDriver: RuntimeDriverK8s,
+					k8sSandboxLabelJupyter: "true",
+				},
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		}
+		r, clientset := newTestK8sRuntime(jupyterPod)
+		r.proxyStateReader = func(string) (ProxyState, error) {
+			return ProxyState{Enabled: false}, nil
+		}
+
+		info, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{})
+		if err != nil {
+			t.Fatalf("EnsureSandbox() error = %v, want the stale jupyter Pod replaced with a plain one", err)
+		}
+		if info.BoxID != name {
+			t.Fatalf("EnsureSandbox() BoxID = %q, want %q", info.BoxID, name)
+		}
+
+		pod, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
+		if getErr != nil {
+			t.Fatalf("get recreated pod: %v", getErr)
+		}
+		container := pod.Spec.Containers[0]
+		if len(container.Command) != 3 || container.Command[2] != "tail -f /dev/null" {
+			t.Fatalf("pod command = %+v, want the plain tail -f /dev/null command", container.Command)
+		}
+	})
 }
 
 // TestK8sEnsureSandboxLaunchesJupyterEvenWhenPodFirstCreatedWithZeroProxyState

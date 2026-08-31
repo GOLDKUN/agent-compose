@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	appconfig "agent-compose/pkg/config"
@@ -136,12 +137,15 @@ func TestK8sGuestDirClearScriptScopesHomeToHostSnapshotEntries(t *testing.T) {
 	r := &k8sRuntime{config: &appconfig.Config{GuestHomePath: "/root"}}
 
 	t.Run("non-home guestDir wipes wholesale", func(t *testing.T) {
-		script, err := r.k8sGuestDirClearScript(t.TempDir(), "/workspace")
+		script, homeEntries, err := r.k8sGuestDirClearScript(t.TempDir(), "/workspace")
 		if err != nil {
 			t.Fatalf("k8sGuestDirClearScript() error = %v", err)
 		}
 		if script != "rm -rf "+shellQuote("/workspace") {
 			t.Fatalf("script = %q, want a wholesale rm -rf of /workspace", script)
+		}
+		if homeEntries != nil {
+			t.Fatalf("homeEntries = %#v, want nil for a non-home guestDir (nothing to track a manifest for)", homeEntries)
 		}
 	})
 
@@ -152,7 +156,7 @@ func TestK8sGuestDirClearScriptScopesHomeToHostSnapshotEntries(t *testing.T) {
 				t.Fatalf("create host home entry %s: %v", name, err)
 			}
 		}
-		script, err := r.k8sGuestDirClearScript(hostHome, "/root")
+		script, homeEntries, err := r.k8sGuestDirClearScript(hostHome, "/root")
 		if err != nil {
 			t.Fatalf("k8sGuestDirClearScript() error = %v", err)
 		}
@@ -160,15 +164,50 @@ func TestK8sGuestDirClearScriptScopesHomeToHostSnapshotEntries(t *testing.T) {
 		if script != want {
 			t.Fatalf("script = %q, want %q (only entries the daemon actually manages, never a wholesale /root wipe that would delete image-baked content like .gitconfig or .local/bin)", script, want)
 		}
+		wantEntries := []string{".claude", ".codex"}
+		if !slices.Equal(homeEntries, wantEntries) {
+			t.Fatalf("homeEntries = %#v, want %#v", homeEntries, wantEntries)
+		}
 	})
 
 	t.Run("empty host snapshot clears nothing", func(t *testing.T) {
-		script, err := r.k8sGuestDirClearScript(t.TempDir(), "/root")
+		script, _, err := r.k8sGuestDirClearScript(t.TempDir(), "/root")
 		if err != nil {
 			t.Fatalf("k8sGuestDirClearScript() error = %v", err)
 		}
 		if script != "true" {
 			t.Fatalf("script = %q, want a no-op when the daemon has never written anything to home", script)
+		}
+	})
+
+	// Regression test: a top-level entry the daemon pushed in a previous
+	// run (recorded in the push manifest) but has since stopped writing at
+	// all must still be cleared from a Pod reused across runs, not left
+	// stale forever just because it's absent from the current snapshot.
+	t.Run("stale entry from a previous push is still cleared even though it's gone from the current snapshot", func(t *testing.T) {
+		hostHome := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(hostHome, ".claude"), 0o755); err != nil {
+			t.Fatalf("create host home entry: %v", err)
+		}
+		manifestPath := k8sHomePushManifestPath(hostHome)
+		if err := k8sWriteHomePushManifest(manifestPath, []string{".claude", ".codex"}); err != nil {
+			t.Fatalf("seed push manifest: %v", err)
+		}
+
+		script, homeEntries, err := r.k8sGuestDirClearScript(hostHome, "/root")
+		if err != nil {
+			t.Fatalf("k8sGuestDirClearScript() error = %v", err)
+		}
+		want := "rm -rf " + shellQuote("/root/.claude") + " " + shellQuote("/root/.codex")
+		if script != want {
+			t.Fatalf("script = %q, want %q (.codex is gone from the current snapshot but must still be cleared - it was pushed last time)", script, want)
+		}
+		// homeEntries (what gets recorded for next time) reflects the
+		// current snapshot only - .codex is no longer part of what this
+		// push restores, so it must not still be tracked afterward.
+		wantEntries := []string{".claude"}
+		if !slices.Equal(homeEntries, wantEntries) {
+			t.Fatalf("homeEntries = %#v, want %#v (the manifest must drop entries no longer being pushed)", homeEntries, wantEntries)
 		}
 	})
 }

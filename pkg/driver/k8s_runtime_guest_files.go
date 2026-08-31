@@ -6,12 +6,14 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -185,7 +187,7 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 	if _, err := r.EnsureSandbox(ctx, sandbox, vmState, ProxyState{}); err != nil {
 		return fmt.Errorf("write guest dir %s: ensure sandbox: %w", guestDir, err)
 	}
-	clearScript, err := r.k8sGuestDirClearScript(hostSrcDir, guestDir)
+	clearScript, homeEntries, err := r.k8sGuestDirClearScript(hostSrcDir, guestDir)
 	if err != nil {
 		return fmt.Errorf("write guest dir %s: %w", guestDir, err)
 	}
@@ -217,11 +219,23 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 	if !result.Success {
 		return fmt.Errorf("write guest dir %s: exit code %d: %s", guestDir, result.ExitCode, strings.TrimSpace(result.Stderr))
 	}
+	if homeEntries != nil {
+		// Record what this push actually restored, so the next push knows
+		// to also clear any of these that have since disappeared from the
+		// host snapshot (see k8sGuestDirClearScript) - only once the push
+		// has actually succeeded, so a failed push doesn't advance the
+		// manifest past entries the guest never actually received.
+		if err := k8sWriteHomePushManifest(k8sHomePushManifestPath(hostSrcDir), homeEntries); err != nil {
+			return fmt.Errorf("write guest dir %s: record home push manifest: %w", guestDir, err)
+		}
+	}
 	return nil
 }
 
 // k8sGuestDirClearScript builds the "clear the guest destination before
-// restoring it" step of a WriteGuestDir push.
+// restoring it" step of a WriteGuestDir push. homeEntries is non-nil only
+// for the GuestHomePath case (see k8sWriteHomePushManifest below); callers
+// use it to record what this push restored, once it succeeds.
 //
 // For every guestDir except GuestHomePath, a plain "rm -rf guestDir" is
 // correct: the guest image ships nothing there worth preserving (workspace
@@ -233,27 +247,80 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 // host-side home snapshot (hostSrcDir) only ever contains what the daemon
 // itself has written there, so a wholesale "rm -rf" of the whole guest home
 // before restoring from that snapshot would delete everything the image
-// shipped that the daemon never touched. Instead, only the snapshot's own
-// top-level entries are cleared in the guest, mirroring what docker/boxlite
-// achieve by bind-mounting just those specific sub-paths (see
-// runtimeMountEntries) rather than the whole home directory.
-func (r *k8sRuntime) k8sGuestDirClearScript(hostSrcDir, guestDir string) (string, error) {
+// shipped that the daemon never touched. Instead, only specific top-level
+// entries are cleared in the guest, mirroring what docker/boxlite achieve
+// by bind-mounting just those specific sub-paths (see runtimeMountEntries)
+// rather than the whole home directory.
+//
+// Which entries: the union of the current snapshot's top-level entries and
+// whatever the *previous* push actually restored (k8sReadHomePushManifest).
+// The current snapshot alone isn't enough - an entry the daemon pushed in
+// an earlier run and has since stopped writing (a rotated credential, a
+// removed MCP/provider config directory) would otherwise never be cleared
+// from the guest side of a Pod that gets reused across runs, even though it
+// no longer exists on the host at all.
+func (r *k8sRuntime) k8sGuestDirClearScript(hostSrcDir, guestDir string) (script string, homeEntries []string, err error) {
 	if filepath.Clean(guestDir) != filepath.Clean(r.config.GuestHomePath) {
-		return "rm -rf " + shellQuote(guestDir), nil
+		return "rm -rf " + shellQuote(guestDir), nil, nil
 	}
-	entries, err := os.ReadDir(hostSrcDir)
+	dirEntries, err := os.ReadDir(hostSrcDir)
 	if err != nil {
-		return "", fmt.Errorf("list host home snapshot %s: %w", hostSrcDir, err)
+		return "", nil, fmt.Errorf("list host home snapshot %s: %w", hostSrcDir, err)
 	}
-	if len(entries) == 0 {
-		return "true", nil
+	current := make([]string, 0, len(dirEntries))
+	for _, entry := range dirEntries {
+		current = append(current, entry.Name())
+	}
+	previous := k8sReadHomePushManifest(k8sHomePushManifestPath(hostSrcDir))
+	clear := slices.Concat(current, previous)
+	slices.Sort(clear)
+	clear = slices.Compact(clear)
+	if len(clear) == 0 {
+		return "true", current, nil
 	}
 	var b strings.Builder
 	b.WriteString("rm -rf")
-	for _, entry := range entries {
-		b.WriteString(" " + shellQuote(filepath.Join(guestDir, entry.Name())))
+	for _, name := range clear {
+		b.WriteString(" " + shellQuote(filepath.Join(guestDir, name)))
 	}
-	return b.String(), nil
+	return b.String(), current, nil
+}
+
+// k8sHomePushManifestPath is where the previous WriteGuestDir(home) push's
+// top-level entry names are recorded, so the next push can still clear an
+// entry that has since disappeared from the host snapshot (see
+// k8sGuestDirClearScript). A sibling file next to hostSrcDir itself, so it
+// never collides with anything the daemon writes under it.
+func k8sHomePushManifestPath(hostSrcDir string) string {
+	return hostSrcDir + ".push-manifest.json"
+}
+
+// k8sReadHomePushManifest returns the entry names recorded by the previous
+// push, or nil if there isn't one - including if the manifest is missing,
+// unreadable, or corrupt. A tracking file agent-compose itself owns failing
+// to parse isn't worth failing the whole guest sync over; the cost of
+// treating it as absent is only that this push behaves like the very first
+// one (no stale-entry cleanup this time), not a wipe of anything real.
+func k8sReadHomePushManifest(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var entries []string
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil
+	}
+	return entries
+}
+
+// k8sWriteHomePushManifest records the top-level entry names a home push
+// just restored, for k8sReadHomePushManifest to pick up on the next push.
+func k8sWriteHomePushManifest(path string, entries []string) error {
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 // k8sGuestDirVolumeMountOverlap classifies how guestDir relates to a k8s

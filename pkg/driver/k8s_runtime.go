@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,13 @@ const (
 	k8sSandboxLabelPrefix = "agent-compose"
 	k8sSandboxLabelID     = k8sSandboxLabelPrefix + ".sandbox_id"
 	k8sSandboxLabelDriver = k8sSandboxLabelPrefix + ".driver"
+	// k8sSandboxLabelJupyter records, on the Pod itself, whether it was
+	// created with jupyter as its entrypoint ("true"/"false") - see
+	// createPod and k8sPodNeedsRecreate. A missing label (any Pod created
+	// before this label existed) is treated as "false", which correctly
+	// flags a mismatch - and triggers a recreate - the first time such a
+	// Pod is seen with jupyter now enabled for its sandbox.
+	k8sSandboxLabelJupyter = k8sSandboxLabelPrefix + ".jupyter"
 
 	// k8sContainerName is the single container agent-compose runs per sandbox
 	// Pod. v1 does not support multi-container sandboxes.
@@ -209,26 +217,39 @@ func (r *k8sRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmStat
 	if err != nil {
 		return SandboxVMInfo{}, err
 	}
+	// Resolved once and reused for the create decision, the mismatch check
+	// below, and the final result, rather than re-resolving in each of
+	// createPod/ensureSandboxResult separately - see the ProxyStateReader
+	// doc comment for why this must come from the store, not the proxyState
+	// parameter this call happened to receive.
+	effective := r.resolveProxyState(sandbox.Summary.ID, proxyState)
 	pod, ok, err := r.findPod(ctx, clientset, sandbox, vmState)
 	if err != nil {
 		return SandboxVMInfo{}, err
 	}
-	if ok && k8sPodIsTerminal(pod) {
-		// A Failed/Succeeded Pod is not a live sandbox to reconnect to - Pods
-		// are immutable once terminal, so the only way back to Running is
-		// deleting it and letting the block below create a fresh one.
-		// Without this, findPod would keep handing back the same dead Pod on
-		// every future EnsureSandbox call (e.g. after node eviction or an
-		// OOM kill with RestartPolicy: Never), and cleanupK8sPodAfterEnsureFailure
-		// never removes it because this call didn't create it.
-		if err := clientset.CoreV1().Pods(r.namespaceFor(vmState)).Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-			return SandboxVMInfo{}, fmt.Errorf("delete terminal k8s pod %s: %w", pod.Name, err)
+	if ok {
+		if reason, stale := k8sPodNeedsRecreate(pod, effective); stale {
+			// Either a Failed/Succeeded Pod (terminal - the only way back to
+			// Running is delete+recreate, Pods are immutable) or a Pod
+			// whose baked-in Command doesn't match whether jupyter should
+			// be running now (created before jupyter was enabled for this
+			// sandbox - including every k8s Pod from before this field
+			// existed - or before this sandbox's config turned it on).
+			// Without this, a jupyter-mismatched Pod stays Running forever:
+			// it never hits the terminal-Pod path, so nothing ever deletes
+			// it, and every future EnsureSandbox call (including the ones
+			// WriteGuestFile/WriteGuestDir trigger internally) would block
+			// for the full jupyter-readiness timeout and fail, over and
+			// over, with no way to self-heal.
+			if err := clientset.CoreV1().Pods(r.namespaceFor(vmState)).Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+				return SandboxVMInfo{}, fmt.Errorf("delete stale k8s pod %s (%s): %w", pod.Name, reason, err)
+			}
+			ok = false
 		}
-		ok = false
 	}
 	created := false
 	if !ok {
-		pod, err = r.createPod(ctx, clientset, sandbox, vmState, proxyState)
+		pod, err = r.createPod(ctx, clientset, sandbox, vmState, effective)
 		if err != nil {
 			return SandboxVMInfo{}, err
 		}
@@ -241,19 +262,29 @@ func (r *k8sRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmStat
 			return SandboxVMInfo{}, r.cleanupK8sPodAfterEnsureFailure(ctx, clientset, attempt, err)
 		}
 	}
-	return r.ensureSandboxResult(ctx, sandbox, pod, proxyState)
+	return r.ensureSandboxResult(ctx, pod, effective)
+}
+
+// k8sPodNeedsRecreate reports whether pod cannot serve as-is and must be
+// deleted and recreated: it's in a terminal phase, or its baked-in Command
+// no longer matches whether jupyter should be running (see the
+// k8sSandboxLabelJupyter doc comment - a Pod's Command can't be changed in
+// place). reason is a short human-readable cause for the delete-failure
+// error message.
+func k8sPodNeedsRecreate(pod *corev1.Pod, effective ProxyState) (reason string, stale bool) {
+	if k8sPodIsTerminal(pod) {
+		return "terminal phase", true
+	}
+	if k8sPodJupyterLabel(pod) != jupyterEnabled(effective) {
+		return "jupyter config no longer matches the Pod's command", true
+	}
+	return "", false
 }
 
 // ensureSandboxResult builds EnsureSandbox's return value once pod is
-// Running. jupyter's launch decision was already made by createPod using
-// resolveProxyState (the durable, order-independent source - see the
-// ProxyStateReader doc comment); this re-resolves the same way so a Pod
-// found already Running by an earlier createPod call still gets its
-// GuestHost/GuestPort reported here, not just a Pod this call just created.
-// When jupyter is enabled, this also waits for it to actually be answering
-// before reporting success, mirroring the microsandbox driver.
-func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, sandbox *Sandbox, pod *corev1.Pod, proxyState ProxyState) (SandboxVMInfo, error) {
-	effective := r.resolveProxyState(sandbox.Summary.ID, proxyState)
+// Running. When jupyter is enabled, this also waits for it to actually be
+// answering before reporting success, mirroring the microsandbox driver.
+func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, pod *corev1.Pod, effective ProxyState) (SandboxVMInfo, error) {
 	if !jupyterEnabled(effective) {
 		return SandboxVMInfo{BoxID: pod.Name}, nil
 	}
@@ -304,7 +335,7 @@ func (r *k8sRuntime) cleanupK8sPodAfterEnsureFailure(ctx context.Context, client
 	return cause
 }
 
-func (r *k8sRuntime) createPod(ctx context.Context, clientset kubernetes.Interface, sandbox *Sandbox, vmState VMState, proxyState ProxyState) (*corev1.Pod, error) {
+func (r *k8sRuntime) createPod(ctx context.Context, clientset kubernetes.Interface, sandbox *Sandbox, vmState VMState, effective ProxyState) (*corev1.Pod, error) {
 	name := r.podName(sandbox, vmState)
 	image := resolveSandboxGuestImage(vmState.Image, sandbox.Summary.GuestImage, defaultGuestImageForDriver(r.config, RuntimeDriverK8s))
 	if image == "" {
@@ -315,13 +346,14 @@ func (r *k8sRuntime) createPod(ctx context.Context, clientset kubernetes.Interfa
 		return nil, err
 	}
 	// A Pod's Command is fixed for its whole life, so the jupyter decision
-	// has to be made once, correctly, right here - resolveProxyState reads
-	// the sandbox's persisted config rather than trusting the proxyState
-	// this particular EnsureSandbox call happened to receive (see the
-	// ProxyStateReader doc comment).
+	// has to be made once, correctly, right here (effective is already
+	// resolved via resolveProxyState by the caller - see the
+	// ProxyStateReader doc comment). k8sSandboxLabelJupyter records that
+	// decision on the Pod itself so a later EnsureSandbox call can detect
+	// whether it's stale (see k8sPodNeedsRecreate) without having to infer
+	// it from the live Command string.
 	cmdText := "tail -f /dev/null"
 	var containerPorts []corev1.ContainerPort
-	effective := r.resolveProxyState(sandbox.Summary.ID, proxyState)
 	if jupyterEnabled(effective) {
 		cmdText = jupyterLaunchCommand(r.config, effective, false)
 		containerPorts = []corev1.ContainerPort{{ContainerPort: int32(effective.GuestPort)}}
@@ -334,8 +366,9 @@ func (r *k8sRuntime) createPod(ctx context.Context, clientset kubernetes.Interfa
 				k8sSandboxLabelID: sandbox.Summary.ID,
 			},
 			Labels: map[string]string{
-				k8sSandboxLabelID:     k8sSandboxLabelValue(sandbox.Summary.ID),
-				k8sSandboxLabelDriver: RuntimeDriverK8s,
+				k8sSandboxLabelID:      k8sSandboxLabelValue(sandbox.Summary.ID),
+				k8sSandboxLabelDriver:  RuntimeDriverK8s,
+				k8sSandboxLabelJupyter: strconv.FormatBool(jupyterEnabled(effective)),
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -504,6 +537,14 @@ func k8sPodIsTerminal(pod *corev1.Pod) bool {
 	default:
 		return false
 	}
+}
+
+// k8sPodJupyterLabel reads back what createPod recorded via
+// k8sSandboxLabelJupyter. A missing or unparseable label reads as false,
+// which is correct for any Pod created before this label existed.
+func k8sPodJupyterLabel(pod *corev1.Pod) bool {
+	enabled, _ := strconv.ParseBool(pod.Labels[k8sSandboxLabelJupyter])
+	return enabled
 }
 
 func (r *k8sRuntime) waitForPodRunning(ctx context.Context, clientset kubernetes.Interface, namespace, name string) (*corev1.Pod, error) {
