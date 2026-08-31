@@ -78,3 +78,8 @@ func ParseCanonicalJSON(data []byte) (*NormalizedProjectSpec, error) {
 func IsProjectName(value string) bool { return compose.IsProjectName(value) }
 
 const ProjectNamePattern = compose.ProjectNamePattern
+
+const (
+	SourceCredentialsUnresolved = compose.SourceCredentialsUnresolved
+	SourceCredentialsResolved   = compose.SourceCredentialsResolved
+)

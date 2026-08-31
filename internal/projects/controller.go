@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"agent-compose/pkg/capability"
-	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/images"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projectdef"
 	"agent-compose/pkg/schedulers"
 )
 
@@ -50,7 +50,7 @@ type CapabilityGatewaySource interface {
 }
 
 type NormalizedProject struct {
-	Spec       *compose.NormalizedProjectSpec
+	Spec       *projectdef.NormalizedProjectSpec
 	SpecHash   string
 	SourcePath string
 }
@@ -171,7 +171,7 @@ type ApplyResult struct {
 	Issues       []ValidationIssue
 	Applied      bool
 	Unchanged    bool
-	RevisionSpec *compose.NormalizedProjectSpec
+	RevisionSpec *projectdef.NormalizedProjectSpec
 }
 
 func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyResult, error) {
@@ -181,7 +181,7 @@ func (c *Controller) ApplyProject(ctx context.Context, req ApplyRequest) (ApplyR
 type PatchRequest struct {
 	Project                 ProjectRef
 	ExpectedCurrentSpecHash string
-	Spec                    *compose.ProjectSpec
+	Spec                    *projectdef.ProjectSpec
 	Issues                  []ValidationIssue
 	DryRun                  bool
 }
@@ -220,7 +220,7 @@ func (c *Controller) PatchProject(ctx context.Context, req PatchRequest) (ApplyR
 	if expectedHash != revision.SpecHash {
 		return ApplyResult{}, fmt.Errorf("%w: expected spec hash %s does not match current spec hash %s", ErrRevisionConflict, expectedHash, revision.SpecHash)
 	}
-	current, err := compose.ParseCanonicalJSON([]byte(revision.SpecJSON))
+	current, err := projectdef.ParseCanonicalJSON([]byte(revision.SpecJSON))
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("patch project %s: parse current revision: %w", project.Name, err)
 	}
@@ -237,12 +237,12 @@ func (c *Controller) PatchProject(ctx context.Context, req PatchRequest) (ApplyR
 	if HasValidationErrors(restoreIssues) {
 		return ApplyResult{Issues: restoreIssues, RevisionSpec: current}, nil
 	}
-	normalizedSpec, err := compose.Normalize(restored, compose.NormalizeOptions{
+	normalizedSpec, err := projectdef.Normalize(restored, projectdef.NormalizeOptions{
 		ComposePath:       project.SourcePath,
-		SourceCredentials: compose.SourceCredentialsResolved,
+		SourceCredentials: projectdef.SourceCredentialsResolved,
 	})
 	if err != nil {
-		var validationErr *compose.ValidationError
+		var validationErr *projectdef.ValidationError
 		if errors.As(err, &validationErr) {
 			return ApplyResult{Issues: []ValidationIssue{{Path: validationErr.Path, Message: validationErr.Message}}, RevisionSpec: current}, nil
 		}
@@ -470,7 +470,7 @@ func (c *Controller) projectByNameIfExists(ctx context.Context, name string) (do
 	return domain.ProjectRecord{}, false, err
 }
 
-func (c *Controller) capabilityGatewayWarnings(ctx context.Context, spec *compose.NormalizedProjectSpec) ([]ValidationIssue, error) {
+func (c *Controller) capabilityGatewayWarnings(ctx context.Context, spec *projectdef.NormalizedProjectSpec) ([]ValidationIssue, error) {
 	if c.gateway == nil || !usesGlobalCapabilityGateway(spec) {
 		return nil, nil
 	}
@@ -488,7 +488,7 @@ func (c *Controller) capabilityGatewayWarnings(ctx context.Context, spec *compos
 	}}, nil
 }
 
-func usesGlobalCapabilityGateway(spec *compose.NormalizedProjectSpec) bool {
+func usesGlobalCapabilityGateway(spec *projectdef.NormalizedProjectSpec) bool {
 	if spec == nil {
 		return false
 	}
@@ -649,7 +649,7 @@ func (c *Controller) projectArtifacts(ctx context.Context, project domain.Projec
 	return agentRecords, agentDefinitions, schedulerRecords, schedulerDefinitions, nil
 }
 
-func (c *Controller) projectSchedulersFromSpec(ctx context.Context, project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]domain.ProjectSchedulerRecord, []domain.Scheduler, error) {
+func (c *Controller) projectSchedulersFromSpec(ctx context.Context, project domain.ProjectRecord, revision int64, spec *projectdef.NormalizedProjectSpec) ([]domain.ProjectSchedulerRecord, []domain.Scheduler, error) {
 	builds, err := c.projectSchedulerBuildsFromSpec(ctx, project, revision, spec)
 	if err != nil {
 		return nil, nil, err
@@ -657,7 +657,7 @@ func (c *Controller) projectSchedulersFromSpec(ctx context.Context, project doma
 	return SchedulerRecords(builds), SchedulerDefinitions(builds), nil
 }
 
-func (c *Controller) projectSchedulerBuildsFromSpec(ctx context.Context, project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]SchedulerBuild, error) {
+func (c *Controller) projectSchedulerBuildsFromSpec(ctx context.Context, project domain.ProjectRecord, revision int64, spec *projectdef.NormalizedProjectSpec) ([]SchedulerBuild, error) {
 	builds, err := NewSchedulerBuildsFromSpec(project, revision, spec)
 	if err != nil {
 		return nil, err
