@@ -127,6 +127,16 @@ func (s *InteractiveSession) Send(ctx context.Context, input RunAttachInput) err
 	}
 }
 
+func (s *InteractiveSession) Receive() RunAttachReceiver {
+	return func() (RunAttachInput, error) {
+		input, ok := <-s.input
+		if !ok {
+			return RunAttachInput{}, ErrInteractiveSessionClosed
+		}
+		return input, nil
+	}
+}
+
 func (s *InteractiveSession) Close(state InteractiveSessionState) {
 	s.closeOnce.Do(func() {
 		s.mu.Lock()

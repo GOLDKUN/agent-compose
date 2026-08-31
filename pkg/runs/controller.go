@@ -341,6 +341,9 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		return err
 	}
 	defer func() { _ = c.interactiveSessions.Remove(started.Run.RunID, InteractiveSessionCompleted) }()
+	inputCtx, cancelInput := context.WithCancel(ctx)
+	defer cancelInput()
+	go forwardRunAttachInputs(inputCtx, receive, session)
 	if onStarted != nil {
 		onStarted(started.Run.RunID)
 	}
@@ -350,7 +353,7 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		Warnings: started.Warnings,
 		Start:    first,
 		Mode:     mode,
-	}, receive, send)
+	}, session.Receive(), send)
 	if err != nil {
 		return err
 	}
@@ -359,6 +362,18 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	}
 	_ = run
 	return nil
+}
+
+func forwardRunAttachInputs(ctx context.Context, receive RunAttachReceiver, session *InteractiveSession) {
+	for {
+		input, err := receive()
+		if err != nil {
+			return
+		}
+		if err := session.Send(ctx, input); err != nil {
+			return
+		}
+	}
 }
 
 // startedProjectRunContext bundles the run-scoped state StartProjectRun
