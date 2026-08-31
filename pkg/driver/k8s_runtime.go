@@ -342,10 +342,21 @@ func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, clientset kubernet
 		// this same stuck Pod again (still Terminating, still "fine" to
 		// k8sPodNeedsRecreate) or have its createPod call hit AlreadyExists
 		// on this Pod's deterministic name.
-		if delErr := clientset.CoreV1().Pods(namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); delErr != nil && !apierrors.IsNotFound(delErr) {
+		//
+		// Once ctx.Err() above has decided this is a genuine Pod-side
+		// failure (not the caller giving up), the cleanup itself must not
+		// still be at the mercy of ctx: waitForPodDeleted can poll for up
+		// to k8sPodDeleteTimeout (30s), and ctx cancelling partway through
+		// that window would abort the cleanup with the Pod still
+		// Terminating - reintroducing the exact stuck state this whole
+		// path exists to fix. cleanupCtx detaches from ctx the same way
+		// k8sCleanupTimeout's callers already do.
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), k8sPodDeleteTimeout)
+		defer cancelCleanup()
+		if delErr := clientset.CoreV1().Pods(namespace).Delete(cleanupCtx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); delErr != nil && !apierrors.IsNotFound(delErr) {
 			return SandboxVMInfo{}, fmt.Errorf("%w; cleanup jupyter-unready k8s pod %s: %w", cause, pod.Name, delErr)
 		}
-		if waitErr := r.waitForPodDeleted(ctx, clientset, namespace, pod.Name, k8sPodDeleteTimeout); waitErr != nil {
+		if waitErr := r.waitForPodDeleted(cleanupCtx, clientset, namespace, pod.Name, k8sPodDeleteTimeout); waitErr != nil {
 			return SandboxVMInfo{}, fmt.Errorf("%w; wait for jupyter-unready k8s pod %s deletion: %w", cause, pod.Name, waitErr)
 		}
 		return SandboxVMInfo{}, cause

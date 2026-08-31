@@ -653,6 +653,76 @@ func TestK8sEnsureSandboxWaitsForJupyterUnreadyPodToActuallyBeDeleted(t *testing
 	}
 }
 
+// TestK8sEnsureSandboxFinishesJupyterUnreadyCleanupAfterCallerContextExpires
+// is the regression test for a review finding on the fix above: once
+// ctx.Err() has already decided this is a genuine Pod-side jupyter failure
+// (not the caller giving up), the cleanup itself must not still be at the
+// mercy of ctx - waitForPodDeleted can poll for several seconds, and ctx
+// expiring partway through that window must not abort the cleanup with the
+// Pod still Terminating (which would reintroduce the exact stuck state
+// this whole path exists to fix).
+func TestK8sEnsureSandboxFinishesJupyterUnreadyCleanupAfterCallerContextExpires(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-jupyter-ctx-expires-during-cleanup")
+	name := (&k8sRuntime{}).podName(sandbox, VMState{})
+	existing := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Labels: map[string]string{
+				k8sSandboxLabelID:      sandbox.Summary.ID,
+				k8sSandboxLabelDriver:  RuntimeDriverK8s,
+				k8sSandboxLabelJupyter: "true",
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	r, clientset := newTestK8sRuntime(existing)
+	r.proxyStateReader = func(string) (ProxyState, error) {
+		return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
+	}
+	r.config.JupyterReadyTimeout = 50 * time.Millisecond
+
+	// Stall waitForPodDeleted's confirmation for a few polls (200ms apart)
+	// so there's a window after the jupyter-readiness failure (~50ms) in
+	// which ctx below - given only slightly more budget than
+	// JupyterReadyTimeout - expires while cleanup is still in progress.
+	clientset.PrependReactor("delete", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, nil // handled: swallow the delete, object stays in the tracker
+	})
+	var gets int
+	var verifying bool
+	clientset.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		getAction, ok := action.(k8stesting.GetAction)
+		if !ok || getAction.GetName() != name || verifying {
+			// verifying excludes this test's own final assertion below from
+			// the count - otherwise that Get would itself be the 3rd hit
+			// and trigger the tracker delete, making this test pass
+			// regardless of whether EnsureSandbox's own cleanup ever
+			// actually got there.
+			return false, nil, nil
+		}
+		gets++
+		if gets < 3 {
+			return false, nil, nil // fall through to the tracker, which still has it
+		}
+		_ = clientset.Tracker().Delete(corev1.SchemeGroupVersion.WithResource("pods"), "default", name)
+		return false, nil, nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Millisecond)
+	defer cancel()
+	if _, err := r.EnsureSandbox(ctx, sandbox, VMState{}, ProxyState{}); err == nil {
+		t.Fatal("EnsureSandbox() error = nil, want a jupyter-readiness failure (nothing is listening in this fake cluster)")
+	}
+	if ctx.Err() == nil {
+		t.Fatal("test setup invalid: ctx did not actually expire during this call")
+	}
+	verifying = true
+	if _, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{}); !apierrors.IsNotFound(getErr) {
+		t.Fatalf("get pod after ctx expired mid-cleanup: err = %v, want NotFound (cleanup must finish even once the caller's context runs out)", getErr)
+	}
+}
+
 func TestK8sStopAndRemoveSandboxDeletePod(t *testing.T) {
 	sandbox := testSandbox(t, "sandbox-3")
 	existing := &corev1.Pod{
