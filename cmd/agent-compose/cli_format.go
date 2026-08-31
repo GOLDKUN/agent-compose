@@ -1,9 +1,9 @@
 package main
 
 import (
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/compose"
 	"agent-compose/pkg/identity"
-	"agent-compose/internal/projects"
 	"context"
 	"fmt"
 	"io"

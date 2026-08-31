@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"agent-compose/pkg/storage/configstore"
 )
 

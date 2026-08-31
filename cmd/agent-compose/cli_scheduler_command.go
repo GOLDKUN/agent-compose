@@ -1,9 +1,9 @@
 package main
 
 import (
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"context"
 	"encoding/json"
 	"errors"

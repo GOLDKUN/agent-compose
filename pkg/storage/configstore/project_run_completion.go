@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	domain "agent-compose/pkg/model"
 	"agent-compose/internal/projects"
+	domain "agent-compose/pkg/model"
 )
 
 func (s *projectStore) StageProjectRunCompletion(ctx context.Context, completion domain.ProjectRunCompletionRecord, events []domain.ProjectRunEventRecord) (domain.ProjectRunCompletionRecord, bool, error) {

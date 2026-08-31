@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	domain "agent-compose/pkg/model"
 	"agent-compose/internal/projects"
+	domain "agent-compose/pkg/model"
 )
 
 func (s *projectStore) GetProjectByName(ctx context.Context, name string, includeRemoved bool) (ProjectRecord, error) {

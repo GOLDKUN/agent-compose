@@ -3,8 +3,8 @@ package configstore
 import (
 	"strings"
 
-	"agent-compose/pkg/model"
 	"agent-compose/internal/projects"
+	"agent-compose/pkg/model"
 	"agent-compose/pkg/runs"
 )
 

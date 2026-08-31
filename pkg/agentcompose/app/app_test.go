@@ -17,12 +17,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/samber/do/v2"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/agentcompose/adapters"
 	"agent-compose/pkg/cleanup"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"

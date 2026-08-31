@@ -12,9 +12,9 @@ import (
 
 	"github.com/samber/do/v2"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
 )

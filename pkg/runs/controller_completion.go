@@ -5,8 +5,8 @@ import (
 	"errors"
 	"log/slog"
 
-	domain "agent-compose/pkg/model"
 	"agent-compose/internal/projects"
+	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )

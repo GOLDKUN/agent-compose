@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	domain "agent-compose/pkg/model"
 	"agent-compose/internal/projects"
+	domain "agent-compose/pkg/model"
 )
 
 // agentRunningCounts tracks the non-scheduler and scheduler runs currently in

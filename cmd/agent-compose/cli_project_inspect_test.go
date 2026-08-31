@@ -9,8 +9,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/identity"
 	"agent-compose/internal/projects"
+	"agent-compose/pkg/identity"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 )
 

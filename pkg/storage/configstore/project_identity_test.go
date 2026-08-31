@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	domain "agent-compose/pkg/model"
 	"agent-compose/internal/projects"
+	domain "agent-compose/pkg/model"
 )
 
 func TestProjectNameIsUniqueAndKeepsIdentityAcrossRenameAndSourceMoves(t *testing.T) {

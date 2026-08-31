@@ -11,12 +11,12 @@ import (
 	"github.com/samber/do/v2"
 	"gopkg.in/yaml.v3"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/agentcompose/adapters"
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	sessionstream "agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"

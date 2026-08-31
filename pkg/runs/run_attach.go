@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"agent-compose/internal/projects"
 	appconfig "agent-compose/pkg/config"
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 )
 
 // startedRunAttachContext bundles the started run's state and the first

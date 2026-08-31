@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/identity"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 )
 
 func TestProjectStableIDHelpers(t *testing.T) {

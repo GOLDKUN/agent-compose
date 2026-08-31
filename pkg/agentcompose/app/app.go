@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/samber/do/v2"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/agentcompose/adapters"
 	"agent-compose/pkg/agentcompose/api"
 	"agent-compose/pkg/agentcompose/proxy"
@@ -27,7 +28,6 @@ import (
 	"agent-compose/pkg/imagecache"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"agent-compose/pkg/resources"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"

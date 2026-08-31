@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/compose"
 	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sources"
 	"agent-compose/pkg/workspaces"

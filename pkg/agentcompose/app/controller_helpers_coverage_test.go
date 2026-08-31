@@ -8,10 +8,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	"agent-compose/internal/projects"
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/events/webhooks"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"

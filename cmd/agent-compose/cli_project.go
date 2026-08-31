@@ -1,8 +1,8 @@
 package main
 
 import (
-	"agent-compose/pkg/compose"
 	"agent-compose/internal/projects"
+	"agent-compose/pkg/compose"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"

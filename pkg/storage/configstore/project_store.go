@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/idset"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 )
 
 // projectStore owns projects, revisions, agents, schedulers, runs, and sandboxes.

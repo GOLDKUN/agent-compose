@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
 	"agent-compose/internal/projects"
+	domain "agent-compose/pkg/model"
 )
 
 func TestProjectSchedulerPageUsesStableCursorAndProjectQuery(t *testing.T) {

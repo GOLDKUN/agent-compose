@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"agent-compose/pkg/storedtime"
 )
 

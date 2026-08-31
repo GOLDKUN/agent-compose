@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	domain "agent-compose/pkg/model"
 	"agent-compose/internal/projects"
+	domain "agent-compose/pkg/model"
 )
 
 type SandboxResult struct {

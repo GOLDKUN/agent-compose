@@ -1,8 +1,8 @@
 package main
 
 import (
-	"agent-compose/pkg/identity"
 	"agent-compose/internal/projects"
+	"agent-compose/pkg/identity"
 	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"encoding/json"

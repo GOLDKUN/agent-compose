@@ -9,13 +9,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"agent-compose/internal/projects"
 	"agent-compose/pkg/capabilities"
 	driverpkg "agent-compose/pkg/driver"
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/images"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
-	"agent-compose/internal/projects"
 	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/sandboxstore"
