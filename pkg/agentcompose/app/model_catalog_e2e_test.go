@@ -16,6 +16,12 @@ import (
 
 func TestE2EModelCatalogConfiguresOpenCodeFacadeTarget(t *testing.T) {
 	ctx := context.Background()
+	// Keep the catalog resolution deterministic when the developer/CI environment
+	// provides global LLM credentials. The test exercises models.json as the
+	// source of truth and must not inherit ambient provider configuration.
+	for _, key := range []string{"LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "OPENAI_API_KEY", "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_API_ENDPOINT", "ANTHROPIC_MODEL", "CLAUDE_MODEL"} {
+		t.Setenv(key, "")
+	}
 	root := t.TempDir()
 	t.Setenv("MODEL_CATALOG_E2E_KEY", "catalog-e2e-key")
 	catalog := `{
@@ -81,7 +87,7 @@ func TestE2EModelCatalogConfiguresOpenCodeFacadeTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configure OpenCode facade: %v", err)
 	}
-	if runtimeConfig.Model != "deepseek-v4-flash" || runtimeConfig.Env["LLM_API_PROTOCOL"] != llms.APIProtocolChatCompletions {
+	if runtimeConfig.Model != "github.com/chaitin/agent-compose/deepseek-v4-flash" || runtimeConfig.Env["LLM_API_PROTOCOL"] != llms.APIProtocolChatCompletions {
 		t.Fatalf("OpenCode runtime config = %#v", runtimeConfig)
 	}
 
