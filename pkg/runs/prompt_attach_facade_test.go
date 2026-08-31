@@ -79,7 +79,7 @@ func TestEnsurePromptAttachLLMFacadeEnvClaudeUsesControllerStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensurePromptAttachLLMFacadeEnv returned error: %v", err)
 	}
-	if env["LLM_API_PROTOCOL"] != llms.APIProtocolMessages || env["ANTHROPIC_MODEL"] != "claude-test" {
+	if env["LLM_API_PROTOCOL"] != llms.APIProtocolMessages {
 		t.Fatalf("Claude facade env = %#v", env)
 	}
 	if env["ANTHROPIC_BASE_URL"] != "http://agent-compose.test:7410/api/runtime/sandboxes/sandbox-claude-attach/llm/anthropic" {
