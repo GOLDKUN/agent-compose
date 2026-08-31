@@ -136,7 +136,7 @@ func TestSchedulerRunSupervisorTimeoutCancelsExecution(t *testing.T) {
 	}
 }
 
-func TestSchedulerRunSupervisorRunIsUnboundedWhenRunTimeoutDependencyUnset(t *testing.T) {
+func TestSchedulerRunSupervisorFallsBackToDefaultWhenRunTimeoutDependencyUnset(t *testing.T) {
 	store := newSupervisorRunStore()
 	hasDeadline := make(chan bool, 1)
 	supervisor := newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
@@ -147,7 +147,7 @@ func TestSchedulerRunSupervisorRunIsUnboundedWhenRunTimeoutDependencyUnset(t *te
 		},
 		Prepare: func(_ context.Context, req RunTriggerRequest) (PreparedRun, error) {
 			scheduler := req.Scheduler
-			return PreparedRun{Scheduler: scheduler, Run: domain.SchedulerRunSummary{ID: "run-unbounded", SchedulerID: scheduler.Summary.ID, Status: domain.SchedulerRunStatusRunning}}, nil
+			return PreparedRun{Scheduler: scheduler, Run: domain.SchedulerRunSummary{ID: "run-default-timeout", SchedulerID: scheduler.Summary.ID, Status: domain.SchedulerRunStatusRunning}}, nil
 		},
 		Execute: func(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error) {
 			_, ok := ctx.Deadline()
@@ -164,8 +164,8 @@ func TestSchedulerRunSupervisorRunIsUnboundedWhenRunTimeoutDependencyUnset(t *te
 	}
 	select {
 	case ok := <-hasDeadline:
-		if ok {
-			t.Fatal("expected an unbounded run context when RunTimeout dependency and overrides are unset, got a deadline")
+		if !ok {
+			t.Fatal("expected the run context to fall back to the hard-coded default timeout when the RunTimeout dependency and overrides are unset, got no deadline")
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for Execute to observe the run context")

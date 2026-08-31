@@ -105,13 +105,7 @@ func (s *SchedulerRunSupervisor) start(ctx context.Context, request SchedulerRun
 
 	runCtx, cancel := context.WithCancelCause(s.deps.RootCtx)
 	cleanup := func() { cancel(context.Canceled) }
-	fallback := s.deps.RunTimeout
-	if fallback == nil {
-		// Preserve the pre-refactor "unset RunTimeout dependency means unbounded run"
-		// contract: only an explicit override or scheduler.RunTimeout can set a deadline.
-		fallback = func(override time.Duration) time.Duration { return override }
-	}
-	if timeout := effectiveSchedulerRunTimeout(scheduler, request.Timeout, fallback); timeout > 0 {
+	if timeout := effectiveSchedulerRunTimeout(scheduler, request.Timeout, s.deps.RunTimeout); timeout > 0 {
 		var timeoutCancel context.CancelFunc
 		runCtx, timeoutCancel = context.WithTimeoutCause(runCtx, timeout, errSchedulerRunTimedOut)
 		cleanup = func() {
