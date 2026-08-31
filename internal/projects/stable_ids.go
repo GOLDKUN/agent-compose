@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/compose"
 	"agent-compose/pkg/identity"
+	"agent-compose/pkg/projectdef"
 )
 
 func StableProjectID(name, _ string) (string, error) {
@@ -14,8 +14,8 @@ func StableProjectID(name, _ string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("project name is required")
 	}
-	if !compose.IsProjectName(name) {
-		return "", fmt.Errorf("project name %q must match %s", name, compose.ProjectNamePattern)
+	if !projectdef.IsProjectName(name) {
+		return "", fmt.Errorf("project name %q must match %s", name, projectdef.ProjectNamePattern)
 	}
 	return identity.NewID(identity.ResourceProject, name), nil
 }

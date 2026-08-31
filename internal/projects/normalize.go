@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projectdef"
 )
 
 func NormalizeRecord(project domain.ProjectRecord) (domain.ProjectRecord, error) {
@@ -23,8 +23,8 @@ func NormalizeRecord(project domain.ProjectRecord) (domain.ProjectRecord, error)
 	if project.Name == "" {
 		return domain.ProjectRecord{}, fmt.Errorf("project name is required")
 	}
-	if !compose.IsProjectName(project.Name) {
-		return domain.ProjectRecord{}, fmt.Errorf("project name %q must match %s", project.Name, compose.ProjectNamePattern)
+	if !projectdef.IsProjectName(project.Name) {
+		return domain.ProjectRecord{}, fmt.Errorf("project name %q must match %s", project.Name, projectdef.ProjectNamePattern)
 	}
 	if project.ShortID == "" {
 		project.ShortID = identity.ShortID(project.ID)
