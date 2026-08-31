@@ -307,6 +307,9 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	if first.Kind != RunAttachInputStart {
 		return fmt.Errorf("%w: first run attach frame must be start", ErrInvalidRequest)
 	}
+	if first.RunID != "" {
+		return c.attachExistingInteractiveSession(ctx, first.RunID, receive)
+	}
 	mode := first.Mode
 	req := first.Request
 	commandText := strings.TrimSpace(req.Command)
@@ -324,9 +327,6 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	}
 	if mode == RunAttachModePrompt && strings.TrimSpace(req.Prompt) == "" {
 		return fmt.Errorf("%w: run attach prompt is required", ErrInvalidRequest)
-	}
-	if first.RunID != "" {
-		return fmt.Errorf("%w: attaching to an existing interactive session is not yet available", domain.ErrUnsupported)
 	}
 	started, err := c.StartProjectRun(ctx, req)
 	if err != nil {
@@ -362,6 +362,29 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	}
 	_ = run
 	return nil
+}
+
+func (c *Controller) attachExistingInteractiveSession(ctx context.Context, runID string, receive RunAttachReceiver) error {
+	attachment, err := c.interactiveSessions.Attach(strings.TrimSpace(runID))
+	if err != nil {
+		return err
+	}
+	defer attachment.Close()
+	for {
+		input, err := receive()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+		if input.Kind == RunAttachInputStart {
+			return fmt.Errorf("%w: duplicate run attach start frame", ErrInvalidRequest)
+		}
+		if err := attachment.Send(ctx, input); err != nil {
+			return err
+		}
+	}
 }
 
 func forwardRunAttachInputs(ctx context.Context, receive RunAttachReceiver, session *InteractiveSession) {

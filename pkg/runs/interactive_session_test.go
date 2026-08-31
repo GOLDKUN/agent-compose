@@ -66,3 +66,32 @@ func TestInteractiveSessionManagerAttachMissing(t *testing.T) {
 		t.Fatalf("attach error = %v", err)
 	}
 }
+
+func TestControllerAttachesExistingInteractiveSession(t *testing.T) {
+	m := NewInteractiveSessionManager()
+	s, err := m.Create("run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	requests := []RunAttachInput{{Kind: RunAttachInputStart, RunID: "run-1"}, {Kind: RunAttachInputHumanMessage, Text: "continue"}}
+	i := 0
+	receive := func() (RunAttachInput, error) {
+		if i == len(requests) {
+			return RunAttachInput{}, errors.New("done")
+		}
+		request := requests[i]
+		i++
+		return request, nil
+	}
+	controller := NewController(ControllerDependencies{InteractiveSessions: m})
+	err = controller.RunProjectCommandAttach(context.Background(), receive, func(RunAttachOutput) error { return nil })
+	if err == nil || err.Error() != "done" {
+		t.Fatalf("attach error = %v", err)
+	}
+	if got := (<-s.input).Text; got != "continue" {
+		t.Fatalf("input = %q", got)
+	}
+}
