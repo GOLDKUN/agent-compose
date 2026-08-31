@@ -48,6 +48,19 @@ func TestRunAttachInputFromProtoPreservesLegacyRequestVolumeBehavior(t *testing.
 	}
 }
 
+func TestRunAttachInputFromProtoPreservesResumeOptions(t *testing.T) {
+	input := runAttachInputFromProto(&agentcomposev2.AttachAgentRunRequest{Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{
+		RunId: " run-1 ", DisconnectPolicy: agentcomposev2.AttachDisconnectPolicy_ATTACH_DISCONNECT_POLICY_DETACH,
+	}}})
+	if input.RunID != "run-1" || input.DisconnectPolicy != runs.AttachDisconnectDetach {
+		t.Fatalf("resume input = %#v", input)
+	}
+	legacy := runAttachInputFromProto(&agentcomposev2.AttachAgentRunRequest{Frame: &agentcomposev2.AttachAgentRunRequest_Start{Start: &agentcomposev2.AttachAgentRunStart{}}})
+	if legacy.DisconnectPolicy != runs.AttachDisconnectCancel {
+		t.Fatalf("legacy policy = %q", legacy.DisconnectPolicy)
+	}
+}
+
 func TestRunAgentStreamStartedProjectionPreservesResponseFields(t *testing.T) {
 	createdAt := time.Date(2026, 7, 10, 8, 9, 10, 123456789, time.FixedZone("CST", 8*60*60))
 	run := domain.ProjectRunRecord{
