@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projectdef"
 )
 
-func (c *Controller) ensureProjectVolumes(ctx context.Context, project domain.ProjectRecord, spec *compose.NormalizedProjectSpec) error {
+func (c *Controller) ensureProjectVolumes(ctx context.Context, project domain.ProjectRecord, spec *projectdef.NormalizedProjectSpec) error {
 	if c.volumes == nil {
 		return fmt.Errorf("volume manager is required")
 	}

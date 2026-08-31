@@ -1,6 +1,11 @@
 package projects
 
 import (
+	"agent-compose/pkg/capabilities"
+	"agent-compose/pkg/identity"
+	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projectdef"
+	"agent-compose/pkg/schedulers"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,16 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/compose"
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
-
 	"agent-compose/pkg/capability"
 )
 
-func NewRecordFromSpec(spec *compose.NormalizedProjectSpec, sourcePath string) (domain.ProjectRecord, error) {
+func NewRecordFromSpec(spec *projectdef.NormalizedProjectSpec, sourcePath string) (domain.ProjectRecord, error) {
 	if spec == nil {
 		return domain.ProjectRecord{}, fmt.Errorf("project spec is required")
 	}
@@ -44,7 +43,7 @@ func NewRecordFromSpec(spec *compose.NormalizedProjectSpec, sourcePath string) (
 	}, nil
 }
 
-func NewAgentRecordFromSpec(projectID string, revision int64, agent compose.NormalizedAgentSpec) (domain.ProjectAgentRecord, error) {
+func NewAgentRecordFromSpec(projectID string, revision int64, agent projectdef.NormalizedAgentSpec) (domain.ProjectAgentRecord, error) {
 	projectAgentID, err := StableProjectAgentID(projectID, agent.Name)
 	if err != nil {
 		return domain.ProjectAgentRecord{}, err
@@ -73,7 +72,7 @@ func NewAgentRecordFromSpec(projectID string, revision int64, agent compose.Norm
 	}, nil
 }
 
-func NewAgentRecordsFromSpec(projectID string, revision int64, spec *compose.NormalizedProjectSpec) ([]domain.ProjectAgentRecord, error) {
+func NewAgentRecordsFromSpec(projectID string, revision int64, spec *projectdef.NormalizedProjectSpec) ([]domain.ProjectAgentRecord, error) {
 	agents := make([]domain.ProjectAgentRecord, 0, len(spec.Agents))
 	for _, agent := range spec.Agents {
 		record, err := NewAgentRecordFromSpec(projectID, revision, agent)
@@ -85,7 +84,7 @@ func NewAgentRecordsFromSpec(projectID string, revision int64, spec *compose.Nor
 	return agents, nil
 }
 
-func NewAgentDefinitionsFromSpec(project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]domain.AgentDefinition, error) {
+func NewAgentDefinitionsFromSpec(project domain.ProjectRecord, revision int64, spec *projectdef.NormalizedProjectSpec) ([]domain.AgentDefinition, error) {
 	agents := make([]domain.AgentDefinition, 0, len(spec.Agents))
 	for _, agent := range spec.Agents {
 		record, err := NewAgentDefinitionFromSpec(project, revision, agent, AgentDefinitionProjectRefs{MCPServers: spec.MCPServers, OctoBusServers: spec.OctoBusServers})
@@ -100,11 +99,11 @@ func NewAgentDefinitionsFromSpec(project domain.ProjectRecord, revision int64, s
 // AgentDefinitionProjectRefs holds the project-level MCP/OctoBus server
 // definitions an agent's config may reference by name.
 type AgentDefinitionProjectRefs struct {
-	MCPServers     map[string]compose.NormalizedMCPServerSpec
-	OctoBusServers map[string]compose.NormalizedOctoBusServerSpec
+	MCPServers     map[string]projectdef.NormalizedMCPServerSpec
+	OctoBusServers map[string]projectdef.NormalizedOctoBusServerSpec
 }
 
-func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, agent compose.NormalizedAgentSpec, projectRefs AgentDefinitionProjectRefs) (domain.AgentDefinition, error) {
+func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, agent projectdef.NormalizedAgentSpec, projectRefs AgentDefinitionProjectRefs) (domain.AgentDefinition, error) {
 	projectAgentID, err := StableProjectAgentID(project.ID, agent.Name)
 	if err != nil {
 		return domain.AgentDefinition{}, err
@@ -144,27 +143,27 @@ func NewAgentDefinitionFromSpec(project domain.ProjectRecord, revision int64, ag
 }
 
 type agentDefinitionConfig struct {
-	Jupyter        *compose.JupyterSpec                           `json:"jupyter,omitempty"`
-	Sandbox        *compose.NormalizedSandboxSpec                 `json:"sandbox,omitempty"`
-	MCPServers     map[string]compose.NormalizedMCPServerSpec     `json:"mcp_servers,omitempty"`
-	OctoBusServers map[string]compose.NormalizedOctoBusServerSpec `json:"octobus_servers,omitempty"`
+	Jupyter        *projectdef.JupyterSpec                           `json:"jupyter,omitempty"`
+	Sandbox        *projectdef.NormalizedSandboxSpec                 `json:"sandbox,omitempty"`
+	MCPServers     map[string]projectdef.NormalizedMCPServerSpec     `json:"mcp_servers,omitempty"`
+	OctoBusServers map[string]projectdef.NormalizedOctoBusServerSpec `json:"octobus_servers,omitempty"`
 	// Workspace carries the full yaml `workspace:` declaration (provider,
 	// url/path, ref, target, credentials). AgentDefinition.WorkspaceID only
 	// keeps the yaml `name` label, which is not a workspace_config preset id
 	// (see issue #599), so runtime code must read the inline spec from here
 	// to actually resolve the declared workspace instead of looking it up as
 	// a preset.
-	Workspace *compose.WorkspaceSpec `json:"workspace,omitempty"`
+	Workspace *projectdef.WorkspaceSpec `json:"workspace,omitempty"`
 
 	// DriverK8s carries the agent's `driver.k8s` override (cluster context,
 	// namespace). It has no dedicated AgentDefinition column, same as
 	// Jupyter/Sandbox/Workspace above; runtime code decodes it back out of
 	// ConfigJSON where it's needed (see driverK8sOptionsFromAgentDefinition).
-	DriverK8s *compose.K8sDriverSpec `json:"driver_k8s,omitempty"`
+	DriverK8s *projectdef.K8sDriverSpec `json:"driver_k8s,omitempty"`
 }
 
-func agentDefinitionConfigJSON(agent compose.NormalizedAgentSpec, projectMCPServers map[string]compose.NormalizedMCPServerSpec, projectOctoBusServers map[string]compose.NormalizedOctoBusServerSpec) (string, error) {
-	var driverK8s *compose.K8sDriverSpec
+func agentDefinitionConfigJSON(agent projectdef.NormalizedAgentSpec, projectMCPServers map[string]projectdef.NormalizedMCPServerSpec, projectOctoBusServers map[string]projectdef.NormalizedOctoBusServerSpec) (string, error) {
+	var driverK8s *projectdef.K8sDriverSpec
 	if agent.Driver != nil {
 		driverK8s = agent.Driver.K8s
 	}
@@ -186,8 +185,8 @@ func agentDefinitionConfigJSON(agent compose.NormalizedAgentSpec, projectMCPServ
 	return string(data), nil
 }
 
-func selectedAgentOctoBusServers(agent compose.NormalizedAgentSpec, projectServers map[string]compose.NormalizedOctoBusServerSpec) map[string]compose.NormalizedOctoBusServerSpec {
-	var selected map[string]compose.NormalizedOctoBusServerSpec
+func selectedAgentOctoBusServers(agent projectdef.NormalizedAgentSpec, projectServers map[string]projectdef.NormalizedOctoBusServerSpec) map[string]projectdef.NormalizedOctoBusServerSpec {
+	var selected map[string]projectdef.NormalizedOctoBusServerSpec
 	for _, declaration := range agent.CapsetIDs {
 		parsed, err := capability.ParseCapsetDeclaration(declaration)
 		if err != nil || !parsed.Qualified() {
@@ -198,16 +197,16 @@ func selectedAgentOctoBusServers(agent compose.NormalizedAgentSpec, projectServe
 			continue
 		}
 		if selected == nil {
-			selected = make(map[string]compose.NormalizedOctoBusServerSpec)
+			selected = make(map[string]projectdef.NormalizedOctoBusServerSpec)
 		}
 		selected[parsed.ServerName] = server
 	}
 	return selected
 }
 
-func selectedAgentMCPServers(agent compose.NormalizedAgentSpec, projectMCPServers map[string]compose.NormalizedMCPServerSpec) map[string]compose.NormalizedMCPServerSpec {
+func selectedAgentMCPServers(agent projectdef.NormalizedAgentSpec, projectMCPServers map[string]projectdef.NormalizedMCPServerSpec) map[string]projectdef.NormalizedMCPServerSpec {
 	if len(agent.MCPServers) > 0 {
-		result := make(map[string]compose.NormalizedMCPServerSpec, len(agent.MCPServers))
+		result := make(map[string]projectdef.NormalizedMCPServerSpec, len(agent.MCPServers))
 		for name, server := range agent.MCPServers {
 			result[name] = server
 		}
@@ -216,7 +215,7 @@ func selectedAgentMCPServers(agent compose.NormalizedAgentSpec, projectMCPServer
 	return nil
 }
 
-func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.ProjectSchedulerRecord, agent compose.NormalizedAgentSpec) (domain.Scheduler, error) {
+func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.ProjectSchedulerRecord, agent projectdef.NormalizedAgentSpec) (domain.Scheduler, error) {
 	projectAgentID, err := StableProjectAgentID(project.ID, agent.Name)
 	if err != nil {
 		return domain.Scheduler{}, err
@@ -276,14 +275,14 @@ func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.Proje
 	}, nil
 }
 
-func projectSchedulerDisplayName(projectName string, agent compose.NormalizedAgentSpec) string {
+func projectSchedulerDisplayName(projectName string, agent projectdef.NormalizedAgentSpec) string {
 	if displayName := strings.TrimSpace(agent.Scheduler.DisplayName); displayName != "" {
 		return displayName
 	}
 	return fmt.Sprintf("%s/%s scheduler", projectName, agent.Name)
 }
 
-func VolumeMountSpecsFromCompose(values []compose.NormalizedVolumeMountSpec) []domain.VolumeMountSpec {
+func VolumeMountSpecsFromCompose(values []projectdef.NormalizedVolumeMountSpec) []domain.VolumeMountSpec {
 	if len(values) == 0 {
 		return nil
 	}
@@ -299,7 +298,7 @@ func VolumeMountSpecsFromCompose(values []compose.NormalizedVolumeMountSpec) []d
 	return out
 }
 
-func AgentSkillsFromCompose(values []compose.NormalizedSkillSpec, sourcePath string) []domain.AgentSkill {
+func AgentSkillsFromCompose(values []projectdef.NormalizedSkillSpec, sourcePath string) []domain.AgentSkill {
 	if len(values) == 0 {
 		return nil
 	}
@@ -371,7 +370,7 @@ func SchedulerDefinitions(builds []SchedulerBuild) []domain.Scheduler {
 	return definitions
 }
 
-func NewSchedulerBuildsFromSpec(project domain.ProjectRecord, revision int64, spec *compose.NormalizedProjectSpec) ([]SchedulerBuild, error) {
+func NewSchedulerBuildsFromSpec(project domain.ProjectRecord, revision int64, spec *projectdef.NormalizedProjectSpec) ([]SchedulerBuild, error) {
 	builds := make([]SchedulerBuild, 0)
 	for _, agent := range spec.Agents {
 		record, ok, err := NewSchedulerRecordFromSpec(project.ID, revision, agent)
@@ -394,7 +393,7 @@ func NewSchedulerBuildsFromSpec(project domain.ProjectRecord, revision int64, sp
 	return builds, nil
 }
 
-func NewSchedulerRecordFromSpec(projectID string, revision int64, agent compose.NormalizedAgentSpec) (domain.ProjectSchedulerRecord, bool, error) {
+func NewSchedulerRecordFromSpec(projectID string, revision int64, agent projectdef.NormalizedAgentSpec) (domain.ProjectSchedulerRecord, bool, error) {
 	if agent.Scheduler == nil {
 		return domain.ProjectSchedulerRecord{}, false, nil
 	}

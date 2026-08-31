@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projectdef"
 )
 
 // AgentDefinitionFromRevision derives runtime agent configuration from an
 // immutable project revision. Mutable project-agent rows are read models and
 // must not override the revision selected by a run.
 func AgentDefinitionFromRevision(project domain.ProjectRecord, revision domain.ProjectRevisionRecord, agentName string) (domain.AgentDefinition, error) {
-	spec, err := compose.ParseCanonicalJSON([]byte(strings.TrimSpace(revision.SpecJSON)))
+	spec, err := projectdef.ParseCanonicalJSON([]byte(strings.TrimSpace(revision.SpecJSON)))
 	if err != nil {
 		return domain.AgentDefinition{}, fmt.Errorf("decode project revision %s/%d: %w", project.ID, revision.Revision, err)
 	}

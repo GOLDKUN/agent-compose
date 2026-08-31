@@ -3,11 +3,11 @@ package projects
 import (
 	"slices"
 
-	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projectdef"
 )
 
-func SandboxEnvItemsFromCompose(values map[string]compose.EnvVarSpec) []domain.SandboxEnvVar {
+func SandboxEnvItemsFromCompose(values map[string]projectdef.EnvVarSpec) []domain.SandboxEnvVar {
 	names := make([]string, 0, len(values))
 	for name := range values {
 		names = append(names, name)

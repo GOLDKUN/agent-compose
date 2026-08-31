@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/compose"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/projectdef"
 	"agent-compose/pkg/schedulers"
 )
 
-func ProjectSchedulerTriggersAndScript(projectID, agentName, schedulerName string, scheduler *compose.NormalizedSchedulerSpec) ([]domain.SchedulerTrigger, string, error) {
+func ProjectSchedulerTriggersAndScript(projectID, agentName, schedulerName string, scheduler *projectdef.NormalizedSchedulerSpec) ([]domain.SchedulerTrigger, string, error) {
 	if scheduler == nil {
 		return nil, "", fmt.Errorf("scheduler is required")
 	}
@@ -44,7 +44,7 @@ func ProjectSchedulerTriggersAndScript(projectID, agentName, schedulerName strin
 	return triggers, script.String(), nil
 }
 
-func ProjectSchedulerTriggerAndRegistration(id, agentName string, trigger compose.NormalizedTriggerSpec) (domain.SchedulerTrigger, string, error) {
+func ProjectSchedulerTriggerAndRegistration(id, agentName string, trigger projectdef.NormalizedTriggerSpec) (domain.SchedulerTrigger, string, error) {
 	prompt := strings.TrimSpace(trigger.Prompt)
 	if prompt == "" {
 		prompt = fmt.Sprintf("Run agent %s.", agentName)

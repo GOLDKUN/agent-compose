@@ -18,6 +18,7 @@ type DockerDriverSpec = compose.DockerDriverSpec
 type BoxliteDriverSpec = compose.BoxliteDriverSpec
 type MicrosandboxDriverSpec = compose.MicrosandboxDriverSpec
 type FirecrackerDriverSpec = compose.FirecrackerDriverSpec
+type K8sDriverSpec = compose.K8sDriverSpec
 type EnvFileSpec = compose.EnvFileSpec
 type EnvVarSpec = compose.EnvVarSpec
 type EventTriggerSpec = compose.EventTriggerSpec
