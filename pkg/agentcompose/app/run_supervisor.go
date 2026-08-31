@@ -41,6 +41,9 @@ func NewRunSupervisor(di do.Injector) (*RunSupervisor, error) {
 }
 
 func (s *RunSupervisor) StartRun(ctx context.Context, req runs.RunAgentRequest) (domain.ProjectRunRecord, error) {
+	if req.Interactive {
+		return s.startInteractiveRun(ctx, req)
+	}
 	started, err := s.controller.StartProjectRun(ctx, req)
 	if err != nil {
 		return domain.ProjectRunRecord{}, err
@@ -57,6 +60,45 @@ func (s *RunSupervisor) StartRun(ctx context.Context, req runs.RunAgentRequest) 
 		_, _, _ = started.Execute(execCtx, nil)
 	}()
 	return started.Run, nil
+}
+
+func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAgentRequest) (domain.ProjectRunRecord, error) {
+	execCtx, cancel := context.WithCancelCause(s.root)
+	started := make(chan string, 1)
+	failed := make(chan error, 1)
+	first := true
+	receive := func() (runs.RunAttachInput, error) {
+		if first {
+			first = false
+			return runs.RunAttachInput{Kind: runs.RunAttachInputStart, Mode: runs.RunAttachModePrompt, Request: req, DisconnectPolicy: runs.AttachDisconnectDetach}, nil
+		}
+		<-execCtx.Done()
+		return runs.RunAttachInput{}, context.Cause(execCtx)
+	}
+	go func() {
+		var runID string
+		err := s.controller.RunProjectCommandAttachRegistered(execCtx, receive, func(runs.RunAttachOutput) error { return nil }, func(id string) {
+			runID = id
+			s.register(id, cancel)
+			s.wg.Add(1)
+			started <- id
+		})
+		if runID != "" {
+			s.wg.Done()
+			s.unregister(runID)
+		} else {
+			cancel(nil)
+		}
+		failed <- err
+	}()
+	select {
+	case runID := <-started:
+		return s.store.GetProjectRun(ctx, runID)
+	case err := <-failed:
+		return domain.ProjectRunRecord{}, err
+	case <-ctx.Done():
+		return domain.ProjectRunRecord{}, ctx.Err()
+	}
 }
 
 func (s *RunSupervisor) Run(ctx context.Context, req runs.RunAgentRequest, stream *runs.StreamSink) (domain.ProjectRunRecord, error, error) {

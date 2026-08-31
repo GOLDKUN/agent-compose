@@ -124,7 +124,9 @@ func (d runControllerDelegate) StartAgentRun(ctx context.Context, req *connect.R
 	if d.supervisor == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("run supervisor is required"))
 	}
-	run, err := d.supervisor.StartRun(ctx, runAgentRequestFromProto(req.Msg.GetRun()))
+	runRequest := runAgentRequestFromProto(req.Msg.GetRun())
+	runRequest.Interactive = req.Msg.GetInteractive()
+	run, err := d.supervisor.StartRun(ctx, runRequest)
 	if err != nil {
 		return nil, runConnectError(err)
 	}

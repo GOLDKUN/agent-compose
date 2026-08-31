@@ -212,6 +212,7 @@ type RunAgentRequest struct {
 	StickyBindingSchedulerID string
 	StickyBindingTriggerID   string
 	StickyBindingConfigHash  string
+	Interactive              bool
 }
 
 type StreamSink struct {
