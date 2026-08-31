@@ -209,7 +209,7 @@ fi
 cd "$ROOT_DIR"
 mkdir -p -- "$(dirname -- "$output")"
 
-build_version_arg="agent-compose/pkg/config.BuildVersion=$version"
+build_version_arg="github.com/chaitin/agent-compose/pkg/config.BuildVersion=$version"
 if [[ "$build_version_arg" == *[[:space:]]* ]]; then
   if [[ "$build_version_arg" != *"'"* ]]; then
     build_version_arg="'$build_version_arg'"
