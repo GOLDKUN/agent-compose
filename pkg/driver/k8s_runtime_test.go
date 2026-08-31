@@ -247,8 +247,8 @@ func TestK8sEnsureSandboxRecreatesPodWhenJupyterConfigChanges(t *testing.T) {
 				Name:      name,
 				Namespace: "default",
 				Labels: map[string]string{
-					k8sSandboxLabelID:     sandbox.Summary.ID,
-					k8sSandboxLabelDriver: RuntimeDriverK8s,
+					k8sSandboxLabelID:      sandbox.Summary.ID,
+					k8sSandboxLabelDriver:  RuntimeDriverK8s,
 					k8sSandboxLabelJupyter: "true",
 				},
 			},
