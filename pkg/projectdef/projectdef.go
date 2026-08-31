@@ -65,6 +65,11 @@ func NormalizeFile(path string) (*NormalizedProjectSpec, error) {
 
 // Validate performs definition-level validation without runtime services.
 func Validate(spec *ProjectSpec, options NormalizeOptions) error {
+	// Validation must not resolve credentials or fetch script sources. Those
+	// operations belong to the agent-compose runtime validation layer.
+	options.SourceCredentials = compose.SourceCredentialsFromReferences
+	options.ResolveScriptURLs = false
+	options.ScriptSourceResolver = nil
 	_, err := compose.Normalize(spec, options)
 	return err
 }

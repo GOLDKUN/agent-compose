@@ -38,3 +38,11 @@ func TestValidateRejectsInvalidDefinition(t *testing.T) {
 		t.Fatal("expected invalid project name to be rejected")
 	}
 }
+
+func TestValidateDoesNotResolveRuntimeSources(t *testing.T) {
+	spec := &ProjectSpec{Name: "demo"}
+	err := Validate(spec, NormalizeOptions{ResolveScriptURLs: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
