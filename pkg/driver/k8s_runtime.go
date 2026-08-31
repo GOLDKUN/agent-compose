@@ -53,6 +53,11 @@ const (
 	k8sPodPollInterval     = 200 * time.Millisecond
 	k8sDefaultStartTimeout = 2 * time.Minute
 
+	// k8sPodDeleteTimeout bounds waitForPodDeleted: how long EnsureSandbox
+	// waits for a stale Pod's name to actually free up after a
+	// force-delete, before giving up on recreating it this call.
+	k8sPodDeleteTimeout = 30 * time.Second
+
 	// k8sCleanupTimeout bounds best-effort cleanup calls (deleting a Pod this
 	// same EnsureSandbox call just created, after it failed to become ready)
 	// so cleanup can still run against a context that is already canceled or
@@ -241,8 +246,25 @@ func (r *k8sRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmStat
 			// WriteGuestFile/WriteGuestDir trigger internally) would block
 			// for the full jupyter-readiness timeout and fail, over and
 			// over, with no way to self-heal.
-			if err := clientset.CoreV1().Pods(r.namespaceFor(vmState)).Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			//
+			// GracePeriodSeconds: new(int64) (i.e. 0) - unlike the terminal
+			// case, a jupyter-mismatched Pod can still have a live
+			// container (its whole point is being discarded regardless of
+			// what's running inside it), and a default graceful delete
+			// waits out terminationGracePeriodSeconds (30s unless set,
+			// which this Pod spec doesn't) before the object actually
+			// disappears. createPod below reuses this same sandbox's
+			// deterministic Pod name, and Kubernetes rejects a Create while
+			// the old object with that name still exists (Terminating) -
+			// force-deleting shortens that window, but Delete returning
+			// still doesn't guarantee the name is free yet, hence the
+			// explicit wait below rather than proceeding straight to
+			// createPod.
+			if err := clientset.CoreV1().Pods(r.namespaceFor(vmState)).Delete(ctx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); err != nil && !apierrors.IsNotFound(err) {
 				return SandboxVMInfo{}, fmt.Errorf("delete stale k8s pod %s (%s): %w", pod.Name, reason, err)
+			}
+			if err := r.waitForPodDeleted(ctx, clientset, r.namespaceFor(vmState), pod.Name, k8sPodDeleteTimeout); err != nil {
+				return SandboxVMInfo{}, fmt.Errorf("wait for stale k8s pod %s (%s) deletion: %w", pod.Name, reason, err)
 			}
 			ok = false
 		}
@@ -576,6 +598,33 @@ func (r *k8sRuntime) waitForPodRunning(ctx context.Context, clientset kubernetes
 				return nil, fmt.Errorf("wait for k8s pod %s to be running: %w: container %s is %s: %s", name, waitCtx.Err(), k8sContainerName, reason, strings.TrimSpace(message))
 			}
 			return nil, fmt.Errorf("wait for k8s pod %s to be running: %w", name, waitCtx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+// waitForPodDeleted polls until name no longer exists in namespace, or
+// timeout elapses. A Kubernetes Pod object is not removed the instant
+// Delete returns - even force-deleted (GracePeriodSeconds=0) - so a caller
+// about to Create a new Pod under the same deterministic name must wait for
+// this first, or risk a 409 AlreadyExists against the still-Terminating
+// old object.
+func (r *k8sRuntime) waitForPodDeleted(ctx context.Context, clientset kubernetes.Interface, namespace, name string, timeout time.Duration) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ticker := time.NewTicker(k8sPodPollInterval)
+	defer ticker.Stop()
+	for {
+		_, err := clientset.CoreV1().Pods(namespace).Get(waitCtx, name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("inspect k8s pod %s: %w", name, err)
+		}
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("wait for k8s pod %s to be deleted: %w", name, waitCtx.Err())
 		case <-ticker.C:
 		}
 	}

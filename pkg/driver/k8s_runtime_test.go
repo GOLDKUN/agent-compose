@@ -14,6 +14,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	validation "k8s.io/apimachinery/pkg/api/validate/content"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -632,6 +633,48 @@ func TestK8sEnsureSandboxRecreatesPodStuckInTerminalPhase(t *testing.T) {
 				t.Fatalf("recreated pod phase = %s, want Running (a %s pod must not be handed back as-is)", pod.Status.Phase, phase)
 			}
 		})
+	}
+}
+
+// TestK8sWaitForPodDeletedPollsUntilGone is the regression test for the Pod
+// name reuse race: Kubernetes doesn't remove a Pod object the instant
+// Delete returns (even with GracePeriodSeconds=0), so a caller about to
+// Create a new Pod under the same deterministic name has to actually wait
+// for the old one to disappear first, not just fire-and-forget the delete.
+func TestK8sWaitForPodDeletedPollsUntilGone(t *testing.T) {
+	r, clientset := newTestK8sRuntime(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "agent-compose-sandbox-deleting", Namespace: "default"},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	})
+	var gets int
+	clientset.PrependReactor("get", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		gets++
+		if gets < 3 {
+			// Fall through to the default tracker, which still has the Pod
+			// - simulates the object still being there (e.g. Terminating)
+			// for the first couple of polls.
+			return false, nil, nil
+		}
+		return true, nil, apierrors.NewNotFound(corev1.Resource("pods"), "agent-compose-sandbox-deleting")
+	})
+
+	if err := r.waitForPodDeleted(context.Background(), clientset, "default", "agent-compose-sandbox-deleting", 5*time.Second); err != nil {
+		t.Fatalf("waitForPodDeleted() error = %v", err)
+	}
+	if gets < 3 {
+		t.Fatalf("Get was called %d time(s), want at least 3 (must actually poll rather than trust the first check)", gets)
+	}
+}
+
+func TestK8sWaitForPodDeletedTimesOutIfPodNeverGoesAway(t *testing.T) {
+	r, clientset := newTestK8sRuntime(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "agent-compose-sandbox-stuck", Namespace: "default"},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	})
+
+	err := r.waitForPodDeleted(context.Background(), clientset, "default", "agent-compose-sandbox-stuck", 100*time.Millisecond)
+	if err == nil {
+		t.Fatal("waitForPodDeleted() error = nil, want a timeout (the Pod never actually disappears in this test)")
 	}
 }
 
