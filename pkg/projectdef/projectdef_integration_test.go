@@ -11,6 +11,15 @@ import (
 )
 
 func TestIntegrationProjectDefinitionFileWorkflow(t *testing.T) {
+	testProjectDefinitionFileWorkflow(t)
+}
+
+func TestE2EProjectDefinitionFileWorkflow(t *testing.T) {
+	testProjectDefinitionFileWorkflow(t)
+}
+
+func testProjectDefinitionFileWorkflow(t *testing.T) {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "agent-compose.yml")
 	definition := []byte("name: demo\nagents:\n  worker:\n    provider: test\n")
 	if err := os.WriteFile(path, definition, 0o600); err != nil {
