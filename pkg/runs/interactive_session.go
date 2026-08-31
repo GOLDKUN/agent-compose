@@ -28,12 +28,14 @@ const (
 type InteractiveSession struct {
 	RunID string
 
-	mu        sync.Mutex
-	state     InteractiveSessionState
-	input     chan RunAttachInput
-	attached  bool
-	closeOnce sync.Once
-	runtime   driverpkg.RuntimeInteraction
+	mu             sync.Mutex
+	state          InteractiveSessionState
+	input          chan RunAttachInput
+	attached       bool
+	closeOnce      sync.Once
+	runtime        driverpkg.RuntimeInteraction
+	subscribers    map[uint64]chan RunAttachOutput
+	nextSubscriber uint64
 }
 
 type InteractiveSessionAttachment struct {
@@ -78,7 +80,38 @@ func (s *InteractiveSession) Runtime() (driverpkg.RuntimeInteraction, error) {
 }
 
 func NewInteractiveSession(runID string) *InteractiveSession {
-	return &InteractiveSession{RunID: runID, state: InteractiveSessionCreated, input: make(chan RunAttachInput, 32)}
+	return &InteractiveSession{RunID: runID, state: InteractiveSessionCreated, input: make(chan RunAttachInput, 32), subscribers: map[uint64]chan RunAttachOutput{}}
+}
+
+func (s *InteractiveSession) Subscribe() (<-chan RunAttachOutput, func(), error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
+		return nil, nil, ErrInteractiveSessionClosed
+	}
+	id := s.nextSubscriber
+	s.nextSubscriber++
+	ch := make(chan RunAttachOutput, 32)
+	s.subscribers[id] = ch
+	return ch, func() {
+		s.mu.Lock()
+		if current, ok := s.subscribers[id]; ok {
+			delete(s.subscribers, id)
+			close(current)
+		}
+		s.mu.Unlock()
+	}, nil
+}
+
+func (s *InteractiveSession) Publish(output RunAttachOutput) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, subscriber := range s.subscribers {
+		select {
+		case subscriber <- output:
+		default:
+		}
+	}
 }
 
 func (s *InteractiveSession) State() InteractiveSessionState {
@@ -142,6 +175,10 @@ func (s *InteractiveSession) Close(state InteractiveSessionState) {
 		s.mu.Lock()
 		s.state = state
 		runtime := s.runtime
+		for id, subscriber := range s.subscribers {
+			delete(s.subscribers, id)
+			close(subscriber)
+		}
 		s.mu.Unlock()
 		close(s.input)
 		if runtime != nil {

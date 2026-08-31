@@ -308,7 +308,7 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		return fmt.Errorf("%w: first run attach frame must be start", ErrInvalidRequest)
 	}
 	if first.RunID != "" {
-		return c.attachExistingInteractiveSession(ctx, first.RunID, receive)
+		return c.attachExistingInteractiveSession(ctx, first.RunID, receive, send)
 	}
 	mode := first.Mode
 	req := first.Request
@@ -353,7 +353,10 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		Warnings: started.Warnings,
 		Start:    first,
 		Mode:     mode,
-	}, session.Receive(), send)
+	}, session.Receive(), func(output RunAttachOutput) error {
+		session.Publish(output)
+		return send(output)
+	})
 	if err != nil {
 		return err
 	}
@@ -364,25 +367,56 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	return nil
 }
 
-func (c *Controller) attachExistingInteractiveSession(ctx context.Context, runID string, receive RunAttachReceiver) error {
+func (c *Controller) attachExistingInteractiveSession(ctx context.Context, runID string, receive RunAttachReceiver, send RunAttachSender) error {
 	attachment, err := c.interactiveSessions.Attach(strings.TrimSpace(runID))
 	if err != nil {
 		return err
 	}
 	defer attachment.Close()
+	session, err := c.interactiveSessions.Get(strings.TrimSpace(runID))
+	if err != nil {
+		return err
+	}
+	outputs, unsubscribe, err := session.Subscribe()
+	if err != nil {
+		return err
+	}
+	defer unsubscribe()
+	receiveErr := make(chan error, 1)
+	go func() {
+		for {
+			input, err := receive()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					receiveErr <- nil
+					return
+				}
+				receiveErr <- err
+				return
+			}
+			if input.Kind == RunAttachInputStart {
+				receiveErr <- fmt.Errorf("%w: duplicate run attach start frame", ErrInvalidRequest)
+				return
+			}
+			if err := attachment.Send(ctx, input); err != nil {
+				receiveErr <- err
+				return
+			}
+		}
+	}()
 	for {
-		input, err := receive()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-receiveErr:
+			return err
+		case output, ok := <-outputs:
+			if !ok {
 				return nil
 			}
-			return err
-		}
-		if input.Kind == RunAttachInputStart {
-			return fmt.Errorf("%w: duplicate run attach start frame", ErrInvalidRequest)
-		}
-		if err := attachment.Send(ctx, input); err != nil {
-			return err
+			if err := send(output); err != nil {
+				return err
+			}
 		}
 	}
 }
