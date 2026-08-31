@@ -28,6 +28,26 @@ func guestFileWriterFor(runtime Runtime, sandbox *domain.Sandbox, vmState domain
 	}
 }
 
+// sandboxGuestFileWriter resolves sandbox's runtime and VM state and
+// returns a guest file writer for it, or nil if either can't be resolved
+// or the driver has no need for one (see guestFileWriterFor). Mirrors
+// pkg/agentcompose/adapters.AgentRunner.guestFileWriterFor for callers that
+// only have a Controller, not an AgentRunner, at hand.
+func (c *Controller) sandboxGuestFileWriter(sandbox *domain.Sandbox) execution.GuestFileWriterFunc {
+	if c == nil || c.runtime == nil || c.store == nil || sandbox == nil {
+		return nil
+	}
+	vmState, err := c.store.GetVMState(sandbox.Summary.ID)
+	if err != nil {
+		return nil
+	}
+	runtime, err := c.runtime(sandbox)
+	if err != nil {
+		return nil
+	}
+	return guestFileWriterFor(runtime, sandbox, vmState)
+}
+
 // guestDirReaderFor returns the pull-side directory capability for runtimes
 // without a shared filesystem. A nil result means the guest artifact
 // directory is already visible at its daemon-local path.

@@ -17,6 +17,7 @@ import (
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
@@ -294,7 +295,13 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		_ = r.Store.UpdateSandbox(ctx, session)
 		return nil, "", ensureErr
 	}
-	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: r.Cap, Store: r.Store, Streams: r.Streams, Session: session, CapsetIDs: scheduler.Summary.CapsetIDs})
+	runs.WriteCapabilityGuide(ctx, runs.CapabilityGuideDeps{
+		Provider:       r.Cap,
+		Store:          r.Store,
+		Streams:        r.Streams,
+		Config:         r.Config,
+		WriteGuestFile: r.AgentExecutor.GuestFileWriterFor(session),
+	}, session, scheduler.Summary.CapsetIDs)
 	if r.AgentExecutor == nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = r.Store.UpdateSandbox(ctx, session)
@@ -402,7 +409,13 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 	if err != nil {
 		return nil, "", err
 	}
-	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: r.Cap, Store: r.Store, Streams: r.Streams, Session: session, CapsetIDs: capabilities.SandboxCapsets(session)})
+	runs.WriteCapabilityGuide(ctx, runs.CapabilityGuideDeps{
+		Provider:       r.Cap,
+		Store:          r.Store,
+		Streams:        r.Streams,
+		Config:         r.Config,
+		WriteGuestFile: r.AgentExecutor.GuestFileWriterFor(session),
+	}, session, capabilities.SandboxCapsets(session))
 	if vmState.StartedAt.IsZero() || sandboxes.RuntimeReleaseIntentional(session) {
 		if err := r.AgentExecutor.PrepareSandboxAgentEnvironmentFromTags(ctx, session); err != nil {
 			return nil, "", err

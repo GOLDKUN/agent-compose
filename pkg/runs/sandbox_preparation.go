@@ -449,7 +449,13 @@ func (c *Controller) prepareFreshStartAgentEnvironment(ctx context.Context, sand
 }
 
 func (c *Controller) startProjectRunSandboxRuntime(ctx context.Context, sandbox *domain.Sandbox, event sandboxStartEvent, trustedHeaders []domain.TrustedHeader) error {
-	writeCapabilityGuide(ctx, capabilityGuideDeps{Provider: c.cap, Store: c.store, Streams: c.streams}, sandbox, capabilities.SandboxCapsets(sandbox))
+	WriteCapabilityGuide(ctx, CapabilityGuideDeps{
+		Provider:       c.cap,
+		Store:          c.store,
+		Streams:        c.streams,
+		Config:         c.config,
+		WriteGuestFile: c.sandboxGuestFileWriter(sandbox),
+	}, sandbox, capabilities.SandboxCapsets(sandbox))
 	if sandbox.Summary.VMStatus != domain.VMStatusRunning {
 		if err := c.driver.StartSandboxVM(ctx, sandbox); err != nil {
 			sandbox.Summary.VMStatus = domain.VMStatusFailed
