@@ -13,6 +13,7 @@ var (
 	ErrInteractiveSessionNotFound = errors.New("interactive session not found")
 	ErrInteractiveSessionClosed   = errors.New("interactive session closed")
 	ErrInteractiveSessionAttached = errors.New("interactive session input already attached")
+	ErrInteractiveSessionBusy     = errors.New("interactive session input queue is full")
 )
 
 type InteractiveSessionState string
@@ -147,9 +148,8 @@ func (s *InteractiveSession) AttachInput() (<-chan RunAttachInput, func(), error
 
 func (s *InteractiveSession) Send(ctx context.Context, input RunAttachInput) error {
 	s.mu.Lock()
-	state := s.state
-	s.mu.Unlock()
-	if state == InteractiveSessionCompleted || state == InteractiveSessionCanceled {
+	defer s.mu.Unlock()
+	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
 		return ErrInteractiveSessionClosed
 	}
 	select {
@@ -157,6 +157,8 @@ func (s *InteractiveSession) Send(ctx context.Context, input RunAttachInput) err
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	default:
+		return ErrInteractiveSessionBusy
 	}
 }
 

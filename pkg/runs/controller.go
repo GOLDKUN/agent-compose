@@ -445,6 +445,8 @@ func interactiveSessionDomainError(err error) error {
 		return fmt.Errorf("%w: %w", domain.ErrFailedPrecondition, err)
 	case errors.Is(err, ErrInteractiveSessionAttached):
 		return fmt.Errorf("%w: %w", domain.ErrConflict, err)
+	case errors.Is(err, ErrInteractiveSessionBusy):
+		return fmt.Errorf("%w: %w", domain.ErrConflict, err)
 	default:
 		return err
 	}
