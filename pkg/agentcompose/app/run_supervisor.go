@@ -76,9 +76,25 @@ func (s *RunSupervisor) Run(ctx context.Context, req runs.RunAgentRequest, strea
 }
 
 func (s *RunSupervisor) Attach(ctx context.Context, receive runs.RunAttachReceiver, send runs.RunAttachSender) error {
-	execCtx, cancel := context.WithCancelCause(ctx)
+	first, err := receive()
+	if err != nil {
+		return err
+	}
+	replayed := false
+	receiveWithFirst := func() (runs.RunAttachInput, error) {
+		if !replayed {
+			replayed = true
+			return first, nil
+		}
+		return receive()
+	}
+	parent := ctx
+	if first.DisconnectPolicy == runs.AttachDisconnectDetach && first.RunID == "" {
+		parent = s.root
+	}
+	execCtx, cancel := context.WithCancelCause(parent)
 	var runID string
-	err := s.controller.RunProjectCommandAttachRegistered(execCtx, receive, send, func(startedRunID string) {
+	err = s.controller.RunProjectCommandAttachRegistered(execCtx, receiveWithFirst, send, func(startedRunID string) {
 		runID = startedRunID
 		s.register(runID, cancel)
 		s.wg.Add(1)

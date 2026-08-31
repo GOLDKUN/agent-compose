@@ -355,7 +355,11 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		Mode:     mode,
 	}, session.Receive(), func(output RunAttachOutput) error {
 		session.Publish(output)
-		return send(output)
+		err := send(output)
+		if first.DisconnectPolicy == AttachDisconnectDetach {
+			return nil
+		}
+		return err
 	})
 	if err != nil {
 		return err

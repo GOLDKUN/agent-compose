@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -238,6 +239,12 @@ func runAttachInputFromProto(request *agentcomposev2.AttachAgentRunRequest) runs
 		start := frame.Start
 		input.Kind = runs.RunAttachInputStart
 		input.RunID = strings.TrimSpace(start.GetRunId())
+		switch start.GetDisconnectPolicy() {
+		case agentcomposev2.AttachDisconnectPolicy_ATTACH_DISCONNECT_POLICY_DETACH:
+			input.DisconnectPolicy = runs.AttachDisconnectDetach
+		default:
+			input.DisconnectPolicy = runs.AttachDisconnectCancel
+		}
 		input.Request = runAgentRequestFromProto(start.GetRequest())
 		// AttachAgentRun historically ignored request-scoped volume mounts. Keep
 		// that compatibility behavior while other run transports map volumes.
