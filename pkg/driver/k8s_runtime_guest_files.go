@@ -312,6 +312,16 @@ func k8sHomePushManifestPath(hostSrcDir string) string {
 // to parse isn't worth failing the whole guest sync over; the cost of
 // treating it as absent is only that this push behaves like the very first
 // one (no stale-entry cleanup this time), not a wipe of anything real.
+//
+// Entries this daemon itself wrote are always plain os.ReadDir names (see
+// k8sGuestDirClearScript) - never empty, ".", "..", or containing a path
+// separator. k8sGuestDirClearScript folds every entry straight into
+// filepath.Join(guestDir, name) and then an rm -rf, so a manifest that's
+// well-formed JSON but has been tampered with or corrupted on disk (e.g.
+// an entry of "../../etc") could otherwise walk that rm -rf outside
+// guestDir entirely. Filtering here is defense in depth, not a response to
+// a reachable attack: nothing this driver considers untrusted (the guest
+// Pod has no shared filesystem to write this file through) can reach it.
 func k8sReadHomePushManifest(path string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -321,7 +331,14 @@ func k8sReadHomePushManifest(path string) []string {
 	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil
 	}
-	return entries
+	valid := entries[:0]
+	for _, entry := range entries {
+		if entry == "" || entry == "." || entry == ".." || strings.ContainsAny(entry, `/\`) {
+			continue
+		}
+		valid = append(valid, entry)
+	}
+	return valid
 }
 
 // k8sWriteHomePushManifest records the top-level entry names a home push

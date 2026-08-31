@@ -210,6 +210,31 @@ func TestK8sGuestDirClearScriptScopesHomeToHostSnapshotEntries(t *testing.T) {
 			t.Fatalf("homeEntries = %#v, want %#v (the manifest must drop entries no longer being pushed)", homeEntries, wantEntries)
 		}
 	})
+
+	// Regression test: k8sGuestDirClearScript folds every manifest entry
+	// straight into an rm -rf, so a manifest that's well-formed JSON but
+	// has a malicious or corrupted entry (e.g. from disk corruption, since
+	// this file isn't otherwise validated) must not be able to walk that
+	// rm -rf outside guestDir.
+	t.Run("path-traversal-shaped manifest entries are dropped, not folded into the clear script", func(t *testing.T) {
+		hostHome := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(hostHome, ".claude"), 0o755); err != nil {
+			t.Fatalf("create host home entry: %v", err)
+		}
+		manifestPath := k8sHomePushManifestPath(hostHome)
+		if err := k8sWriteHomePushManifest(manifestPath, []string{".claude", "../../etc", "..", ".", "", "a/b"}); err != nil {
+			t.Fatalf("seed push manifest: %v", err)
+		}
+
+		script, _, err := r.k8sGuestDirClearScript(hostHome, "/root")
+		if err != nil {
+			t.Fatalf("k8sGuestDirClearScript() error = %v", err)
+		}
+		want := "rm -rf " + shellQuote("/root/.claude")
+		if script != want {
+			t.Fatalf("script = %q, want %q (every non-plain-name manifest entry must be dropped, not joined into the rm -rf)", script, want)
+		}
+	})
 }
 
 func TestWriteGuestDirSkipsPushWhenGuestDirOverlapsVolumeMount(t *testing.T) {

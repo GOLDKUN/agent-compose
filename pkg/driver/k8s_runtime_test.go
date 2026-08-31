@@ -684,8 +684,13 @@ func TestK8sEnsureSandboxFinishesJupyterUnreadyCleanupAfterCallerContextExpires(
 
 	// Stall waitForPodDeleted's confirmation for a few polls (200ms apart)
 	// so there's a window after the jupyter-readiness failure (~50ms) in
-	// which ctx below - given only slightly more budget than
-	// JupyterReadyTimeout - expires while cleanup is still in progress.
+	// which ctx below expires while cleanup is still in progress. ctx's
+	// budget (200ms) leaves ~150ms of margin over JupyterReadyTimeout
+	// rather than the ~25ms a tighter budget would - still comfortably
+	// short of the ~250ms+ these polls take to actually finish, but not so
+	// tight that scheduler jitter or -race overhead could flip which
+	// timeout fires first and produce a failure unrelated to the code
+	// under test.
 	clientset.PrependReactor("delete", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, nil // handled: swallow the delete, object stays in the tracker
 	})
@@ -709,7 +714,7 @@ func TestK8sEnsureSandboxFinishesJupyterUnreadyCleanupAfterCallerContextExpires(
 		return false, nil, nil
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	if _, err := r.EnsureSandbox(ctx, sandbox, VMState{}, ProxyState{}); err == nil {
 		t.Fatal("EnsureSandbox() error = nil, want a jupyter-readiness failure (nothing is listening in this fake cluster)")
