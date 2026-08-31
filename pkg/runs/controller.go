@@ -342,9 +342,13 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		return err
 	}
 	defer func() { _ = c.interactiveSessions.Remove(started.Run.RunID, InteractiveSessionCompleted) }()
+	releaseInput, err := session.AcquireInput()
+	if err != nil {
+		return err
+	}
 	inputCtx, cancelInput := context.WithCancel(ctx)
 	defer cancelInput()
-	go forwardRunAttachInputs(inputCtx, receive, session)
+	go func() { defer releaseInput(); forwardRunAttachInputs(inputCtx, receive, session) }()
 	if onStarted != nil {
 		onStarted(started.Run.RunID)
 	}

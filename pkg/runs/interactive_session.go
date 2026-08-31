@@ -134,16 +134,34 @@ func (s *InteractiveSession) transition(next InteractiveSessionState) error {
 }
 
 func (s *InteractiveSession) AttachInput() (<-chan RunAttachInput, func(), error) {
+	release, err := s.AcquireInput()
+	if err != nil {
+		return nil, nil, err
+	}
+	return s.input, release, nil
+}
+
+func (s *InteractiveSession) AcquireInput() (func(), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
-		return nil, nil, ErrInteractiveSessionClosed
+		return nil, ErrInteractiveSessionClosed
 	}
 	if s.attached {
-		return nil, nil, ErrInteractiveSessionAttached
+		return nil, ErrInteractiveSessionAttached
 	}
 	s.attached = true
-	return s.input, func() { s.mu.Lock(); s.attached = false; s.mu.Unlock() }, nil
+	if s.state == InteractiveSessionDetached {
+		s.state = InteractiveSessionRunning
+	}
+	return func() {
+		s.mu.Lock()
+		s.attached = false
+		if s.state == InteractiveSessionRunning {
+			s.state = InteractiveSessionDetached
+		}
+		s.mu.Unlock()
+	}, nil
 }
 
 func (s *InteractiveSession) Send(ctx context.Context, input RunAttachInput) error {
@@ -227,11 +245,11 @@ func (m *InteractiveSessionManager) Attach(runID string) (*InteractiveSessionAtt
 	if err != nil {
 		return nil, err
 	}
-	input, release, err := s.AttachInput()
+	release, err := s.AcquireInput()
 	if err != nil {
 		return nil, err
 	}
-	return &InteractiveSessionAttachment{session: s, input: input, release: release}, nil
+	return &InteractiveSessionAttachment{session: s, release: release}, nil
 }
 
 func (m *InteractiveSessionManager) Remove(runID string, state InteractiveSessionState) error {
