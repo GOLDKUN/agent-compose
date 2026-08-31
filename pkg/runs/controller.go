@@ -341,7 +341,8 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		_ = c.interactiveSessions.Remove(started.Run.RunID, InteractiveSessionCanceled)
 		return err
 	}
-	defer func() { _ = c.interactiveSessions.Remove(started.Run.RunID, InteractiveSessionCompleted) }()
+	sessionTerminalState := InteractiveSessionCompleted
+	defer func() { _ = c.interactiveSessions.Remove(started.Run.RunID, sessionTerminalState) }()
 	releaseInput, err := session.AcquireInput()
 	if err != nil {
 		return err
@@ -367,9 +368,19 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		return err
 	})
 	if err != nil {
+		if ctx.Err() != nil {
+			sessionTerminalState = InteractiveSessionCanceled
+		} else {
+			sessionTerminalState = InteractiveSessionFailed
+		}
 		return err
 	}
 	if execErr != nil {
+		if ctx.Err() != nil {
+			sessionTerminalState = InteractiveSessionCanceled
+		} else {
+			sessionTerminalState = InteractiveSessionFailed
+		}
 		return nil
 	}
 	_ = run

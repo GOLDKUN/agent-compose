@@ -24,6 +24,7 @@ const (
 	InteractiveSessionDetached  InteractiveSessionState = "detached"
 	InteractiveSessionCompleted InteractiveSessionState = "completed"
 	InteractiveSessionCanceled  InteractiveSessionState = "canceled"
+	InteractiveSessionFailed    InteractiveSessionState = "failed"
 )
 
 type InteractiveSession struct {
@@ -64,7 +65,7 @@ func (s *InteractiveSession) BindRuntime(interaction driverpkg.RuntimeInteractio
 	if s.runtime != nil {
 		return fmt.Errorf("runtime interaction already bound")
 	}
-	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
+	if interactiveSessionTerminal(s.state) {
 		return ErrInteractiveSessionClosed
 	}
 	s.runtime = driverpkg.GuardRuntimeInteractionInput(interaction)
@@ -87,7 +88,7 @@ func NewInteractiveSession(runID string) *InteractiveSession {
 func (s *InteractiveSession) Subscribe() (<-chan RunAttachOutput, func(), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
+	if interactiveSessionTerminal(s.state) {
 		return nil, nil, ErrInteractiveSessionClosed
 	}
 	id := s.nextSubscriber
@@ -126,7 +127,7 @@ func (s *InteractiveSession) Start() error { return s.transition(InteractiveSess
 func (s *InteractiveSession) transition(next InteractiveSessionState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
+	if interactiveSessionTerminal(s.state) {
 		return ErrInteractiveSessionClosed
 	}
 	s.state = next
@@ -144,7 +145,7 @@ func (s *InteractiveSession) AttachInput() (<-chan RunAttachInput, func(), error
 func (s *InteractiveSession) AcquireInput() (func(), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
+	if interactiveSessionTerminal(s.state) {
 		return nil, ErrInteractiveSessionClosed
 	}
 	if s.attached {
@@ -162,6 +163,10 @@ func (s *InteractiveSession) AcquireInput() (func(), error) {
 		}
 		s.mu.Unlock()
 	}, nil
+}
+
+func interactiveSessionTerminal(state InteractiveSessionState) bool {
+	return state == InteractiveSessionCompleted || state == InteractiveSessionCanceled || state == InteractiveSessionFailed
 }
 
 func (s *InteractiveSession) Send(ctx context.Context, input RunAttachInput) error {
