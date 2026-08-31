@@ -185,6 +185,10 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 	if _, err := r.EnsureSandbox(ctx, sandbox, vmState, ProxyState{}); err != nil {
 		return fmt.Errorf("write guest dir %s: ensure sandbox: %w", guestDir, err)
 	}
+	clearScript, err := r.k8sGuestDirClearScript(hostSrcDir, guestDir)
+	if err != nil {
+		return fmt.Errorf("write guest dir %s: %w", guestDir, err)
+	}
 	archiveReader, archiveWriter := io.Pipe()
 	archiveErr := make(chan error, 1)
 	go func() {
@@ -192,8 +196,8 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 		close(archiveErr)
 	}()
 	script := fmt.Sprintf(
-		"rm -rf %s && mkdir -p %s && tar xf - -C %s",
-		shellQuote(guestDir),
+		"%s && mkdir -p %s && tar xf - -C %s",
+		clearScript,
 		shellQuote(guestDir),
 		shellQuote(guestDir),
 	)
@@ -214,6 +218,42 @@ func (r *k8sRuntime) WriteGuestDir(ctx context.Context, sandbox *Sandbox, vmStat
 		return fmt.Errorf("write guest dir %s: exit code %d: %s", guestDir, result.ExitCode, strings.TrimSpace(result.Stderr))
 	}
 	return nil
+}
+
+// k8sGuestDirClearScript builds the "clear the guest destination before
+// restoring it" step of a WriteGuestDir push.
+//
+// For every guestDir except GuestHomePath, a plain "rm -rf guestDir" is
+// correct: the guest image ships nothing there worth preserving (workspace
+// is created empty - see guest-images/Dockerfile.agent-compose-guest).
+//
+// GuestHomePath is different: the guest image bakes default content
+// directly into it (.codex, .claude, .gitconfig, .claude.json, .dsh, plus
+// PATH entries like .local/bin, .cargo/bin - same Dockerfile). The daemon's
+// host-side home snapshot (hostSrcDir) only ever contains what the daemon
+// itself has written there, so a wholesale "rm -rf" of the whole guest home
+// before restoring from that snapshot would delete everything the image
+// shipped that the daemon never touched. Instead, only the snapshot's own
+// top-level entries are cleared in the guest, mirroring what docker/boxlite
+// achieve by bind-mounting just those specific sub-paths (see
+// runtimeMountEntries) rather than the whole home directory.
+func (r *k8sRuntime) k8sGuestDirClearScript(hostSrcDir, guestDir string) (string, error) {
+	if filepath.Clean(guestDir) != filepath.Clean(r.config.GuestHomePath) {
+		return "rm -rf " + shellQuote(guestDir), nil
+	}
+	entries, err := os.ReadDir(hostSrcDir)
+	if err != nil {
+		return "", fmt.Errorf("list host home snapshot %s: %w", hostSrcDir, err)
+	}
+	if len(entries) == 0 {
+		return "true", nil
+	}
+	var b strings.Builder
+	b.WriteString("rm -rf")
+	for _, entry := range entries {
+		b.WriteString(" " + shellQuote(filepath.Join(guestDir, entry.Name())))
+	}
+	return b.String(), nil
 }
 
 // k8sGuestDirVolumeMountOverlap classifies how guestDir relates to a k8s

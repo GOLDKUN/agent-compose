@@ -388,7 +388,7 @@ func NewVolumeManager(di do.Injector) (*volumes.Manager, error) {
 }
 
 func NewRuntimeProvider(di do.Injector) (adapters.RuntimeProvider, error) {
-	return adapters.NewRuntimeProvider(do.MustInvoke[*appconfig.Config](di))
+	return adapters.NewRuntimeProvider(do.MustInvoke[*appconfig.Config](di), do.MustInvoke[*sandboxstore.Store](di))
 }
 
 func NewLLMClient(di do.Injector) (*adapters.LLMClient, error) {

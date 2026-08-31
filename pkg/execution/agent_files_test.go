@@ -11,6 +11,70 @@ import (
 	domain "agent-compose/pkg/model"
 )
 
+func TestWriteAgentSystemPromptFileClearsGuestOnlyWhenPreviouslyPushed(t *testing.T) {
+	root := t.TempDir()
+	config := &appconfig.Config{}
+	var pushCount int
+	writer := func(context.Context, string, []byte) error {
+		pushCount++
+		return nil
+	}
+
+	// Never had a system prompt written: clearing must not push at all.
+	fresh := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "fresh")}}
+	if err := WriteAgentSystemPromptFile(context.Background(), config, fresh, "", writer); err != nil {
+		t.Fatalf("WriteAgentSystemPromptFile (fresh) returned error: %v", err)
+	}
+	if pushCount != 0 {
+		t.Fatalf("push count for a sandbox that never had a system prompt = %d, want 0", pushCount)
+	}
+
+	// Reused sandbox transitioning from having a prompt to having none: a
+	// no-shared-mount guest (k8s) only learns of the removal via this push,
+	// so the guest's stale copy must be cleared, not left behind for the
+	// same Pod's next run to pick back up.
+	reused := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "reused")}}
+	if err := WriteAgentSystemPromptFile(context.Background(), config, reused, "you are an agent", writer); err != nil {
+		t.Fatalf("WriteAgentSystemPromptFile (populate) returned error: %v", err)
+	}
+	pushCount = 0
+	if err := WriteAgentSystemPromptFile(context.Background(), config, reused, "", writer); err != nil {
+		t.Fatalf("WriteAgentSystemPromptFile (clear) returned error: %v", err)
+	}
+	if pushCount != 1 {
+		t.Fatalf("push count clearing a previously-populated system prompt = %d, want 1", pushCount)
+	}
+}
+
+func TestWriteAgentSystemPromptFileRetriesGuestClearAfterTransientPushFailure(t *testing.T) {
+	root := t.TempDir()
+	config := &appconfig.Config{}
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "reused")}}
+	if err := WriteAgentSystemPromptFile(context.Background(), config, session, "you are an agent", func(context.Context, string, []byte) error { return nil }); err != nil {
+		t.Fatalf("WriteAgentSystemPromptFile (populate) returned error: %v", err)
+	}
+
+	failing := func(context.Context, string, []byte) error { return fmt.Errorf("transient exec failure") }
+	if err := WriteAgentSystemPromptFile(context.Background(), config, session, "", failing); err == nil {
+		t.Fatal("WriteAgentSystemPromptFile (clear, guest push fails) returned nil error, want the push failure")
+	}
+	if _, err := os.Stat(HostAgentSystemPromptPath(session)); err != nil {
+		t.Fatalf("host system prompt file after a failed guest push, stat error = %v, want the file to still exist so a retry sees hadExisting=true", err)
+	}
+
+	var pushCount int
+	retry := func(context.Context, string, []byte) error {
+		pushCount++
+		return nil
+	}
+	if err := WriteAgentSystemPromptFile(context.Background(), config, session, "", retry); err != nil {
+		t.Fatalf("WriteAgentSystemPromptFile (clear, retry) returned error: %v", err)
+	}
+	if pushCount != 1 {
+		t.Fatalf("push count on retry after a prior transient failure = %d, want 1", pushCount)
+	}
+}
+
 func TestWriteAgentSkillsReconcilesManagedProjection(t *testing.T) {
 	root := t.TempDir()
 	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}

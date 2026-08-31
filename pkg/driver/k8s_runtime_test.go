@@ -25,10 +25,16 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// testK8sPodIP is the fake PodIP the create reactor in newTestK8sRuntime
+// stamps onto every Pod it creates, standing in for a real kubelet
+// assigning one - tests that resolve jupyter's GuestHost assert against
+// this constant.
+const testK8sPodIP = "10.42.0.7"
+
 // newTestK8sRuntime builds a k8sRuntime backed by a fake clientset, bypassing
 // the lazy clientcmd-based client() construction entirely. The fake clientset
 // does not simulate a kubelet transitioning a Pod to Running, so a reactor
-// marks every created Pod Running immediately.
+// marks every created Pod Running (with a fake PodIP) immediately.
 func newTestK8sRuntime(objects ...runtime.Object) (*k8sRuntime, *fake.Clientset) {
 	clientset := fake.NewClientset(objects...)
 	clientset.PrependReactor("create", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -41,6 +47,7 @@ func newTestK8sRuntime(objects ...runtime.Object) (*k8sRuntime, *fake.Clientset)
 			return false, nil, nil
 		}
 		pod.Status.Phase = corev1.PodRunning
+		pod.Status.PodIP = testK8sPodIP
 		return false, nil, nil
 	})
 	r := &k8sRuntime{
@@ -51,6 +58,7 @@ func newTestK8sRuntime(objects ...runtime.Object) (*k8sRuntime, *fake.Clientset)
 			GuestRuntimeRoot:    "/data/runtime",
 			GuestLogRoot:        "/data/logs",
 			SandboxStartTimeout: 5 * time.Second,
+			JupyterReadyTimeout: 5 * time.Second,
 		},
 		defaultNamespace: "default",
 		clients: map[string]*k8sClientEntry{
@@ -156,6 +164,88 @@ func TestK8sEnsureSandboxCreatesPodWhenMissing(t *testing.T) {
 	}
 	if len(pod.Spec.Containers[0].VolumeMounts) != 0 {
 		t.Fatalf("pod container declares volume mounts %+v, want none", pod.Spec.Containers[0].VolumeMounts)
+	}
+}
+
+func TestK8sCreatePodLaunchesJupyterWhenReaderReportsEnabled(t *testing.T) {
+	r, clientset := newTestK8sRuntime()
+	sandbox := testSandbox(t, "sandbox-jupyter")
+	r.proxyStateReader = func(sandboxID string) (ProxyState, error) {
+		if sandboxID != sandbox.Summary.ID {
+			t.Fatalf("proxyStateReader called with sandbox ID = %q, want %q", sandboxID, sandbox.Summary.ID)
+		}
+		return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
+	}
+
+	// The proxyState parameter passed here is deliberately zero-value: the
+	// point of resolveProxyState is that createPod's jupyter decision must
+	// come from the reader, not from whatever a given caller happens to
+	// pass in (see the ProxyStateReader doc comment).
+	pod, err := r.createPod(context.Background(), clientset, sandbox, VMState{}, ProxyState{})
+	if err != nil {
+		t.Fatalf("createPod() error = %v", err)
+	}
+	if len(pod.Spec.Containers) != 1 {
+		t.Fatalf("pod containers = %+v, want exactly 1", pod.Spec.Containers)
+	}
+	container := pod.Spec.Containers[0]
+	if len(container.Command) != 3 || !strings.Contains(container.Command[2], "jupyterlab") {
+		t.Fatalf("pod command = %+v, want a jupyterlab launch command", container.Command)
+	}
+	if len(container.Ports) != 1 || container.Ports[0].ContainerPort != 8888 {
+		t.Fatalf("pod container ports = %+v, want [{ContainerPort: 8888}]", container.Ports)
+	}
+}
+
+// TestK8sEnsureSandboxLaunchesJupyterEvenWhenPodFirstCreatedWithZeroProxyState
+// is the regression test for the ordering bug the ProxyStateReader doc
+// comment describes: WriteGuestDir/WriteGuestFile call EnsureSandbox with a
+// zero-value ProxyState, and that call can be the one that creates the Pod
+// (prepareFreshStartAgentEnvironment's guest-dir sync runs before
+// StartSandboxVM ever supplies the real, persisted proxyState). Since a
+// Pod's Command is immutable, if createPod trusted that zero-value
+// parameter instead of resolveProxyState, jupyter would never launch.
+func TestK8sEnsureSandboxLaunchesJupyterEvenWhenPodFirstCreatedWithZeroProxyState(t *testing.T) {
+	r, clientset := newTestK8sRuntime()
+	sandbox := testSandbox(t, "sandbox-jupyter-ordering")
+	r.proxyStateReader = func(string) (ProxyState, error) {
+		return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
+	}
+	// Nothing in this fake cluster actually answers on the jupyter port, so
+	// the readiness wait is expected to fail - keep it short so the test
+	// doesn't hang. What's under test is what Command the Pod got, not
+	// whether EnsureSandbox reports overall success.
+	r.config.JupyterReadyTimeout = 50 * time.Millisecond
+
+	if _, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{}); err == nil {
+		t.Fatal("EnsureSandbox() error = nil, want a jupyter-readiness failure (nothing is listening in this fake cluster)")
+	}
+
+	name := (&k8sRuntime{}).podName(sandbox, VMState{})
+	pod, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
+	if getErr != nil {
+		t.Fatalf("get created pod: %v", getErr)
+	}
+	container := pod.Spec.Containers[0]
+	if len(container.Command) != 3 || !strings.Contains(container.Command[2], "jupyterlab") {
+		t.Fatalf("pod command = %+v, want a jupyterlab launch command even though EnsureSandbox received ProxyState{}", container.Command)
+	}
+}
+
+func TestK8sJupyterProxyStateForPodSetsGuestHostFromPodIP(t *testing.T) {
+	proxyState := ProxyState{GuestPort: 8888, Token: "tok", ProxyPath: "/agent-compose/session/sandbox-1"}
+	pod := &corev1.Pod{Status: corev1.PodStatus{PodIP: "10.42.0.7"}}
+
+	got := k8sJupyterProxyStateForPod(proxyState, pod)
+
+	if !got.Enabled {
+		t.Fatal("k8sJupyterProxyStateForPod() Enabled = false, want true")
+	}
+	if got.GuestHost != "10.42.0.7" {
+		t.Fatalf("k8sJupyterProxyStateForPod() GuestHost = %q, want pod IP %q", got.GuestHost, "10.42.0.7")
+	}
+	if got.GuestPort != 8888 || got.Token != "tok" || got.ProxyPath != proxyState.ProxyPath {
+		t.Fatalf("k8sJupyterProxyStateForPod() = %+v, want GuestPort/Token/ProxyPath carried through unchanged", got)
 	}
 }
 
@@ -335,6 +425,40 @@ func TestK8sStopAndRemoveSandboxDeletePod(t *testing.T) {
 	}
 }
 
+func TestK8sClientDoesNotCacheBuildFailure(t *testing.T) {
+	// A nonexistent ExplicitPath fails clientcmd's ClientConfig() call
+	// immediately (no in-cluster fallback once an explicit path is set), so
+	// this exercises client()'s error path without touching the network.
+	r := &k8sRuntime{
+		config:  &appconfig.Config{K8sKubeconfigPath: filepath.Join(t.TempDir(), "does-not-exist")},
+		clients: map[string]*k8sClientEntry{},
+	}
+
+	if _, _, err := r.client(""); err == nil {
+		t.Fatal("client() error = nil, want a load-config failure")
+	}
+	if len(r.clients) != 0 {
+		t.Fatalf("client() cached a failed build: r.clients = %#v, want empty (a transient failure must not permanently poison this context for the rest of the daemon's process lifetime)", r.clients)
+	}
+	// A second call must retry from scratch, not return a cached error.
+	if _, _, err := r.client(""); err == nil {
+		t.Fatal("client() (second call) error = nil, want the same load-config failure retried, not a cached success")
+	}
+}
+
+func TestK8sExecScriptFailsClosedWhenCwdDoesNotExist(t *testing.T) {
+	script := k8sExecScript(ExecSpec{
+		Command: "echo",
+		Args:    []string{"should not run"},
+		Env:     map[string]string{"SHOULD_NOT": "be-set"},
+	}, filepath.Join(t.TempDir(), "does-not-exist"))
+
+	output, err := exec.Command("sh", "-lc", script).CombinedOutput()
+	if err == nil {
+		t.Fatalf("script with a missing cwd succeeded and printed %q, want a failure from the bad cd", output)
+	}
+}
+
 func TestK8sExecScriptPreservesNestedShellQuotes(t *testing.T) {
 	script := k8sExecScript(ExecSpec{
 		Command: "sh",
@@ -390,6 +514,43 @@ func TestK8sEnsureSandboxLeavesExistingPodOnWaitFailure(t *testing.T) {
 
 	if _, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), existing.Name, metav1.GetOptions{}); getErr != nil {
 		t.Fatalf("EnsureSandbox() deleted a pod it did not create: %v", getErr)
+	}
+}
+
+func TestK8sEnsureSandboxRecreatesPodStuckInTerminalPhase(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-terminal-phase")
+	name := (&k8sRuntime{}).podName(sandbox, VMState{})
+	for _, phase := range []corev1.PodPhase{corev1.PodFailed, corev1.PodSucceeded} {
+		t.Run(string(phase), func(t *testing.T) {
+			existing := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: "default",
+					Labels: map[string]string{
+						k8sSandboxLabelID:     sandbox.Summary.ID,
+						k8sSandboxLabelDriver: RuntimeDriverK8s,
+					},
+				},
+				Status: corev1.PodStatus{Phase: phase},
+			}
+			r, clientset := newTestK8sRuntime(existing)
+
+			info, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{})
+			if err != nil {
+				t.Fatalf("EnsureSandbox() error = %v, want the terminal pod replaced with a fresh one", err)
+			}
+			if info.BoxID != name {
+				t.Fatalf("EnsureSandbox() BoxID = %q, want %q", info.BoxID, name)
+			}
+
+			pod, err := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
+			if err != nil {
+				t.Fatalf("get recreated pod: %v", err)
+			}
+			if pod.Status.Phase != corev1.PodRunning {
+				t.Fatalf("recreated pod phase = %s, want Running (a %s pod must not be handed back as-is)", pod.Status.Phase, phase)
+			}
+		})
 	}
 }
 

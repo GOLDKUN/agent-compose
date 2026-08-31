@@ -75,6 +75,16 @@ type ProxyState struct {
 	Exposed    bool   `json:"exposed,omitempty"`
 }
 
+// ProxyStateReader fetches a sandbox's persisted ProxyState directly from
+// the store. The k8s driver needs this because, unlike docker/microsandbox,
+// it can't trust the proxyState an individual EnsureSandbox call happens to
+// receive: EnsureSandbox is invoked from several call sites (guest file
+// pushes, exec-ensure) that don't carry real jupyter config, and whichever
+// call creates the Pod first fixes its Command forever - so the decision of
+// whether to launch jupyter has to come from durable state, not an ad-hoc
+// parameter. See k8sRuntime.resolveProxyState.
+type ProxyStateReader func(sandboxID string) (ProxyState, error)
+
 type StdioStream string
 
 const (

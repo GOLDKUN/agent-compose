@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	appconfig "agent-compose/pkg/config"
 )
 
 func buildTestTar(t *testing.T, entries map[string]string) []byte {
@@ -128,6 +130,47 @@ func TestWriteGuestDirRefusesGuestRootReplacement(t *testing.T) {
 	if err == nil || err.Error() != "write guest dir: refusing to replace guest root" {
 		t.Fatalf("WriteGuestDir root error = %v", err)
 	}
+}
+
+func TestK8sGuestDirClearScriptScopesHomeToHostSnapshotEntries(t *testing.T) {
+	r := &k8sRuntime{config: &appconfig.Config{GuestHomePath: "/root"}}
+
+	t.Run("non-home guestDir wipes wholesale", func(t *testing.T) {
+		script, err := r.k8sGuestDirClearScript(t.TempDir(), "/workspace")
+		if err != nil {
+			t.Fatalf("k8sGuestDirClearScript() error = %v", err)
+		}
+		if script != "rm -rf "+shellQuote("/workspace") {
+			t.Fatalf("script = %q, want a wholesale rm -rf of /workspace", script)
+		}
+	})
+
+	t.Run("home guestDir only clears the host snapshot's own entries", func(t *testing.T) {
+		hostHome := t.TempDir()
+		for _, name := range []string{".codex", ".claude"} {
+			if err := os.MkdirAll(filepath.Join(hostHome, name), 0o755); err != nil {
+				t.Fatalf("create host home entry %s: %v", name, err)
+			}
+		}
+		script, err := r.k8sGuestDirClearScript(hostHome, "/root")
+		if err != nil {
+			t.Fatalf("k8sGuestDirClearScript() error = %v", err)
+		}
+		want := "rm -rf " + shellQuote("/root/.claude") + " " + shellQuote("/root/.codex")
+		if script != want {
+			t.Fatalf("script = %q, want %q (only entries the daemon actually manages, never a wholesale /root wipe that would delete image-baked content like .gitconfig or .local/bin)", script, want)
+		}
+	})
+
+	t.Run("empty host snapshot clears nothing", func(t *testing.T) {
+		script, err := r.k8sGuestDirClearScript(t.TempDir(), "/root")
+		if err != nil {
+			t.Fatalf("k8sGuestDirClearScript() error = %v", err)
+		}
+		if script != "true" {
+			t.Fatalf("script = %q, want a no-op when the daemon has never written anything to home", script)
+		}
+	})
 }
 
 func TestWriteGuestDirSkipsPushWhenGuestDirOverlapsVolumeMount(t *testing.T) {

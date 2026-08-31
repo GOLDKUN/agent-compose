@@ -85,7 +85,6 @@ func k8sPodWaitingReason(pod *corev1.Pod) (reason, message string, stuck bool) {
 type k8sClientEntry struct {
 	clientset  kubernetes.Interface
 	restConfig *rest.Config
-	err        error
 }
 
 type k8sRuntime struct {
@@ -105,6 +104,13 @@ type k8sRuntime struct {
 	// call. Defaults to remotecommand.NewSPDYExecutor; overridden in tests
 	// to exercise execWithInput/execRaw without a real apiserver.
 	newExecutor func(*rest.Config, string, *url.URL) (remotecommand.Executor, error)
+
+	// proxyStateReader fetches a sandbox's persisted ProxyState (see the
+	// ProxyStateReader doc comment for why createPod needs this instead of
+	// trusting whatever proxyState an individual EnsureSandbox call
+	// received). May be nil - callers fall back to the ad-hoc proxyState
+	// parameter in that case (see resolveProxyState).
+	proxyStateReader ProxyStateReader
 }
 
 // newK8sRuntime builds a Kubernetes Pod runtime driver. It does not touch the
@@ -113,7 +119,7 @@ type k8sRuntime struct {
 // selected, so building the kubeconfig-backed client eagerly here would break
 // startup for anyone who compiled in k8s support but runs a different
 // driver. Clients are built lazily on first use instead.
-func newK8sRuntime(config *appconfig.Config) (SandboxRuntime, error) {
+func newK8sRuntime(config *appconfig.Config, proxyStateReader ProxyStateReader) (SandboxRuntime, error) {
 	// config.K8sNamespace is never empty here: pkg/config already defaults it
 	// to "default" when K8S_NAMESPACE is unset.
 	return &k8sRuntime{
@@ -121,7 +127,24 @@ func newK8sRuntime(config *appconfig.Config) (SandboxRuntime, error) {
 		defaultNamespace: strings.TrimSpace(config.K8sNamespace),
 		clients:          make(map[string]*k8sClientEntry),
 		newExecutor:      remotecommand.NewSPDYExecutor,
+		proxyStateReader: proxyStateReader,
 	}, nil
+}
+
+// resolveProxyState is the authoritative source for "should this sandbox's
+// Pod run jupyter, and with what config" - see the ProxyStateReader doc
+// comment. fallback is whatever proxyState the caller happened to receive;
+// it's only used when there is no reader, or the reader errors (e.g. no
+// ProxyState has been persisted for this sandbox yet).
+func (r *k8sRuntime) resolveProxyState(sandboxID string, fallback ProxyState) ProxyState {
+	if r.proxyStateReader == nil {
+		return fallback
+	}
+	proxyState, err := r.proxyStateReader(sandboxID)
+	if err != nil {
+		return fallback
+	}
+	return proxyState
 }
 
 // namespaceFor resolves the namespace a sandbox's Pods live in: the
@@ -146,10 +169,9 @@ func (r *k8sRuntime) client(contextName string) (kubernetes.Interface, *rest.Con
 	r.clientsMu.Lock()
 	defer r.clientsMu.Unlock()
 	if entry, ok := r.clients[contextName]; ok {
-		return entry.clientset, entry.restConfig, entry.err
+		return entry.clientset, entry.restConfig, nil
 	}
 
-	entry := &k8sClientEntry{}
 	// NewDefaultClientConfigLoadingRules, not a bare &ClientConfigLoadingRules{}:
 	// only the constructor populates Precedence with the ~/.kube/config
 	// fallback (and folds in KUBECONFIG) - a struct literal leaves Precedence
@@ -164,24 +186,25 @@ func (r *k8sRuntime) client(contextName string) (kubernetes.Interface, *rest.Con
 	if contextName != "" {
 		overrides.CurrentContext = contextName
 	}
+	// A failed build is not cached: it's usually transient (kubeconfig
+	// mounted but not yet written, a context temporarily unreachable), and
+	// this map has no TTL/invalidation - caching the error would make a
+	// one-time failure permanent for the rest of the daemon's process
+	// lifetime, surviving even after whatever caused it is fixed.
 	restConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
 	if err != nil {
-		entry.err = fmt.Errorf("load kubernetes client config for context %q: verify K8S_KUBECONFIG/KUBECONFIG: %w", contextName, err)
-		r.clients[contextName] = entry
-		return nil, nil, entry.err
+		return nil, nil, fmt.Errorf("load kubernetes client config for context %q: verify K8S_KUBECONFIG/KUBECONFIG: %w", contextName, err)
 	}
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		entry.err = fmt.Errorf("build kubernetes client for context %q: %w", contextName, err)
-		r.clients[contextName] = entry
-		return nil, nil, entry.err
+		return nil, nil, fmt.Errorf("build kubernetes client for context %q: %w", contextName, err)
 	}
-	entry.clientset, entry.restConfig = clientset, restConfig
+	entry := &k8sClientEntry{clientset: clientset, restConfig: restConfig}
 	r.clients[contextName] = entry
 	return entry.clientset, entry.restConfig, nil
 }
 
-func (r *k8sRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmState VMState, _ ProxyState) (SandboxVMInfo, error) {
+func (r *k8sRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmState VMState, proxyState ProxyState) (SandboxVMInfo, error) {
 	clientset, _, err := r.client(vmState.K8sContext)
 	if err != nil {
 		return SandboxVMInfo{}, err
@@ -190,9 +213,22 @@ func (r *k8sRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmStat
 	if err != nil {
 		return SandboxVMInfo{}, err
 	}
+	if ok && k8sPodIsTerminal(pod) {
+		// A Failed/Succeeded Pod is not a live sandbox to reconnect to - Pods
+		// are immutable once terminal, so the only way back to Running is
+		// deleting it and letting the block below create a fresh one.
+		// Without this, findPod would keep handing back the same dead Pod on
+		// every future EnsureSandbox call (e.g. after node eviction or an
+		// OOM kill with RestartPolicy: Never), and cleanupK8sPodAfterEnsureFailure
+		// never removes it because this call didn't create it.
+		if err := clientset.CoreV1().Pods(r.namespaceFor(vmState)).Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return SandboxVMInfo{}, fmt.Errorf("delete terminal k8s pod %s: %w", pod.Name, err)
+		}
+		ok = false
+	}
 	created := false
 	if !ok {
-		pod, err = r.createPod(ctx, clientset, sandbox, vmState)
+		pod, err = r.createPod(ctx, clientset, sandbox, vmState, proxyState)
 		if err != nil {
 			return SandboxVMInfo{}, err
 		}
@@ -205,7 +241,40 @@ func (r *k8sRuntime) EnsureSandbox(ctx context.Context, sandbox *Sandbox, vmStat
 			return SandboxVMInfo{}, r.cleanupK8sPodAfterEnsureFailure(ctx, clientset, attempt, err)
 		}
 	}
-	return SandboxVMInfo{BoxID: pod.Name}, nil
+	return r.ensureSandboxResult(ctx, sandbox, pod, proxyState)
+}
+
+// ensureSandboxResult builds EnsureSandbox's return value once pod is
+// Running. jupyter's launch decision was already made by createPod using
+// resolveProxyState (the durable, order-independent source - see the
+// ProxyStateReader doc comment); this re-resolves the same way so a Pod
+// found already Running by an earlier createPod call still gets its
+// GuestHost/GuestPort reported here, not just a Pod this call just created.
+// When jupyter is enabled, this also waits for it to actually be answering
+// before reporting success, mirroring the microsandbox driver.
+func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, sandbox *Sandbox, pod *corev1.Pod, proxyState ProxyState) (SandboxVMInfo, error) {
+	effective := r.resolveProxyState(sandbox.Summary.ID, proxyState)
+	if !jupyterEnabled(effective) {
+		return SandboxVMInfo{BoxID: pod.Name}, nil
+	}
+	effective = k8sJupyterProxyStateForPod(effective, pod)
+	readyCtx, cancel := context.WithTimeout(ctx, r.config.JupyterReadyTimeout)
+	defer cancel()
+	if err := waitForJupyterProxy(readyCtx, effective); err != nil {
+		return SandboxVMInfo{}, fmt.Errorf("wait for jupyter on k8s pod %s: %w", pod.Name, err)
+	}
+	return SandboxVMInfo{BoxID: pod.Name, ProxyState: &effective}, nil
+}
+
+// k8sJupyterProxyStateForPod finalizes proxyState's connect target once pod
+// is Running: GuestHost is the Pod's own address on the pod network - the
+// daemon (itself in-cluster, per this driver's Helm chart) reaches it
+// directly, with no port-publish/port-forward step needed. Split out from
+// ensureSandboxResult so this part is testable without a live network probe.
+func k8sJupyterProxyStateForPod(proxyState ProxyState, pod *corev1.Pod) ProxyState {
+	proxyState.Enabled = true
+	proxyState.GuestHost = pod.Status.PodIP
+	return proxyState
 }
 
 // k8sEnsureAttemptState describes how far a failed EnsureSandbox attempt
@@ -235,7 +304,7 @@ func (r *k8sRuntime) cleanupK8sPodAfterEnsureFailure(ctx context.Context, client
 	return cause
 }
 
-func (r *k8sRuntime) createPod(ctx context.Context, clientset kubernetes.Interface, sandbox *Sandbox, vmState VMState) (*corev1.Pod, error) {
+func (r *k8sRuntime) createPod(ctx context.Context, clientset kubernetes.Interface, sandbox *Sandbox, vmState VMState, proxyState ProxyState) (*corev1.Pod, error) {
 	name := r.podName(sandbox, vmState)
 	image := resolveSandboxGuestImage(vmState.Image, sandbox.Summary.GuestImage, defaultGuestImageForDriver(r.config, RuntimeDriverK8s))
 	if image == "" {
@@ -244,6 +313,18 @@ func (r *k8sRuntime) createPod(ctx context.Context, clientset kubernetes.Interfa
 	volumes, volumeMounts, err := r.podVolumeSpecs(sandbox, vmState)
 	if err != nil {
 		return nil, err
+	}
+	// A Pod's Command is fixed for its whole life, so the jupyter decision
+	// has to be made once, correctly, right here - resolveProxyState reads
+	// the sandbox's persisted config rather than trusting the proxyState
+	// this particular EnsureSandbox call happened to receive (see the
+	// ProxyStateReader doc comment).
+	cmdText := "tail -f /dev/null"
+	var containerPorts []corev1.ContainerPort
+	effective := r.resolveProxyState(sandbox.Summary.ID, proxyState)
+	if jupyterEnabled(effective) {
+		cmdText = jupyterLaunchCommand(r.config, effective, false)
+		containerPorts = []corev1.ContainerPort{{ContainerPort: int32(effective.GuestPort)}}
 	}
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -264,7 +345,8 @@ func (r *k8sRuntime) createPod(ctx context.Context, clientset kubernetes.Interfa
 					Name:            k8sContainerName,
 					Image:           image,
 					ImagePullPolicy: k8sImagePullPolicy(sandbox.Summary.PullPolicy),
-					Command:         []string{"sh", "-lc", "tail -f /dev/null"},
+					Command:         []string{"sh", "-lc", cmdText},
+					Ports:           containerPorts,
 					WorkingDir:      r.config.GuestWorkspacePath,
 					Env:             k8sEnvVars(r.containerEnv(sandbox)),
 					VolumeMounts:    volumeMounts,
@@ -411,6 +493,19 @@ func k8sImagePullPolicy(pullPolicy string) corev1.PullPolicy {
 	}
 }
 
+// k8sPodIsTerminal reports whether a Pod has reached a terminal phase
+// (Failed or Succeeded) and therefore can never transition to Running again
+// - Pods, unlike containers, have no restart-in-place primitive once
+// terminal.
+func k8sPodIsTerminal(pod *corev1.Pod) bool {
+	switch pod.Status.Phase {
+	case corev1.PodFailed, corev1.PodSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
 func (r *k8sRuntime) waitForPodRunning(ctx context.Context, clientset kubernetes.Interface, namespace, name string) (*corev1.Pod, error) {
 	timeout := r.config.SandboxStartTimeout
 	if timeout <= 0 {
@@ -425,10 +520,10 @@ func (r *k8sRuntime) waitForPodRunning(ctx context.Context, clientset kubernetes
 		if err != nil {
 			return nil, fmt.Errorf("inspect k8s pod %s: %w", name, err)
 		}
-		switch pod.Status.Phase {
-		case corev1.PodRunning:
+		if pod.Status.Phase == corev1.PodRunning {
 			return pod, nil
-		case corev1.PodFailed, corev1.PodSucceeded:
+		}
+		if k8sPodIsTerminal(pod) {
 			return nil, fmt.Errorf("k8s pod %s exited before becoming ready: phase=%s", name, pod.Status.Phase)
 		}
 		if reason, message, stuck := k8sPodWaitingReason(pod); stuck {
@@ -733,8 +828,15 @@ func k8sPodExecOptions(script string, withStdin bool) *corev1.PodExecOptions {
 // API) has no dedicated cwd/env fields.
 func k8sExecScript(spec ExecSpec, defaultCwd string) string {
 	var b strings.Builder
+	// set -e, and cd as its own ";"-terminated statement rather than
+	// "cd X && ...": bash's -e specifically exempts a non-final command in
+	// an && / || list from triggering exit-on-error, so "cd X && export
+	// Y" would still let a failed cd fall through to export/exec via the
+	// later ";" separators - set -e only catches a failing cd if it's a
+	// bare statement, not the left side of &&.
+	b.WriteString("set -e; ")
 	if cwd := firstNonEmpty(spec.Cwd, defaultCwd); cwd != "" {
-		b.WriteString("cd " + shellQuote(cwd) + " && ")
+		b.WriteString("cd " + shellQuote(cwd) + "; ")
 	}
 	keys := make([]string, 0, len(spec.Env))
 	for key := range spec.Env {

@@ -389,6 +389,46 @@ func TestNewConfigDefaultsK8sNamespaceForWhitespaceOnlyEnvironment(t *testing.T)
 	}
 }
 
+func TestNewConfigK8sKubeconfigPathIgnoresPlainKUBECONFIG(t *testing.T) {
+	// KUBECONFIG becomes clientcmd's ExplicitPath (k8sRuntime.client), which
+	// only accepts a single file - but KUBECONFIG's own documented form is a
+	// list-separator-delimited list of files to merge, which client-go's
+	// default loading rules already handle correctly on their own. Reading
+	// KUBECONFIG into K8sKubeconfigPath here would break that multi-file
+	// case, so only the explicit, single-purpose K8S_KUBECONFIG should ever
+	// populate this field.
+	root := t.TempDir()
+	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
+	t.Setenv("KUBECONFIG", "/a/config"+string(os.PathListSeparator)+"/b/config")
+	di := do.New()
+	do.ProvideValue(di, slog.Default())
+
+	config, err := NewConfig(di)
+	if err != nil {
+		t.Fatalf("NewConfig returned error: %v", err)
+	}
+	if config.K8sKubeconfigPath != "" {
+		t.Fatalf("K8sKubeconfigPath = %q, want empty (KUBECONFIG is left to client-go's default loading rules)", config.K8sKubeconfigPath)
+	}
+}
+
+func TestNewConfigK8sKubeconfigPathUsesExplicitEnvVar(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
+	t.Setenv("K8S_KUBECONFIG", "/explicit/kubeconfig")
+	t.Setenv("KUBECONFIG", "/should/be/ignored")
+	di := do.New()
+	do.ProvideValue(di, slog.Default())
+
+	config, err := NewConfig(di)
+	if err != nil {
+		t.Fatalf("NewConfig returned error: %v", err)
+	}
+	if config.K8sKubeconfigPath != "/explicit/kubeconfig" {
+		t.Fatalf("K8sKubeconfigPath = %q, want %q", config.K8sKubeconfigPath, "/explicit/kubeconfig")
+	}
+}
+
 func TestNewConfigUsesNonEmptyLegacySessionsRootByDefault(t *testing.T) {
 	dataRoot := filepath.Join(t.TempDir(), "data")
 	legacyRoot := filepath.Join(dataRoot, "sessions")

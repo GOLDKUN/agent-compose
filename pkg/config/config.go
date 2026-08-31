@@ -590,10 +590,16 @@ func loadDriverHomesConfig(logger *slog.Logger, dataRoot string) (driverHomesCon
 	if k8sHome == "" {
 		k8sHome = filepath.Join(dataRoot, "k8s")
 	}
-	// K8sKubeconfigPath is left empty by default so the k8s driver falls back to
-	// client-go's own default loading rules (KUBECONFIG env, then ~/.kube/config),
-	// the same resolution kubectl uses.
-	k8sKubeconfigPath := getenvFirst("K8S_KUBECONFIG", "KUBECONFIG")
+	// K8sKubeconfigPath is left empty unless K8S_KUBECONFIG is set, so the k8s
+	// driver falls back to client-go's own default loading rules (KUBECONFIG
+	// env, then ~/.kube/config), the same resolution kubectl uses. KUBECONFIG
+	// itself is deliberately not read here: it becomes clientcmd's
+	// ExplicitPath below (k8sRuntime.client), which only accepts a single
+	// file, while KUBECONFIG's own documented form is a PATH-list-separator-
+	// delimited list of files to merge - the default loading rules already
+	// handle that correctly, so reading it into ExplicitPath here would only
+	// break the multi-file case.
+	k8sKubeconfigPath := strings.TrimSpace(os.Getenv("K8S_KUBECONFIG"))
 	k8sNamespace := strings.TrimSpace(os.Getenv("K8S_NAMESPACE"))
 	if k8sNamespace == "" {
 		k8sNamespace = "default"

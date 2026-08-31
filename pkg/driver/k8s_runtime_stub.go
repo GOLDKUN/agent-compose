@@ -10,7 +10,7 @@ import (
 
 type k8sRuntime struct{}
 
-func newK8sRuntime(_ *appconfig.Config) (SandboxRuntime, error) {
+func newK8sRuntime(_ *appconfig.Config, _ ProxyStateReader) (SandboxRuntime, error) {
 	return &k8sRuntime{}, nil
 }
 

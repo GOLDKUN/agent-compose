@@ -79,7 +79,15 @@ type guestFileRuntimeAdapter struct {
 	driverRuntimeAdapter
 }
 
-func NewRuntimeProvider(config *appconfig.Config) (RuntimeProvider, error) {
+// ProxyStateGetter is the read side of sandboxstore.Store's persisted
+// ProxyState, narrowed to just what the k8s driver needs to resolve whether
+// a sandbox's Pod should launch jupyter (see driverpkg.ProxyStateReader).
+// *sandboxstore.Store satisfies this directly.
+type ProxyStateGetter interface {
+	GetProxyState(sandboxID string) (domain.ProxyState, error)
+}
+
+func NewRuntimeProvider(config *appconfig.Config, proxyStateGetter ProxyStateGetter) (RuntimeProvider, error) {
 	if config == nil {
 		return nil, fmt.Errorf("runtime provider config is required")
 	}
@@ -99,7 +107,17 @@ func NewRuntimeProvider(config *appconfig.Config) (RuntimeProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	k8sRuntime, err := driverpkg.NewK8sRuntime(config)
+	var proxyStateReader driverpkg.ProxyStateReader
+	if proxyStateGetter != nil {
+		proxyStateReader = func(sandboxID string) (driverpkg.ProxyState, error) {
+			state, err := proxyStateGetter.GetProxyState(sandboxID)
+			if err != nil {
+				return driverpkg.ProxyState{}, err
+			}
+			return execution.ToDriverProxyState(state), nil
+		}
+	}
+	k8sRuntime, err := driverpkg.NewK8sRuntime(config, proxyStateReader)
 	if err != nil {
 		return nil, err
 	}
