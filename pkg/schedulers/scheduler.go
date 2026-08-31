@@ -70,7 +70,7 @@ func (s *Scheduler) Loop() {
 
 func (s *Scheduler) Dispatch(jobs []ScheduledRun) {
 	for _, job := range jobs {
-		runCtx, cancel := context.WithTimeout(s.rootCtx(), s.runTimeout(0))
+		runCtx, cancel := context.WithTimeout(s.rootCtx(), s.runTimeoutFor(job.Scheduler, 0))
 		go func(job ScheduledRun) {
 			defer cancel()
 			if _, err := s.deps.Run(runCtx, RunTriggerRequest{Scheduler: job.Scheduler, Trigger: &job.Trigger, PayloadJSON: job.PayloadJSON, Source: job.Source}); err != nil {
@@ -146,9 +146,6 @@ func (s *Scheduler) rootCtx() context.Context {
 	return s.deps.RootCtx
 }
 
-func (s *Scheduler) runTimeout(override time.Duration) time.Duration {
-	if s.deps.RunTimeout == nil {
-		return 20 * time.Minute
-	}
-	return s.deps.RunTimeout(override)
+func (s *Scheduler) runTimeoutFor(scheduler domain.Scheduler, override time.Duration) time.Duration {
+	return effectiveSchedulerRunTimeout(scheduler, override, s.deps.RunTimeout)
 }

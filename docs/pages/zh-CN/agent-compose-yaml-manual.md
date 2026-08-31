@@ -816,6 +816,7 @@ Scheduler 可以使用声明式 `triggers`，也可以使用 JavaScript `script`
 | `enabled` | bool | `true` | 是否启用该 Agent 的 Scheduler。禁用 Agent 也会使其 Scheduler 无效。 |
 | `sandbox_policy` | string | `new` | Scheduler 默认 sandbox 策略：`new` 或 `sticky`。 |
 | `concurrency_policy` | string | `skip` | 整个 Agent Scheduler 的重叠运行策略：`skip` 或 `parallel`。 |
+| `run_timeout` | duration | 空 | 单次 scheduler run 的最大时长。为空时继承 `SCHEDULER_RUN_TIMEOUT`；支持 `30m`、`2h` 等 Go duration。 |
 | `model` | string | Agent 的模型 | `scheduler.llm` 默认使用的 `provider/model`；调用参数中的 `model` 或 `LLM_MODEL` 优先。 |
 | `triggers` | list | 空 | 声明式触发器。 |
 | `script` | string/object | 空 | 内联 JavaScript，或扁平的 `file`/`http`/`git` 来源配置。不能和 `triggers` 同时使用。 |

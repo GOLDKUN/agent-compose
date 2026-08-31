@@ -413,6 +413,9 @@ func SchedulerYAMLShape(scheduler *agentcomposev2.SchedulerSpec) map[string]any 
 	if policy := schedulerConcurrencyPolicyText(scheduler.GetConcurrencyPolicy()); policy != "" {
 		raw["concurrency_policy"] = policy
 	}
+	if strings.TrimSpace(scheduler.GetRunTimeout()) != "" {
+		raw["run_timeout"] = scheduler.GetRunTimeout()
+	}
 	triggers := make([]map[string]any, 0, len(scheduler.GetTriggers()))
 	for _, trigger := range scheduler.GetTriggers() {
 		triggers = append(triggers, TriggerYAMLShape(trigger))

@@ -61,6 +61,7 @@ type Scheduler struct {
 	Script     string             `json:"script"`
 	Model      string             `json:"model,omitempty"`
 	AgentModel string             `json:"agent_model,omitempty"`
+	RunTimeout time.Duration      `json:"run_timeout,omitempty"`
 	Triggers   []SchedulerTrigger `json:"triggers,omitempty"`
 	EnvItems   []SandboxEnvVar    `json:"env_items,omitempty"`
 	Volumes    []VolumeMountSpec  `json:"volumes,omitempty"`

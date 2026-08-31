@@ -139,6 +139,7 @@ type NormalizedSchedulerSpec struct {
 	Enabled           bool                    `yaml:"enabled" json:"enabled"`
 	SandboxPolicy     string                  `yaml:"sandbox_policy" json:"sandbox_policy"`
 	ConcurrencyPolicy string                  `yaml:"concurrency_policy" json:"concurrency_policy"`
+	RunTimeout        string                  `yaml:"run_timeout,omitempty" json:"run_timeout,omitempty"`
 	DisplayName       string                  `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 	Description       string                  `yaml:"description,omitempty" json:"description,omitempty"`
 	Model             string                  `yaml:"model,omitempty" json:"model,omitempty"`
@@ -1132,10 +1133,17 @@ func normalizeSchedulerSpec(path string, scheduler *SchedulerSpec, options Norma
 	if err != nil {
 		return nil, err
 	}
+	runTimeout := strings.TrimSpace(scheduler.RunTimeout)
+	if runTimeout != "" {
+		if err := validatePositiveDuration(path+".run_timeout", runTimeout); err != nil {
+			return nil, err
+		}
+	}
 	normalized := &NormalizedSchedulerSpec{
 		Enabled:           enabled,
 		SandboxPolicy:     sandboxPolicy,
 		ConcurrencyPolicy: concurrencyPolicy,
+		RunTimeout:        runTimeout,
 		DisplayName:       strings.TrimSpace(scheduler.DisplayName),
 		Description:       strings.TrimSpace(scheduler.Description),
 		Model:             strings.TrimSpace(scheduler.Model),

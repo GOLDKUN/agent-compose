@@ -98,7 +98,7 @@ func (d *EventDispatcher) dispatchTargets(event domain.SchedulerTopicEvent, targ
 		d.recordMatched(event, target)
 		reservation := reservations[0]
 		reservations = reservations[1:]
-		runCtx, cancel := context.WithTimeout(d.rootCtx(), d.runTimeout(0))
+		runCtx, cancel := context.WithTimeout(d.rootCtx(), d.runTimeoutFor(target.Scheduler, 0))
 		go func(target EventTarget, payloadJSON string, topic string, ack func(context.Context) error, release func(), reservation *webhooks.Reservation) {
 			defer cancel()
 			defer reservation.Release()
@@ -168,7 +168,7 @@ func (d *EventDispatcher) dispatchWebhookTargets(event domain.SchedulerTopicEven
 		if index < len(reservations) {
 			reservation = reservations[index]
 		}
-		runCtx, cancel := context.WithTimeout(d.rootCtx(), d.runTimeout(0))
+		runCtx, cancel := context.WithTimeout(d.rootCtx(), d.runTimeoutFor(item.Scheduler, 0))
 		go func(item PreparedRun, reservation *webhooks.Reservation) {
 			defer cancel()
 			defer reservation.Release()
@@ -240,11 +240,8 @@ func (d *EventDispatcher) rootCtx() context.Context {
 	return d.deps.RootCtx
 }
 
-func (d *EventDispatcher) runTimeout(override time.Duration) time.Duration {
-	if d.deps.RunTimeout == nil {
-		return 20 * time.Minute
-	}
-	return d.deps.RunTimeout(override)
+func (d *EventDispatcher) runTimeoutFor(scheduler domain.Scheduler, override time.Duration) time.Duration {
+	return effectiveSchedulerRunTimeout(scheduler, override, d.deps.RunTimeout)
 }
 
 func (d *EventDispatcher) enterRun(scheduler domain.Scheduler) bool {

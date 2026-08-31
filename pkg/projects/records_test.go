@@ -3,6 +3,7 @@ package projects
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"agent-compose/pkg/capabilities"
 	"agent-compose/pkg/compose"
@@ -159,6 +160,31 @@ func TestSchedulerConcurrencyPolicyFlowsIntoManagedScheduler(t *testing.T) {
 				t.Fatalf("scheduler concurrency policy = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestSchedulerRunTimeoutFlowsIntoManagedScheduler(t *testing.T) {
+	spec, err := compose.Parse([]byte(`name: timeout-policy
+agents:
+  reviewer:
+    scheduler:
+      run_timeout: 2h
+      triggers:
+        - interval: 1m
+`))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	normalized, err := compose.Normalize(spec, compose.NormalizeOptions{})
+	if err != nil {
+		t.Fatalf("Normalize returned error: %v", err)
+	}
+	builds, err := NewSchedulerBuildsFromSpec(domain.ProjectRecord{ID: "project-1", Name: normalized.Name}, 1, normalized)
+	if err != nil {
+		t.Fatalf("NewSchedulerBuildsFromSpec returned error: %v", err)
+	}
+	if len(builds) != 1 || builds[0].Definition.RunTimeout != 2*time.Hour {
+		t.Fatalf("scheduler run timeout = %s, want 2h", builds[0].Definition.RunTimeout)
 	}
 }
 

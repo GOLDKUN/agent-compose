@@ -270,6 +270,7 @@ func SchedulerSpecToProto(scheduler *compose.NormalizedSchedulerSpec) *agentcomp
 		Description:       scheduler.Description,
 		Model:             scheduler.Model,
 		ConcurrencyPolicy: schedulerConcurrencyPolicyToProto(scheduler.ConcurrencyPolicy),
+		RunTimeout:        scheduler.RunTimeout,
 	}
 }
 

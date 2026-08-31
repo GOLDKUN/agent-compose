@@ -1,16 +1,18 @@
 package projects
 
 import (
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/compose"
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"agent-compose/pkg/capabilities"
+	"agent-compose/pkg/compose"
+	"agent-compose/pkg/identity"
+	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/schedulers"
 
 	"agent-compose/pkg/capability"
 )
@@ -216,6 +218,14 @@ func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.Proje
 	if agent.Workspace != nil {
 		workspaceID = strings.TrimSpace(agent.Workspace.Name)
 	}
+	var runTimeout time.Duration
+	if strings.TrimSpace(agent.Scheduler.RunTimeout) != "" {
+		var err error
+		runTimeout, err = time.ParseDuration(agent.Scheduler.RunTimeout)
+		if err != nil {
+			return domain.Scheduler{}, fmt.Errorf("parse scheduler %s run_timeout: %w", agent.Name, err)
+		}
+	}
 	var triggers []domain.SchedulerTrigger
 	script := agent.Scheduler.Script
 	if strings.TrimSpace(script) == "" {
@@ -248,6 +258,7 @@ func NewSchedulerDefinition(project domain.ProjectRecord, scheduler domain.Proje
 		Script:     script,
 		Model:      strings.TrimSpace(agent.Scheduler.Model),
 		AgentModel: strings.TrimSpace(agent.Model),
+		RunTimeout: runTimeout,
 		Triggers:   triggers,
 		EnvItems:   SandboxEnvItemsFromCompose(agent.Env),
 		Volumes:    VolumeMountSpecsFromCompose(agent.Volumes),
