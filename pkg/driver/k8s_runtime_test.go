@@ -550,6 +550,109 @@ func TestK8sEnsureSandboxSelfHealsWhenReusedPodsJupyterNeverBecomesReady(t *test
 	}
 }
 
+// TestK8sEnsureSandboxLeavesJupyterPodAloneWhenCallerContextIsDone is a
+// regression test for a gap in the self-heal above: waitForJupyterProxy's
+// readyCtx is derived from the caller's ctx, so a caller that cancels (or
+// whose own deadline passes) fails that wait exactly the same way a
+// genuine JupyterReadyTimeout expiry would. That failure says nothing
+// about whether this Pod's jupyter would have come up given more time, so
+// it must not be force-deleted for a timeout that was never its own.
+func TestK8sEnsureSandboxLeavesJupyterPodAloneWhenCallerContextIsDone(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-jupyter-caller-cancelled")
+	name := (&k8sRuntime{}).podName(sandbox, VMState{})
+	existing := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Labels: map[string]string{
+				k8sSandboxLabelID:      sandbox.Summary.ID,
+				k8sSandboxLabelDriver:  RuntimeDriverK8s,
+				k8sSandboxLabelJupyter: "true",
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	r, clientset := newTestK8sRuntime(existing)
+	r.proxyStateReader = func(string) (ProxyState, error) {
+		return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
+	}
+	// Long enough that the caller's own context (below) is what gives out
+	// first, not readyCtx's derived JupyterReadyTimeout.
+	r.config.JupyterReadyTimeout = 5 * time.Second
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if _, err := r.EnsureSandbox(ctx, sandbox, VMState{}, ProxyState{}); err == nil {
+		t.Fatal("EnsureSandbox() error = nil, want the caller's context to have run out")
+	}
+
+	if _, getErr := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{}); getErr != nil {
+		t.Fatalf("get pod after caller-context cancellation: err = %v, want the Pod left alone (this failure was the caller's, not the Pod's)", getErr)
+	}
+}
+
+// TestK8sEnsureSandboxWaitsForJupyterUnreadyPodToActuallyBeDeleted is a
+// regression test for a second gap in the self-heal above: deleting the
+// Pod isn't enough on its own - Kubernetes doesn't remove a Pod object the
+// instant Delete returns (even with GracePeriodSeconds=0, see
+// TestK8sEnsureSandboxWaitsForStalePodNameToFreeUpBeforeRecreating for the
+// same race on the stale-recreate path above). Without waiting for it to
+// actually be gone, an immediate retry could either find this same
+// Terminating Pod again or have its own createPod call hit AlreadyExists
+// on this Pod's deterministic name.
+func TestK8sEnsureSandboxWaitsForJupyterUnreadyPodToActuallyBeDeleted(t *testing.T) {
+	sandbox := testSandbox(t, "sandbox-jupyter-delete-race")
+	name := (&k8sRuntime{}).podName(sandbox, VMState{})
+	existing := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Labels: map[string]string{
+				k8sSandboxLabelID:      sandbox.Summary.ID,
+				k8sSandboxLabelDriver:  RuntimeDriverK8s,
+				k8sSandboxLabelJupyter: "true",
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	r, clientset := newTestK8sRuntime(existing)
+	r.proxyStateReader = func(string) (ProxyState, error) {
+		return ProxyState{Enabled: true, GuestPort: 8888, Token: "tok"}, nil
+	}
+	r.config.JupyterReadyTimeout = 50 * time.Millisecond
+
+	var deleteCalled bool
+	clientset.PrependReactor("delete", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		deleteCalled = true
+		return true, nil, nil // handled: swallow the delete, object stays in the tracker
+	})
+	var gets int
+	var terminatedFromTracker bool
+	clientset.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		getAction, ok := action.(k8stesting.GetAction)
+		if !ok || getAction.GetName() != name || terminatedFromTracker {
+			return false, nil, nil
+		}
+		gets++
+		if gets < 3 {
+			return false, nil, nil // fall through to the tracker, which still has it
+		}
+		terminatedFromTracker = true
+		_ = clientset.Tracker().Delete(corev1.SchemeGroupVersion.WithResource("pods"), "default", name)
+		return false, nil, nil
+	})
+
+	if _, err := r.EnsureSandbox(context.Background(), sandbox, VMState{}, ProxyState{}); err == nil {
+		t.Fatal("EnsureSandbox() error = nil, want a jupyter-readiness failure (nothing is listening in this fake cluster)")
+	}
+	if !deleteCalled {
+		t.Fatal("Delete was never called on the jupyter-unready pod")
+	}
+	if gets < 3 {
+		t.Fatalf("Get was called %d time(s), want at least 3 (EnsureSandbox must actually wait for the Pod to be gone, not return right after Delete returns)", gets)
+	}
+}
+
 func TestK8sStopAndRemoveSandboxDeletePod(t *testing.T) {
 	sandbox := testSandbox(t, "sandbox-3")
 	existing := &corev1.Pod{

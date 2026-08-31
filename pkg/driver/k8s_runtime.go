@@ -317,6 +317,13 @@ func k8sPodNeedsRecreate(pod *corev1.Pod, effective ProxyState) (reason string, 
 // short of a manual kubectl delete. This applies regardless of whether this
 // call created pod itself or found it already Running: a Pod that can't
 // bring up jupyter can't serve this sandbox either way.
+//
+// Gated on ctx (the caller's own context) still being fine, not just
+// readyCtx: readyCtx is derived from ctx, so if the caller cancelled or its
+// own deadline passed, waitForJupyterProxy fails the exact same way as a
+// genuine JupyterReadyTimeout expiry - but that failure says nothing about
+// whether this Pod's jupyter would have come up given more time, so it
+// must not be punished for a timeout that was never its own.
 func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, clientset kubernetes.Interface, namespace string, pod *corev1.Pod, effective ProxyState) (SandboxVMInfo, error) {
 	if !jupyterEnabled(effective) {
 		return SandboxVMInfo{BoxID: pod.Name}, nil
@@ -326,10 +333,20 @@ func (r *k8sRuntime) ensureSandboxResult(ctx context.Context, clientset kubernet
 	defer cancel()
 	if err := waitForJupyterProxy(readyCtx, effective); err != nil {
 		cause := fmt.Errorf("wait for jupyter on k8s pod %s: %w", pod.Name, err)
-		cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), k8sCleanupTimeout)
-		defer cancelCleanup()
-		if delErr := clientset.CoreV1().Pods(namespace).Delete(cleanupCtx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); delErr != nil && !apierrors.IsNotFound(delErr) {
+		if ctx.Err() != nil {
+			return SandboxVMInfo{}, cause
+		}
+		// Force-delete and wait for the Pod to actually be gone (mirroring
+		// the stale-recreate path above) rather than just requesting
+		// deletion: a caller that retries immediately would otherwise find
+		// this same stuck Pod again (still Terminating, still "fine" to
+		// k8sPodNeedsRecreate) or have its createPod call hit AlreadyExists
+		// on this Pod's deterministic name.
+		if delErr := clientset.CoreV1().Pods(namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); delErr != nil && !apierrors.IsNotFound(delErr) {
 			return SandboxVMInfo{}, fmt.Errorf("%w; cleanup jupyter-unready k8s pod %s: %w", cause, pod.Name, delErr)
+		}
+		if waitErr := r.waitForPodDeleted(ctx, clientset, namespace, pod.Name, k8sPodDeleteTimeout); waitErr != nil {
+			return SandboxVMInfo{}, fmt.Errorf("%w; wait for jupyter-unready k8s pod %s deletion: %w", cause, pod.Name, waitErr)
 		}
 		return SandboxVMInfo{}, cause
 	}
