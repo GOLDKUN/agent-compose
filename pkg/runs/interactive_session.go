@@ -36,6 +36,23 @@ type InteractiveSession struct {
 	runtime   driverpkg.RuntimeInteraction
 }
 
+type InteractiveSessionAttachment struct {
+	session *InteractiveSession
+	input   <-chan RunAttachInput
+	release func()
+}
+
+func (a *InteractiveSessionAttachment) Input() <-chan RunAttachInput { return a.input }
+func (a *InteractiveSessionAttachment) Send(ctx context.Context, input RunAttachInput) error {
+	return a.session.Send(ctx, input)
+}
+func (a *InteractiveSessionAttachment) Close() {
+	if a.release != nil {
+		a.release()
+		a.release = nil
+	}
+}
+
 // BindRuntime transfers ownership of the runtime interaction to the session.
 // It may only be called once, before the session is closed.
 func (s *InteractiveSession) BindRuntime(interaction driverpkg.RuntimeInteraction) error {
@@ -154,6 +171,18 @@ func (m *InteractiveSessionManager) Get(runID string) (*InteractiveSession, erro
 		return nil, ErrInteractiveSessionNotFound
 	}
 	return s, nil
+}
+
+func (m *InteractiveSessionManager) Attach(runID string) (*InteractiveSessionAttachment, error) {
+	s, err := m.Get(runID)
+	if err != nil {
+		return nil, err
+	}
+	input, release, err := s.AttachInput()
+	if err != nil {
+		return nil, err
+	}
+	return &InteractiveSessionAttachment{session: s, input: input, release: release}, nil
 }
 
 func (m *InteractiveSessionManager) Remove(runID string, state InteractiveSessionState) error {

@@ -59,3 +59,10 @@ func TestInteractiveSessionManagerAttachAndClose(t *testing.T) {
 		t.Fatalf("send error = %v", err)
 	}
 }
+
+func TestInteractiveSessionManagerAttachMissing(t *testing.T) {
+	m := NewInteractiveSessionManager()
+	if _, err := m.Attach("missing"); !errors.Is(err, ErrInteractiveSessionNotFound) {
+		t.Fatalf("attach error = %v", err)
+	}
+}
