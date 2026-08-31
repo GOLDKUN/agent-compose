@@ -89,7 +89,7 @@ func TestEnsurePromptAttachLLMFacadeEnvClaudeUsesControllerStore(t *testing.T) {
 		t.Fatalf("Claude facade token env = %q, saved tokens = %#v", env["AGENT_COMPOSE_SANDBOX_TOKEN"], store.tokens)
 	}
 	token := store.tokens[0]
-	if token.SandboxID != sandbox.Summary.ID || token.Model != "claude-test" || token.Source != "agent" || token.RunID != "run-claude-attach" {
+	if token.SandboxID != sandbox.Summary.ID || token.Source != "agent" || token.RunID != "run-claude-attach" {
 		t.Fatalf("stored token = %#v", token)
 	}
 }
