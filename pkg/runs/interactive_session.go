@@ -106,10 +106,12 @@ func (s *InteractiveSession) Subscribe() (<-chan RunAttachOutput, func(), error)
 func (s *InteractiveSession) Publish(output RunAttachOutput) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, subscriber := range s.subscribers {
+	for id, subscriber := range s.subscribers {
 		select {
 		case subscriber <- output:
 		default:
+			delete(s.subscribers, id)
+			close(subscriber)
 		}
 	}
 }

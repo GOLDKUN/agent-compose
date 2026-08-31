@@ -98,6 +98,20 @@ func TestInteractiveSessionInputLeaseTracksDetachAndResume(t *testing.T) {
 	release()
 }
 
+func TestInteractiveSessionClosesSlowOutputSubscriber(t *testing.T) {
+	s := NewInteractiveSession("run-1")
+	outputs, unsubscribe, err := s.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unsubscribe()
+	for i := 0; i < 33; i++ {
+		s.Publish(RunAttachOutput{})
+	}
+	for range outputs {
+	}
+}
+
 func TestControllerAttachesExistingInteractiveSession(t *testing.T) {
 	m := NewInteractiveSessionManager()
 	s, err := m.Create("run-1")
