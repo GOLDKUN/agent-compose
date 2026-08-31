@@ -30,7 +30,3 @@ func TestEffectiveSchedulerRunTimeoutPrecedence(t *testing.T) {
 		t.Fatalf("hard-coded default timeout = %s, want 20m", got)
 	}
 }
-
-func TestE2EEffectiveSchedulerRunTimeoutPrecedence(t *testing.T) {
-	TestEffectiveSchedulerRunTimeoutPrecedence(t)
-}

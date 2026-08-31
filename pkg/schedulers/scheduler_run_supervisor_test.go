@@ -136,6 +136,42 @@ func TestSchedulerRunSupervisorTimeoutCancelsExecution(t *testing.T) {
 	}
 }
 
+func TestSchedulerRunSupervisorRunIsUnboundedWhenRunTimeoutDependencyUnset(t *testing.T) {
+	store := newSupervisorRunStore()
+	hasDeadline := make(chan bool, 1)
+	supervisor := newSchedulerRunSupervisor(schedulerRunSupervisorDependencies{
+		RootCtx: context.Background(),
+		Store:   store,
+		LoadSchedulerForRun: func(context.Context, string, string) (domain.Scheduler, *domain.SchedulerTrigger, error) {
+			return domain.Scheduler{Summary: domain.SchedulerSummary{ID: "scheduler-1"}}, nil, nil
+		},
+		Prepare: func(_ context.Context, req RunTriggerRequest) (PreparedRun, error) {
+			scheduler := req.Scheduler
+			return PreparedRun{Scheduler: scheduler, Run: domain.SchedulerRunSummary{ID: "run-unbounded", SchedulerID: scheduler.Summary.ID, Status: domain.SchedulerRunStatusRunning}}, nil
+		},
+		Execute: func(ctx context.Context, prepared PreparedRun) (domain.SchedulerRunSummary, error) {
+			_, ok := ctx.Deadline()
+			hasDeadline <- ok
+			run := prepared.Run
+			run.Status = domain.SchedulerRunStatusSucceeded
+			store.set(run)
+			return run, nil
+		},
+	})
+
+	if _, err := supervisor.RunScheduler(context.Background(), SchedulerRunRequest{SchedulerID: "scheduler-1", TriggerID: "trigger-1"}); err != nil {
+		t.Fatalf("RunScheduler err=%v", err)
+	}
+	select {
+	case ok := <-hasDeadline:
+		if ok {
+			t.Fatal("expected an unbounded run context when RunTimeout dependency and overrides are unset, got a deadline")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Execute to observe the run context")
+	}
+}
+
 func TestSchedulerRunSupervisorStopWaitsForExecutorTerminalState(t *testing.T) {
 	store := newSupervisorRunStore()
 	started := make(chan struct{})
