@@ -42,11 +42,9 @@ type InteractiveSession struct {
 
 type InteractiveSessionAttachment struct {
 	session *InteractiveSession
-	input   <-chan RunAttachInput
 	release func()
 }
 
-func (a *InteractiveSessionAttachment) Input() <-chan RunAttachInput { return a.input }
 func (a *InteractiveSessionAttachment) Send(ctx context.Context, input RunAttachInput) error {
 	return a.session.Send(ctx, input)
 }
@@ -132,14 +130,6 @@ func (s *InteractiveSession) transition(next InteractiveSessionState) error {
 	}
 	s.state = next
 	return nil
-}
-
-func (s *InteractiveSession) AttachInput() (<-chan RunAttachInput, func(), error) {
-	release, err := s.AcquireInput()
-	if err != nil {
-		return nil, nil, err
-	}
-	return s.input, release, nil
 }
 
 func (s *InteractiveSession) AcquireInput() (func(), error) {

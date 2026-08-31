@@ -36,7 +36,7 @@ func TestInteractiveSessionManagerAttachAndClose(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	input, release, err := s.AttachInput()
+	release, err := s.AcquireInput()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,10 +44,14 @@ func TestInteractiveSessionManagerAttachAndClose(t *testing.T) {
 	if err := s.Send(context.Background(), RunAttachInput{Kind: RunAttachInputHumanMessage, Text: "hello"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := (<-input).Text; got != "hello" {
+	input, err := s.Receive()()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := input.Text; got != "hello" {
 		t.Fatalf("input = %q", got)
 	}
-	if _, _, err := s.AttachInput(); !errors.Is(err, ErrInteractiveSessionAttached) {
+	if _, err := s.AcquireInput(); !errors.Is(err, ErrInteractiveSessionAttached) {
 		t.Fatalf("attach error = %v", err)
 	}
 	if err := m.Remove("run-1", InteractiveSessionCompleted); err != nil {
