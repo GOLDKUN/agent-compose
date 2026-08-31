@@ -29,6 +29,12 @@ func NormalizeFile(path string) (*NormalizedProjectSpec, error) {
 	return compose.NormalizeFile(path)
 }
 
+// Validate performs definition-level validation without runtime services.
+func Validate(spec *ProjectSpec, options NormalizeOptions) error {
+	_, err := compose.Normalize(spec, options)
+	return err
+}
+
 // ParseCanonicalJSON decodes the canonical normalized representation.
 func ParseCanonicalJSON(data []byte) (*NormalizedProjectSpec, error) {
 	return compose.ParseCanonicalJSON(data)

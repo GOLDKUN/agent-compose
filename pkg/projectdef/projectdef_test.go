@@ -32,3 +32,9 @@ func TestProjectNameContract(t *testing.T) {
 		t.Fatal("expected invalid project name")
 	}
 }
+
+func TestValidateRejectsInvalidDefinition(t *testing.T) {
+	if err := Validate(&ProjectSpec{Name: "Invalid Name"}, NormalizeOptions{}); err == nil {
+		t.Fatal("expected invalid project name to be rejected")
+	}
+}
