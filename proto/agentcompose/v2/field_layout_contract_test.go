@@ -24,6 +24,7 @@ func TestV2FreezeFieldLayout(t *testing.T) {
 		"agentcompose.v2.ProjectScheduler":         {"enabled": 4, "description": 7},
 		"agentcompose.v2.ProjectSpec":              {"agents": 3, "octobus_servers": 7},
 		"agentcompose.v2.RunAgentRequest":          {"env": 5, "payload_json": 16},
+		"agentcompose.v2.StartAgentRunRequest":     {"run": 1, "interactive": 2},
 		"agentcompose.v2.ListRunsRequest":          {"scheduler_id": 3, "sandbox_id": 10, "scheduler_run_id": 11},
 		"agentcompose.v2.RunSummary":               {"exit_code": 11, "sandbox_short_id": 21, "scheduler_run_id": 22},
 		"agentcompose.v2.TranscriptEvent":          {"name": 3, "created_at": 5},

@@ -97,6 +97,7 @@ func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAge
 	case err := <-failed:
 		return domain.ProjectRunRecord{}, err
 	case <-ctx.Done():
+		cancel(ctx.Err())
 		return domain.ProjectRunRecord{}, ctx.Err()
 	}
 }

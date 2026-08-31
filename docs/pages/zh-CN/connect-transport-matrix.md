@@ -16,3 +16,11 @@
 - 保留 Connect 协议头和 HTTP/2 stream 语义。仅支持 HTTP/1 的上游无法承载 bidi attach。
 
 请求的组合不可用时，daemon 返回标明操作的 Connect `CodeUnimplemented` 或传输错误。这与 HTTP/1 代理下 unary 调用成功不同：代理可以支持状态/列表操作，但仍会阻止 attach。
+
+## 可恢复的 Agent 连接
+
+当 `AttachAgentRunStart.run_id` 为空时，`AttachAgentRun` 保持现有的“创建并连接”行为。将 `disconnect_policy` 设置为 `DETACH`，可在客户端断开后继续运行该交互任务；重新建立 `AttachAgentRun` 流，并在首帧中传入服务端返回的 `run_id` 即可恢复连接。同一时刻只允许一个 attachment 发送输入。
+
+`StartAgentRun(interactive=true)` 可直接启动相同的 detached prompt session，而无需保持提交请求。普通 `StartAgentRun` 调用仍是非交互任务。
+
+只有 daemon 进程仍存活时才能恢复 attachment。daemon 重启后，已持久化的 run events 和 logs 仍可读取，但 runtime 输入/输出句柄无法重建，此时 attach 会明确失败。页面刷新或 IM/Web 切换后，客户端应先通过 `ListRunEvents`/`FollowRunLogs` 恢复历史，再订阅 attachment 实时输出。
