@@ -27,7 +27,7 @@ func TestAgentExecutorExecuteAgentRequestPersistsCellAndEvents(t *testing.T) {
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}
@@ -126,7 +126,7 @@ func TestAgentExecutorStreamsOnlyHumanVisibleAgentOutput(t *testing.T) {
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}
@@ -207,7 +207,7 @@ func TestAgentExecutorPersistsFailedCellWhenStreamCallbackFails(t *testing.T) {
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 		AgentTimeout:         2 * time.Second,
 	}

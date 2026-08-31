@@ -69,7 +69,7 @@ func TestE2EDockerSchedulerScriptHelloWorldFlow(t *testing.T) {
 		waitForDaemonExit(t, errCh)
 	})
 	client := newUnixHTTPClient(socketPath)
-	waitForHTTPStatus(t, client, "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, client, "http://agent-compose/api/version", http.StatusOK)
 
 	t.Setenv("AGENT_COMPOSE_SOCKET", socketPath)
 	projectDir := filepath.Join(root, "project")

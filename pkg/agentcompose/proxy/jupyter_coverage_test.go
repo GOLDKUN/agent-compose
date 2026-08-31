@@ -16,7 +16,7 @@ import (
 
 func TestJupyterProxyRouteCoverage(t *testing.T) {
 	e := echo.New()
-	store := &fakeJupyterStore{state: domain.ProxyState{ProxyPath: "/github.com/chaitin/agent-compose/session/session-1", Token: "token value"}}
+	store := &fakeJupyterStore{state: domain.ProxyState{ProxyPath: "/agent-compose/session/session-1", Token: "token value"}}
 	var ensureCalls int
 	RegisterJupyterRoutes(e, JupyterOptions{
 		BasePath: "/jupyter/",

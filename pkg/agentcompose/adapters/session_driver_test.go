@@ -168,7 +168,7 @@ func TestSandboxDriverStartSandboxVMSavesRuntimeState(t *testing.T) {
 		DefaultImage:         "guest:latest",
 		GuestWorkspacePath:   "/workspace",
 		JupyterGuestPort:     8888,
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)
@@ -218,7 +218,7 @@ func TestSandboxDriverRollsBackRuntimeWhenOwnershipUpdateFails(t *testing.T) {
 	config := &appconfig.Config{
 		DataRoot: root, SandboxRoot: filepath.Join(root, "sandboxes"), RuntimeDriver: driverpkg.RuntimeDriverBoxlite,
 		BoxliteHome: filepath.Join(root, "boxlite"), DefaultImage: "guest:latest", GuestWorkspacePath: "/workspace",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session", SandboxStartTimeout: 2 * time.Second, SandboxStopTimeout: time.Second,
+		JupyterProxyBasePath: "/agent-compose/session", SandboxStartTimeout: 2 * time.Second, SandboxStopTimeout: time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {
@@ -256,7 +256,7 @@ func TestSandboxDriverRecreatesOnlyAfterIntentionalRuntimeRelease(t *testing.T) 
 	config := &appconfig.Config{
 		DataRoot: root, SandboxRoot: filepath.Join(root, "sandboxes"), RuntimeDriver: driverpkg.RuntimeDriverBoxlite,
 		BoxliteHome: filepath.Join(root, "boxlite"), DefaultImage: "guest:latest", GuestWorkspacePath: "/workspace",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session", SandboxStartTimeout: 2 * time.Second, SandboxStopTimeout: time.Second,
+		JupyterProxyBasePath: "/agent-compose/session", SandboxStartTimeout: 2 * time.Second, SandboxStopTimeout: time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)
 	if err != nil {

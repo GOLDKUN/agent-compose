@@ -2,11 +2,11 @@
   <img src="images/agent-compose-logo.png" alt="Agent-compose" height="60">
 </p>
 <p align="center">
-  <a href="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml">
-    <img src="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
+  <a href="https://agent-compose/actions/workflows/ci.yml">
+    <img src="https://agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
   </a>
-  <a href="https://github.com/chaitin/agent-compose/actions/workflows/images.yml">
-    <img src="https://github.com/chaitin/agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
+  <a href="https://agent-compose/actions/workflows/images.yml">
+    <img src="https://agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
   </a>
   <a href="LICENSE.txt">
     <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3">
@@ -51,7 +51,7 @@
 一行安装脚本会用 Docker Compose 部署并启动 agent-compose daemon，支持 Linux amd64/arm64。Web UI 位于可选的 `with-ui` profile，默认关闭，需要在 installer 的**安装 Web UI**一项选「是」（或传 `--with-ui`）才会启动：
 
 ```bash
-curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | bash
+curl -fsSL https://agent-compose/releases/download/installer-latest/install.sh | bash
 ```
 
 bootstrap 会自动选择 Linux amd64/arm64 installer 并打开中英文 TUI。默认安装目录固定为
@@ -132,7 +132,7 @@ agent-compose logs --agent reviewer
 agent-compose down                                # 停止 sandbox、禁用 scheduler
 ```
 
-更多可运行示例（cron、timeout、scheduler 脚本）见 [examples/github.com/chaitin/agent-compose/](examples/github.com/chaitin/agent-compose/)。
+更多可运行示例（cron、timeout、scheduler 脚本）见 [examples/agent-compose/](examples/agent-compose/)。
 
 ## Compose 配置
 
@@ -229,7 +229,7 @@ agent-compose --host http://127.0.0.1:7410 auth login --token 'your-token'
 agent-compose --host http://127.0.0.1:7410 status
 ```
 
-登录命令会先向 daemon 验证 Token，成功后将凭据保存到当前平台的用户配置目录；标准 Linux 路径为 `~/.config/github.com/chaitin/agent-compose/config.yml`，且仅当前用户可读写。后续通过相同的 `--host` 或 `AGENT_COMPOSE_HOST` 连接时，CLI 会自动携带对应 Token。使用 `agent-compose auth ls` 查看已保存站点，使用 `agent-compose --host <site> auth logout` 删除站点凭据。
+登录命令会先向 daemon 验证 Token，成功后将凭据保存到当前平台的用户配置目录；标准 Linux 路径为 `~/.config/agent-compose/config.yml`，且仅当前用户可读写。后续通过相同的 `--host` 或 `AGENT_COMPOSE_HOST` 连接时，CLI 会自动携带对应 Token。使用 `agent-compose auth ls` 查看已保存站点，使用 `agent-compose --host <site> auth logout` 删除站点凭据。
 
 Bearer Token 不会加密网络流量。跨机器连接时，请使用 HTTPS、SSH 隧道、VPN 或其他受保护网络；明文 HTTP 中的 Token 可能被监听并重放。UI server 或反向代理若调用受保护的 daemon 控制面 API，也必须注入相同的 `Authorization: Bearer <token>` 请求头。
 
@@ -421,7 +421,7 @@ ID，再按上面的说明使用旧 CLI 停止这些 ID。停止旧 daemon 后�
 运行相同的 dry-run：
 
 ```bash
-DATA_ROOT=/opt/github.com/chaitin/agent-compose/data
+DATA_ROOT=/opt/agent-compose/data
 RUNTIME_ROOT=/data
 "$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
   --runtime-root "$RUNTIME_ROOT" --dry-run

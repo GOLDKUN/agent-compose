@@ -23,7 +23,7 @@ func testJupyterGuestCoverageWorkflow(t *testing.T) {
 	}
 
 	proxyState := ProxyState{Enabled: true, HostPort: 7410, GuestPort: 8888, ProxyPath: "github.com/chaitin/agent-compose/session/session-1/lab/", Token: "token value"}
-	if got := jupyterBaseURL(proxyState); got != "/github.com/chaitin/agent-compose/session/session-1/" {
+	if got := jupyterBaseURL(proxyState); got != "/agent-compose/session/session-1/" {
 		t.Fatalf("jupyterBaseURL = %q", got)
 	}
 	if direct := jupyterDirectURL(proxyState); !strings.Contains(direct, "127.0.0.1:7410") || !strings.Contains(direct, "token=token+value") {

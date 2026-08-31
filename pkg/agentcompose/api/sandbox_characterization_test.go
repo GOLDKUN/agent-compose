@@ -22,7 +22,7 @@ func TestV2SandboxLifecycleActions(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	delegate := &characterizationSessionDelegate{}
 	store := &characterizationSandboxStore{session: &domain.Sandbox{Summary: domain.SandboxSummary{
-		ID: sandboxID, Driver: "docker", VMStatus: domain.VMStatusRunning, CreatedAt: now, UpdatedAt: now, ProxyPath: "/github.com/chaitin/agent-compose/session/" + sandboxID,
+		ID: sandboxID, Driver: "docker", VMStatus: domain.VMStatusRunning, CreatedAt: now, UpdatedAt: now, ProxyPath: "/agent-compose/session/" + sandboxID,
 	}}}
 	handler := NewSandboxHandler(SandboxHandlerDeps{
 		Delegate:  delegate,
@@ -101,9 +101,9 @@ func TestGetSandboxDoesNotPrepareProxyForStoppedSandbox(t *testing.T) {
 	delegate := &characterizationSessionDelegate{}
 	store := &characterizationSandboxStore{
 		session: &domain.Sandbox{Summary: domain.SandboxSummary{
-			ID: sandboxID, VMStatus: domain.VMStatusStopped, ProxyPath: "/github.com/chaitin/agent-compose/session/" + sandboxID,
+			ID: sandboxID, VMStatus: domain.VMStatusStopped, ProxyPath: "/agent-compose/session/" + sandboxID,
 		}},
-		proxyState: domain.ProxyState{Enabled: true, Exposed: true, ProxyPath: "/github.com/chaitin/agent-compose/session/" + sandboxID, Token: "token"},
+		proxyState: domain.ProxyState{Enabled: true, Exposed: true, ProxyPath: "/agent-compose/session/" + sandboxID, Token: "token"},
 	}
 	handler := NewSandboxHandler(SandboxHandlerDeps{
 		Delegate:  delegate,

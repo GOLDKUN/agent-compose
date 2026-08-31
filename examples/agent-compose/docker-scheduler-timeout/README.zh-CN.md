@@ -63,11 +63,11 @@ agent-compose down
 如果没有安装二进制，可在仓库根目录为每条命令添加 compose 文件，例如：
 
 ```bash
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml up
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml scheduler runs reviewer --limit 1
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml scheduler inspect <scheduler-run-id>
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml logs reviewer
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml down
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml up
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml scheduler runs reviewer --limit 1
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml scheduler inspect <scheduler-run-id>
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml logs reviewer
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml down
 ```
 
 将 `<scheduler-run-id>` 替换为 `scheduler runs` 输出的外层 run ID。

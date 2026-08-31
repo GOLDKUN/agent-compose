@@ -118,7 +118,7 @@ func newRuntimeSmokeConfig(t *testing.T, driver string) *appconfig.Config {
 		GuestRuntimeRoot:         "/data/runtime",
 		GuestLogRoot:             "/data/logs",
 		JupyterGuestPort:         8888,
-		JupyterProxyBasePath:     "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath:     "/agent-compose/session",
 		SandboxStartTimeout:      3 * time.Minute,
 		SandboxStopTimeout:       30 * time.Second,
 	}

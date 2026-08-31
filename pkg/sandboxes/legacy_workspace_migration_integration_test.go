@@ -32,7 +32,7 @@ func TestIntegrationLegacyWorkspaceMigrationPreservesStateWithoutMaterialization
 		RuntimeDriver:        driverpkg.RuntimeDriverDocker,
 		DefaultImage:         "guest:latest",
 		JupyterGuestPort:     8888,
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 	}
 
 	workspaceStore, sandboxStore, err := testutil.OpenStores(t, config)

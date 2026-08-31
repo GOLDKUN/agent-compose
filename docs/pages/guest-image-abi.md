@@ -194,7 +194,7 @@ The `prompt` and `exec` stdout payloads, stream separation, artifact files, and
 interactive NDJSON frames are protocol, not just CLI presentation. A custom
 replacement runtime **MUST** implement the matching release protocol. Reusing
 the repository runtime is strongly recommended; see
-[agent-compose and runtime call contract](https://github.com/chaitin/agent-compose/blob/main/docs/design/agent-compose-runtime_contract.md).
+[agent-compose and runtime call contract](https://agent-compose/blob/main/docs/design/agent-compose-runtime_contract.md).
 
 ### 4.1 Graceful-stop capability
 
@@ -601,12 +601,12 @@ For every daemon upgrade:
 
 The implementation sources of truth are:
 
-- [`guest-images/Dockerfile.agent-compose-guest`](https://github.com/chaitin/agent-compose/blob/main/guest-images/Dockerfile.agent-compose-guest)
-- [`guest-images/Dockerfile.agent-compose-guest-archlinux`](https://github.com/chaitin/agent-compose/blob/main/guest-images/Dockerfile.agent-compose-guest-archlinux)
-- [`pkg/driver/runtime_mount_manifest.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/driver/runtime_mount_manifest.go)
-- [`pkg/driver/directory_only_guest_bootstrap.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/driver/directory_only_guest_bootstrap.go)
-- [`pkg/driver/docker_runtime.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/driver/docker_runtime.go)
-- [`pkg/driver/jupyter_guest.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/driver/jupyter_guest.go)
-- [`pkg/agentcompose/adapters/agent_runner.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/agentcompose/adapters/agent_runner.go)
-- [`pkg/execution/command_runtime.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/execution/command_runtime.go)
-- [`runtime/javascript`](https://github.com/chaitin/agent-compose/tree/main/runtime/javascript)
+- [`guest-images/Dockerfile.agent-compose-guest`](https://agent-compose/blob/main/guest-images/Dockerfile.agent-compose-guest)
+- [`guest-images/Dockerfile.agent-compose-guest-archlinux`](https://agent-compose/blob/main/guest-images/Dockerfile.agent-compose-guest-archlinux)
+- [`pkg/driver/runtime_mount_manifest.go`](https://agent-compose/blob/main/pkg/driver/runtime_mount_manifest.go)
+- [`pkg/driver/directory_only_guest_bootstrap.go`](https://agent-compose/blob/main/pkg/driver/directory_only_guest_bootstrap.go)
+- [`pkg/driver/docker_runtime.go`](https://agent-compose/blob/main/pkg/driver/docker_runtime.go)
+- [`pkg/driver/jupyter_guest.go`](https://agent-compose/blob/main/pkg/driver/jupyter_guest.go)
+- [`pkg/agentcompose/adapters/agent_runner.go`](https://agent-compose/blob/main/pkg/agentcompose/adapters/agent_runner.go)
+- [`pkg/execution/command_runtime.go`](https://agent-compose/blob/main/pkg/execution/command_runtime.go)
+- [`runtime/javascript`](https://agent-compose/tree/main/runtime/javascript)

@@ -62,12 +62,12 @@ agent-compose down
 From the repository root without installing the binary:
 
 ```bash
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml config
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml up
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml ls
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml scheduler ls
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml inspect project
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-cron/agent-compose.yml down
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml config
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml up
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml ls
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml scheduler ls
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml inspect project
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-cron/agent-compose.yml down
 ```
 
 Expected result:

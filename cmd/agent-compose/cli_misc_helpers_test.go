@@ -11,7 +11,7 @@ import (
 )
 
 func TestJoinBaseURLAndPathPreservesAbsoluteNotebookURLWithoutHTTPTransport(t *testing.T) {
-	want := "https://notebooks.example/github.com/chaitin/agent-compose/session/sandbox/lab?token=absolute-token"
+	want := "https://notebooks.example/agent-compose/session/sandbox/lab?token=absolute-token"
 	if got := joinBaseURLAndPath("", want); got != want {
 		t.Fatalf("absolute notebook URL = %q, want %q", got, want)
 	}

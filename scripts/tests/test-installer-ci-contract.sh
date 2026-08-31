@@ -22,7 +22,7 @@ grep -Fq -- '--clobber' <<<"$source_text" || fail 'existing fixed release assets
 grep -Fq 'agent-compose-installer-linux-amd64' "$ROOT_DIR/scripts/build-installer-binaries.sh" || fail 'amd64 asset is missing'
 grep -Fq 'agent-compose-installer-linux-arm64' "$ROOT_DIR/scripts/build-installer-binaries.sh" || fail 'arm64 asset is missing'
 [[ -f "$INSTALLER_MODULE" ]] || fail 'standalone installer module is missing'
-grep -Fq 'module github.com/chaitin/agent-compose/cmd/installer' "$INSTALLER_MODULE" || fail 'installer module path is incorrect'
+grep -Fq 'module agent-compose/cmd/installer' "$INSTALLER_MODULE" || fail 'installer module path is incorrect'
 grep -Fq 'go -C "$ROOT_DIR/cmd/installer" build' "$ROOT_DIR/scripts/build-installer-binaries.sh" || fail 'binary builder does not use the installer module'
 grep -Fq 'go -C cmd/installer test ./...' "$WORKFLOW" || fail 'publishing workflow does not test the installer module'
 if grep -Fq 'github.com/charmbracelet/' "$ROOT_DIR/go.mod"; then

@@ -353,7 +353,7 @@ agents:
 		stopDaemon()
 		waitForDaemonExit(t, errCh)
 	})
-	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://agent-compose/api/version", http.StatusOK)
 
 	runCtx, cancelRun := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelRun()
@@ -445,7 +445,7 @@ func testDaemonAppRegistersCoreRoutes(t *testing.T) {
 		{method: http.MethodPost, path: "/agentcompose.v2.ExecService/*"},
 		{method: http.MethodPost, path: "/agentcompose.v2.ImageService/*"},
 		{method: http.MethodGet, path: "/api/webhook-sources"},
-		{method: http.MethodGet, path: "/api/github.com/chaitin/agent-compose/workspaces/:workspaceID/files"},
+		{method: http.MethodGet, path: "/api/agent-compose/workspaces/:workspaceID/files"},
 		{method: http.MethodGet, path: "/jupyter/:sessionID"},
 	} {
 		if !hasRoute(app, route.method, route.path) {

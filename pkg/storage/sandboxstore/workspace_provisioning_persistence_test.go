@@ -187,7 +187,7 @@ func newWorkspaceProvisioningPersistenceStore(t *testing.T, sandboxRoot string) 
 		DefaultImage:         "workspace-provisioning-test:latest",
 		BoxliteHome:          filepath.Join(filepath.Dir(sandboxRoot), "boxlite-home"),
 		JupyterGuestPort:     8888,
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 	})
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)

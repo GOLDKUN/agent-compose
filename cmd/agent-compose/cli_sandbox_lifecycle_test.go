@@ -216,7 +216,7 @@ func TestE2ECLIResolveSandboxRefAfterProjectDown(t *testing.T) {
 }
 
 func testCLISandboxProxy(sessionID, token string) *agentcomposev2.Sandbox {
-	proxyPath := "/github.com/chaitin/agent-compose/session/" + sessionID + "/lab"
+	proxyPath := "/agent-compose/session/" + sessionID + "/lab"
 	return &agentcomposev2.Sandbox{
 		SandboxId:   sessionID,
 		ProxyPath:   proxyPath,

@@ -104,7 +104,7 @@ func TestSchedulerCommandExecutorFiltersCommandPayloadFromStreamingCellOutput(t 
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)
@@ -291,7 +291,7 @@ func schedulerCommandFacadeTestConfig(root string) *appconfig.Config {
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
 		RuntimeBaseURL:       "http://agent-compose.test:7410",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 }

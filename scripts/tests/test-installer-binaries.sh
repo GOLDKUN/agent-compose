@@ -20,7 +20,7 @@ actual=$(find "$TEST_ROOT/assets" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_AL
 readelf -h "$TEST_ROOT/assets/agent-compose-installer-linux-amd64" | grep -Fq 'Advanced Micro Devices X86-64'
 readelf -h "$TEST_ROOT/assets/agent-compose-installer-linux-arm64" | grep -Fq 'AArch64'
 go version -m "$TEST_ROOT/assets/agent-compose-installer-linux-amd64" \
-  | grep -Eq 'path[[:space:]]+github.com/chaitin/agent-compose/cmd/installer'
+  | grep -Eq 'path[[:space:]]+agent-compose/cmd/installer'
 cmp "$ROOT_DIR/deploy/install.sh" "$TEST_ROOT/assets/install.sh" >/dev/null
 
 printf 'test-installer-binaries: all checks passed\n'

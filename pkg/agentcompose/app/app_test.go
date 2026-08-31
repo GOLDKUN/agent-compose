@@ -40,7 +40,7 @@ func TestSetupRegistersServiceGraph(t *testing.T) {
 	t.Setenv("DOCKER_IMAGE", "guest:latest")
 	t.Setenv("SANDBOX_START_TIMEOUT", "1s")
 	t.Setenv("SANDBOX_STOP_TIMEOUT", "1s")
-	t.Setenv("JUPYTER_PROXY_BASE", "/github.com/chaitin/agent-compose/jupyter/")
+	t.Setenv("JUPYTER_PROXY_BASE", "/agent-compose/jupyter/")
 	t.Setenv("LLM_API_ENDPOINT", "")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,8 +73,8 @@ func TestSetupRegistersServiceGraph(t *testing.T) {
 		{method: http.MethodPost, path: "/agentcompose.v2.CacheService/*"},
 		{method: http.MethodPost, path: "/agentcompose.v2.VolumeService/*"},
 		{method: http.MethodPost, path: "/agentcompose.v2.SandboxService/*"},
-		{method: http.MethodGet, path: "/github.com/chaitin/agent-compose/jupyter/:sessionID"},
-		{method: http.MethodPost, path: "/github.com/chaitin/agent-compose/jupyter/:sessionID/*"},
+		{method: http.MethodGet, path: "/agent-compose/jupyter/:sessionID"},
+		{method: http.MethodPost, path: "/agent-compose/jupyter/:sessionID/*"},
 	} {
 		if !hasEchoRoute(app, route.method, route.path) {
 			t.Fatalf("%s %s route was not registered", route.method, route.path)
@@ -265,7 +265,7 @@ func TestCacheServiceRouteUsesRuntimeCacheController(t *testing.T) {
 	t.Setenv("DOCKER_IMAGE", "guest:latest")
 	t.Setenv("SANDBOX_START_TIMEOUT", "1s")
 	t.Setenv("SANDBOX_STOP_TIMEOUT", "1s")
-	t.Setenv("JUPYTER_PROXY_BASE", "/github.com/chaitin/agent-compose/jupyter/")
+	t.Setenv("JUPYTER_PROXY_BASE", "/agent-compose/jupyter/")
 	t.Setenv("LLM_API_ENDPOINT", "")
 
 	materializedRootFS := filepath.Join(root, "image-cache", "sha256-test", "rootfs")

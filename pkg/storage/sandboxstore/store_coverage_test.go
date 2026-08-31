@@ -97,7 +97,7 @@ func TestStoreCreateSessionUsesConfiguredJupyterProxyBase(t *testing.T) {
 			t.Fatalf("sandbox layout missing %s: %v", rel, err)
 		}
 	}
-	wantProxyPath := "/github.com/chaitin/agent-compose/session/" + session.Summary.ID + "/lab"
+	wantProxyPath := "/agent-compose/session/" + session.Summary.ID + "/lab"
 	if session.Summary.ProxyPath != wantProxyPath {
 		t.Fatalf("session proxy path = %q, want %q", session.Summary.ProxyPath, wantProxyPath)
 	}
@@ -892,7 +892,7 @@ func newCoverageStore(t *testing.T) *Store {
 		GuestHomePath:        "/home/agent-compose",
 		MicrosandboxHome:     filepath.Join(t.TempDir(), "microsandbox"),
 		JupyterGuestPort:     8888,
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 	})
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)

@@ -56,7 +56,7 @@ func TestAgentRunnerPrepareSandboxAgentEnvironmentUsesOnlyCurrentAgent(t *testin
 		LLMModel:             "gpt-default",
 		LLMAPIProtocol:       "responses",
 		SandboxStartTimeout:  2 * time.Second,
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 	}
 	configDB, store, err := testutil.OpenStores(t, config)
 	if err != nil {
@@ -301,7 +301,7 @@ func TestAgentRunnerExecuteAgentRunWritesSystemPromptAndParsesResult(t *testing.
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)
@@ -381,7 +381,7 @@ func TestAgentRunnerExecuteAgentRunFallsBackToDefinitionModel(t *testing.T) {
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)
@@ -441,7 +441,7 @@ func TestAgentRunnerExecuteAgentRunUsesResolvedOpenCodeFacadeModel(t *testing.T)
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
 		RuntimeBaseURL:       "http://agent-compose.test:7410",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 	configDB, store, err := testutil.OpenStores(t, config)
@@ -496,7 +496,7 @@ func TestAgentRunnerExecuteAgentRunUsesResolvedOpenCodeFacadeModel(t *testing.T)
 		t.Fatalf("runtime specs = %#v", runtime.specs)
 	}
 	command := runtime.specs[0].Args[1]
-	if !strings.Contains(command, " --model 'github.com/chaitin/agent-compose/deepseek-v4-flash'") {
+	if !strings.Contains(command, " --model 'agent-compose/deepseek-v4-flash'") {
 		t.Fatalf("runtime command missing resolved facade model: %s", command)
 	}
 	if strings.Contains(command, " --model 'baizhi/deepseek-v4-flash'") {
@@ -515,7 +515,7 @@ func TestAgentRunnerExecuteAgentRunContinuesWhenDefinitionLookupFails(t *testing
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/data/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 	store, err := sandboxstore.NewWithConfig(config)

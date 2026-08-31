@@ -178,7 +178,7 @@ func testDaemonAppServesUnixSocketAndOptionalTCP(t *testing.T) {
 	errCh := runDaemonAppAsync(app, runCtx)
 
 	unixClient := newUnixHTTPClient(socketPath)
-	waitForHTTPStatus(t, unixClient, "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, unixClient, "http://agent-compose/api/version", http.StatusOK)
 	waitForHTTPStatus(t, http.DefaultClient, "http://"+tcpListen+"/api/version", http.StatusOK)
 
 	info, err := os.Stat(socketPath)
@@ -220,7 +220,7 @@ func testDaemonAppCleansStaleUnixSocket(t *testing.T) {
 	runCtx, stop := context.WithCancel(context.Background())
 	errCh := runDaemonAppAsync(app, runCtx)
 
-	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://github.com/chaitin/agent-compose/api/version", http.StatusOK)
+	waitForHTTPStatus(t, newUnixHTTPClient(socketPath), "http://agent-compose/api/version", http.StatusOK)
 	stop()
 	waitForDaemonExit(t, errCh)
 }

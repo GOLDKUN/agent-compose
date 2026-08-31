@@ -125,7 +125,7 @@ func newHistoricalUncompiledRuntimeFixture(t *testing.T) (*appconfig.Config, *sa
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/state",
 		GuestHomePath:        "/root",
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  time.Second,
 		SandboxStopTimeout:   time.Second,
 		AgentTimeout:         time.Second,

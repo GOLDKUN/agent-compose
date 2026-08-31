@@ -63,9 +63,9 @@ func TestNewConfigNormalizesJupyterProxyBase(t *testing.T) {
 		want string
 	}{
 		{name: "default", raw: "", want: "/jupyter"},
-		{name: "trims whitespace", raw: "  /github.com/chaitin/agent-compose/jupyter  ", want: "/github.com/chaitin/agent-compose/jupyter"},
-		{name: "adds leading slash", raw: "github.com/chaitin/agent-compose/jupyter", want: "/github.com/chaitin/agent-compose/jupyter"},
-		{name: "trims trailing slash", raw: "/github.com/chaitin/agent-compose/jupyter/", want: "/github.com/chaitin/agent-compose/jupyter"},
+		{name: "trims whitespace", raw: "  /agent-compose/jupyter  ", want: "/agent-compose/jupyter"},
+		{name: "adds leading slash", raw: "github.com/chaitin/agent-compose/jupyter", want: "/agent-compose/jupyter"},
+		{name: "trims trailing slash", raw: "/agent-compose/jupyter/", want: "/agent-compose/jupyter"},
 		{name: "root falls back to default", raw: "/", want: "/jupyter"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -187,7 +187,7 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	t.Setenv("GUEST_RUNTIME_ROOT", "/runtime")
 	t.Setenv("GUEST_LOG_ROOT", "/logs")
 	t.Setenv("JUPYTER_GUEST_PORT", "9999")
-	t.Setenv("JUPYTER_PROXY_BASE", "/github.com/chaitin/agent-compose/jupyter/")
+	t.Setenv("JUPYTER_PROXY_BASE", "/agent-compose/jupyter/")
 	t.Setenv("SANDBOX_START_TIMEOUT", "9s")
 	t.Setenv("SANDBOX_STOP_TIMEOUT", "10s")
 	t.Setenv("SANDBOX_GRACEFUL_STOP_TIMEOUT", "12s")
@@ -249,7 +249,7 @@ func testNewConfigParsesEnvironment(t *testing.T) {
 	if config.WebhookQueueRulesJSON == "" || config.WebhookQueueDefaultWorkers != 6 {
 		t.Fatalf("webhook queue config = %q/%d", config.WebhookQueueRulesJSON, config.WebhookQueueDefaultWorkers)
 	}
-	if config.JupyterProxyBasePath != "/github.com/chaitin/agent-compose/jupyter" {
+	if config.JupyterProxyBasePath != "/agent-compose/jupyter" {
 		t.Fatalf("jupyter proxy base path = %q", config.JupyterProxyBasePath)
 	}
 	if got := strings.Join(config.MicrosandboxInsecure, "|"); got != "one.example|two.example|three.example" {
@@ -873,7 +873,7 @@ func testNewConfigEnsuresHostDirectoriesExist(t *testing.T) {
 func TestNewConfigPreservesWindowsDockerHostSandboxRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DATA_ROOT", filepath.Join(root, "data"))
-	t.Setenv("DOCKER_HOST_SANDBOX_ROOT", `E:/program/agent-compose-main/data/github.com/chaitin/agent-compose/sandboxes`)
+	t.Setenv("DOCKER_HOST_SANDBOX_ROOT", `E:/program/agent-compose-main/data/agent-compose/sandboxes`)
 
 	di := do.New()
 	do.ProvideValue(di, slog.Default())
@@ -882,7 +882,7 @@ func TestNewConfigPreservesWindowsDockerHostSandboxRoot(t *testing.T) {
 		t.Fatalf("NewConfig returned error: %v", err)
 	}
 
-	want := `E:/program/agent-compose-main/data/github.com/chaitin/agent-compose/sandboxes`
+	want := `E:/program/agent-compose-main/data/agent-compose/sandboxes`
 	if config.DockerHostSandboxRoot != want {
 		t.Fatalf("DockerHostSandboxRoot = %q, want %q", config.DockerHostSandboxRoot, want)
 	}

@@ -65,11 +65,11 @@ From the repository root without installing the binary, add the compose file to
 each command, for example:
 
 ```bash
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml up
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml scheduler runs reviewer --limit 1
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml scheduler inspect <scheduler-run-id>
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml logs reviewer
-go run ./cmd/agent-compose --file examples/github.com/chaitin/agent-compose/docker-scheduler-timeout/agent-compose.yml down
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml up
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml scheduler runs reviewer --limit 1
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml scheduler inspect <scheduler-run-id>
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml logs reviewer
+go run ./cmd/agent-compose --file examples/agent-compose/docker-scheduler-timeout/agent-compose.yml down
 ```
 
 Replace `<scheduler-run-id>` with the outer run ID printed by `scheduler runs`.

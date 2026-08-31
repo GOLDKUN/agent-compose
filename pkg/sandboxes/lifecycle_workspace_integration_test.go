@@ -29,7 +29,7 @@ func TestIntegrationJupyterWorkspaceProxyResumePreservesState(t *testing.T) {
 		RuntimeDriver:        driverpkg.RuntimeDriverDocker,
 		DefaultImage:         "guest:latest",
 		JupyterGuestPort:     8888,
-		JupyterProxyBasePath: "/github.com/chaitin/agent-compose/session",
+		JupyterProxyBasePath: "/agent-compose/session",
 		SandboxStartTimeout:  2 * time.Second,
 	}
 

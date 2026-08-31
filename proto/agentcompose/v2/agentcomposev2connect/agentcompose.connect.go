@@ -5,10 +5,10 @@
 package agentcomposev2connect
 
 import (
-	v2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
+	v2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	http "net/http"
 	strings "strings"
 )

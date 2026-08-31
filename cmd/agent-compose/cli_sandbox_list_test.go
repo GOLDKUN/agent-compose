@@ -199,7 +199,7 @@ func testCLISessionSummary(sessionID, vmStatus, projectID, agentName, runID stri
 		Driver:        "boxlite",
 		Status:        sandboxStatusFromText(strings.ToLower(strings.TrimSpace(vmStatus))),
 		WorkspacePath: "/workspace/" + sessionID,
-		ProxyPath:     "/github.com/chaitin/agent-compose/session/" + sessionID + "/lab",
+		ProxyPath:     "/agent-compose/session/" + sessionID + "/lab",
 		Image:         "guest:latest",
 		TriggerSource: "manual",
 		CreatedAt:     timestamppb.New(time.Date(2026, 6, 11, 0, 0, 0, 0, time.UTC)),

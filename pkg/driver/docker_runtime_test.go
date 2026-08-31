@@ -23,7 +23,7 @@ import (
 func TestDockerRuntimeBindRuntimeMountSourceUsesHostSandboxRoot(t *testing.T) {
 	config := &appconfig.Config{
 		SandboxRoot:           "/data/sandboxes",
-		DockerHostSandboxRoot: "/srv/github.com/chaitin/agent-compose/sandboxes",
+		DockerHostSandboxRoot: "/srv/agent-compose/sandboxes",
 	}
 	runtime := &dockerRuntime{config: config}
 
@@ -31,7 +31,7 @@ func TestDockerRuntimeBindRuntimeMountSourceUsesHostSandboxRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bindRuntimeMountSource returned error: %v", err)
 	}
-	want := filepath.Join("/srv/github.com/chaitin/agent-compose/sandboxes", "session-1", "workspace")
+	want := filepath.Join("/srv/agent-compose/sandboxes", "session-1", "workspace")
 	if got != want {
 		t.Fatalf("bindRuntimeMountSource returned %q, want %q", got, want)
 	}
@@ -400,7 +400,7 @@ func TestDockerRuntimeBindRuntimeMountSourceKeepsSourceWithoutHostRoot(t *testin
 func TestDockerRuntimeBindRuntimeMountSourceRejectsOutsideSandboxRoot(t *testing.T) {
 	config := &appconfig.Config{
 		SandboxRoot:           "/data/sandboxes",
-		DockerHostSandboxRoot: "/srv/github.com/chaitin/agent-compose/sandboxes",
+		DockerHostSandboxRoot: "/srv/agent-compose/sandboxes",
 	}
 	runtime := &dockerRuntime{config: config}
 
@@ -432,11 +432,11 @@ func TestRebasePathUnderRootPreservesWindowsHostRoot(t *testing.T) {
 }
 
 func TestRebasePathUnderRootPreservesWindowsHostRootWithSlashes(t *testing.T) {
-	got, err := rebasePathUnderRoot("/data/sandboxes/session-1/workspace", "/data/sandboxes", "E:/program/agent-compose-main/data/github.com/chaitin/agent-compose/sandboxes")
+	got, err := rebasePathUnderRoot("/data/sandboxes/session-1/workspace", "/data/sandboxes", "E:/program/agent-compose-main/data/agent-compose/sandboxes")
 	if err != nil {
 		t.Fatalf("rebasePathUnderRoot returned error: %v", err)
 	}
-	want := "E:/program/agent-compose-main/data/github.com/chaitin/agent-compose/sandboxes/session-1/workspace"
+	want := "E:/program/agent-compose-main/data/agent-compose/sandboxes/session-1/workspace"
 	if got != want {
 		t.Fatalf("rebasePathUnderRoot returned %q, want %q", got, want)
 	}

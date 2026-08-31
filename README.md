@@ -2,11 +2,11 @@
   <img src="images/agent-compose-logo.png" alt="Agent-compose" height="60">
 </p>
 <p align="center">
-  <a href="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml">
-    <img src="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
+  <a href="https://agent-compose/actions/workflows/ci.yml">
+    <img src="https://agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
   </a>
-  <a href="https://github.com/chaitin/agent-compose/actions/workflows/images.yml">
-    <img src="https://github.com/chaitin/agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
+  <a href="https://agent-compose/actions/workflows/images.yml">
+    <img src="https://agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
   </a>
   <a href="LICENSE.txt">
     <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3">
@@ -61,7 +61,7 @@ The one-line installer sets up the agent-compose daemon with Docker Compose on
 Linux amd64/arm64:
 
 ```bash
-curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | bash
+curl -fsSL https://agent-compose/releases/download/installer-latest/install.sh | bash
 ```
 
 The bootstrap selects the Linux amd64/arm64 installer and opens its bilingual
@@ -166,7 +166,7 @@ agent-compose down                                # stop sandboxes, disable sche
 ```
 
 More runnable examples (cron, timeout, scheduler scripts) live in
-[examples/github.com/chaitin/agent-compose/](examples/github.com/chaitin/agent-compose/).
+[examples/agent-compose/](examples/agent-compose/).
 
 ## The compose file
 
@@ -453,7 +453,7 @@ components live under `runtime/`.
 
 ## Documentation
 
-- [Documentation homepage](https://chaitin.github.io/github.com/chaitin/agent-compose/)
+- [Documentation homepage](https://chaitin.github.io/agent-compose/)
 - [Command line manual](docs/pages/command-line-manual.md)
 - [agent-compose.yml manual](docs/pages/agent-compose-yaml-manual.md)
 
@@ -524,7 +524,7 @@ running sandbox IDs, then stop those IDs with the old CLI as described above.
 After stopping the old daemon, run the same dry run again before migration:
 
 ```bash
-DATA_ROOT=/opt/github.com/chaitin/agent-compose/data
+DATA_ROOT=/opt/agent-compose/data
 RUNTIME_ROOT=/data
 "$MIGRATOR" --source "$DATA_ROOT" --target "$DATA_ROOT" \
   --runtime-root "$RUNTIME_ROOT" --dry-run

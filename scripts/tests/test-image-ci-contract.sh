@@ -602,7 +602,7 @@ if [[ -f $ARCHLINUX_GUEST_DOCKERFILE ]]; then
     'versioned DSH install in Arch Linux guest image'
   require_regex "$archlinux_guest_source" '/usr/bin/pi' \
     'stable Pi executable path in Arch Linux guest image'
-  require_regex "$archlinux_guest_source" '/usr/local/share/github.com/chaitin/agent-compose/pi-mcp-adapter/index\.ts' \
+  require_regex "$archlinux_guest_source" '/usr/local/share/agent-compose/pi-mcp-adapter/index\.ts' \
     'stable Pi MCP adapter path in Arch Linux guest image'
   require_regex "$archlinux_guest_source" '/usr/bin/dsh' \
     'stable DSH executable path in Arch Linux guest image'

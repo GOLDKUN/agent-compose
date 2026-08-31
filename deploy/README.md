@@ -9,16 +9,16 @@ owns installation, upgrade, uninstall, validation, and rollback.
 Interactive installation opens a bilingual TUI:
 
 ```bash
-curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | bash
+curl -fsSL https://agent-compose/releases/download/installer-latest/install.sh | bash
 ```
 
 The default installation directory is `/opt/agent-compose`. Run the bootstrap
 with `sudo` when the current user cannot write there. The installer is retained
-as `/opt/github.com/chaitin/agent-compose/installer`, so later operations can run directly:
+as `/opt/agent-compose/installer`, so later operations can run directly:
 
 ```bash
-sudo /opt/github.com/chaitin/agent-compose/installer upgrade
-sudo /opt/github.com/chaitin/agent-compose/installer uninstall
+sudo /opt/agent-compose/installer upgrade
+sudo /opt/agent-compose/installer uninstall
 ```
 
 Docker Engine and the Docker Compose v2 plugin must already be installed. The
@@ -31,11 +31,11 @@ The bootstrap forwards all arguments to the downloaded binary:
 
 ```bash
 # Install the latest application release.
-curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | \
+curl -fsSL https://agent-compose/releases/download/installer-latest/install.sh | \
   sudo bash -s -- install --yes
 
 # Select a release, directory, registry, supported UI version, or guest image.
-sudo /opt/github.com/chaitin/agent-compose/installer install \
+sudo /opt/agent-compose/installer install \
   --version v1.2.3 \
   --dir /srv/agent-compose \
   --registry registry.example.com \
@@ -46,13 +46,13 @@ sudo /opt/github.com/chaitin/agent-compose/installer install \
   --yes
 
 # Skip the guest image pre-pull; the first sandbox downloads it instead.
-sudo /opt/github.com/chaitin/agent-compose/installer install --skip-guest-pull --yes
+sudo /opt/agent-compose/installer install --skip-guest-pull --yes
 
 # Update installer-managed image references to the latest application release.
-sudo /opt/github.com/chaitin/agent-compose/installer upgrade --yes
+sudo /opt/agent-compose/installer upgrade --yes
 
 # Prepare and validate files without pulling images or starting services.
-sudo /opt/github.com/chaitin/agent-compose/installer install --no-start --yes
+sudo /opt/agent-compose/installer install --no-start --yes
 ```
 
 The legacy top-level form, including `--upgrade`, `--dir`, `--version`,
@@ -138,13 +138,13 @@ Compose files, state, and the retained installer binary. It deliberately keeps
 `.env` and persistent `data` so a later installation can recover them:
 
 ```bash
-sudo /opt/github.com/chaitin/agent-compose/installer uninstall
+sudo /opt/agent-compose/installer uninstall
 ```
 
 Permanent removal requires the explicit purge option and confirmation:
 
 ```bash
-sudo /opt/github.com/chaitin/agent-compose/installer uninstall --purge
+sudo /opt/agent-compose/installer uninstall --purge
 ```
 
 Purge removes only recognized installer configuration and data. Unknown files
