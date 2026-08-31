@@ -149,7 +149,17 @@ func (c *Controller) runPromptInteractionSession(ctx context.Context, runCtx int
 		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
 		return transition, err
 	}
-	interaction = driverpkg.GuardRuntimeInteractionInput(interaction)
+	managed, err := c.interactiveSessions.Get(run.RunID)
+	if err != nil {
+		return transition, err
+	}
+	if err := managed.BindRuntime(interaction); err != nil {
+		return transition, err
+	}
+	interaction, err = managed.Runtime()
+	if err != nil {
+		return transition, err
+	}
 	defer func() { _ = interaction.CloseSend() }()
 	projector := newPersistentPromptAttachProjector(context.WithoutCancel(ctx), persistentPromptAttachProjectorDeps{Run: run, Sandbox: sandbox, LogsPath: logsPath, Hub: c.runLogs, EventStore: c.configDB})
 	input := &promptWrapperInput{interaction: interaction}

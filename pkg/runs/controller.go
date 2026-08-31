@@ -104,25 +104,26 @@ type SandboxRuntimeStore interface {
 }
 
 type Controller struct {
-	config           *appconfig.Config
-	store            SandboxRuntimeStore
-	configDB         ControllerStore
-	workspaceEnsurer workspaces.WorkspaceEnsurer
-	driver           SandboxDriver
-	executor         AgentExecutor
-	runtime          RuntimeProvider
-	images           images.Backend
-	schedulerEngine  schedulers.SchedulerEngine
-	cap              capabilities.Provider
-	volumes          VolumeResolver
-	streams          *sandboxes.StreamBroker
-	bus              TopicPublisher
-	dashboard        DashboardNotifier
-	capTokens        CapabilitySandboxIndexer
-	runLogs          *RunLogHub
-	lifecycleLocks   *sandboxes.LifecycleLocks
-	removal          SandboxRemoval
-	completion       *CompletionManager
+	config              *appconfig.Config
+	store               SandboxRuntimeStore
+	configDB            ControllerStore
+	workspaceEnsurer    workspaces.WorkspaceEnsurer
+	driver              SandboxDriver
+	executor            AgentExecutor
+	runtime             RuntimeProvider
+	images              images.Backend
+	schedulerEngine     schedulers.SchedulerEngine
+	cap                 capabilities.Provider
+	volumes             VolumeResolver
+	streams             *sandboxes.StreamBroker
+	bus                 TopicPublisher
+	dashboard           DashboardNotifier
+	capTokens           CapabilitySandboxIndexer
+	runLogs             *RunLogHub
+	lifecycleLocks      *sandboxes.LifecycleLocks
+	removal             SandboxRemoval
+	completion          *CompletionManager
+	interactiveSessions *InteractiveSessionManager
 }
 
 type llmFacadeTokenDeleter interface {
@@ -135,25 +136,26 @@ type llmFacadeStore interface {
 }
 
 type ControllerDependencies struct {
-	Config           *appconfig.Config
-	Store            SandboxRuntimeStore
-	ConfigDB         ControllerStore
-	WorkspaceEnsurer workspaces.WorkspaceEnsurer
-	Driver           SandboxDriver
-	Executor         AgentExecutor
-	Runtime          RuntimeProvider
-	Images           images.Backend
-	SchedulerEngine  schedulers.SchedulerEngine
-	Cap              capabilities.Provider
-	Volumes          VolumeResolver
-	Streams          *sandboxes.StreamBroker
-	Bus              TopicPublisher
-	Dashboard        DashboardNotifier
-	CapTokens        CapabilitySandboxIndexer
-	RunLogs          *RunLogHub
-	LifecycleLocks   *sandboxes.LifecycleLocks
-	Removal          SandboxRemoval
-	Completion       *CompletionManager
+	Config              *appconfig.Config
+	Store               SandboxRuntimeStore
+	ConfigDB            ControllerStore
+	WorkspaceEnsurer    workspaces.WorkspaceEnsurer
+	Driver              SandboxDriver
+	Executor            AgentExecutor
+	Runtime             RuntimeProvider
+	Images              images.Backend
+	SchedulerEngine     schedulers.SchedulerEngine
+	Cap                 capabilities.Provider
+	Volumes             VolumeResolver
+	Streams             *sandboxes.StreamBroker
+	Bus                 TopicPublisher
+	Dashboard           DashboardNotifier
+	CapTokens           CapabilitySandboxIndexer
+	RunLogs             *RunLogHub
+	LifecycleLocks      *sandboxes.LifecycleLocks
+	Removal             SandboxRemoval
+	Completion          *CompletionManager
+	InteractiveSessions *InteractiveSessionManager
 }
 
 type SandboxRemoval interface {
@@ -161,26 +163,31 @@ type SandboxRemoval interface {
 }
 
 func NewController(deps ControllerDependencies) *Controller {
+	interactiveSessions := deps.InteractiveSessions
+	if interactiveSessions == nil {
+		interactiveSessions = NewInteractiveSessionManager()
+	}
 	return &Controller{
-		config:           deps.Config,
-		store:            deps.Store,
-		configDB:         deps.ConfigDB,
-		workspaceEnsurer: deps.WorkspaceEnsurer,
-		driver:           deps.Driver,
-		executor:         deps.Executor,
-		runtime:          deps.Runtime,
-		images:           deps.Images,
-		schedulerEngine:  deps.SchedulerEngine,
-		cap:              deps.Cap,
-		volumes:          deps.Volumes,
-		streams:          deps.Streams,
-		bus:              deps.Bus,
-		dashboard:        deps.Dashboard,
-		capTokens:        deps.CapTokens,
-		runLogs:          deps.RunLogs,
-		lifecycleLocks:   deps.LifecycleLocks,
-		removal:          deps.Removal,
-		completion:       deps.Completion,
+		config:              deps.Config,
+		store:               deps.Store,
+		configDB:            deps.ConfigDB,
+		workspaceEnsurer:    deps.WorkspaceEnsurer,
+		driver:              deps.Driver,
+		executor:            deps.Executor,
+		runtime:             deps.Runtime,
+		images:              deps.Images,
+		schedulerEngine:     deps.SchedulerEngine,
+		cap:                 deps.Cap,
+		volumes:             deps.Volumes,
+		streams:             deps.Streams,
+		bus:                 deps.Bus,
+		dashboard:           deps.Dashboard,
+		capTokens:           deps.CapTokens,
+		runLogs:             deps.RunLogs,
+		lifecycleLocks:      deps.LifecycleLocks,
+		removal:             deps.Removal,
+		completion:          deps.Completion,
+		interactiveSessions: interactiveSessions,
 	}
 }
 
@@ -325,6 +332,15 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	if err != nil {
 		return err
 	}
+	session, err := c.interactiveSessions.Create(started.Run.RunID)
+	if err != nil {
+		return err
+	}
+	if err := session.Start(); err != nil {
+		_ = c.interactiveSessions.Remove(started.Run.RunID, InteractiveSessionCanceled)
+		return err
+	}
+	defer func() { _ = c.interactiveSessions.Remove(started.Run.RunID, InteractiveSessionCompleted) }()
 	if onStarted != nil {
 		onStarted(started.Run.RunID)
 	}
