@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -123,7 +124,9 @@ func (d runControllerDelegate) StartAgentRun(ctx context.Context, req *connect.R
 	if d.supervisor == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("run supervisor is required"))
 	}
-	run, err := d.supervisor.StartRun(ctx, runAgentRequestFromProto(req.Msg.GetRun()))
+	runRequest := runAgentRequestFromProto(req.Msg.GetRun())
+	runRequest.Interactive = req.Msg.GetInteractive()
+	run, err := d.supervisor.StartRun(ctx, runRequest)
 	if err != nil {
 		return nil, runConnectError(err)
 	}
@@ -206,19 +209,9 @@ func runAgentStreamCompletedProjection(run domain.ProjectRunRecord, createdAt ti
 }
 
 func (d runControllerDelegate) AttachAgentRun(ctx context.Context, stream *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
-	if d.controller == nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("run controller is required"))
-	}
-	if err := d.controller.RunProjectCommandAttach(ctx, receiveRunAttachInput(stream.Receive), func(output runs.RunAttachOutput) error {
+	return d.RunProjectCommandAttach(ctx, stream.Receive, func(output runs.RunAttachOutput) error {
 		return stream.Send(api.RunAttachOutputToProto(output))
-	}); err != nil {
-		var connectErr *connect.Error
-		if errors.As(err, &connectErr) {
-			return connectErr
-		}
-		return runConnectError(err)
-	}
-	return nil
+	})
 }
 
 func receiveRunAttachInput(receive func() (*agentcomposev2.AttachAgentRunRequest, error)) runs.RunAttachReceiver {
@@ -237,6 +230,13 @@ func runAttachInputFromProto(request *agentcomposev2.AttachAgentRunRequest) runs
 	case *agentcomposev2.AttachAgentRunRequest_Start:
 		start := frame.Start
 		input.Kind = runs.RunAttachInputStart
+		input.RunID = strings.TrimSpace(start.GetRunId())
+		switch start.GetDisconnectPolicy() {
+		case agentcomposev2.AttachDisconnectPolicy_ATTACH_DISCONNECT_POLICY_DETACH:
+			input.DisconnectPolicy = runs.AttachDisconnectDetach
+		default:
+			input.DisconnectPolicy = runs.AttachDisconnectCancel
+		}
 		input.Request = runAgentRequestFromProto(start.GetRequest())
 		// AttachAgentRun historically ignored request-scoped volume mounts. Keep
 		// that compatibility behavior while other run transports map volumes.

@@ -129,6 +129,11 @@ func TestAppRunControllerHelperCoverage(t *testing.T) {
 	if _, err := (runControllerDelegate{}).StartAgentRun(context.Background(), connect.NewRequest(&agentcomposev2.StartAgentRunRequest{Run: msg})); connect.CodeOf(err) != connect.CodeInternal {
 		t.Fatalf("StartRun nil supervisor err=%v", err)
 	}
+	if err := (runControllerDelegate{}).RunProjectCommandAttach(context.Background(), func() (*agentcomposev2.AttachAgentRunRequest, error) {
+		return nil, errors.New("must not receive without a supervisor")
+	}, func(runs.RunAttachOutput) error { return nil }); connect.CodeOf(err) != connect.CodeInternal {
+		t.Fatalf("RunProjectCommandAttach nil supervisor err=%v", err)
+	}
 	for _, tc := range []struct {
 		err  error
 		code connect.Code

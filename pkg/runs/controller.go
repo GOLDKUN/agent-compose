@@ -104,25 +104,26 @@ type SandboxRuntimeStore interface {
 }
 
 type Controller struct {
-	config           *appconfig.Config
-	store            SandboxRuntimeStore
-	configDB         ControllerStore
-	workspaceEnsurer workspaces.WorkspaceEnsurer
-	driver           SandboxDriver
-	executor         AgentExecutor
-	runtime          RuntimeProvider
-	images           images.Backend
-	schedulerEngine  schedulers.SchedulerEngine
-	cap              capabilities.Provider
-	volumes          VolumeResolver
-	streams          *sandboxes.StreamBroker
-	bus              TopicPublisher
-	dashboard        DashboardNotifier
-	capTokens        CapabilitySandboxIndexer
-	runLogs          *RunLogHub
-	lifecycleLocks   *sandboxes.LifecycleLocks
-	removal          SandboxRemoval
-	completion       *CompletionManager
+	config              *appconfig.Config
+	store               SandboxRuntimeStore
+	configDB            ControllerStore
+	workspaceEnsurer    workspaces.WorkspaceEnsurer
+	driver              SandboxDriver
+	executor            AgentExecutor
+	runtime             RuntimeProvider
+	images              images.Backend
+	schedulerEngine     schedulers.SchedulerEngine
+	cap                 capabilities.Provider
+	volumes             VolumeResolver
+	streams             *sandboxes.StreamBroker
+	bus                 TopicPublisher
+	dashboard           DashboardNotifier
+	capTokens           CapabilitySandboxIndexer
+	runLogs             *RunLogHub
+	lifecycleLocks      *sandboxes.LifecycleLocks
+	removal             SandboxRemoval
+	completion          *CompletionManager
+	interactiveSessions *InteractiveSessionManager
 }
 
 type llmFacadeTokenDeleter interface {
@@ -135,25 +136,26 @@ type llmFacadeStore interface {
 }
 
 type ControllerDependencies struct {
-	Config           *appconfig.Config
-	Store            SandboxRuntimeStore
-	ConfigDB         ControllerStore
-	WorkspaceEnsurer workspaces.WorkspaceEnsurer
-	Driver           SandboxDriver
-	Executor         AgentExecutor
-	Runtime          RuntimeProvider
-	Images           images.Backend
-	SchedulerEngine  schedulers.SchedulerEngine
-	Cap              capabilities.Provider
-	Volumes          VolumeResolver
-	Streams          *sandboxes.StreamBroker
-	Bus              TopicPublisher
-	Dashboard        DashboardNotifier
-	CapTokens        CapabilitySandboxIndexer
-	RunLogs          *RunLogHub
-	LifecycleLocks   *sandboxes.LifecycleLocks
-	Removal          SandboxRemoval
-	Completion       *CompletionManager
+	Config              *appconfig.Config
+	Store               SandboxRuntimeStore
+	ConfigDB            ControllerStore
+	WorkspaceEnsurer    workspaces.WorkspaceEnsurer
+	Driver              SandboxDriver
+	Executor            AgentExecutor
+	Runtime             RuntimeProvider
+	Images              images.Backend
+	SchedulerEngine     schedulers.SchedulerEngine
+	Cap                 capabilities.Provider
+	Volumes             VolumeResolver
+	Streams             *sandboxes.StreamBroker
+	Bus                 TopicPublisher
+	Dashboard           DashboardNotifier
+	CapTokens           CapabilitySandboxIndexer
+	RunLogs             *RunLogHub
+	LifecycleLocks      *sandboxes.LifecycleLocks
+	Removal             SandboxRemoval
+	Completion          *CompletionManager
+	InteractiveSessions *InteractiveSessionManager
 }
 
 type SandboxRemoval interface {
@@ -161,26 +163,31 @@ type SandboxRemoval interface {
 }
 
 func NewController(deps ControllerDependencies) *Controller {
+	interactiveSessions := deps.InteractiveSessions
+	if interactiveSessions == nil {
+		interactiveSessions = NewInteractiveSessionManager()
+	}
 	return &Controller{
-		config:           deps.Config,
-		store:            deps.Store,
-		configDB:         deps.ConfigDB,
-		workspaceEnsurer: deps.WorkspaceEnsurer,
-		driver:           deps.Driver,
-		executor:         deps.Executor,
-		runtime:          deps.Runtime,
-		images:           deps.Images,
-		schedulerEngine:  deps.SchedulerEngine,
-		cap:              deps.Cap,
-		volumes:          deps.Volumes,
-		streams:          deps.Streams,
-		bus:              deps.Bus,
-		dashboard:        deps.Dashboard,
-		capTokens:        deps.CapTokens,
-		runLogs:          deps.RunLogs,
-		lifecycleLocks:   deps.LifecycleLocks,
-		removal:          deps.Removal,
-		completion:       deps.Completion,
+		config:              deps.Config,
+		store:               deps.Store,
+		configDB:            deps.ConfigDB,
+		workspaceEnsurer:    deps.WorkspaceEnsurer,
+		driver:              deps.Driver,
+		executor:            deps.Executor,
+		runtime:             deps.Runtime,
+		images:              deps.Images,
+		schedulerEngine:     deps.SchedulerEngine,
+		cap:                 deps.Cap,
+		volumes:             deps.Volumes,
+		streams:             deps.Streams,
+		bus:                 deps.Bus,
+		dashboard:           deps.Dashboard,
+		capTokens:           deps.CapTokens,
+		runLogs:             deps.RunLogs,
+		lifecycleLocks:      deps.LifecycleLocks,
+		removal:             deps.Removal,
+		completion:          deps.Completion,
+		interactiveSessions: interactiveSessions,
 	}
 }
 
@@ -205,6 +212,7 @@ type RunAgentRequest struct {
 	StickyBindingSchedulerID string
 	StickyBindingTriggerID   string
 	StickyBindingConfigHash  string
+	Interactive              bool
 }
 
 type StreamSink struct {
@@ -283,10 +291,10 @@ func (c *Controller) RunProjectAgent(ctx context.Context, req RunAgentRequest, s
 }
 
 func (c *Controller) RunProjectCommandAttach(ctx context.Context, receive RunAttachReceiver, send RunAttachSender) error {
-	return c.RunProjectCommandAttachRegistered(ctx, receive, send, nil)
+	return c.RunProjectCommandAttachRegistered(ctx, ctx, receive, send, nil)
 }
 
-func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, receive RunAttachReceiver, send RunAttachSender, onStarted func(string)) error {
+func (c *Controller) RunProjectCommandAttachRegistered(ctx, inputCtx context.Context, receive RunAttachReceiver, send RunAttachSender, onStarted func(string, <-chan struct{})) error {
 	if receive == nil || send == nil {
 		return fmt.Errorf("run attach stream is required")
 	}
@@ -299,6 +307,9 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	}
 	if first.Kind != RunAttachInputStart {
 		return fmt.Errorf("%w: first run attach frame must be start", ErrInvalidRequest)
+	}
+	if first.RunID != "" {
+		return c.attachExistingInteractiveSession(ctx, first.RunID, receive, send)
 	}
 	mode := first.Mode
 	req := first.Request
@@ -322,8 +333,17 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	if err != nil {
 		return err
 	}
+	session, releaseInput, err := c.interactiveSessions.CreateAttached(started.Run.RunID)
+	if err != nil {
+		return err
+	}
+	sessionTerminalState := InteractiveSessionCompleted
+	defer func() { _ = c.interactiveSessions.Remove(started.Run.RunID, sessionTerminalState) }()
+	inputCtx, cancelInput := context.WithCancel(inputCtx)
+	defer cancelInput()
+	inputReleased := startRunAttachInputForwarder(inputCtx, receive, session, releaseInput)
 	if onStarted != nil {
-		onStarted(started.Run.RunID)
+		onStarted(started.Run.RunID, inputReleased)
 	}
 	run, execErr, err := c.executeStartedProjectRunAttach(ctx, startedRunAttachContext{
 		Run:      started.Run,
@@ -331,15 +351,141 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		Warnings: started.Warnings,
 		Start:    first,
 		Mode:     mode,
-	}, receive, send)
+	}, session.Receive(), newInteractiveRunOutputSender(session, first.DisconnectPolicy, send))
 	if err != nil {
+		if ctx.Err() != nil {
+			sessionTerminalState = InteractiveSessionCanceled
+		} else {
+			sessionTerminalState = InteractiveSessionFailed
+		}
 		return err
 	}
 	if execErr != nil {
+		if ctx.Err() != nil {
+			sessionTerminalState = InteractiveSessionCanceled
+		} else {
+			sessionTerminalState = InteractiveSessionFailed
+		}
 		return nil
 	}
 	_ = run
 	return nil
+}
+
+func (c *Controller) attachExistingInteractiveSession(ctx context.Context, runID string, receive RunAttachReceiver, send RunAttachSender) error {
+	runID = strings.TrimSpace(runID)
+	if c.configDB == nil {
+		return fmt.Errorf("config store is required")
+	}
+	run, err := c.configDB.GetProjectRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if StatusIsTerminal(run.Status) {
+		return fmt.Errorf("%w: run %s is terminal", domain.ErrFailedPrecondition, runID)
+	}
+	attachment, err := c.interactiveSessions.Attach(runID)
+	if err != nil {
+		return interactiveSessionDomainError(err)
+	}
+	defer attachment.Close()
+	session, err := c.interactiveSessions.Get(runID)
+	if err != nil {
+		return err
+	}
+	outputs, unsubscribe, err := session.Subscribe()
+	if err != nil {
+		return err
+	}
+	defer unsubscribe()
+	receiveErr := make(chan error, 1)
+	go func() {
+		for {
+			input, err := receive()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					receiveErr <- nil
+					return
+				}
+				receiveErr <- err
+				return
+			}
+			if input.Kind == RunAttachInputStart {
+				receiveErr <- fmt.Errorf("%w: duplicate run attach start frame", ErrInvalidRequest)
+				return
+			}
+			if err := attachment.Send(ctx, input); err != nil {
+				receiveErr <- err
+				return
+			}
+		}
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-receiveErr:
+			return err
+		case output, ok := <-outputs:
+			if !ok {
+				return nil
+			}
+			if err := send(output); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func interactiveSessionDomainError(err error) error {
+	switch {
+	case errors.Is(err, ErrInteractiveSessionNotFound):
+		return fmt.Errorf("%w: %w", domain.ErrNotFound, err)
+	case errors.Is(err, ErrInteractiveSessionClosed):
+		return fmt.Errorf("%w: %w", domain.ErrFailedPrecondition, err)
+	case errors.Is(err, ErrInteractiveSessionAttached):
+		return fmt.Errorf("%w: %w", domain.ErrConflict, err)
+	default:
+		return err
+	}
+}
+
+func newInteractiveRunOutputSender(session *InteractiveSession, policy AttachDisconnectPolicy, send RunAttachSender) RunAttachSender {
+	detached := false
+	return func(output RunAttachOutput) error {
+		session.Publish(output)
+		if detached {
+			return nil
+		}
+		err := send(output)
+		if err != nil && policy == AttachDisconnectDetach {
+			detached = true
+			return nil
+		}
+		return err
+	}
+}
+
+func forwardRunAttachInputs(ctx context.Context, receive RunAttachReceiver, session *InteractiveSession) {
+	for {
+		input, err := receive()
+		if err != nil {
+			return
+		}
+		if err := session.Send(ctx, input); err != nil {
+			return
+		}
+	}
+}
+
+func startRunAttachInputForwarder(ctx context.Context, receive RunAttachReceiver, session *InteractiveSession, release func()) <-chan struct{} {
+	released := make(chan struct{})
+	go func() {
+		defer close(released)
+		defer release()
+		forwardRunAttachInputs(ctx, receive, session)
+	}()
+	return released
 }
 
 // startedProjectRunContext bundles the run-scoped state StartProjectRun

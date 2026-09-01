@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -15,12 +17,17 @@ import (
 
 type RunSupervisor struct {
 	root       context.Context
-	controller *runs.Controller
+	controller runSupervisorController
 	store      *configstore.ConfigStore
 
 	mu     sync.Mutex
 	active map[string]*activeRun
 	wg     sync.WaitGroup
+}
+
+type runSupervisorController interface {
+	StartProjectRun(context.Context, runs.RunAgentRequest) (runs.StartedProjectRun, error)
+	RunProjectCommandAttachRegistered(context.Context, context.Context, runs.RunAttachReceiver, runs.RunAttachSender, func(string, <-chan struct{})) error
 }
 
 type activeRun struct {
@@ -41,6 +48,9 @@ func NewRunSupervisor(di do.Injector) (*RunSupervisor, error) {
 }
 
 func (s *RunSupervisor) StartRun(ctx context.Context, req runs.RunAgentRequest) (domain.ProjectRunRecord, error) {
+	if req.Interactive {
+		return s.startInteractiveRun(ctx, req)
+	}
 	started, err := s.controller.StartProjectRun(ctx, req)
 	if err != nil {
 		return domain.ProjectRunRecord{}, err
@@ -57,6 +67,52 @@ func (s *RunSupervisor) StartRun(ctx context.Context, req runs.RunAgentRequest) 
 		_, _, _ = started.Execute(execCtx, nil)
 	}()
 	return started.Run, nil
+}
+
+func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAgentRequest) (domain.ProjectRunRecord, error) {
+	execCtx, cancel := context.WithCancelCause(s.root)
+	type interactiveRunStarted struct {
+		runID         string
+		inputReleased <-chan struct{}
+	}
+	started := make(chan interactiveRunStarted, 1)
+	failed := make(chan error, 1)
+	first := true
+	receive := func() (runs.RunAttachInput, error) {
+		if first {
+			first = false
+			return runs.RunAttachInput{Kind: runs.RunAttachInputStart, Mode: runs.RunAttachModePrompt, Request: req, DisconnectPolicy: runs.AttachDisconnectDetach}, nil
+		}
+		return runs.RunAttachInput{}, io.EOF
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer cancel(nil)
+		var runID string
+		err := s.controller.RunProjectCommandAttachRegistered(execCtx, execCtx, receive, func(runs.RunAttachOutput) error { return nil }, func(id string, inputReleased <-chan struct{}) {
+			runID = id
+			s.register(id, cancel)
+			started <- interactiveRunStarted{runID: id, inputReleased: inputReleased}
+		})
+		if runID != "" {
+			s.unregister(runID)
+		}
+		failed <- err
+	}()
+	select {
+	case run := <-started:
+		select {
+		case <-run.inputReleased:
+			return s.store.GetProjectRun(ctx, run.runID)
+		case <-ctx.Done():
+			return domain.ProjectRunRecord{}, ctx.Err()
+		}
+	case err := <-failed:
+		return domain.ProjectRunRecord{}, err
+	case <-ctx.Done():
+		return domain.ProjectRunRecord{}, ctx.Err()
+	}
 }
 
 func (s *RunSupervisor) Run(ctx context.Context, req runs.RunAgentRequest, stream *runs.StreamSink) (domain.ProjectRunRecord, error, error) {
@@ -76,9 +132,29 @@ func (s *RunSupervisor) Run(ctx context.Context, req runs.RunAgentRequest, strea
 }
 
 func (s *RunSupervisor) Attach(ctx context.Context, receive runs.RunAttachReceiver, send runs.RunAttachSender) error {
-	execCtx, cancel := context.WithCancelCause(ctx)
+	first, err := receive()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return fmt.Errorf("%w: run attach start frame is required", runs.ErrInvalidRequest)
+		}
+		return err
+	}
+	replayed := false
+	receiveWithFirst := func() (runs.RunAttachInput, error) {
+		if !replayed {
+			replayed = true
+			return first, nil
+		}
+		return receive()
+	}
+	parent := ctx
+	if first.DisconnectPolicy == runs.AttachDisconnectDetach && first.RunID == "" {
+		parent = s.root
+	}
+	execCtx, cancel := context.WithCancelCause(parent)
+	defer cancel(nil)
 	var runID string
-	err := s.controller.RunProjectCommandAttachRegistered(execCtx, receive, send, func(startedRunID string) {
+	err = s.controller.RunProjectCommandAttachRegistered(execCtx, ctx, receiveWithFirst, send, func(startedRunID string, _ <-chan struct{}) {
 		runID = startedRunID
 		s.register(runID, cancel)
 		s.wg.Add(1)
@@ -86,8 +162,6 @@ func (s *RunSupervisor) Attach(ctx context.Context, receive runs.RunAttachReceiv
 	if runID != "" {
 		s.wg.Done()
 		s.unregister(runID)
-	} else {
-		cancel(nil)
 	}
 	return err
 }

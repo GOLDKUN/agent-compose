@@ -21,19 +21,28 @@ const (
 	RunAttachModePrompt      RunAttachMode = "prompt"
 )
 
+type AttachDisconnectPolicy string
+
+const (
+	AttachDisconnectCancel AttachDisconnectPolicy = "cancel"
+	AttachDisconnectDetach AttachDisconnectPolicy = "detach"
+)
+
 type RunAttachInput struct {
-	Kind          RunAttachInputKind
-	Mode          RunAttachMode
-	Request       RunAgentRequest
-	AttachStdin   bool
-	TTY           bool
-	Rows          uint32
-	Cols          uint32
-	Data          []byte
-	Signal        string
-	Reason        string
-	Text          string
-	ClientFrameID string
+	Kind             RunAttachInputKind
+	RunID            string
+	DisconnectPolicy AttachDisconnectPolicy
+	Mode             RunAttachMode
+	Request          RunAgentRequest
+	AttachStdin      bool
+	TTY              bool
+	Rows             uint32
+	Cols             uint32
+	Data             []byte
+	Signal           string
+	Reason           string
+	Text             string
+	ClientFrameID    string
 }
 
 type RunAttachReceiver func() (RunAttachInput, error)

@@ -16,3 +16,11 @@ This matrix describes the transports required by the daemon's Connect control-pl
 - Preserve the Connect protocol headers and HTTP/2 stream semantics. HTTP/1-only upstreams cannot carry bidi attach.
 
 When a requested combination is unavailable, the daemon returns a Connect `CodeUnimplemented` or transport error identifying the operation. This is distinct from a successful unary call through an HTTP/1 proxy: a proxy can support status/list operations while still preventing attach.
+
+## Resumable agent attachments
+
+`AttachAgentRun` keeps its existing create-and-attach behavior when `AttachAgentRunStart.run_id` is empty. Set `disconnect_policy` to `DETACH` to keep that interactive run alive after the client disconnects; reconnect with another `AttachAgentRun` stream whose start frame contains the returned `run_id`. Only one attachment may send input at a time.
+
+`StartAgentRun(interactive=true)` starts the same detached prompt session without keeping the submission request open. Ordinary `StartAgentRun` calls remain non-interactive.
+
+Attachments are resumable only while the daemon process remains alive. After a daemon restart, persisted run events and logs remain readable, but runtime input/output handles cannot be reconstructed and attach fails closed. After a page refresh or channel switch, clients should read `ListRunEvents`/`FollowRunLogs` before subscribing to live attachment output.

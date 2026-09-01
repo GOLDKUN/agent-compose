@@ -160,7 +160,10 @@ func (c *Controller) openCommandInteraction(ctx context.Context, runCtx interact
 	if err != nil {
 		return commandInteractionSession{}, err
 	}
-	interaction = driverpkg.GuardRuntimeInteractionInput(interaction)
+	interaction, err = c.interactiveSessions.BindRuntime(run.RunID, interaction)
+	if err != nil {
+		return commandInteractionSession{}, err
+	}
 	return commandInteractionSession{Run: run, Interaction: interaction, LogsPath: logsPath}, nil
 }
 
