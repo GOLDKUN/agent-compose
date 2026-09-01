@@ -12,11 +12,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/samber/do/v2"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/internal/testutil"
-	domain "agent-compose/pkg/model"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/internal/testutil"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func TestIntegrationBatchGetLatestSchedulerRunsFindsRunBeyondFirstPage(t *testing.T) {

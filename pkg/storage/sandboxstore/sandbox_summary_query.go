@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/idset"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/idset"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 const sandboxSummaryQueryBatchSize = 500

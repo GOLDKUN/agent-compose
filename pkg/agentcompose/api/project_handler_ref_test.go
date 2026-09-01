@@ -6,8 +6,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/projects"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/internal/projects"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 // projectDelegateRefSpy records the domain project reference PatchProject

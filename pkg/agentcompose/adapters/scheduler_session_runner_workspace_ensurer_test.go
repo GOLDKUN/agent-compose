@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/capabilities"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/workspaces"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 type recordingSchedulerWorkspaceEnsurer struct {

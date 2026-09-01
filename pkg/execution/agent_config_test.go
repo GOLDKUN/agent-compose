@@ -3,7 +3,7 @@ package execution
 import (
 	"testing"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestAgentConfigFromDefinitionPreservesPiModel(t *testing.T) {

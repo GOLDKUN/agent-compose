@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/volumes"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/volumes"
 
 	"github.com/fastschema/qjs"
 )

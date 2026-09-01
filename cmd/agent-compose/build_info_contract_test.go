@@ -12,8 +12,8 @@ import (
 
 	"github.com/samber/do/v2"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
 )
 
 func TestBuildInfoHTTPAndStatusCompatibility(t *testing.T) {

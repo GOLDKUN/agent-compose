@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storage/sandboxstore"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestStickyProjectRunConfigRetainsHistoricalHashSchemaKey(t *testing.T) {

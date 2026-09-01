@@ -5,7 +5,7 @@ package driver
 import (
 	"context"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 func ListMicrosandboxManagedResources(context.Context, *appconfig.Config) ([]ManagedRuntimeResource, []string, error) {

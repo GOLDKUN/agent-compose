@@ -13,8 +13,8 @@ import (
 	"github.com/samber/do/v2"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"agent-compose/pkg/config"
-	"agent-compose/proto/health/v1/healthv1connect"
+	"github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/proto/health/v1/healthv1connect"
 )
 
 func TestServiceSnapshotIncludesRuntimeDetails(t *testing.T) {

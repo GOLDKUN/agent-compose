@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"agent-compose/pkg/events/webhooks"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/events/webhooks"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 
 	"github.com/labstack/echo/v4"
 )

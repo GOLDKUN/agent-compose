@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 	containerapi "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 )

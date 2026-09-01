@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/configstore"
-	storagesqlite "agent-compose/pkg/storage/sqlite"
-	"agent-compose/pkg/volumes"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
+	"github.com/chaitin/agent-compose/pkg/volumes"
 )
 
 func TestIntegrationManagerPersistsProjectVolumeLifecycle(t *testing.T) {

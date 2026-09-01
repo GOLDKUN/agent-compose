@@ -3,7 +3,7 @@ package runs
 import (
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type agentTurnProjection struct {

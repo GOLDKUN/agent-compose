@@ -3,7 +3,7 @@ package schedulers
 import (
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func effectiveSchedulerRunTimeout(scheduler domain.Scheduler, override time.Duration, fallback func(time.Duration) time.Duration) time.Duration {

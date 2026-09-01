@@ -1,11 +1,11 @@
 package sandboxes_test
 
 import (
-	"agent-compose/pkg/sandboxes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/internal/testutil"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sandboxstore"
-	"agent-compose/pkg/workspaces"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/internal/testutil"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 func TestIntegrationLegacyWorkspaceMigrationPreservesStateWithoutMaterialization(t *testing.T) {

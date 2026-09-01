@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	"agent-compose/pkg/cache"
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/images"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/cache"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/images"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type Kind string

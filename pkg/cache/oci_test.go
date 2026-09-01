@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 	"github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/layout"

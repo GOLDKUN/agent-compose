@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func MarkSandboxRuntimeReleased(sandboxRoot string, sandbox *domain.Sandbox) error {

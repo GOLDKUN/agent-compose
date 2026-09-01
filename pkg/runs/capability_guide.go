@@ -1,13 +1,13 @@
 package runs
 
 import (
-	"agent-compose/pkg/capabilities"
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 	"log/slog"
 	"os"
 	"path/filepath"

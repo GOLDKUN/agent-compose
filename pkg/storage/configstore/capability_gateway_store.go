@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // capabilityGatewayStore owns the capability gateway settings row.

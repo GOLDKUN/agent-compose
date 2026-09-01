@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/cache"
+	"github.com/chaitin/agent-compose/pkg/cache"
 
 	_ "modernc.org/sqlite"
 )

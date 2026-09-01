@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"connectrpc.com/connect"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 const detachedRunJupyterSandboxWait = 30 * time.Second

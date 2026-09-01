@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestSandboxProviderEnvPersistsOnlyProvenance(t *testing.T) {

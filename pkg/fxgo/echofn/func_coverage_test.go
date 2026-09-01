@@ -13,7 +13,7 @@ import (
 	"github.com/samber/oops"
 	"google.golang.org/grpc/codes"
 
-	"agent-compose/pkg/fxgo/restful"
+	"github.com/chaitin/agent-compose/pkg/fxgo/restful"
 )
 
 func TestEchoFunctionAdaptersCoverage(t *testing.T) {

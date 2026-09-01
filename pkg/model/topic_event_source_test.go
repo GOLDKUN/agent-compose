@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"agent-compose/pkg/events"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/events"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestTopicEventSourceFilterValuesIncludeLegacyLoaderAlias(t *testing.T) {

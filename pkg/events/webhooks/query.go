@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // EventQueryStore provides the lightweight HTTP event-query projections.

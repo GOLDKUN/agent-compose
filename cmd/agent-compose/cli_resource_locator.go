@@ -8,8 +8,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func runComposeIDInspectCommand(cmd *cobra.Command, cli cliOptions, id string) error {

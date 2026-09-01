@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 func (s *schedulerStore) ListInterruptedSchedulerRuns(ctx context.Context, startedBefore time.Time) ([]domain.SchedulerRunSummary, error) {

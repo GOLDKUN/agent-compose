@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/idset"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/idset"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type SchedulerRunPruneFilter struct {

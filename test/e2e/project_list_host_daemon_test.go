@@ -12,11 +12,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/configstore"
-	storagesqlite "agent-compose/pkg/storage/sqlite"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func TestE2EProjectListSQLitePagination(t *testing.T) {

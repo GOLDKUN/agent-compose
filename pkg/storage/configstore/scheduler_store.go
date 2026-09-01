@@ -1,13 +1,13 @@
 package configstore
 
 import (
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storedtime"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storedtime"
 	"sort"
 	"strings"
 	"time"

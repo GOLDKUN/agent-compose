@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/idset"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/idset"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func (s *projectStore) ListProjectSandboxRuns(ctx context.Context, filter domain.ProjectSandboxRelationFilter) ([]ProjectRunRecord, error) {

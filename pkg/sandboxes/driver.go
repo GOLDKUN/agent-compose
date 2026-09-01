@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func ApplySessionStartInfo(vmState domain.VMState, proxyState domain.ProxyState, info domain.SandboxVMInfo, now time.Time) (domain.VMState, domain.ProxyState) {

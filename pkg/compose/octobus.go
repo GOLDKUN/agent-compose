@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"agent-compose/pkg/capability"
+	"github.com/chaitin/agent-compose/pkg/capability"
 )
 
 func normalizeOctoBusMap(path string, values map[string]OctoBusServerSpec, options NormalizeOptions) (map[string]NormalizedOctoBusServerSpec, error) {

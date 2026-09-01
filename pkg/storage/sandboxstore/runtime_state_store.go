@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	driverpkg "agent-compose/pkg/driver"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
 )
 
 func (s *Store) vmStatePath(id string) string {

@@ -3,7 +3,7 @@ package sandboxes
 import (
 	"testing"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestLegacySandboxDefaultsToRetainedRuntime(t *testing.T) {

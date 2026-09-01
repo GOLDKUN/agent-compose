@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 func TestNormalizeSandboxVMStatus(t *testing.T) {

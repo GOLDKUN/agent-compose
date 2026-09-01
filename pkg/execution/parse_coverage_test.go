@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestParseAgentAndCommandExecResultWorkflows(t *testing.T) {

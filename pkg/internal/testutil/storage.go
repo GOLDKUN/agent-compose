@@ -7,10 +7,10 @@ import (
 
 	"github.com/samber/do/v2"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sandboxstore"
-	storagesqlite "agent-compose/pkg/storage/sqlite"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
 )
 
 // OpenConfigStore opens a migrated test database from the dependencies in di.

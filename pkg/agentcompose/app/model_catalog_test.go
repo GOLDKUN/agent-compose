@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/llms"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/llms"
 )
 
 type modelCatalogStoreFake struct {

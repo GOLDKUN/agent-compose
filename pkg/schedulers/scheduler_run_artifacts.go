@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/identity"
 )
 
 func (a FSArtifacts) InspectRunArtifacts(schedulerID, runID, recordedDir string) (SchedulerRunArtifactInfo, error) {

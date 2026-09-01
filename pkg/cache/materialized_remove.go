@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 )
 
 type MaterializedRemover struct {

@@ -16,9 +16,9 @@ import (
 	typesimage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/imagecache"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestImageBackendAndMappingCoverageWorkflows(t *testing.T) {

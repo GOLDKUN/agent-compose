@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
-	"agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
 )
 
 func createNativeTestAgent(t testing.TB, ctx context.Context, store *configstore.ConfigStore, definition domain.AgentDefinition) domain.AgentDefinition {

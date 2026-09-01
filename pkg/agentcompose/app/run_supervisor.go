@@ -10,9 +10,9 @@ import (
 
 	"github.com/samber/do/v2"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	"agent-compose/pkg/storage/configstore"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
 )
 
 type RunSupervisor struct {

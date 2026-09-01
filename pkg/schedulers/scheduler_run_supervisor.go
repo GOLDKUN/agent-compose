@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 var errSchedulerRunTimedOut = errors.New("scheduler run timed out")

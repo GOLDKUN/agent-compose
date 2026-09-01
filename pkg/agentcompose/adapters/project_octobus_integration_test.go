@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/capproxy"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/capproxy"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

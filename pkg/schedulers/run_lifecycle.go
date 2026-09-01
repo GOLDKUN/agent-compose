@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type RunStore interface {

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"agent-compose/pkg/config"
-	"agent-compose/pkg/imagecache"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"encoding/json"
+	"github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"net/http/httptest"
 	"os"
 	"path/filepath"

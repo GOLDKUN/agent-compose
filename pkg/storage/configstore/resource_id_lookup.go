@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/resources"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/resources"
 )
 
 func (s *ConfigStore) FindResourceIDs(ctx context.Context, options resources.ResolveOptions) ([]resources.Target, error) {

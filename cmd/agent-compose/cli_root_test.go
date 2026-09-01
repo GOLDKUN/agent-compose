@@ -1,11 +1,11 @@
 package main
 
 import (
-	"agent-compose/pkg/config"
-	driverpkg "agent-compose/pkg/driver"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/config"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
 	"os"
 	"reflect"
 	"runtime"

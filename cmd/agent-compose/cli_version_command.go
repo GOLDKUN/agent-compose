@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/config"
 
 	"github.com/spf13/cobra"
 )

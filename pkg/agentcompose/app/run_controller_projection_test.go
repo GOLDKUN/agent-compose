@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/runs"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestRunAttachInputFromProtoPreservesUnknownModeAsInvalid(t *testing.T) {

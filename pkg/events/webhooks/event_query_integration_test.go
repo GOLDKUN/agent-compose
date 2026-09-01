@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/events/webhooks"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/configstore"
-	"agent-compose/pkg/storage/sqlite"
+	"github.com/chaitin/agent-compose/pkg/events/webhooks"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
+	"github.com/chaitin/agent-compose/pkg/storage/sqlite"
 
 	"github.com/labstack/echo/v4"
 )

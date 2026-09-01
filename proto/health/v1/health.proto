@@ -4,7 +4,7 @@ import "google/protobuf/timestamp.proto";
 
 package health.v1;
 
-option go_package = "agent-compose/proto/health/v1;healthv1";
+option go_package = "github.com/chaitin/agent-compose/proto/health/v1;healthv1";
 
 import "google/protobuf/empty.proto";
 

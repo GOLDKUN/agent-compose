@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestTraceServiceKeepsTraceWhenSandboxSummaryEnrichmentFails(t *testing.T) {

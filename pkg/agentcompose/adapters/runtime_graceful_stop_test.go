@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 func TestSandboxExecutionsBlockAndRelease(t *testing.T) {

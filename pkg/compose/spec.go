@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/sources"
 
 	"gopkg.in/yaml.v3"
 )

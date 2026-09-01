@@ -12,7 +12,7 @@ import (
 	typesimage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func DockerSummaryToProtoImage(image typesimage.Summary, inspectedAt time.Time, imageRef string) *agentcomposev2.Image {

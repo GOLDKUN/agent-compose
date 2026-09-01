@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/llms"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/llms"
 )
 
 type modelCatalogStore interface {

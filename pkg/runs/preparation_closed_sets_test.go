@@ -3,7 +3,7 @@ package runs
 import (
 	"testing"
 
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestDecodeRevisionSpecMapsStoredClosedSetStrings(t *testing.T) {

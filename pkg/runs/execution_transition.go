@@ -1,13 +1,13 @@
 package runs
 
 import (
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	"path/filepath"
 	"strings"
 )

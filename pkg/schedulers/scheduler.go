@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type SchedulerStore interface {

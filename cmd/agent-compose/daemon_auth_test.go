@@ -8,7 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/config"
 )
 
 func TestDaemonAuthMiddleware(t *testing.T) {

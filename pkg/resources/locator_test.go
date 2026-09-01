@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/cache"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/cache"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type storedIDSourceStub struct {

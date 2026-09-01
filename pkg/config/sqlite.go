@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	storagesqlite "agent-compose/pkg/storage/sqlite"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
 )
 
 const (

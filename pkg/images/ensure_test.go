@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/imagecache"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 )
 
 func TestEnsureDriverImageUsesDockerBackendFromAutoBackend(t *testing.T) {

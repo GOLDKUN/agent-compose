@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sources"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"gopkg.in/yaml.v3"
 )
 

@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 type fdWriter interface {

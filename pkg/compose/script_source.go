@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 const (

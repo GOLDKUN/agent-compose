@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"agent-compose/pkg/events"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/events"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func (s *eventStore) CreateEvent(ctx context.Context, item domain.TopicEventRecord) (domain.TopicEventRecord, error) {

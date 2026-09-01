@@ -20,10 +20,10 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/samber/do/v2"
 
-	agentcomposeapp "agent-compose/pkg/agentcompose/app"
-	"agent-compose/pkg/config"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
+	agentcomposeapp "github.com/chaitin/agent-compose/pkg/agentcompose/app"
+	"github.com/chaitin/agent-compose/pkg/config"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 )
 
 func TestE2EDockerSchedulerScriptHelloWorldFlow(t *testing.T) {

@@ -3,7 +3,7 @@ package compose
 import (
 	"fmt"
 
-	"agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 // SourceCredentialMode identifies whether persisted source credentials still

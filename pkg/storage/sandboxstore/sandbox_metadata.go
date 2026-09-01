@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/sandboxes"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 func (s *Store) UpdateSandbox(_ context.Context, session *Sandbox) error {

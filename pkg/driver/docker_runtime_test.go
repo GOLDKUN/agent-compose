@@ -1,10 +1,10 @@
 package driver
 
 import (
-	appconfig "agent-compose/pkg/config"
 	"context"
 	"errors"
 	"fmt"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 	"io"
 	"net"
 	"path/filepath"

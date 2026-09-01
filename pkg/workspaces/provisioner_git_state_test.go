@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 func TestProvisionerGitWorkspaceReadyPreservesState(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	agentcomposeapp "agent-compose/pkg/agentcompose/app"
-	"agent-compose/pkg/config"
-	"agent-compose/proto/health/v1/healthv1connect"
+	agentcomposeapp "github.com/chaitin/agent-compose/pkg/agentcompose/app"
+	"github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/proto/health/v1/healthv1connect"
 )
 
 const bearerScheme = "Bearer "

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"agent-compose/pkg/compose"
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/projects"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/identity"
 	"io"
 	"sort"
 	"strconv"

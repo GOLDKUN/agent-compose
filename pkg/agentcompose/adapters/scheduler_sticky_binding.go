@@ -12,9 +12,9 @@ import (
 	"sort"
 	"strings"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
-	"agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/internal/projects"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
 )
 
 func (r *SchedulerSandboxRunner) reuseCompatibleSchedulerBinding(ctx context.Context, scheduler domain.Scheduler, triggerID, configHash string) (*domain.Sandbox, string, bool, *domain.SchedulerBinding, error) {

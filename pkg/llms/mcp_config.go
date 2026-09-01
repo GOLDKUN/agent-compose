@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type AgentConfigPayload struct {

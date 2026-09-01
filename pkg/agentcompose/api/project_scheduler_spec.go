@@ -3,8 +3,8 @@ package api
 import (
 	"encoding/json"
 
-	"agent-compose/pkg/compose"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 // decodeProjectSchedulerSpec maps the normalized scheduler snapshot stored by

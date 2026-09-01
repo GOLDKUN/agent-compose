@@ -6,9 +6,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/capability"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/capability"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 type CapabilityV2Handler struct {

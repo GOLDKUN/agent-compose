@@ -1,18 +1,18 @@
 package sandboxes_test
 
 import (
-	"agent-compose/pkg/sandboxes"
 	"context"
 	"errors"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sandboxstore"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 type releaseRecoveryDriver struct {

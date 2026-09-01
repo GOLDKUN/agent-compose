@@ -3,7 +3,7 @@ package driver
 import (
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 func TestConfiguredSandboxResources(t *testing.T) {

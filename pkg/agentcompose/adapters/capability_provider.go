@@ -3,8 +3,8 @@ package adapters
 import (
 	"context"
 
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/capability"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/capability"
 )
 
 type projectAwareCapabilityProvider struct {

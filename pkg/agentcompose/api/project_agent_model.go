@@ -6,9 +6,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 // ProjectAgentModelResolver supplies read-only model previews for project responses.

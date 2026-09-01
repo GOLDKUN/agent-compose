@@ -1,9 +1,9 @@
 package driver
 
 import (
-	appconfig "agent-compose/pkg/config"
 	"context"
 	"fmt"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 	"log/slog"
 	"os"
 	"strings"

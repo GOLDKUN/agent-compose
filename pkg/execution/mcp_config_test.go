@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/compose"
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestWriteAgentMCPConfigFile(t *testing.T) {

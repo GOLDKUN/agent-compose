@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestQJSSchedulerEnginePreservesCallbackObjectResult(t *testing.T) {

@@ -1,13 +1,13 @@
 package sandboxes_test
 
 import (
-	"agent-compose/pkg/sandboxes"
 	"archive/tar"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,10 +18,10 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sandboxstore"
-	"agent-compose/pkg/workspaces"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 func TestWorkspaceCleanerReclaimsStoppedSandboxAndBlocksProvisioning(t *testing.T) {

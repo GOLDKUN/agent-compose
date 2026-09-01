@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/capproxy"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capproxy"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

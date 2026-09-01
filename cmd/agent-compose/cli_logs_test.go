@@ -1,11 +1,11 @@
 package main
 
 import (
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"strings"
 	"sync/atomic"
 	"testing"

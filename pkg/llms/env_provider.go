@@ -3,7 +3,7 @@ package llms
 import (
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func EnvItemValue(items []domain.SandboxEnvVar, key string) string {

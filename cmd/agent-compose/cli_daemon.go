@@ -1,17 +1,17 @@
 package main
 
 import (
-	agentcomposeapp "agent-compose/pkg/agentcompose/app"
-	"agent-compose/pkg/config"
-	"agent-compose/pkg/fxgo/echofn"
-	"agent-compose/pkg/fxgo/restful"
-	"agent-compose/pkg/fxgo/utils"
-	"agent-compose/pkg/health"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	agentcomposeapp "github.com/chaitin/agent-compose/pkg/agentcompose/app"
+	"github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/fxgo/echofn"
+	"github.com/chaitin/agent-compose/pkg/fxgo/restful"
+	"github.com/chaitin/agent-compose/pkg/fxgo/utils"
+	"github.com/chaitin/agent-compose/pkg/health"
 	"io"
 	"log"
 	"log/slog"

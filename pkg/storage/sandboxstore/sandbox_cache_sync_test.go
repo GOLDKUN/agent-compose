@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
-	storagesqlite "agent-compose/pkg/storage/sqlite"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	storagesqlite "github.com/chaitin/agent-compose/pkg/storage/sqlite"
 )
 
 func cleanupSandboxStore(t *testing.T, store *Store) {

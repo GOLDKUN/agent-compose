@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestSchedulerEffectiveSandboxConfigRetainsHistoricalHashSchemaKey(t *testing.T) {

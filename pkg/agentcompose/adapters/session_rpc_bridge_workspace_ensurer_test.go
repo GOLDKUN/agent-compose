@@ -10,8 +10,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/workspaces"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 type recordingBridgeWorkspaceEnsurer struct {

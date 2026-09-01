@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"agent-compose/pkg/capability"
+	"github.com/chaitin/agent-compose/pkg/capability"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

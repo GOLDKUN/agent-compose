@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // DefaultListLimit caps an unbounded sandbox listing request.

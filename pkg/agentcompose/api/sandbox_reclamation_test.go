@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func TestSandboxToV2IncludesWorkspaceReclamation(t *testing.T) {

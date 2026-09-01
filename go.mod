@@ -1,4 +1,4 @@
-module agent-compose
+module github.com/chaitin/agent-compose
 
 go 1.26.2
 

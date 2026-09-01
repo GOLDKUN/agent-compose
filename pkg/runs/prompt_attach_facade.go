@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // promptAttachFacadeTarget bundles the config, credential store, and target

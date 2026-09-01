@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
 )
 
 func TestProjectAwareCapabilityProviderUsesBareCatalogPathAndQualifiedGuideDeclaration(t *testing.T) {

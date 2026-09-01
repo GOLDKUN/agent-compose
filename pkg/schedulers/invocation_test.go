@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestInvocationExecutorUsesEphemeralContextAndSharedConcurrencyGate(t *testing.T) {

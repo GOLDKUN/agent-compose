@@ -137,12 +137,12 @@ static enum BoxliteErrorCode agentcompose_boxlite_execution_kill(
 import "C"
 
 import (
-	appconfig "agent-compose/pkg/config"
 	"archive/tar"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 	"io"
 	"log/slog"
 	"os"

@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storedtime"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storedtime"
 )
 
 func ScanTopicEvents(rows *sql.Rows) ([]domain.TopicEventRecord, error) {

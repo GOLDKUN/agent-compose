@@ -3,7 +3,7 @@ package schedulers
 import (
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func SessionTopicPayload(session *domain.Sandbox, source string) map[string]any {

@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	"agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/compose"
 )
 
 func TestProjectSpecOctoBusServersRoundTripAndRedaction(t *testing.T) {

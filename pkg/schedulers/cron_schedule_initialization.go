@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func (c *Controller) initializeCronSchedules(ctx context.Context, items []domain.Scheduler) error {

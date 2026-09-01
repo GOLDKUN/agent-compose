@@ -1,11 +1,11 @@
 package main
 
 import (
-	"agent-compose/pkg/identity"
-	"agent-compose/pkg/projects"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
 	"context"
 	"encoding/json"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"strings"
 	"testing"
 

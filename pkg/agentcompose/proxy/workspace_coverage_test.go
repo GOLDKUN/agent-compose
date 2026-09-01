@@ -16,8 +16,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/workspaces"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/workspaces"
 )
 
 func TestWorkspaceRoutesCoverageWorkflow(t *testing.T) {

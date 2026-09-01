@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 func TestNormalizeDefaultsProjectNameFromComposeDirectory(t *testing.T) {

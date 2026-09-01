@@ -1,6 +1,6 @@
 package sandboxes
 
-import domain "agent-compose/pkg/model"
+import domain "github.com/chaitin/agent-compose/pkg/model"
 
 func runtimeStopIsCurrent(vmState domain.VMState) bool {
 	if vmState.StoppedAt.IsZero() {

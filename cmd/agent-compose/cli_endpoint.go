@@ -1,8 +1,8 @@
 package main
 
 import (
-	"agent-compose/pkg/config"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/config"
 	"net/url"
 	"path/filepath"
 	"strings"

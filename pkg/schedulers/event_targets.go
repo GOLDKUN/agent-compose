@@ -3,8 +3,8 @@ package schedulers
 import (
 	"strings"
 
-	"agent-compose/pkg/events"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/events"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type EventTarget struct {

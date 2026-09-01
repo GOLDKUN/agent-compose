@@ -7,9 +7,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func (h *ProjectHandler) PruneSchedulerRuns(ctx context.Context, req *connect.Request[agentcomposev2.PruneSchedulerRunsRequest]) (*connect.Response[agentcomposev2.PruneSchedulerRunsResponse], error) {

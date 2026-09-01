@@ -1,11 +1,11 @@
 package main
 
 import (
-	"agent-compose/pkg/agentcompose/api"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
-	"agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"context"
 	"fmt"
+	"github.com/chaitin/agent-compose/pkg/agentcompose/api"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/proto/agentcompose/v2/agentcomposev2connect"
 	"io"
 	"strings"
 	"text/tabwriter"

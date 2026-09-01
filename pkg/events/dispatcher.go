@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // ReleaseEventClaimRequest describes how to release a previously claimed

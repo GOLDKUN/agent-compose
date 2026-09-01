@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"agent-compose/pkg/idset"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/idset"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // projectStore owns projects, revisions, agents, schedulers, runs, and sandboxes.

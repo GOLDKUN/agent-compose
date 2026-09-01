@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/identity"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/identity"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestControllerCoverageWorkflow(t *testing.T) {

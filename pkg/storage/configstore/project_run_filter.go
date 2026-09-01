@@ -3,9 +3,9 @@ package configstore
 import (
 	"strings"
 
-	"agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
-	"agent-compose/pkg/runs"
+	"github.com/chaitin/agent-compose/internal/projects"
+	"github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/runs"
 )
 
 func projectRunFilter(options model.ProjectRunListOptions) ([]string, []any) {

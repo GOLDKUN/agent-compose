@@ -1,8 +1,8 @@
 package api
 
 import (
-	"agent-compose/pkg/compose"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 
 	"google.golang.org/protobuf/proto"
 )

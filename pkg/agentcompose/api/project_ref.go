@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/projects"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	"github.com/chaitin/agent-compose/internal/projects"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 func resolveProjectReference(ctx context.Context, store projects.ProjectRefStore, ref *agentcomposev2.ProjectRef) (domain.ProjectRecord, error) {

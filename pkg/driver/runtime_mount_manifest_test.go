@@ -3,8 +3,8 @@ package driver
 import (
 	"fmt"
 
-	appconfig "agent-compose/pkg/config"
 	"encoding/json"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 	"os"
 	"path/filepath"
 	"strings"

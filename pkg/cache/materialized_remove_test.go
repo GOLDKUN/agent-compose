@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 )
 
 func TestMaterializedPruneSkipsReferencedByDefault(t *testing.T) {

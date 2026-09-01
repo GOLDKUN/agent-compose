@@ -7,10 +7,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/imagecache"
-	"agent-compose/pkg/images"
-	agentcomposev2 "agent-compose/proto/agentcompose/v2"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/images"
+	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 )
 
 type ImageBackends struct {

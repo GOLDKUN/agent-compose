@@ -1,0 +1,168 @@
+package projects
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	domain "github.com/chaitin/agent-compose/pkg/model"
+)
+
+const (
+	DownChangeUpdated   = "updated"
+	DownChangeUnchanged = "unchanged"
+)
+
+type DownChange struct {
+	Action       string
+	ResourceType string
+	ResourceID   string
+	Name         string
+	Message      string
+}
+
+type DownStore interface {
+	ListProjectSchedulers(ctx context.Context, projectID string) ([]domain.ProjectSchedulerRecord, error)
+	SetProjectSchedulerEnabled(ctx context.Context, projectID, schedulerID string, enabled bool) (domain.ProjectSchedulerRecord, error)
+}
+
+type DownSandboxStore interface {
+	ListSandboxes(ctx context.Context, options domain.SandboxListOptions) (domain.SandboxListResult, error)
+}
+
+type DownOptions struct {
+	Store             DownStore
+	Sandboxes         DownSandboxStore
+	RefreshSchedulers func(ctx context.Context) error
+	StopSandbox       func(ctx context.Context, sandbox *domain.Sandbox) error
+}
+
+func DownProject(ctx context.Context, project domain.ProjectRecord, options DownOptions) ([]DownChange, error) {
+	var changes []DownChange
+	schedulerChanges, err := DisableProjectSchedulers(ctx, project, options)
+	if err != nil {
+		return changes, err
+	}
+	changes = append(changes, schedulerChanges...)
+	sandboxChanges, err := StopProjectRunningSandboxes(ctx, project, options)
+	if err != nil {
+		return changes, err
+	}
+	changes = append(changes, sandboxChanges...)
+	return changes, nil
+}
+
+func DisableProjectSchedulers(ctx context.Context, project domain.ProjectRecord, options DownOptions) ([]DownChange, error) {
+	if options.Store == nil {
+		return nil, fmt.Errorf("project store is required")
+	}
+	schedulers, err := options.Store.ListProjectSchedulers(ctx, project.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list project schedulers for down %s: %w", project.Name, err)
+	}
+	var changes []DownChange
+	for _, scheduler := range schedulers {
+		if !scheduler.Enabled {
+			continue
+		}
+		disabled, err := options.Store.SetProjectSchedulerEnabled(ctx, scheduler.ProjectID, scheduler.SchedulerID, false)
+		if err != nil {
+			return changes, fmt.Errorf("disable project scheduler %s/%s: %w", scheduler.ProjectID, scheduler.SchedulerID, err)
+		}
+		changes = append(changes, DownChange{
+			Action:       DownChangeUpdated,
+			ResourceType: "scheduler",
+			ResourceID:   disabled.ID,
+			Name:         disabled.AgentName,
+			Message:      "disabled by project down",
+		})
+	}
+	if len(changes) > 0 && options.RefreshSchedulers != nil {
+		if err := options.RefreshSchedulers(ctx); err != nil {
+			return changes, fmt.Errorf("refresh scheduler controller after project down: %w", err)
+		}
+	}
+	return changes, nil
+}
+
+func StopProjectRunningSandboxes(ctx context.Context, project domain.ProjectRecord, options DownOptions) ([]DownChange, error) {
+	if options.Sandboxes == nil {
+		return nil, fmt.Errorf("sandbox store is required")
+	}
+	result, err := options.Sandboxes.ListSandboxes(ctx, domain.SandboxListOptions{VMStatus: domain.VMStatusRunning, Limit: 1 << 30})
+	if err != nil {
+		return nil, fmt.Errorf("list running sandboxes for project down %s: %w", project.Name, err)
+	}
+	var changes []DownChange
+	for _, sandbox := range result.Sandboxes {
+		if !SandboxBelongsToProject(sandbox, project.ID) {
+			continue
+		}
+		if options.StopSandbox == nil {
+			return changes, fmt.Errorf("sandbox stopper is required")
+		}
+		if err := options.StopSandbox(ctx, sandbox); err != nil {
+			changes = append(changes, DownChange{
+				Action:       DownChangeUnchanged,
+				ResourceType: "sandbox",
+				ResourceID:   sandbox.Summary.ID,
+				Name:         sandbox.Summary.Title,
+				Message:      fmt.Sprintf("failed to stop by project down: %v", err),
+			})
+			continue
+		}
+		changes = append(changes, DownChange{
+			Action:       DownChangeUpdated,
+			ResourceType: "sandbox",
+			ResourceID:   sandbox.Summary.ID,
+			Name:         sandbox.Summary.Title,
+			Message:      "stopped by project down",
+		})
+	}
+	return changes, nil
+}
+
+func DownChangesHaveFailures(changes []DownChange) bool {
+	for _, change := range changes {
+		if change.ResourceType == "sandbox" && change.Action == DownChangeUnchanged {
+			return true
+		}
+	}
+	return false
+}
+
+func SandboxBelongsToProject(sandbox *domain.Sandbox, projectID string) bool {
+	if sandbox == nil {
+		return false
+	}
+	if canonical := sandboxTagValue(sandbox, "project"); canonical != "" {
+		return canonical == strings.TrimSpace(projectID)
+	}
+	return sandboxTagValue(sandbox, "project_id") == strings.TrimSpace(projectID)
+}
+
+func sandboxTagValue(sandbox *domain.Sandbox, name string) string {
+	if sandbox == nil {
+		return ""
+	}
+	for _, tag := range sandbox.Summary.Tags {
+		if strings.TrimSpace(tag.Name) == strings.TrimSpace(name) {
+			return strings.TrimSpace(tag.Value)
+		}
+	}
+	return ""
+}
+
+func SandboxHasTag(sandbox *domain.Sandbox, name, value string) bool {
+	if sandbox == nil {
+		return false
+	}
+	name = strings.TrimSpace(name)
+	value = strings.TrimSpace(value)
+	for _, tag := range sandbox.Summary.Tags {
+		if strings.TrimSpace(tag.Name) == name && strings.TrimSpace(tag.Value) == value {
+			return true
+		}
+	}
+	return false
+}

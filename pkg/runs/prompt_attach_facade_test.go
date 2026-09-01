@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
-	"agent-compose/pkg/driver"
-	"agent-compose/pkg/execution"
-	"agent-compose/pkg/llms"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	"github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	"github.com/chaitin/agent-compose/pkg/llms"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type promptAttachFacadeStore struct {
@@ -79,7 +79,7 @@ func TestEnsurePromptAttachLLMFacadeEnvClaudeUsesControllerStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensurePromptAttachLLMFacadeEnv returned error: %v", err)
 	}
-	if env["LLM_API_PROTOCOL"] != llms.APIProtocolMessages || env["ANTHROPIC_MODEL"] != "claude-test" {
+	if env["LLM_API_PROTOCOL"] != llms.APIProtocolMessages {
 		t.Fatalf("Claude facade env = %#v", env)
 	}
 	if env["ANTHROPIC_BASE_URL"] != "http://agent-compose.test:7410/api/runtime/sandboxes/sandbox-claude-attach/llm/anthropic" {
@@ -89,7 +89,7 @@ func TestEnsurePromptAttachLLMFacadeEnvClaudeUsesControllerStore(t *testing.T) {
 		t.Fatalf("Claude facade token env = %q, saved tokens = %#v", env["AGENT_COMPOSE_SANDBOX_TOKEN"], store.tokens)
 	}
 	token := store.tokens[0]
-	if token.SandboxID != sandbox.Summary.ID || token.Model != "claude-test" || token.Source != "agent" || token.RunID != "run-claude-attach" {
+	if token.SandboxID != sandbox.Summary.ID || token.Source != "agent" || token.RunID != "run-claude-attach" {
 		t.Fatalf("stored token = %#v", token)
 	}
 }

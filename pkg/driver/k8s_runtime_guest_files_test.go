@@ -11,7 +11,7 @@ import (
 	"slices"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
 )
 
 func buildTestTar(t *testing.T, entries map[string]string) []byte {

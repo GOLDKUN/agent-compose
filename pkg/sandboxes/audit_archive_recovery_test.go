@@ -1,16 +1,16 @@
 package sandboxes_test
 
 import (
-	"agent-compose/pkg/sandboxes"
 	"context"
 	"errors"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storage/sandboxstore"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 func TestSandboxRetentionReusesCommittedArchiveAfterMetadataFailure(t *testing.T) {

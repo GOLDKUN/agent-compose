@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 // listSandboxesFromFilesystem preserves the original listing contract for

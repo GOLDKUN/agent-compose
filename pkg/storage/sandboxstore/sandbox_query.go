@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
 )
 
 // sandboxWhere builds the WHERE clause and bound arguments for a sandbox list

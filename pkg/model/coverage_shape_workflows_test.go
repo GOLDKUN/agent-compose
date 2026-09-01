@@ -9,12 +9,12 @@ import (
 
 	"github.com/samber/do/v2"
 
-	driverpkg "agent-compose/pkg/driver"
-	"agent-compose/pkg/events"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sandboxes"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storage/configstore"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	"github.com/chaitin/agent-compose/pkg/events"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sandboxes"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storage/configstore"
 )
 
 func TestModelBranchCoverageWorkflows(t *testing.T) {

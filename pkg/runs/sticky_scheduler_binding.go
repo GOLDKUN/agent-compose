@@ -11,11 +11,11 @@ import (
 	"sort"
 	"strings"
 
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/schedulers"
-	"agent-compose/pkg/storage/sandboxstore"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/schedulers"
+	"github.com/chaitin/agent-compose/pkg/storage/sandboxstore"
 )
 
 type stickyProjectRunSandboxConfig struct {

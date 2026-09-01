@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/storedtime"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/storedtime"
 )
 
 func NormalizeWorkspaceConfig(item domain.WorkspaceConfig, assignID bool) (domain.WorkspaceConfig, error) {

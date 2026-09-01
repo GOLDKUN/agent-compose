@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"agent-compose/pkg/clientconfig"
+	"github.com/chaitin/agent-compose/pkg/clientconfig"
 )
 
 type cliAuthLoginOptions struct {

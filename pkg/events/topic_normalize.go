@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // legacySourceLoader is the retired spelling of the scheduler source; stored

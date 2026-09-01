@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"agent-compose/pkg/sources"
+	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
 // storedGitWorkspaceConfig is the read model for persisted Git workspace

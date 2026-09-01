@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/compose"
+	"github.com/chaitin/agent-compose/pkg/compose"
 
 	"github.com/joho/godotenv"
 )

@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-compose/pkg/capabilities"
-	"agent-compose/pkg/capability"
-	"agent-compose/pkg/capproxy"
-	"agent-compose/pkg/compose"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capabilities"
+	"github.com/chaitin/agent-compose/pkg/capability"
+	"github.com/chaitin/agent-compose/pkg/capproxy"
+	"github.com/chaitin/agent-compose/pkg/compose"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

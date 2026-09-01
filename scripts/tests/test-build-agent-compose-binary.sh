@@ -254,7 +254,7 @@ assert_contains "$FAKE_GO_LOG" 'ENV_GOOS=darwin'
 assert_contains "$FAKE_GO_LOG" 'ENV_GOARCH=amd64'
 assert_contains "$FAKE_GO_LOG" 'ENV_CGO_ENABLED=0'
 assert_build_arg 'netgo,osusergo'
-assert_build_arg '-X agent-compose/pkg/config.BuildVersion=test-darwin'
+assert_build_arg '-X github.com/chaitin/agent-compose/pkg/config.BuildVersion=test-darwin'
 assert_build_arg "$darwin_output"
 assert_build_arg './cmd/agent-compose/'
 assert_not_contains "$FAKE_GO_LOG" 'ARG=-x'
@@ -336,7 +336,7 @@ assert_contains "$FAKE_GO_LOG" 'ENV_GOOS=linux'
 assert_contains "$FAKE_GO_LOG" 'ENV_GOARCH=amd64'
 assert_contains "$FAKE_GO_LOG" 'ENV_CGO_ENABLED=1'
 assert_build_arg 'netgo,osusergo,boxlitecgo,microsandboxcgo,k8scompose'
-assert_build_arg '-X agent-compose/pkg/config.BuildVersion=test-linux'
+assert_build_arg '-X github.com/chaitin/agent-compose/pkg/config.BuildVersion=test-linux'
 
 # auto dispatch uses the Go host OS and defaults architecture from GOHOSTARCH.
 FAKE_GOHOSTOS=darwin
@@ -392,7 +392,7 @@ run_helper \
   --goarch amd64 \
   --output "$TEST_ROOT/out/fallback-version"
 assert_success
-assert_build_arg '-X agent-compose/pkg/config.BuildVersion=unknown'
+assert_build_arg '-X github.com/chaitin/agent-compose/pkg/config.BuildVersion=unknown'
 
 # Parser, target, and security failures happen before go build.
 run_helper --help
@@ -483,7 +483,7 @@ run_helper \
 assert_success
 [[ -x "$literal_output" ]] || fail "literal metacharacter output was not created"
 [[ ! -e "$injection_marker" ]] || fail "version text was executed as shell input"
-assert_build_arg "-X 'agent-compose/pkg/config.BuildVersion=$injection_version'"
+assert_build_arg "-X 'github.com/chaitin/agent-compose/pkg/config.BuildVersion=$injection_version'"
 
 # Artifact exporter stamps bind complete fixtures to source inputs and target
 # architecture without invoking Docker. A source or architecture change must

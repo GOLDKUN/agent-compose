@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-compose/pkg/imagecache"
+	"github.com/chaitin/agent-compose/pkg/imagecache"
 )
 
 func TestMicrosandboxBaseDiskInventoryAndReferenceProtection(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"agent-compose/pkg/capability"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/capability"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type guideTestProvider struct {

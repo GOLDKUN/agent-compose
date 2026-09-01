@@ -13,7 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	domain "agent-compose/pkg/model"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 func TestGitHubWebhookSignatureAndEventRouting(t *testing.T) {
