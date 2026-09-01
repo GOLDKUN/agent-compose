@@ -243,13 +243,34 @@ func (a *DaemonApp) listen() (*daemonServers, error) {
 	})
 
 	if a.Config.HttpListen != "" {
+		var tlsConfig *tls.Config
+		if !isLoopbackListenAddress(a.Config.HttpListen) {
+			if strings.TrimSpace(a.Config.DaemonAuthToken) == "" {
+				shutdownErr := servers.shutdown(context.Background())
+				return nil, errors.Join(errors.New("non-loopback HTTP_LISTEN requires AGENT_COMPOSE_AUTH_TOKEN"), shutdownErr)
+			}
+			if strings.TrimSpace(a.Config.HttpTLSCertFile) == "" || strings.TrimSpace(a.Config.HttpTLSKeyFile) == "" {
+				shutdownErr := servers.shutdown(context.Background())
+				return nil, errors.Join(errors.New("non-loopback HTTP_LISTEN requires HTTP_TLS_CERT_FILE and HTTP_TLS_KEY_FILE"), shutdownErr)
+			}
+			certificate, err := tls.LoadX509KeyPair(a.Config.HttpTLSCertFile, a.Config.HttpTLSKeyFile)
+			if err != nil {
+				shutdownErr := servers.shutdown(context.Background())
+				return nil, errors.Join(fmt.Errorf("load HTTP TLS certificate and key: %w", err), shutdownErr)
+			}
+			tlsConfig = &tls.Config{
+				MinVersion:   tls.VersionTLS12,
+				Certificates: []tls.Certificate{certificate},
+				NextProtos:   []string{"h2", "http/1.1"},
+			}
+		}
 		tcpListener, err := net.Listen("tcp", a.Config.HttpListen)
 		if err != nil {
 			shutdownErr := servers.shutdown(context.Background())
 			return nil, errors.Join(fmt.Errorf("listen HTTP_LISTEN %q: %w", a.Config.HttpListen, err), shutdownErr)
 		}
-		if !isLoopbackListenAddress(a.Config.HttpListen) {
-			a.Logger.Warn("HTTP_LISTEN exposes unencrypted h2c traffic; use a TLS-terminating reverse proxy before exposing this listener", "address", a.Config.HttpListen)
+		if tlsConfig != nil {
+			tcpListener = tls.NewListener(tcpListener, tlsConfig)
 		}
 		servers.add("HTTP_LISTEN", a.Config.HttpListen, tcpListener, a.Echo, nil)
 	}
@@ -310,6 +331,10 @@ func (s *daemonServers) serve(logger *slog.Logger) <-chan error {
 	errCh := make(chan error, len(s.items))
 	for _, item := range s.items {
 		go func(item *daemonServer) {
+			if err := http2.ConfigureServer(item.server, &http2.Server{}); err != nil {
+				errCh <- fmt.Errorf("configure HTTP/2 server for %s %q: %w", item.name, item.value, err)
+				return
+			}
 			logger.Info("agent-compose listener started", "config", item.name, "addr", item.listener.Addr().String())
 			err := item.server.Serve(item.listener)
 			if err != nil && !errors.Is(err, http.ErrServerClosed) {
