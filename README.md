@@ -2,11 +2,11 @@
   <img src="images/agent-compose-logo.png" alt="Agent-compose" height="60">
 </p>
 <p align="center">
-  <a href="https://agent-compose/actions/workflows/ci.yml">
-    <img src="https://agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
+  <a href="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml">
+    <img src="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
   </a>
-  <a href="https://agent-compose/actions/workflows/images.yml">
-    <img src="https://agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
+  <a href="https://github.com/chaitin/agent-compose/actions/workflows/images.yml">
+    <img src="https://github.com/chaitin/agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
   </a>
   <a href="LICENSE.txt">
     <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3">
@@ -61,7 +61,7 @@ The one-line installer sets up the agent-compose daemon with Docker Compose on
 Linux amd64/arm64:
 
 ```bash
-curl -fsSL https://agent-compose/releases/download/installer-latest/install.sh | bash
+curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | bash
 ```
 
 The bootstrap selects the Linux amd64/arm64 installer and opens its bilingual

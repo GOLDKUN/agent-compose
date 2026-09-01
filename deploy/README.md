@@ -9,7 +9,7 @@ owns installation, upgrade, uninstall, validation, and rollback.
 Interactive installation opens a bilingual TUI:
 
 ```bash
-curl -fsSL https://agent-compose/releases/download/installer-latest/install.sh | bash
+curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | bash
 ```
 
 The default installation directory is `/opt/agent-compose`. Run the bootstrap
@@ -31,7 +31,7 @@ The bootstrap forwards all arguments to the downloaded binary:
 
 ```bash
 # Install the latest application release.
-curl -fsSL https://agent-compose/releases/download/installer-latest/install.sh | \
+curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | \
   sudo bash -s -- install --yes
 
 # Select a release, directory, registry, supported UI version, or guest image.

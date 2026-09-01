@@ -191,8 +191,8 @@ func TestEnsurePromptAttachLLMFacadeEnvOpenCodeUsesSharedRuntimeConfig(t *testin
 	}
 	if env["LLM_API_PROTOCOL"] != llms.APIProtocolResponses ||
 		env["OPENCODE_CONFIG"] != "/root/.config/opencode/opencode.json" ||
-		env["LLM_MODEL"] != "github.com/chaitin/agent-compose/gpt-test" ||
-		env["OPENCODE_MODEL"] != "github.com/chaitin/agent-compose/gpt-test" {
+		env["LLM_MODEL"] != "agent-compose/gpt-test" ||
+		env["OPENCODE_MODEL"] != "agent-compose/gpt-test" {
 		t.Fatalf("OpenCode facade env = %#v", env)
 	}
 	if env["AGENT_COMPOSE_SANDBOX_TOKEN"] == "" || len(store.tokens) != 1 {

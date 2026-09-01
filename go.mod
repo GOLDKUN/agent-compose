@@ -2,10 +2,6 @@ module github.com/chaitin/agent-compose
 
 go 1.26.2
 
-require agent-compose v0.0.0
-
-replace agent-compose => .
-
 require (
 	connectrpc.com/connect v1.19.2
 	github.com/chaitin/ai-api-protocol-bridge v1.0.0

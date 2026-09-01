@@ -61,3 +61,13 @@ func TestValidateDoesNotResolveRuntimeSources(t *testing.T) {
 		t.Fatal("Validate must not resolve script sources")
 	}
 }
+
+func TestValidateRejectsResolvedPlaintextCredentials(t *testing.T) {
+	spec, err := Parse([]byte("name: demo\nworkspaces:\n  private:\n    provider: git\n    url: https://example.invalid/repo.git\n    token: plaintext-token\nagents:\n  worker:\n    provider: test\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Validate(spec, NormalizeOptions{SourceCredentials: SourceCredentialsResolved}); err == nil {
+		t.Fatal("Validate must enforce credential references")
+	}
+}

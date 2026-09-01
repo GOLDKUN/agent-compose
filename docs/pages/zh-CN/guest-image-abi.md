@@ -135,7 +135,7 @@ daemon 会显式传递 workspace、state 和 home 路径，并注入：
 | `VERSION` | 当前 daemon version |
 | `AGENT_COMPOSE_RUNTIME_BASE_URL` | 配置 runtime facade 时设置 |
 
-`prompt` 和 `exec` 的 stdout payload、stream 分离、artifact 文件以及交互式 NDJSON frame 都属于协议，而不仅是 CLI 展示。自行替换 runtime 时，必须实现对应 release 的完整协议。强烈建议直接复用仓库 runtime，协议详见 [agent-compose 与 runtime 调用约定](https://agent-compose/blob/main/docs/design/agent-compose-runtime_contract.md)。
+`prompt` 和 `exec` 的 stdout payload、stream 分离、artifact 文件以及交互式 NDJSON frame 都属于协议，而不仅是 CLI 展示。自行替换 runtime 时，必须实现对应 release 的完整协议。强烈建议直接复用仓库 runtime，协议详见 [agent-compose 与 runtime 调用约定](https://github.com/chaitin/agent-compose/blob/main/docs/design/agent-compose-runtime_contract.md)。
 
 ### 4.1 Graceful-stop 能力
 
@@ -457,12 +457,12 @@ task test:e2e:docker-jupyter
 
 实现的事实来源包括：
 
-- [`guest-images/Dockerfile.agent-compose-guest`](https://agent-compose/blob/main/guest-images/Dockerfile.agent-compose-guest)
-- [`guest-images/Dockerfile.agent-compose-guest-archlinux`](https://agent-compose/blob/main/guest-images/Dockerfile.agent-compose-guest-archlinux)
-- [`pkg/driver/runtime_mount_manifest.go`](https://agent-compose/blob/main/pkg/driver/runtime_mount_manifest.go)
-- [`pkg/driver/directory_only_guest_bootstrap.go`](https://agent-compose/blob/main/pkg/driver/directory_only_guest_bootstrap.go)
-- [`pkg/driver/docker_runtime.go`](https://agent-compose/blob/main/pkg/driver/docker_runtime.go)
-- [`pkg/driver/jupyter_guest.go`](https://agent-compose/blob/main/pkg/driver/jupyter_guest.go)
-- [`pkg/agentcompose/adapters/agent_runner.go`](https://agent-compose/blob/main/pkg/agentcompose/adapters/agent_runner.go)
-- [`pkg/execution/command_runtime.go`](https://agent-compose/blob/main/pkg/execution/command_runtime.go)
-- [`runtime/javascript`](https://agent-compose/tree/main/runtime/javascript)
+- [`guest-images/Dockerfile.agent-compose-guest`](https://github.com/chaitin/agent-compose/blob/main/guest-images/Dockerfile.agent-compose-guest)
+- [`guest-images/Dockerfile.agent-compose-guest-archlinux`](https://github.com/chaitin/agent-compose/blob/main/guest-images/Dockerfile.agent-compose-guest-archlinux)
+- [`pkg/driver/runtime_mount_manifest.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/driver/runtime_mount_manifest.go)
+- [`pkg/driver/directory_only_guest_bootstrap.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/driver/directory_only_guest_bootstrap.go)
+- [`pkg/driver/docker_runtime.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/driver/docker_runtime.go)
+- [`pkg/driver/jupyter_guest.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/driver/jupyter_guest.go)
+- [`pkg/agentcompose/adapters/agent_runner.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/agentcompose/adapters/agent_runner.go)
+- [`pkg/execution/command_runtime.go`](https://github.com/chaitin/agent-compose/blob/main/pkg/execution/command_runtime.go)
+- [`runtime/javascript`](https://github.com/chaitin/agent-compose/tree/main/runtime/javascript)

@@ -153,8 +153,8 @@ func ensureOpenCodeResolvedFacadeConfig(ctx context.Context, call openCodeFacade
 		return nil, err
 	}
 	env := openCodeOpenAIEnv(tokenValue, openAIBaseURL, protocol, config)
-	env["LLM_MODEL"] = "github.com/chaitin/agent-compose/" + target.Model.Name
-	env["OPENCODE_MODEL"] = "github.com/chaitin/agent-compose/" + target.Model.Name
+	env["LLM_MODEL"] = "agent-compose/" + target.Model.Name
+	env["OPENCODE_MODEL"] = "agent-compose/" + target.Model.Name
 	return env, nil
 }
 
@@ -225,8 +225,8 @@ func ensureOpenCodeOpenAIFacadeConfig(ctx context.Context, call openCodeFacadeCa
 		return nil, err
 	}
 	env := openCodeOpenAIEnv(tokenValue, openAIBaseURL, APIProtocolResponses, config)
-	env["LLM_MODEL"] = "github.com/chaitin/agent-compose/" + target.Model.Name
-	env["OPENCODE_MODEL"] = "github.com/chaitin/agent-compose/" + target.Model.Name
+	env["LLM_MODEL"] = "agent-compose/" + target.Model.Name
+	env["OPENCODE_MODEL"] = "agent-compose/" + target.Model.Name
 	return env, nil
 }
 

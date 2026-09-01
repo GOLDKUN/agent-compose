@@ -496,7 +496,7 @@ func TestAgentRunnerExecuteAgentRunUsesResolvedOpenCodeFacadeModel(t *testing.T)
 		t.Fatalf("runtime specs = %#v", runtime.specs)
 	}
 	command := runtime.specs[0].Args[1]
-	if !strings.Contains(command, " --model 'github.com/chaitin/agent-compose/deepseek-v4-flash'") {
+	if !strings.Contains(command, " --model 'agent-compose/deepseek-v4-flash'") {
 		t.Fatalf("runtime command missing resolved facade model: %s", command)
 	}
 	if strings.Contains(command, " --model 'baizhi/deepseek-v4-flash'") {

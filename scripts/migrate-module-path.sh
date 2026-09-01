@@ -4,7 +4,7 @@ set -euo pipefail
 # Rewrite this repository's local module import prefix to its canonical
 # GitHub module path. Run once from the repository root.
 old='agent-compose/'
-new='agent-compose/'
+new='github.com/chaitin/agent-compose/'
 export LC_ALL=C
 
 while IFS= read -r -d '' file; do

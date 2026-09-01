@@ -2,11 +2,11 @@
   <img src="images/agent-compose-logo.png" alt="Agent-compose" height="60">
 </p>
 <p align="center">
-  <a href="https://agent-compose/actions/workflows/ci.yml">
-    <img src="https://agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
+  <a href="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml">
+    <img src="https://github.com/chaitin/agent-compose/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
   </a>
-  <a href="https://agent-compose/actions/workflows/images.yml">
-    <img src="https://agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
+  <a href="https://github.com/chaitin/agent-compose/actions/workflows/images.yml">
+    <img src="https://github.com/chaitin/agent-compose/actions/workflows/images.yml/badge.svg?branch=main" alt="Images & Release">
   </a>
   <a href="LICENSE.txt">
     <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3">
@@ -51,7 +51,7 @@
 一行安装脚本会用 Docker Compose 部署并启动 agent-compose daemon，支持 Linux amd64/arm64。Web UI 位于可选的 `with-ui` profile，默认关闭，需要在 installer 的**安装 Web UI**一项选「是」（或传 `--with-ui`）才会启动：
 
 ```bash
-curl -fsSL https://agent-compose/releases/download/installer-latest/install.sh | bash
+curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | bash
 ```
 
 bootstrap 会自动选择 Linux amd64/arm64 installer 并打开中英文 TUI。默认安装目录固定为

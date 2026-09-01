@@ -9,7 +9,7 @@ Please report suspected vulnerabilities privately. Do not open a public issue
 with exploit details, credentials, tokens, or private infrastructure data.
 
 Use a private GitHub security advisory for this repository:
-https://agent-compose/security/advisories/new
+https://github.com/chaitin/agent-compose/security/advisories/new
 
 Include:
 

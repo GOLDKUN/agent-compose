@@ -87,7 +87,7 @@ func TestE2EModelCatalogConfiguresOpenCodeFacadeTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configure OpenCode facade: %v", err)
 	}
-	if runtimeConfig.Model != "github.com/chaitin/agent-compose/deepseek-v4-flash" || runtimeConfig.Env["LLM_API_PROTOCOL"] != llms.APIProtocolChatCompletions {
+	if runtimeConfig.Model != "agent-compose/deepseek-v4-flash" || runtimeConfig.Env["LLM_API_PROTOCOL"] != llms.APIProtocolChatCompletions {
 		t.Fatalf("OpenCode runtime config = %#v", runtimeConfig)
 	}
 
