@@ -1,8 +1,9 @@
 ARG REGISTRY_MIRROR=docker.io
 ARG GOPROXY=https://proxy.golang.org,direct
 ARG BUF_VERSION=v1.68.1
+ARG GO_VERSION=1.26.7
 
-FROM ${REGISTRY_MIRROR}/library/golang:1-alpine AS golang-toolchain
+FROM ${REGISTRY_MIRROR}/library/golang:${GO_VERSION}-alpine AS golang-toolchain
 
 FROM ${REGISTRY_MIRROR}/library/debian:bookworm AS go-build
 ARG GOPROXY
@@ -21,6 +22,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN --mount=type=cache,target=/go/pkg/mod \
     GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
 COPY cmd ./cmd
+COPY internal ./internal
 COPY pkg ./pkg
 COPY assets ./assets
 COPY proto ./proto

@@ -61,6 +61,9 @@ done
 
 for daemon_dockerfile in "$DAEMON_DOCKERFILE" "$LOCAL_DAEMON_DOCKERFILE"; do
   require_regex "$(<"$daemon_dockerfile")" \
+    '^ARG[[:space:]]+GO_VERSION=1\.26\.7$' \
+    "pinned Go builder default in $(basename "$daemon_dockerfile")"
+  require_regex "$(<"$daemon_dockerfile")" \
     '^ARG[[:space:]]+GOPROXY=https://proxy\.golang\.org,direct$' \
     "official Go proxy default in $(basename "$daemon_dockerfile")"
   require_regex "$(<"$daemon_dockerfile")" \
@@ -70,6 +73,16 @@ for daemon_dockerfile in "$DAEMON_DOCKERFILE" "$LOCAL_DAEMON_DOCKERFILE"; do
     'go[[:space:]]+install[[:space:]]+github\.com/bufbuild/buf/cmd/buf@\$\{BUF_VERSION\}' \
     "configurable Buf install in $(basename "$daemon_dockerfile")"
 done
+
+for guest_dockerfile in "$GUEST_DOCKERFILE" "$ARCHLINUX_GUEST_DOCKERFILE"; do
+  require_regex "$(<"$guest_dockerfile")" \
+    '^ARG[[:space:]]+GO_VERSION=1\.26\.7$' \
+    "pinned Go builder default in $(basename "$guest_dockerfile")"
+done
+
+require_regex "$(<"$LOCAL_DAEMON_DOCKERFILE")" \
+  '^COPY[[:space:]]+internal[[:space:]]+\./internal$' \
+  'internal packages copied into local daemon build stage'
 
 require_regex "$(<"$GUEST_DOCKERFILE")" \
   '^ARG[[:space:]]+PIP_INDEX_URL=https://pypi\.org/simple$' \
@@ -678,7 +691,7 @@ run_daemon_builder() { # remaining arguments are environment overrides
     VERSION=contract \
     DOCKER_DEFAULT_PLATFORM= \
     HTTP_PROXY= http_proxy= HTTPS_PROXY= https_proxy= ALL_PROXY= all_proxy= NO_PROXY= no_proxy= \
-    REGISTRY_MIRROR= GOPROXY= GITHUB_MIRROR= BUF_VERSION= BOXLITE_VERSION= MICROSANDBOX_VERSION= \
+    REGISTRY_MIRROR= GOPROXY= GITHUB_MIRROR= GO_VERSION= BUF_VERSION= BOXLITE_VERSION= MICROSANDBOX_VERSION= \
     "$@" \
     "$DAEMON_BUILDER" >/dev/null
 }
@@ -704,7 +717,7 @@ if ! run_daemon_builder; then
   fail 'daemon image helper default build invocation'
 else
   require_regex "$(<"$FAKE_DOCKER_LOG")" '^VERSION=contract$' 'daemon VERSION build argument'
-  for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR GOPROXY GITHUB_MIRROR BUF_VERSION BOXLITE_VERSION MICROSANDBOX_VERSION; do
+  for omitted in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY REGISTRY_MIRROR GOPROXY GITHUB_MIRROR GO_VERSION BUF_VERSION BOXLITE_VERSION MICROSANDBOX_VERSION; do
     forbid_regex "$(<"$FAKE_DOCKER_LOG")" "^$omitted=" "empty daemon $omitted build argument"
   done
 fi
@@ -725,6 +738,7 @@ if ! run_daemon_builder \
   REGISTRY_MIRROR=registry.example.invalid \
   GOPROXY=https://go-proxy.example.invalid,direct \
   GITHUB_MIRROR=https://github.example.invalid \
+  GO_VERSION=1.99.0 \
   BUF_VERSION=v9.9.9 \
   BOXLITE_VERSION=v8.8.8 \
   MICROSANDBOX_VERSION=v7.7.7; then
@@ -739,6 +753,7 @@ else
     'REGISTRY_MIRROR=registry.example.invalid' \
     'GOPROXY=https://go-proxy.example.invalid,direct' \
     'GITHUB_MIRROR=https://github.example.invalid' \
+    'GO_VERSION=1.99.0' \
     'BUF_VERSION=v9.9.9' \
     'BOXLITE_VERSION=v8.8.8' \
     'MICROSANDBOX_VERSION=v7.7.7'; do
