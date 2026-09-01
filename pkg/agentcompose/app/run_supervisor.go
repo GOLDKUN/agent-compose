@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"sync"
 
@@ -64,7 +65,11 @@ func (s *RunSupervisor) StartRun(ctx context.Context, req runs.RunAgentRequest) 
 
 func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAgentRequest) (domain.ProjectRunRecord, error) {
 	execCtx, cancel := context.WithCancelCause(s.root)
-	started := make(chan string, 1)
+	type interactiveRunStarted struct {
+		runID         string
+		inputReleased <-chan struct{}
+	}
+	started := make(chan interactiveRunStarted, 1)
 	failed := make(chan error, 1)
 	first := true
 	receive := func() (runs.RunAttachInput, error) {
@@ -72,17 +77,16 @@ func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAge
 			first = false
 			return runs.RunAttachInput{Kind: runs.RunAttachInputStart, Mode: runs.RunAttachModePrompt, Request: req, DisconnectPolicy: runs.AttachDisconnectDetach}, nil
 		}
-		<-execCtx.Done()
-		return runs.RunAttachInput{}, context.Cause(execCtx)
+		return runs.RunAttachInput{}, io.EOF
 	}
 	go func() {
 		defer cancel(nil)
 		var runID string
-		err := s.controller.RunProjectCommandAttachRegistered(execCtx, receive, func(runs.RunAttachOutput) error { return nil }, func(id string) {
+		err := s.controller.RunProjectCommandAttachRegistered(execCtx, receive, func(runs.RunAttachOutput) error { return nil }, func(id string, inputReleased <-chan struct{}) {
 			runID = id
 			s.register(id, cancel)
 			s.wg.Add(1)
-			started <- id
+			started <- interactiveRunStarted{runID: id, inputReleased: inputReleased}
 		})
 		if runID != "" {
 			s.wg.Done()
@@ -91,8 +95,14 @@ func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAge
 		failed <- err
 	}()
 	select {
-	case runID := <-started:
-		return s.store.GetProjectRun(ctx, runID)
+	case run := <-started:
+		select {
+		case <-run.inputReleased:
+			return s.store.GetProjectRun(ctx, run.runID)
+		case <-ctx.Done():
+			cancel(ctx.Err())
+			return domain.ProjectRunRecord{}, ctx.Err()
+		}
 	case err := <-failed:
 		return domain.ProjectRunRecord{}, err
 	case <-ctx.Done():
@@ -137,7 +147,7 @@ func (s *RunSupervisor) Attach(ctx context.Context, receive runs.RunAttachReceiv
 	execCtx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
 	var runID string
-	err = s.controller.RunProjectCommandAttachRegistered(execCtx, receiveWithFirst, send, func(startedRunID string) {
+	err = s.controller.RunProjectCommandAttachRegistered(execCtx, receiveWithFirst, send, func(startedRunID string, _ <-chan struct{}) {
 		runID = startedRunID
 		s.register(runID, cancel)
 		s.wg.Add(1)

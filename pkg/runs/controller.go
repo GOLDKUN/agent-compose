@@ -294,7 +294,7 @@ func (c *Controller) RunProjectCommandAttach(ctx context.Context, receive RunAtt
 	return c.RunProjectCommandAttachRegistered(ctx, receive, send, nil)
 }
 
-func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, receive RunAttachReceiver, send RunAttachSender, onStarted func(string)) error {
+func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, receive RunAttachReceiver, send RunAttachSender, onStarted func(string, <-chan struct{})) error {
 	if receive == nil || send == nil {
 		return fmt.Errorf("run attach stream is required")
 	}
@@ -349,9 +349,9 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	}
 	inputCtx, cancelInput := context.WithCancel(ctx)
 	defer cancelInput()
-	go func() { defer releaseInput(); forwardRunAttachInputs(inputCtx, receive, session) }()
+	inputReleased := startRunAttachInputForwarder(inputCtx, receive, session, releaseInput)
 	if onStarted != nil {
-		onStarted(started.Run.RunID)
+		onStarted(started.Run.RunID, inputReleased)
 	}
 	run, execErr, err := c.executeStartedProjectRunAttach(ctx, startedRunAttachContext{
 		Run:      started.Run,
@@ -484,6 +484,16 @@ func forwardRunAttachInputs(ctx context.Context, receive RunAttachReceiver, sess
 			return
 		}
 	}
+}
+
+func startRunAttachInputForwarder(ctx context.Context, receive RunAttachReceiver, session *InteractiveSession, release func()) <-chan struct{} {
+	released := make(chan struct{})
+	go func() {
+		defer close(released)
+		defer release()
+		forwardRunAttachInputs(ctx, receive, session)
+	}()
+	return released
 }
 
 // startedProjectRunContext bundles the run-scoped state StartProjectRun
