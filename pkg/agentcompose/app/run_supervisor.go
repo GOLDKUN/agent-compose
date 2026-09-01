@@ -76,6 +76,7 @@ func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAge
 		return runs.RunAttachInput{}, context.Cause(execCtx)
 	}
 	go func() {
+		defer cancel(nil)
 		var runID string
 		err := s.controller.RunProjectCommandAttachRegistered(execCtx, receive, func(runs.RunAttachOutput) error { return nil }, func(id string) {
 			runID = id
@@ -86,8 +87,6 @@ func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAge
 		if runID != "" {
 			s.wg.Done()
 			s.unregister(runID)
-		} else {
-			cancel(nil)
 		}
 		failed <- err
 	}()

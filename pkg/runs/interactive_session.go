@@ -164,7 +164,7 @@ func interactiveSessionTerminal(state InteractiveSessionState) bool {
 func (s *InteractiveSession) Send(ctx context.Context, input RunAttachInput) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.state == InteractiveSessionCompleted || s.state == InteractiveSessionCanceled {
+	if interactiveSessionTerminal(s.state) {
 		return ErrInteractiveSessionClosed
 	}
 	select {

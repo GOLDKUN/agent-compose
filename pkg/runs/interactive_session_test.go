@@ -20,7 +20,7 @@ func (s *sessionTestInteraction) Wait() (driverpkg.RuntimeResult, error) {
 	return driverpkg.RuntimeResult{}, nil
 }
 
-func TestInteractiveSessionManagerAttachAndClose(t *testing.T) {
+func TestIntegrationInteractiveSessionManagerAttachAndClose(t *testing.T) {
 	m := NewInteractiveSessionManager()
 	s, err := m.Create("run-1")
 	if err != nil {
@@ -72,6 +72,23 @@ func TestInteractiveSessionManagerAttachMissing(t *testing.T) {
 	}
 }
 
+func TestInteractiveSessionSendRejectsEveryTerminalState(t *testing.T) {
+	states := []InteractiveSessionState{
+		InteractiveSessionCompleted,
+		InteractiveSessionCanceled,
+		InteractiveSessionFailed,
+	}
+	for _, state := range states {
+		t.Run(string(state), func(t *testing.T) {
+			s := NewInteractiveSession("run-1")
+			s.Close(state)
+			if err := s.Send(context.Background(), RunAttachInput{}); !errors.Is(err, ErrInteractiveSessionClosed) {
+				t.Fatalf("Send() error = %v, want %v", err, ErrInteractiveSessionClosed)
+			}
+		})
+	}
+}
+
 func TestInteractiveSessionInputLeaseTracksDetachAndResume(t *testing.T) {
 	s := NewInteractiveSession("run-1")
 	if err := s.Start(); err != nil {
@@ -112,7 +129,7 @@ func TestInteractiveSessionClosesSlowOutputSubscriber(t *testing.T) {
 	}
 }
 
-func TestControllerAttachesExistingInteractiveSession(t *testing.T) {
+func TestIntegrationControllerAttachesExistingInteractiveSession(t *testing.T) {
 	m := NewInteractiveSessionManager()
 	s, err := m.Create("run-1")
 	if err != nil {
