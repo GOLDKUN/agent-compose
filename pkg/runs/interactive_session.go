@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	driverpkg "agent-compose/pkg/driver"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
 )
 
 var (

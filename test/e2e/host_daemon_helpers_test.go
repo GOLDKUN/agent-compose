@@ -54,6 +54,7 @@ func startE2EDaemonWithEnv(t *testing.T, binary, repoRoot, testRoot, listenAddre
 	process.cmd.Dir = repoRoot
 	env := map[string]string{
 		"AGENT_COMPOSE_SOCKET":     filepath.Join(testRoot, "agent-compose.sock"),
+		"AGENT_COMPOSE_AUTH_TOKEN": "",
 		"AUTH_PASSWORD":            "",
 		"AUTH_USERNAME":            "",
 		"DATA_ROOT":                testRoot,

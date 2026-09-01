@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	driverpkg "agent-compose/pkg/driver"
-	domain "agent-compose/pkg/model"
+	driverpkg "github.com/chaitin/agent-compose/pkg/driver"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 type sessionTestInteraction struct{ closed bool }

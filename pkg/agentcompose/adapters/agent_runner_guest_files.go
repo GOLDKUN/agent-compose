@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // guestFileReaderFor returns a pull function for runtimes without a shared

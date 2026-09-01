@@ -3,7 +3,6 @@ package compose
 import (
 	"context"
 	"fmt"
-	"github.com/chaitin/agent-compose/pkg/sources"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,8 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	domain "agent-compose/pkg/model"
-	"agent-compose/pkg/sources"
+	domain "github.com/chaitin/agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/sources"
 
 	"github.com/robfig/cron/v3"
 )

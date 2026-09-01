@@ -622,6 +622,7 @@ func newTestSandboxRPCBridge(t *testing.T) (*SandboxRPCBridge, *fakeRPCSandboxDr
 		GuestWorkspacePath:   "/workspace",
 		GuestStateRoot:       "/state",
 		JupyterGuestPort:     8888,
+		RuntimeBaseURL:       "http://agent-compose.test:7410",
 		SandboxStartTimeout:  time.Second,
 		SandboxStopTimeout:   time.Second,
 		JupyterProxyBasePath: "/agent-compose/session",

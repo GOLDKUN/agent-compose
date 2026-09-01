@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"

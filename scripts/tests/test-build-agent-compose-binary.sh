@@ -483,7 +483,7 @@ run_helper \
 assert_success
 [[ -x "$literal_output" ]] || fail "literal metacharacter output was not created"
 [[ ! -e "$injection_marker" ]] || fail "version text was executed as shell input"
-assert_build_arg "-X 'agent-compose/pkg/config.BuildVersion=$injection_version'"
+assert_build_arg "-X 'github.com/chaitin/agent-compose/pkg/config.BuildVersion=$injection_version'"
 
 # Artifact exporter stamps bind complete fixtures to source inputs and target
 # architecture without invoking Docker. A source or architecture change must

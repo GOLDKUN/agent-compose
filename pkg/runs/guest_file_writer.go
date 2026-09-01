@@ -3,8 +3,8 @@ package runs
 import (
 	"context"
 
-	"agent-compose/pkg/execution"
-	domain "agent-compose/pkg/model"
+	"github.com/chaitin/agent-compose/pkg/execution"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 )
 
 // guestFileWriterFor returns an execution.GuestFileWriterFunc that pushes a

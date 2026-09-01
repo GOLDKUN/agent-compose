@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	appconfig "agent-compose/pkg/config"
-	domain "agent-compose/pkg/model"
+	appconfig "github.com/chaitin/agent-compose/pkg/config"
+	domain "github.com/chaitin/agent-compose/pkg/model"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
