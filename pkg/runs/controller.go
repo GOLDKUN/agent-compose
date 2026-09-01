@@ -291,10 +291,10 @@ func (c *Controller) RunProjectAgent(ctx context.Context, req RunAgentRequest, s
 }
 
 func (c *Controller) RunProjectCommandAttach(ctx context.Context, receive RunAttachReceiver, send RunAttachSender) error {
-	return c.RunProjectCommandAttachRegistered(ctx, receive, send, nil)
+	return c.RunProjectCommandAttachRegistered(ctx, ctx, receive, send, nil)
 }
 
-func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, receive RunAttachReceiver, send RunAttachSender, onStarted func(string, <-chan struct{})) error {
+func (c *Controller) RunProjectCommandAttachRegistered(ctx, inputCtx context.Context, receive RunAttachReceiver, send RunAttachSender, onStarted func(string, <-chan struct{})) error {
 	if receive == nil || send == nil {
 		return fmt.Errorf("run attach stream is required")
 	}
@@ -347,7 +347,7 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 	if err != nil {
 		return err
 	}
-	inputCtx, cancelInput := context.WithCancel(ctx)
+	inputCtx, cancelInput := context.WithCancel(inputCtx)
 	defer cancelInput()
 	inputReleased := startRunAttachInputForwarder(inputCtx, receive, session, releaseInput)
 	if onStarted != nil {
@@ -475,34 +475,13 @@ func newInteractiveRunOutputSender(session *InteractiveSession, policy AttachDis
 }
 
 func forwardRunAttachInputs(ctx context.Context, receive RunAttachReceiver, session *InteractiveSession) {
-	inputs := make(chan RunAttachInput)
-	disconnected := make(chan struct{})
-	go func() {
-		defer close(disconnected)
-		for {
-			input, err := receive()
-			if err != nil {
-				return
-			}
-			select {
-			case inputs <- input:
-			case <-ctx.Done():
-				return
-			case <-session.done:
-				return
-			}
-		}
-	}()
 	for {
-		select {
-		case <-ctx.Done():
+		input, err := receive()
+		if err != nil {
 			return
-		case <-disconnected:
+		}
+		if err := session.Send(ctx, input); err != nil {
 			return
-		case input := <-inputs:
-			if err := session.sendReceived(ctx, input, disconnected); err != nil {
-				return
-			}
 		}
 	}
 }

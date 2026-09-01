@@ -83,7 +83,7 @@ func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAge
 	go func() {
 		defer cancel(nil)
 		var runID string
-		err := s.controller.RunProjectCommandAttachRegistered(execCtx, receive, func(runs.RunAttachOutput) error { return nil }, func(id string, inputReleased <-chan struct{}) {
+		err := s.controller.RunProjectCommandAttachRegistered(execCtx, execCtx, receive, func(runs.RunAttachOutput) error { return nil }, func(id string, inputReleased <-chan struct{}) {
 			runID = id
 			s.register(id, cancel)
 			s.wg.Add(1)
@@ -151,7 +151,7 @@ func (s *RunSupervisor) Attach(ctx context.Context, receive runs.RunAttachReceiv
 	execCtx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
 	var runID string
-	err = s.controller.RunProjectCommandAttachRegistered(execCtx, receiveWithFirst, send, func(startedRunID string, _ <-chan struct{}) {
+	err = s.controller.RunProjectCommandAttachRegistered(execCtx, ctx, receiveWithFirst, send, func(startedRunID string, _ <-chan struct{}) {
 		runID = startedRunID
 		s.register(runID, cancel)
 		s.wg.Add(1)
