@@ -3,6 +3,7 @@ package runs
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	driverpkg "agent-compose/pkg/driver"
@@ -35,6 +36,12 @@ func TestIntegrationInteractiveSessionManagerAttachAndClose(t *testing.T) {
 	}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
+	}
+	if got, err := m.Get("run-1"); err != nil || got != s {
+		t.Fatalf("Get() = %v, %v", got, err)
+	}
+	if _, err := m.Create("run-1"); err == nil {
+		t.Fatal("duplicate Create() returned nil error")
 	}
 	release, err := s.AcquireInput()
 	if err != nil {
@@ -156,5 +163,242 @@ func TestIntegrationControllerAttachesExistingInteractiveSession(t *testing.T) {
 	}
 	if got := (<-s.input).Text; got != "continue" {
 		t.Fatalf("input = %q", got)
+	}
+}
+
+func TestE2EControllerResumesAndCompletesInteractiveSession(t *testing.T) {
+	m := NewInteractiveSessionManager()
+	s, err := m.Create("run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := &sessionTestInteraction{}
+	if err := s.BindRuntime(runtime); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.Get("run-1"); err != nil || got != s {
+		t.Fatalf("Get() = %v, %v", got, err)
+	}
+	if _, err := m.Create("run-1"); err == nil {
+		t.Fatal("duplicate Create() returned nil error")
+	}
+	outputs, unsubscribe, err := s.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unsubscribe()
+
+	requests := make(chan RunAttachInput, 2)
+	requests <- RunAttachInput{Kind: RunAttachInputStart, RunID: "run-1"}
+	requests <- RunAttachInput{Kind: RunAttachInputHumanMessage, Text: "continue"}
+	receive := func() (RunAttachInput, error) {
+		request, ok := <-requests
+		if !ok {
+			return RunAttachInput{}, io.EOF
+		}
+		return request, nil
+	}
+	controller := NewController(ControllerDependencies{InteractiveSessions: m})
+	controller.configDB = &fakeControllerStore{runs: map[string]domain.ProjectRunRecord{
+		"run-1": {RunID: "run-1", Status: domain.ProjectRunStatusRunning},
+	}}
+	forwardedOutputs := make(chan RunAttachOutput, 1)
+	attachDone := make(chan error, 1)
+	go func() {
+		attachDone <- controller.RunProjectCommandAttach(context.Background(), receive, func(output RunAttachOutput) error {
+			forwardedOutputs <- output
+			return nil
+		})
+	}()
+	if got := (<-s.input).Text; got != "continue" {
+		t.Fatalf("forwarded input = %q, want %q", got, "continue")
+	}
+
+	wantOutput := RunAttachOutput{Kind: RunAttachOutputAgentEvent}
+	s.Publish(wantOutput)
+	if got := <-outputs; got.Kind != wantOutput.Kind {
+		t.Fatalf("published output kind = %q, want %q", got.Kind, wantOutput.Kind)
+	}
+	if got := <-forwardedOutputs; got.Kind != wantOutput.Kind {
+		t.Fatalf("attached output kind = %q, want %q", got.Kind, wantOutput.Kind)
+	}
+	close(requests)
+	if err := <-attachDone; err != nil {
+		t.Fatalf("RunProjectCommandAttach() error = %v", err)
+	}
+	unsubscribe()
+	slowOutputs, unsubscribeSlow, err := s.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unsubscribeSlow()
+	for range 33 {
+		s.Publish(RunAttachOutput{Kind: RunAttachOutputData})
+	}
+	for range slowOutputs {
+	}
+	if err := m.Remove("run-1", InteractiveSessionCompleted); err != nil {
+		t.Fatal(err)
+	}
+	if !runtime.closed {
+		t.Fatal("completed session did not close runtime input")
+	}
+	if s.State() != InteractiveSessionCompleted {
+		t.Fatalf("state = %q, want %q", s.State(), InteractiveSessionCompleted)
+	}
+	if _, err := m.Get("run-1"); !errors.Is(err, ErrInteractiveSessionNotFound) {
+		t.Fatalf("Get() after completion error = %v", err)
+	}
+	if _, err := m.Attach("run-1"); !errors.Is(err, ErrInteractiveSessionNotFound) {
+		t.Fatalf("Attach() after completion error = %v", err)
+	}
+	if err := s.Send(context.Background(), RunAttachInput{}); !errors.Is(err, ErrInteractiveSessionClosed) {
+		t.Fatalf("Send() after completion error = %v", err)
+	}
+	if _, _, err := s.Subscribe(); !errors.Is(err, ErrInteractiveSessionClosed) {
+		t.Fatalf("Subscribe() after completion error = %v", err)
+	}
+	if _, err := s.AcquireInput(); !errors.Is(err, ErrInteractiveSessionClosed) {
+		t.Fatalf("AcquireInput() after completion error = %v", err)
+	}
+	if _, err := s.Receive()(); !errors.Is(err, ErrInteractiveSessionClosed) {
+		t.Fatalf("Receive() after completion error = %v", err)
+	}
+
+	queued, err := m.Create("run-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 32 {
+		if err := queued.Send(context.Background(), RunAttachInput{Kind: RunAttachInputHumanMessage}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := queued.Send(context.Background(), RunAttachInput{}); !errors.Is(err, ErrInteractiveSessionBusy) {
+		t.Fatalf("Send() to full queue error = %v", err)
+	}
+	if err := m.Remove("run-2", InteractiveSessionCanceled); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Remove("missing", InteractiveSessionCanceled); !errors.Is(err, ErrInteractiveSessionNotFound) {
+		t.Fatalf("Remove() missing error = %v", err)
+	}
+
+	startOnly := func(runID string) RunAttachReceiver {
+		return func() (RunAttachInput, error) {
+			return RunAttachInput{Kind: RunAttachInputStart, RunID: runID}, nil
+		}
+	}
+	if err := NewController(ControllerDependencies{InteractiveSessions: m}).RunProjectCommandAttach(
+		context.Background(), startOnly("run-1"), func(RunAttachOutput) error { return nil },
+	); err == nil || err.Error() != "config store is required" {
+		t.Fatalf("attach without store error = %v", err)
+	}
+	controller.configDB = &fakeControllerStore{runs: map[string]domain.ProjectRunRecord{
+		"terminal": {RunID: "terminal", Status: domain.ProjectRunStatusSucceeded},
+		"missing":  {RunID: "missing", Status: domain.ProjectRunStatusRunning},
+	}}
+	if err := controller.RunProjectCommandAttach(context.Background(), startOnly("terminal"), func(RunAttachOutput) error { return nil }); !errors.Is(err, domain.ErrFailedPrecondition) {
+		t.Fatalf("attach terminal run error = %v", err)
+	}
+	if err := controller.RunProjectCommandAttach(context.Background(), startOnly("missing"), func(RunAttachOutput) error { return nil }); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("attach missing session error = %v", err)
+	}
+
+	duplicate, err := m.Create("duplicate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := duplicate.Start(); err != nil {
+		t.Fatal(err)
+	}
+	controller.configDB = &fakeControllerStore{runs: map[string]domain.ProjectRunRecord{
+		"duplicate": {RunID: "duplicate", Status: domain.ProjectRunStatusRunning},
+	}}
+	frames := make(chan RunAttachInput, 2)
+	frames <- RunAttachInput{Kind: RunAttachInputStart, RunID: "duplicate"}
+	frames <- RunAttachInput{Kind: RunAttachInputStart, RunID: "duplicate"}
+	if err := controller.RunProjectCommandAttach(context.Background(), func() (RunAttachInput, error) {
+		return <-frames, nil
+	}, func(RunAttachOutput) error { return nil }); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("duplicate start frame error = %v", err)
+	}
+	if err := m.Remove("duplicate", InteractiveSessionCanceled); err != nil {
+		t.Fatal(err)
+	}
+
+	attached, err := m.Create("attached")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := attached.Start(); err != nil {
+		t.Fatal(err)
+	}
+	release, err := attached.AcquireInput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller.configDB = &fakeControllerStore{runs: map[string]domain.ProjectRunRecord{
+		"attached": {RunID: "attached", Status: domain.ProjectRunStatusRunning},
+	}}
+	if err := controller.RunProjectCommandAttach(context.Background(), startOnly("attached"), func(RunAttachOutput) error { return nil }); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("attach busy session error = %v", err)
+	}
+	release()
+	if err := m.Remove("attached", InteractiveSessionCanceled); err != nil {
+		t.Fatal(err)
+	}
+
+	closed, err := m.Create("closed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed.Close(InteractiveSessionFailed)
+	controller.configDB = &fakeControllerStore{runs: map[string]domain.ProjectRunRecord{
+		"closed": {RunID: "closed", Status: domain.ProjectRunStatusRunning},
+	}}
+	if err := controller.RunProjectCommandAttach(context.Background(), startOnly("closed"), func(RunAttachOutput) error { return nil }); !errors.Is(err, domain.ErrFailedPrecondition) {
+		t.Fatalf("attach closed session error = %v", err)
+	}
+	if err := m.Remove("closed", InteractiveSessionFailed); err != nil {
+		t.Fatal(err)
+	}
+
+	sendDiscard := func(RunAttachOutput) error { return nil }
+	invalidStreams := []struct {
+		name    string
+		receive RunAttachReceiver
+		send    RunAttachSender
+		want    error
+	}{
+		{name: "nil receiver", send: sendDiscard},
+		{name: "nil sender", receive: startOnly("")},
+		{name: "EOF before start", receive: func() (RunAttachInput, error) { return RunAttachInput{}, io.EOF }, send: sendDiscard, want: ErrInvalidRequest},
+		{name: "receive failure", receive: func() (RunAttachInput, error) { return RunAttachInput{}, context.Canceled }, send: sendDiscard, want: context.Canceled},
+		{name: "non-start first frame", receive: func() (RunAttachInput, error) { return RunAttachInput{Kind: RunAttachInputHumanMessage}, nil }, send: sendDiscard, want: ErrInvalidRequest},
+		{name: "missing mode", receive: startOnly(""), send: sendDiscard, want: ErrInvalidRequest},
+		{name: "missing command", receive: func() (RunAttachInput, error) {
+			return RunAttachInput{Kind: RunAttachInputStart, Mode: RunAttachModeCommand}, nil
+		}, send: sendDiscard, want: ErrInvalidRequest},
+		{name: "missing prompt", receive: func() (RunAttachInput, error) {
+			return RunAttachInput{Kind: RunAttachInputStart, Mode: RunAttachModePrompt}, nil
+		}, send: sendDiscard, want: ErrInvalidRequest},
+	}
+	for _, test := range invalidStreams {
+		t.Run(test.name, func(t *testing.T) {
+			err := controller.RunProjectCommandAttach(context.Background(), test.receive, test.send)
+			if test.want == nil {
+				if err == nil || err.Error() != "run attach stream is required" {
+					t.Fatalf("RunProjectCommandAttach() error = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, test.want) {
+				t.Fatalf("RunProjectCommandAttach() error = %v, want %v", err, test.want)
+			}
+		})
 	}
 }
