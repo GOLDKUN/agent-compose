@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	driverpkg "agent-compose/pkg/driver"
 	domain "agent-compose/pkg/model"
@@ -213,8 +214,15 @@ func TestE2EControllerResumesAndCompletesInteractiveSession(t *testing.T) {
 			return nil
 		})
 	}()
-	if got := (<-s.input).Text; got != "continue" {
-		t.Fatalf("forwarded input = %q, want %q", got, "continue")
+	select {
+	case err := <-attachDone:
+		t.Fatalf("RunProjectCommandAttach() failed before forwarding input: %v", err)
+	case got := <-s.input:
+		if got.Text != "continue" {
+			t.Fatalf("forwarded input = %q, want %q", got.Text, "continue")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for forwarded input")
 	}
 
 	wantOutput := RunAttachOutput{Kind: RunAttachOutputAgentEvent}
