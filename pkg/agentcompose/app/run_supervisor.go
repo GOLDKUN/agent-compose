@@ -17,12 +17,17 @@ import (
 
 type RunSupervisor struct {
 	root       context.Context
-	controller *runs.Controller
+	controller runSupervisorController
 	store      *configstore.ConfigStore
 
 	mu     sync.Mutex
 	active map[string]*activeRun
 	wg     sync.WaitGroup
+}
+
+type runSupervisorController interface {
+	StartProjectRun(context.Context, runs.RunAgentRequest) (runs.StartedProjectRun, error)
+	RunProjectCommandAttachRegistered(context.Context, context.Context, runs.RunAttachReceiver, runs.RunAttachSender, func(string, <-chan struct{})) error
 }
 
 type activeRun struct {

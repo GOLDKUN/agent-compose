@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/samber/do/v2"
 
@@ -23,6 +25,110 @@ func TestRunSupervisorAttachMapsMissingStartFrameToInvalidRequest(t *testing.T) 
 	}, func(runs.RunAttachOutput) error { return nil })
 	if !errors.Is(err, runs.ErrInvalidRequest) {
 		t.Fatalf("Attach() error = %v, want %v", err, runs.ErrInvalidRequest)
+	}
+}
+
+func TestRunSupervisorAttachDetachCancelsInputWithoutCancelingExecution(t *testing.T) {
+	rootCtx, cancelRoot := context.WithCancel(context.Background())
+	t.Cleanup(cancelRoot)
+	controller := newRunSupervisorAttachController()
+	supervisor := &RunSupervisor{
+		root:       rootCtx,
+		controller: controller,
+		active:     map[string]*activeRun{},
+	}
+	connectionCtx, cancelConnection := context.WithCancel(context.Background())
+	attachDone := make(chan error, 1)
+	first := true
+	go func() {
+		attachDone <- supervisor.Attach(connectionCtx, func() (runs.RunAttachInput, error) {
+			if first {
+				first = false
+				return runs.RunAttachInput{
+					Kind:             runs.RunAttachInputStart,
+					Mode:             runs.RunAttachModePrompt,
+					Request:          runs.RunAgentRequest{Prompt: "keep running"},
+					DisconnectPolicy: runs.AttachDisconnectDetach,
+				}, nil
+			}
+			return runs.RunAttachInput{}, io.EOF
+		}, func(runs.RunAttachOutput) error { return nil })
+	}()
+
+	select {
+	case <-controller.started:
+	case <-time.After(time.Second):
+		t.Fatal("detached run did not start")
+	}
+	cancelConnection()
+	select {
+	case <-controller.inputCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("connection cancellation did not reach the attach input context")
+	}
+	select {
+	case err := <-attachDone:
+		t.Fatalf("detached execution ended with its connection: %v", err)
+	default:
+	}
+	supervisor.mu.Lock()
+	_, active := supervisor.active["run-1"]
+	supervisor.mu.Unlock()
+	if !active {
+		t.Fatal("detached run was unregistered after connection cancellation")
+	}
+
+	close(controller.finishExecution)
+	select {
+	case err := <-attachDone:
+		if err != nil {
+			t.Fatalf("Attach() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Attach() did not finish after execution completed")
+	}
+}
+
+type runSupervisorAttachController struct {
+	started         chan struct{}
+	inputCanceled   chan struct{}
+	finishExecution chan struct{}
+	startOnce       sync.Once
+}
+
+func newRunSupervisorAttachController() *runSupervisorAttachController {
+	return &runSupervisorAttachController{
+		started:         make(chan struct{}),
+		inputCanceled:   make(chan struct{}),
+		finishExecution: make(chan struct{}),
+	}
+}
+
+func (*runSupervisorAttachController) StartProjectRun(context.Context, runs.RunAgentRequest) (runs.StartedProjectRun, error) {
+	return runs.StartedProjectRun{}, errors.New("unexpected StartProjectRun call")
+}
+
+func (c *runSupervisorAttachController) RunProjectCommandAttachRegistered(
+	execCtx context.Context,
+	inputCtx context.Context,
+	receive runs.RunAttachReceiver,
+	_ runs.RunAttachSender,
+	onStarted func(string, <-chan struct{}),
+) error {
+	if _, err := receive(); err != nil {
+		return err
+	}
+	released := make(chan struct{})
+	onStarted("run-1", released)
+	c.startOnce.Do(func() { close(c.started) })
+	<-inputCtx.Done()
+	close(released)
+	close(c.inputCanceled)
+	select {
+	case <-execCtx.Done():
+		return errors.New("execution context canceled with connection")
+	case <-c.finishExecution:
+		return nil
 	}
 }
 
