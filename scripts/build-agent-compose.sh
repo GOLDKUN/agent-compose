@@ -36,6 +36,7 @@ append_build_arg NO_PROXY "${NO_PROXY:-${no_proxy:-}}"
 append_build_arg REGISTRY_MIRROR "${REGISTRY_MIRROR:-}"
 append_build_arg GOPROXY "${GOPROXY:-}"
 append_build_arg BUF_VERSION "${BUF_VERSION:-}"
+append_build_arg GO_VERSION "${GO_VERSION:-}"
 
 if [[ "$(basename "$DOCKERFILE")" == "Dockerfile.agent-compose-local" ]]; then
   build_args+=(

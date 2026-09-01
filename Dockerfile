@@ -2,8 +2,9 @@ ARG REGISTRY_MIRROR=docker.io
 ARG GOPROXY=https://proxy.golang.org,direct
 ARG GITHUB_MIRROR=https://github.com
 ARG BUF_VERSION=v1.68.1
+ARG GO_VERSION=1.26.7
 
-FROM ${REGISTRY_MIRROR}/library/golang:1-alpine AS golang-toolchain
+FROM ${REGISTRY_MIRROR}/library/golang:${GO_VERSION}-alpine AS golang-toolchain
 
 FROM ${REGISTRY_MIRROR}/library/debian:bookworm AS boxlite-build
 ARG BOXLITE_VERSION=v0.9.7
