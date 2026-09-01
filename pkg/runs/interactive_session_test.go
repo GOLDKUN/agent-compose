@@ -240,6 +240,26 @@ func TestInteractiveSessionInputLeaseTracksDetachAndResume(t *testing.T) {
 	release()
 }
 
+func TestInteractiveSessionManagerCreateAttachedReservesInitialInputLease(t *testing.T) {
+	m := NewInteractiveSessionManager()
+	s, release, err := m.CreateAttached("run-1")
+	if err != nil {
+		t.Fatalf("CreateAttached() error = %v", err)
+	}
+	if s.State() != InteractiveSessionRunning {
+		t.Fatalf("created session state = %q, want %q", s.State(), InteractiveSessionRunning)
+	}
+	if _, err := m.Attach("run-1"); !errors.Is(err, ErrInteractiveSessionAttached) {
+		t.Fatalf("concurrent Attach() error = %v, want %v", err, ErrInteractiveSessionAttached)
+	}
+	release()
+	attachment, err := m.Attach("run-1")
+	if err != nil {
+		t.Fatalf("Attach() after initial release error = %v", err)
+	}
+	attachment.Close()
+}
+
 func TestInteractiveSessionClosesSlowOutputSubscriber(t *testing.T) {
 	s := NewInteractiveSession("run-1")
 	outputs, unsubscribe, err := s.Subscribe()

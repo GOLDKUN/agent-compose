@@ -262,6 +262,30 @@ func (m *InteractiveSessionManager) Create(runID string) (*InteractiveSession, e
 	return s, nil
 }
 
+// CreateAttached creates a running session with its initial input lease held.
+// The session is not visible to concurrent Attach calls until the lease has
+// been acquired, so a resuming client cannot preempt the run creator.
+func (m *InteractiveSessionManager) CreateAttached(runID string) (*InteractiveSession, func(), error) {
+	if runID == "" {
+		return nil, nil, fmt.Errorf("run id is required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.sessions[runID]; ok {
+		return nil, nil, fmt.Errorf("session for %s already exists", runID)
+	}
+	s := NewInteractiveSession(runID)
+	if err := s.Start(); err != nil {
+		return nil, nil, err
+	}
+	release, err := s.AcquireInput()
+	if err != nil {
+		return nil, nil, err
+	}
+	m.sessions[runID] = s
+	return s, release, nil
+}
+
 func (m *InteractiveSessionManager) Get(runID string) (*InteractiveSession, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

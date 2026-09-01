@@ -85,17 +85,17 @@ func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAge
 		}
 		return runs.RunAttachInput{}, io.EOF
 	}
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		defer cancel(nil)
 		var runID string
 		err := s.controller.RunProjectCommandAttachRegistered(execCtx, execCtx, receive, func(runs.RunAttachOutput) error { return nil }, func(id string, inputReleased <-chan struct{}) {
 			runID = id
 			s.register(id, cancel)
-			s.wg.Add(1)
 			started <- interactiveRunStarted{runID: id, inputReleased: inputReleased}
 		})
 		if runID != "" {
-			s.wg.Done()
 			s.unregister(runID)
 		}
 		failed <- err
@@ -106,13 +106,11 @@ func (s *RunSupervisor) startInteractiveRun(ctx context.Context, req runs.RunAge
 		case <-run.inputReleased:
 			return s.store.GetProjectRun(ctx, run.runID)
 		case <-ctx.Done():
-			cancel(ctx.Err())
 			return domain.ProjectRunRecord{}, ctx.Err()
 		}
 	case err := <-failed:
 		return domain.ProjectRunRecord{}, err
 	case <-ctx.Done():
-		cancel(ctx.Err())
 		return domain.ProjectRunRecord{}, ctx.Err()
 	}
 }

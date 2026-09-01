@@ -89,6 +89,126 @@ func TestRunSupervisorAttachDetachCancelsInputWithoutCancelingExecution(t *testi
 	}
 }
 
+func TestRunSupervisorInteractiveStartRequestCancellationDoesNotCancelExecution(t *testing.T) {
+	rootCtx, cancelRoot := context.WithCancel(context.Background())
+	t.Cleanup(cancelRoot)
+	controller := newRunSupervisorInteractiveController(true)
+	supervisor := &RunSupervisor{
+		root:       rootCtx,
+		controller: controller,
+		active:     map[string]*activeRun{},
+	}
+	requestCtx, cancelRequest := context.WithCancel(context.Background())
+	startDone := make(chan error, 1)
+	go func() {
+		_, err := supervisor.StartRun(requestCtx, runs.RunAgentRequest{Interactive: true, Prompt: "keep running"})
+		startDone <- err
+	}()
+
+	<-controller.started
+	cancelRequest()
+	if err := <-startDone; !errors.Is(err, context.Canceled) {
+		t.Fatalf("StartRun() error = %v, want %v", err, context.Canceled)
+	}
+	select {
+	case <-controller.executionCanceled:
+		t.Fatal("background interactive execution was canceled with its request")
+	default:
+	}
+	supervisor.mu.Lock()
+	_, active := supervisor.active["run-1"]
+	supervisor.mu.Unlock()
+	if !active {
+		t.Fatal("background interactive execution was unregistered with its request")
+	}
+
+	close(controller.finish)
+	select {
+	case <-controller.returned:
+	case <-time.After(time.Second):
+		t.Fatal("interactive execution did not finish")
+	}
+}
+
+func TestRunSupervisorInteractiveStartRegistersWaitBeforeGoroutineRuns(t *testing.T) {
+	controller := newRunSupervisorInteractiveController(false)
+	supervisor := &RunSupervisor{
+		root:       context.Background(),
+		controller: controller,
+		active:     map[string]*activeRun{},
+	}
+	startDone := make(chan error, 1)
+	go func() {
+		_, err := supervisor.StartRun(context.Background(), runs.RunAgentRequest{Interactive: true, Prompt: "wait for me"})
+		startDone <- err
+	}()
+	<-controller.entered
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancelShutdown()
+	if err := supervisor.Shutdown(shutdownCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Shutdown() error = %v, want %v while interactive start is blocked", err, context.DeadlineExceeded)
+	}
+	close(controller.finish)
+	if err := <-startDone; !errors.Is(err, errRunSupervisorInteractiveStopped) {
+		t.Fatalf("StartRun() error = %v, want %v", err, errRunSupervisorInteractiveStopped)
+	}
+	if err := supervisor.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown() after execution exit error = %v", err)
+	}
+}
+
+var errRunSupervisorInteractiveStopped = errors.New("interactive controller stopped")
+
+type runSupervisorInteractiveController struct {
+	callStarted       bool
+	entered           chan struct{}
+	started           chan struct{}
+	executionCanceled chan struct{}
+	finish            chan struct{}
+	returned          chan struct{}
+}
+
+func newRunSupervisorInteractiveController(callStarted bool) *runSupervisorInteractiveController {
+	return &runSupervisorInteractiveController{
+		callStarted:       callStarted,
+		entered:           make(chan struct{}),
+		started:           make(chan struct{}),
+		executionCanceled: make(chan struct{}),
+		finish:            make(chan struct{}),
+		returned:          make(chan struct{}),
+	}
+}
+
+func (*runSupervisorInteractiveController) StartProjectRun(context.Context, runs.RunAgentRequest) (runs.StartedProjectRun, error) {
+	return runs.StartedProjectRun{}, errors.New("unexpected StartProjectRun call")
+}
+
+func (c *runSupervisorInteractiveController) RunProjectCommandAttachRegistered(
+	execCtx context.Context,
+	_ context.Context,
+	receive runs.RunAttachReceiver,
+	_ runs.RunAttachSender,
+	onStarted func(string, <-chan struct{}),
+) error {
+	defer close(c.returned)
+	if _, err := receive(); err != nil {
+		return err
+	}
+	close(c.entered)
+	if c.callStarted {
+		onStarted("run-1", make(chan struct{}))
+		close(c.started)
+	}
+	select {
+	case <-execCtx.Done():
+		close(c.executionCanceled)
+		return context.Cause(execCtx)
+	case <-c.finish:
+		return errRunSupervisorInteractiveStopped
+	}
+}
+
 type runSupervisorAttachController struct {
 	started         chan struct{}
 	inputCanceled   chan struct{}

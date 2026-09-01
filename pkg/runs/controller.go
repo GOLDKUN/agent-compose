@@ -333,20 +333,12 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx, inputCtx context.Con
 	if err != nil {
 		return err
 	}
-	session, err := c.interactiveSessions.Create(started.Run.RunID)
+	session, releaseInput, err := c.interactiveSessions.CreateAttached(started.Run.RunID)
 	if err != nil {
-		return err
-	}
-	if err := session.Start(); err != nil {
-		_ = c.interactiveSessions.Remove(started.Run.RunID, InteractiveSessionCanceled)
 		return err
 	}
 	sessionTerminalState := InteractiveSessionCompleted
 	defer func() { _ = c.interactiveSessions.Remove(started.Run.RunID, sessionTerminalState) }()
-	releaseInput, err := session.AcquireInput()
-	if err != nil {
-		return err
-	}
 	inputCtx, cancelInput := context.WithCancel(inputCtx)
 	defer cancelInput()
 	inputReleased := startRunAttachInputForwarder(inputCtx, receive, session, releaseInput)
