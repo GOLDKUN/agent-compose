@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"io"
 	"path/filepath"
 	"testing"
 
@@ -10,8 +12,19 @@ import (
 	appconfig "agent-compose/pkg/config"
 	"agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/runs"
 	"agent-compose/pkg/storage/configstore"
 )
+
+func TestRunSupervisorAttachMapsMissingStartFrameToInvalidRequest(t *testing.T) {
+	supervisor := &RunSupervisor{}
+	err := supervisor.Attach(context.Background(), func() (runs.RunAttachInput, error) {
+		return runs.RunAttachInput{}, io.EOF
+	}, func(runs.RunAttachOutput) error { return nil })
+	if !errors.Is(err, runs.ErrInvalidRequest) {
+		t.Fatalf("Attach() error = %v, want %v", err, runs.ErrInvalidRequest)
+	}
+}
 
 func TestRunSupervisorStopActiveRunRequestsCancellationWithoutMarkingTerminal(t *testing.T) {
 	ctx := context.Background()

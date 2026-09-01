@@ -179,6 +179,39 @@ func TestStartRunAttachInputForwarderReleasesInitialLeaseBeforeResume(t *testing
 	attachment.Close()
 }
 
+func TestRunAttachInputForwarderReleasesLeaseWhenFullClientDisconnects(t *testing.T) {
+	m := NewInteractiveSessionManager()
+	s, err := m.Create("run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	release, err := s.AcquireInput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	received := 0
+	released := startRunAttachInputForwarder(context.Background(), func() (RunAttachInput, error) {
+		if received == 33 {
+			return RunAttachInput{}, io.EOF
+		}
+		received++
+		return RunAttachInput{Kind: RunAttachInputHumanMessage}, nil
+	}, s, release)
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("disconnect did not release the backpressured input lease")
+	}
+	attachment, err := m.Attach("run-1")
+	if err != nil {
+		t.Fatalf("Attach() after backpressured disconnect error = %v", err)
+	}
+	attachment.Close()
+}
+
 func TestInteractiveSessionInputLeaseTracksDetachAndResume(t *testing.T) {
 	s := NewInteractiveSession("run-1")
 	if err := s.Start(); err != nil {

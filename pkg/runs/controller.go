@@ -475,13 +475,34 @@ func newInteractiveRunOutputSender(session *InteractiveSession, policy AttachDis
 }
 
 func forwardRunAttachInputs(ctx context.Context, receive RunAttachReceiver, session *InteractiveSession) {
-	for {
-		input, err := receive()
-		if err != nil {
-			return
+	inputs := make(chan RunAttachInput)
+	disconnected := make(chan struct{})
+	go func() {
+		defer close(disconnected)
+		for {
+			input, err := receive()
+			if err != nil {
+				return
+			}
+			select {
+			case inputs <- input:
+			case <-ctx.Done():
+				return
+			case <-session.done:
+				return
+			}
 		}
-		if err := session.Send(ctx, input); err != nil {
+	}()
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case <-disconnected:
+			return
+		case input := <-inputs:
+			if err := session.sendReceived(ctx, input, disconnected); err != nil {
+				return
+			}
 		}
 	}
 }

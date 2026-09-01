@@ -206,6 +206,32 @@ func (s *InteractiveSession) send(ctx context.Context, input RunAttachInput, att
 	}
 }
 
+// sendReceived prefers delivering an input frame that has already been read
+// from the client, but abandons backpressure when that client disconnects.
+func (s *InteractiveSession) sendReceived(ctx context.Context, input RunAttachInput, disconnected <-chan struct{}) error {
+	s.mu.Lock()
+	if interactiveSessionTerminal(s.state) {
+		s.mu.Unlock()
+		return ErrInteractiveSessionClosed
+	}
+	s.mu.Unlock()
+	select {
+	case s.input <- input:
+		return nil
+	default:
+	}
+	select {
+	case s.input <- input:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-disconnected:
+		return ErrInteractiveSessionClosed
+	case <-s.done:
+		return ErrInteractiveSessionClosed
+	}
+}
+
 func (s *InteractiveSession) Receive() RunAttachReceiver {
 	return func() (RunAttachInput, error) {
 		select {

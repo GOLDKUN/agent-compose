@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -130,6 +131,9 @@ func (s *RunSupervisor) Run(ctx context.Context, req runs.RunAgentRequest, strea
 func (s *RunSupervisor) Attach(ctx context.Context, receive runs.RunAttachReceiver, send runs.RunAttachSender) error {
 	first, err := receive()
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return fmt.Errorf("%w: run attach start frame is required", runs.ErrInvalidRequest)
+		}
 		return err
 	}
 	replayed := false
