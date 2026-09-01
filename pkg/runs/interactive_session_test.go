@@ -80,6 +80,32 @@ func TestInteractiveSessionManagerAttachMissing(t *testing.T) {
 	}
 }
 
+func TestInteractiveSessionManagerBindRuntimeClosesInteractionOnFailure(t *testing.T) {
+	m := NewInteractiveSessionManager()
+	missing := &sessionTestInteraction{}
+	if _, err := m.BindRuntime("missing", missing); !errors.Is(err, ErrInteractiveSessionNotFound) {
+		t.Fatalf("BindRuntime() missing error = %v", err)
+	}
+	if !missing.closed {
+		t.Fatal("missing session did not close interaction")
+	}
+
+	s, err := m.Create("run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BindRuntime(&sessionTestInteraction{}); err != nil {
+		t.Fatal(err)
+	}
+	duplicate := &sessionTestInteraction{}
+	if _, err := m.BindRuntime("run-1", duplicate); err == nil {
+		t.Fatal("BindRuntime() duplicate returned nil error")
+	}
+	if !duplicate.closed {
+		t.Fatal("duplicate runtime did not close interaction")
+	}
+}
+
 func TestInteractiveSessionSendRejectsEveryTerminalState(t *testing.T) {
 	states := []InteractiveSessionState{
 		InteractiveSessionCompleted,
@@ -94,6 +120,34 @@ func TestInteractiveSessionSendRejectsEveryTerminalState(t *testing.T) {
 				t.Fatalf("Send() error = %v, want %v", err, ErrInteractiveSessionClosed)
 			}
 		})
+	}
+}
+
+func TestInteractiveSessionAttachmentCloseInterruptsBackpressure(t *testing.T) {
+	m := NewInteractiveSessionManager()
+	s, err := m.Create("run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attachment, err := m.Attach("run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 32 {
+		if err := s.Send(context.Background(), RunAttachInput{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sendDone := make(chan error, 1)
+	go func() { sendDone <- attachment.Send(context.Background(), RunAttachInput{}) }()
+	attachment.Close()
+	select {
+	case err := <-sendDone:
+		if !errors.Is(err, ErrInteractiveSessionClosed) {
+			t.Fatalf("blocked Send() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("attachment Close() did not interrupt blocked Send()")
 	}
 }
 
@@ -134,6 +188,30 @@ func TestInteractiveSessionClosesSlowOutputSubscriber(t *testing.T) {
 		s.Publish(RunAttachOutput{})
 	}
 	for range outputs {
+	}
+}
+
+func TestInteractiveRunOutputSenderStopsWritingAfterDetach(t *testing.T) {
+	s := NewInteractiveSession("run-1")
+	sendCalls := 0
+	sender := newInteractiveRunOutputSender(s, AttachDisconnectDetach, func(RunAttachOutput) error {
+		sendCalls++
+		return errors.New("stream closed")
+	})
+	if err := sender(RunAttachOutput{Kind: RunAttachOutputData}); err != nil {
+		t.Fatalf("first detached send error = %v", err)
+	}
+	if err := sender(RunAttachOutput{Kind: RunAttachOutputData}); err != nil {
+		t.Fatalf("second detached send error = %v", err)
+	}
+	if sendCalls != 1 {
+		t.Fatalf("send calls = %d, want 1", sendCalls)
+	}
+
+	wantErr := errors.New("write failed")
+	attached := newInteractiveRunOutputSender(s, AttachDisconnectCancel, func(RunAttachOutput) error { return wantErr })
+	if err := attached(RunAttachOutput{}); !errors.Is(err, wantErr) {
+		t.Fatalf("attached send error = %v, want %v", err, wantErr)
 	}
 }
 
@@ -285,8 +363,13 @@ func TestE2EControllerResumesAndCompletesInteractiveSession(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := queued.Send(context.Background(), RunAttachInput{}); !errors.Is(err, ErrInteractiveSessionBusy) {
-		t.Fatalf("Send() to full queue error = %v", err)
+	queuedSend := make(chan error, 1)
+	go func() { queuedSend <- queued.Send(context.Background(), RunAttachInput{}) }()
+	if _, err := queued.Receive()(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-queuedSend; err != nil {
+		t.Fatalf("Send() after queue space became available error = %v", err)
 	}
 	if err := m.Remove("run-2", InteractiveSessionCanceled); err != nil {
 		t.Fatal(err)
@@ -356,6 +439,19 @@ func TestE2EControllerResumesAndCompletesInteractiveSession(t *testing.T) {
 		t.Fatalf("attach busy session error = %v", err)
 	}
 	release()
+	oldAttachment, err := m.Attach("attached")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldAttachment.Close()
+	newAttachment, err := m.Attach("attached")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := oldAttachment.Send(context.Background(), RunAttachInput{}); !errors.Is(err, ErrInteractiveSessionClosed) {
+		t.Fatalf("stale attachment Send() error = %v", err)
+	}
+	newAttachment.Close()
 	if err := m.Remove("attached", InteractiveSessionCanceled); err != nil {
 		t.Fatal(err)
 	}

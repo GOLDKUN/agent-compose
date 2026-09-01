@@ -160,14 +160,7 @@ func (c *Controller) openCommandInteraction(ctx context.Context, runCtx interact
 	if err != nil {
 		return commandInteractionSession{}, err
 	}
-	managed, err := c.interactiveSessions.Get(run.RunID)
-	if err != nil {
-		return commandInteractionSession{}, err
-	}
-	if err := managed.BindRuntime(interaction); err != nil {
-		return commandInteractionSession{}, err
-	}
-	interaction, err = managed.Runtime()
+	interaction, err = c.interactiveSessions.BindRuntime(run.RunID, interaction)
 	if err != nil {
 		return commandInteractionSession{}, err
 	}

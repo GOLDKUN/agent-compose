@@ -149,14 +149,7 @@ func (c *Controller) runPromptInteractionSession(ctx context.Context, runCtx int
 		transition.Error = fmt.Sprintf("agent execution failed: %v", err)
 		return transition, err
 	}
-	managed, err := c.interactiveSessions.Get(run.RunID)
-	if err != nil {
-		return transition, err
-	}
-	if err := managed.BindRuntime(interaction); err != nil {
-		return transition, err
-	}
-	interaction, err = managed.Runtime()
+	interaction, err = c.interactiveSessions.BindRuntime(run.RunID, interaction)
 	if err != nil {
 		return transition, err
 	}

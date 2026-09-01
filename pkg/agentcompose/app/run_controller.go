@@ -209,19 +209,9 @@ func runAgentStreamCompletedProjection(run domain.ProjectRunRecord, createdAt ti
 }
 
 func (d runControllerDelegate) AttachAgentRun(ctx context.Context, stream *connect.BidiStream[agentcomposev2.AttachAgentRunRequest, agentcomposev2.AttachAgentRunResponse]) error {
-	if d.controller == nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("run controller is required"))
-	}
-	if err := d.controller.RunProjectCommandAttach(ctx, receiveRunAttachInput(stream.Receive), func(output runs.RunAttachOutput) error {
+	return d.RunProjectCommandAttach(ctx, stream.Receive, func(output runs.RunAttachOutput) error {
 		return stream.Send(api.RunAttachOutputToProto(output))
-	}); err != nil {
-		var connectErr *connect.Error
-		if errors.As(err, &connectErr) {
-			return connectErr
-		}
-		return runConnectError(err)
-	}
-	return nil
+	})
 }
 
 func receiveRunAttachInput(receive func() (*agentcomposev2.AttachAgentRunRequest, error)) runs.RunAttachReceiver {

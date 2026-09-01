@@ -13,7 +13,6 @@ var (
 	ErrInteractiveSessionNotFound = errors.New("interactive session not found")
 	ErrInteractiveSessionClosed   = errors.New("interactive session closed")
 	ErrInteractiveSessionAttached = errors.New("interactive session input already attached")
-	ErrInteractiveSessionBusy     = errors.New("interactive session input queue is full")
 )
 
 type InteractiveSessionState string
@@ -33,6 +32,7 @@ type InteractiveSession struct {
 	mu             sync.Mutex
 	state          InteractiveSessionState
 	input          chan RunAttachInput
+	done           chan struct{}
 	attached       bool
 	closeOnce      sync.Once
 	runtime        driverpkg.RuntimeInteraction
@@ -43,12 +43,25 @@ type InteractiveSession struct {
 type InteractiveSessionAttachment struct {
 	session *InteractiveSession
 	release func()
+	done    chan struct{}
+	mu      sync.RWMutex
+	close   sync.Once
 }
 
 func (a *InteractiveSessionAttachment) Send(ctx context.Context, input RunAttachInput) error {
-	return a.session.Send(ctx, input)
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	select {
+	case <-a.done:
+		return ErrInteractiveSessionClosed
+	default:
+	}
+	return a.session.send(ctx, input, a.done)
 }
 func (a *InteractiveSessionAttachment) Close() {
+	a.close.Do(func() { close(a.done) })
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.release != nil {
 		a.release()
 		a.release = nil
@@ -80,7 +93,7 @@ func (s *InteractiveSession) Runtime() (driverpkg.RuntimeInteraction, error) {
 }
 
 func NewInteractiveSession(runID string) *InteractiveSession {
-	return &InteractiveSession{RunID: runID, state: InteractiveSessionCreated, input: make(chan RunAttachInput, 32), subscribers: map[uint64]chan RunAttachOutput{}}
+	return &InteractiveSession{RunID: runID, state: InteractiveSessionCreated, input: make(chan RunAttachInput, 32), done: make(chan struct{}), subscribers: map[uint64]chan RunAttachOutput{}}
 }
 
 func (s *InteractiveSession) Subscribe() (<-chan RunAttachOutput, func(), error) {
@@ -162,28 +175,50 @@ func interactiveSessionTerminal(state InteractiveSessionState) bool {
 }
 
 func (s *InteractiveSession) Send(ctx context.Context, input RunAttachInput) error {
+	return s.send(ctx, input, nil)
+}
+
+func (s *InteractiveSession) send(ctx context.Context, input RunAttachInput, attachmentDone <-chan struct{}) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if interactiveSessionTerminal(s.state) {
+		s.mu.Unlock()
 		return ErrInteractiveSessionClosed
+	}
+	s.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-attachmentDone:
+		return ErrInteractiveSessionClosed
+	case <-s.done:
+		return ErrInteractiveSessionClosed
+	default:
 	}
 	select {
 	case s.input <- input:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	default:
-		return ErrInteractiveSessionBusy
+	case <-attachmentDone:
+		return ErrInteractiveSessionClosed
+	case <-s.done:
+		return ErrInteractiveSessionClosed
 	}
 }
 
 func (s *InteractiveSession) Receive() RunAttachReceiver {
 	return func() (RunAttachInput, error) {
-		input, ok := <-s.input
-		if !ok {
+		select {
+		case <-s.done:
+			return RunAttachInput{}, ErrInteractiveSessionClosed
+		default:
+		}
+		select {
+		case input := <-s.input:
+			return input, nil
+		case <-s.done:
 			return RunAttachInput{}, ErrInteractiveSessionClosed
 		}
-		return input, nil
 	}
 }
 
@@ -197,7 +232,7 @@ func (s *InteractiveSession) Close(state InteractiveSessionState) {
 			close(subscriber)
 		}
 		s.mu.Unlock()
-		close(s.input)
+		close(s.done)
 		if runtime != nil {
 			_ = runtime.CloseSend()
 		}
@@ -246,7 +281,22 @@ func (m *InteractiveSessionManager) Attach(runID string) (*InteractiveSessionAtt
 	if err != nil {
 		return nil, err
 	}
-	return &InteractiveSessionAttachment{session: s, release: release}, nil
+	return &InteractiveSessionAttachment{session: s, release: release, done: make(chan struct{})}, nil
+}
+
+// BindRuntime transfers an opened interaction to the named session. It closes
+// the interaction when ownership cannot be transferred.
+func (m *InteractiveSessionManager) BindRuntime(runID string, interaction driverpkg.RuntimeInteraction) (driverpkg.RuntimeInteraction, error) {
+	s, err := m.Get(runID)
+	if err != nil {
+		_ = interaction.CloseSend()
+		return nil, err
+	}
+	if err := s.BindRuntime(interaction); err != nil {
+		_ = interaction.CloseSend()
+		return nil, err
+	}
+	return s.Runtime()
 }
 
 func (m *InteractiveSessionManager) Remove(runID string, state InteractiveSessionState) error {

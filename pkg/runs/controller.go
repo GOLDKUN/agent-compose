@@ -359,14 +359,7 @@ func (c *Controller) RunProjectCommandAttachRegistered(ctx context.Context, rece
 		Warnings: started.Warnings,
 		Start:    first,
 		Mode:     mode,
-	}, session.Receive(), func(output RunAttachOutput) error {
-		session.Publish(output)
-		err := send(output)
-		if first.DisconnectPolicy == AttachDisconnectDetach {
-			return nil
-		}
-		return err
-	})
+	}, session.Receive(), newInteractiveRunOutputSender(session, first.DisconnectPolicy, send))
 	if err != nil {
 		if ctx.Err() != nil {
 			sessionTerminalState = InteractiveSessionCanceled
@@ -460,9 +453,23 @@ func interactiveSessionDomainError(err error) error {
 		return fmt.Errorf("%w: %w", domain.ErrFailedPrecondition, err)
 	case errors.Is(err, ErrInteractiveSessionAttached):
 		return fmt.Errorf("%w: %w", domain.ErrConflict, err)
-	case errors.Is(err, ErrInteractiveSessionBusy):
-		return fmt.Errorf("%w: %w", domain.ErrConflict, err)
 	default:
+		return err
+	}
+}
+
+func newInteractiveRunOutputSender(session *InteractiveSession, policy AttachDisconnectPolicy, send RunAttachSender) RunAttachSender {
+	detached := false
+	return func(output RunAttachOutput) error {
+		session.Publish(output)
+		if detached {
+			return nil
+		}
+		err := send(output)
+		if err != nil && policy == AttachDisconnectDetach {
+			detached = true
+			return nil
+		}
 		return err
 	}
 }

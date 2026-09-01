@@ -135,6 +135,7 @@ func (s *RunSupervisor) Attach(ctx context.Context, receive runs.RunAttachReceiv
 		parent = s.root
 	}
 	execCtx, cancel := context.WithCancelCause(parent)
+	defer cancel(nil)
 	var runID string
 	err = s.controller.RunProjectCommandAttachRegistered(execCtx, receiveWithFirst, send, func(startedRunID string) {
 		runID = startedRunID
@@ -144,8 +145,6 @@ func (s *RunSupervisor) Attach(ctx context.Context, receive runs.RunAttachReceiv
 	if runID != "" {
 		s.wg.Done()
 		s.unregister(runID)
-	} else {
-		cancel(nil)
 	}
 	return err
 }
