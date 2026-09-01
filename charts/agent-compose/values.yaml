@@ -1,0 +1,59 @@
+replicaCount: 1
+
+image:
+  repository: chaitin/agent-compose
+  tag: latest
+  pullPolicy: IfNotPresent
+
+guestImage: chaitin/agent-compose-guest:latest
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+runtime:
+  driver: k8s
+  # Empty means the Helm release namespace. Set this only when the daemon's
+  # ServiceAccount is intentionally allowed to create sandbox Pods elsewhere.
+  sandboxNamespace: ""
+  # Empty means the in-cluster Service DNS address rendered by the chart.
+  runtimeBaseURL: ""
+
+data:
+  root: /data
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  # The daemon writes SQLite state; read-only access modes are invalid here.
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+service:
+  type: ClusterIP
+  port: 7410
+  annotations: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: true
+
+rbac:
+  create: true
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+securityContext: {}
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Additional daemon environment variables. Do not override the managed
+# RUNTIME_DRIVER, K8S_NAMESPACE, DATA_ROOT, HTTP_LISTEN,
+# AGENT_COMPOSE_RUNTIME_BASE_URL, or DEFAULT_IMAGE entries.
+extraEnv: []
+extraEnvFrom: []

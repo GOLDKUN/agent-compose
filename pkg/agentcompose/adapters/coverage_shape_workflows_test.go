@@ -26,6 +26,10 @@ func TestIntegrationAdapterRuntimeWorkflows(t *testing.T) {
 	t.Run("adapter helpers", TestAdapterHelperCoverage)
 	t.Run("capability sandbox resolver", TestCapabilitySandboxResolverCoverage)
 	t.Run("scheduler sticky unsupported history", TestSchedulerSandboxRunnerRejectsUnsupportedStickyResumeBeforeSideEffects)
+	t.Run("agent runner k8s guest dir sync", TestAgentRunnerSyncsWorkspaceAndHomeForGuestDirRuntime)
+	t.Run("cell executor guest exec push", TestCellExecutorPushesScriptBeforeGuestExec)
+	t.Run("scheduler command guest files", TestSchedulerCommandExecutorTransfersGuestRequestAndArtifacts)
+	t.Run("sandbox driver rejects k8s stopped runtime retention", TestSandboxDriverRejectsStoppedRuntimeRetentionForK8s)
 }
 
 func TestE2EAdapterRuntimeWorkflows(t *testing.T) {

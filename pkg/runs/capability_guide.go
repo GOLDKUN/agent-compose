@@ -2,6 +2,8 @@ package runs
 
 import (
 	"agent-compose/pkg/capabilities"
+	appconfig "agent-compose/pkg/config"
+	"agent-compose/pkg/execution"
 	domain "agent-compose/pkg/model"
 	"agent-compose/pkg/sandboxes"
 	"context"
@@ -15,15 +17,26 @@ import (
 	"github.com/google/uuid"
 )
 
-// capabilityGuideDeps groups the dependencies writeCapabilityGuide and
+// CapabilityGuideDeps groups the dependencies WriteCapabilityGuide and
 // recordCapabilityGuideWarning need to render a guide and report failures.
-type capabilityGuideDeps struct {
+// Exported so drivers outside this package (pkg/agentcompose/adapters) can
+// call WriteCapabilityGuide too, rather than keeping their own copy.
+type CapabilityGuideDeps struct {
 	Provider capabilities.Provider
 	Store    SandboxRuntimeStore
 	Streams  *sandboxes.StreamBroker
+	// Config resolves the guest-side path the guide is pushed to. Only
+	// needed when WriteGuestFile is set.
+	Config *appconfig.Config
+	// WriteGuestFile pushes the rendered guide into the sandbox for
+	// runtimes with no shared filesystem (k8s - see
+	// docs/design/k8s_pod_runtime_driver_design.md §2.1). nil for drivers
+	// with a real mount (docker/boxlite/microsandbox), which see the host
+	// write below for free.
+	WriteGuestFile execution.GuestFileWriterFunc
 }
 
-func writeCapabilityGuide(ctx context.Context, deps capabilityGuideDeps, sandbox *domain.Sandbox, capsetIDs []string) {
+func WriteCapabilityGuide(ctx context.Context, deps CapabilityGuideDeps, sandbox *domain.Sandbox, capsetIDs []string) {
 	ids := capabilities.NormalizeCapsetIDs(capsetIDs)
 	if len(ids) == 0 || deps.Provider == nil || sandbox == nil {
 		return
@@ -62,10 +75,19 @@ func writeCapabilityGuide(ctx context.Context, deps capabilityGuideDeps, sandbox
 	if err := os.WriteFile(catalogPath, []byte(content), 0o644); err != nil {
 		slog.Warn("capability guide write failed", "sandbox_id", sandbox.Summary.ID, "error", err)
 		recordCapabilityGuideWarning(ctx, deps, sandbox.Summary.ID, "capability guide write failed")
+		return
+	}
+	if deps.WriteGuestFile != nil && deps.Config != nil {
+		appconfig.ApplyDefaultGuestPaths(deps.Config)
+		guestPath := filepath.Join(deps.Config.GuestRuntimeRoot, "mpi", "catalog.md")
+		if err := deps.WriteGuestFile(ctx, guestPath, []byte(content)); err != nil {
+			slog.Warn("capability guide guest push failed", "sandbox_id", sandbox.Summary.ID, "error", err)
+			recordCapabilityGuideWarning(ctx, deps, sandbox.Summary.ID, "capability guide guest push failed")
+		}
 	}
 }
 
-func recordCapabilityGuideWarning(ctx context.Context, deps capabilityGuideDeps, sandboxID, message string) {
+func recordCapabilityGuideWarning(ctx context.Context, deps CapabilityGuideDeps, sandboxID, message string) {
 	if deps.Store == nil || strings.TrimSpace(sandboxID) == "" {
 		return
 	}

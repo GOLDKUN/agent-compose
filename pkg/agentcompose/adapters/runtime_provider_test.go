@@ -14,7 +14,7 @@ import (
 )
 
 func TestNewRuntimeProviderValidatesConfiguredDefaultCompiled(t *testing.T) {
-	if provider, err := NewRuntimeProvider(nil); err == nil || provider != nil || !strings.Contains(err.Error(), "config is required") {
+	if provider, err := NewRuntimeProvider(nil, nil); err == nil || provider != nil || !strings.Contains(err.Error(), "config is required") {
 		t.Fatalf("NewRuntimeProvider(nil) = %T, %v; want nil provider and config error", provider, err)
 	}
 
@@ -23,7 +23,7 @@ func TestNewRuntimeProviderValidatesConfiguredDefaultCompiled(t *testing.T) {
 		t.Skip("all recognized runtime drivers are compiled")
 	}
 
-	provider, err := NewRuntimeProvider(&appconfig.Config{RuntimeDriver: uncompiledDriver})
+	provider, err := NewRuntimeProvider(&appconfig.Config{RuntimeDriver: uncompiledDriver}, nil)
 	if provider != nil {
 		t.Fatalf("NewRuntimeProvider(%q) provider = %T, want nil", uncompiledDriver, provider)
 	}
@@ -50,7 +50,7 @@ func TestNewRuntimeProviderConstructionIsLazy(t *testing.T) {
 		MicrosandboxLibPath: filepath.Join(missingRoot, "lib", "libmicrosandbox_go_ffi.so"),
 	}
 
-	provider, err := NewRuntimeProvider(config)
+	provider, err := NewRuntimeProvider(config, nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeProvider() with unavailable native paths returned error: %v", err)
 	}
@@ -58,11 +58,20 @@ func TestNewRuntimeProviderConstructionIsLazy(t *testing.T) {
 	if !ok {
 		t.Fatalf("NewRuntimeProvider() = %T, want *runtimeProvider", provider)
 	}
-	if len(resolved.runtimes) != 3 {
-		t.Fatalf("registered runtimes = %d, want 3 lazy wrappers", len(resolved.runtimes))
+	if len(resolved.runtimes) != 4 {
+		t.Fatalf("registered runtimes = %d, want 4 lazy wrappers", len(resolved.runtimes))
 	}
 	if _, err := provider.ForDriver(driverpkg.RuntimeDriverDocker); err != nil {
 		t.Fatalf("ForDriver(docker) after lazy construction returned error: %v", err)
+	}
+	if _, ok := resolved.runtimes[driverpkg.RuntimeDriverDocker].(GuestFileWriter); ok {
+		t.Fatal("Docker runtime unexpectedly exposes direct guest file writes")
+	}
+	if _, ok := resolved.runtimes[driverpkg.RuntimeDriverK8s].(GuestFileWriter); !ok {
+		t.Fatal("k8s runtime does not expose direct guest file writes")
+	}
+	if _, ok := resolved.runtimes[driverpkg.RuntimeDriverK8s].(GuestDirWriter); !ok {
+		t.Fatal("k8s runtime does not expose direct guest directory writes")
 	}
 }
 

@@ -124,7 +124,7 @@ jq -e \
   'keys == ["arch", "compiled_drivers", "os", "version"] and
    .os == "linux" and
    .arch == $arch and
-   .compiled_drivers == ["docker", "boxlite", "microsandbox"] and
+   .compiled_drivers == ["docker", "boxlite", "microsandbox", "k8s"] and
    (.version | type == "string" and length > 0)' \
   <<<"$version_metadata" >/dev/null \
   || die 'agent-compose image build metadata mismatch'

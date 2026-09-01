@@ -195,6 +195,8 @@ func runtimeMountSpecsForDriver(config *appconfig.Config, session *Sandbox, driv
 	switch resolveRuntimeDriver(driver) {
 	case RuntimeDriverDocker:
 		return runtimeMountSpecsForDocker(config, session)
+	case RuntimeDriverK8s:
+		return runtimeMountSpecsForK8s(config, session)
 	case RuntimeDriverBoxlite:
 		return runtimeMountSpecsForBoxlite(config, session)
 	case RuntimeDriverMicrosandbox:
@@ -243,6 +245,16 @@ func runtimeMountSpecsForDocker(config *appconfig.Config, session *Sandbox) []ru
 		})
 	}
 	return append(specs, sandboxVolumeMountSpecs(session)...)
+}
+
+// runtimeMountSpecsForK8s intentionally returns no mounts: the k8s driver
+// has no shared filesystem between the daemon and a sandbox Pod (see
+// docs/design/k8s_pod_runtime_driver_design.md §2.1). Sandbox data flows
+// over Exec instead - pushed in before the guest process that needs it
+// starts, pulled out right after the Exec call that produced it returns -
+// not through a mount.
+func runtimeMountSpecsForK8s(*appconfig.Config, *Sandbox) []runtimeMountSpec {
+	return nil
 }
 
 func runtimeMountSpecsForBoxlite(config *appconfig.Config, session *Sandbox) []runtimeMountSpec {

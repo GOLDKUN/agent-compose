@@ -79,6 +79,25 @@ func TestNormalizeVolumeMountSpecsRejectsInvalidTargetsAndSources(t *testing.T) 
 	}
 }
 
+func TestValidateDriverMountSpecsRejectsK8sBindMounts(t *testing.T) {
+	bind := domain.VolumeMountSpec{Type: domain.VolumeMountTypeBind, Source: "./fixtures", Target: "/fixtures"}
+	if err := ValidateDriverMountSpecs(domain.VolumeDriverK8s, []domain.VolumeMountSpec{bind}); err == nil || !strings.Contains(err.Error(), "does not support local bind mounts") {
+		t.Fatalf("k8s bind validation error = %v", err)
+	}
+	if err := ValidateDriverMountSpecs("docker", []domain.VolumeMountSpec{bind}); err != nil {
+		t.Fatalf("docker bind validation error = %v", err)
+	}
+}
+
+func TestValidateResolvedDriverMountsRejectsLocalVolumeForK8s(t *testing.T) {
+	err := ValidateResolvedDriverMounts(domain.VolumeDriverK8s, []domain.SandboxVolumeMount{{
+		Type: domain.VolumeMountTypeVolume, Source: "cache", Driver: domain.VolumeDriverLocal, Target: "/cache",
+	}})
+	if err == nil || !strings.Contains(err.Error(), "use a volume with driver k8s") {
+		t.Fatalf("resolved k8s mount validation error = %v", err)
+	}
+}
+
 func TestNormalizeSessionVolumeMountsKeepsValidReadOnlyNestedMounts(t *testing.T) {
 	items := NormalizeSandboxMounts([]domain.SandboxVolumeMount{
 		{ID: " mount-a ", Type: " VOLUME ", Source: " cache ", Target: "/mnt/nested/../cache", ReadOnly: true, HostPath: " /host/cache "},

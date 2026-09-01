@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
@@ -283,7 +283,13 @@ func (b *SandboxRPCBridge) createSandboxWithAgent(ctx context.Context, req sandb
 		_ = b.store.UpdateSandbox(ctx, session)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: b.cap, Store: b.store, Streams: b.streams, Session: session, CapsetIDs: req.CapsetIDs})
+	runs.WriteCapabilityGuide(ctx, runs.CapabilityGuideDeps{
+		Provider:       b.cap,
+		Store:          b.store,
+		Streams:        b.streams,
+		Config:         b.config,
+		WriteGuestFile: b.agentExecutor.GuestFileWriterFor(session),
+	}, session, req.CapsetIDs)
 	if b.agentExecutor == nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = b.store.UpdateSandbox(ctx, session)
@@ -479,7 +485,13 @@ func (b *SandboxRPCBridge) sessionLifecycle() sandboxes.Lifecycle {
 			dashboard: b.dashboard,
 		},
 		GuideWriter: func(ctx context.Context, session *domain.Sandbox, capsetIDs []string) {
-			writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: b.cap, Store: b.store, Streams: b.streams, Session: session, CapsetIDs: capsetIDs})
+			runs.WriteCapabilityGuide(ctx, runs.CapabilityGuideDeps{
+				Provider:       b.cap,
+				Store:          b.store,
+				Streams:        b.streams,
+				Config:         b.config,
+				WriteGuestFile: b.agentExecutor.GuestFileWriterFor(session),
+			}, session, capsetIDs)
 		},
 		PrepareAgentEnvironment: b.agentExecutor.PrepareSandboxAgentEnvironmentFromTags,
 		Locks:                   b.lifecycleLocks,
@@ -531,93 +543,6 @@ func (n sandboxLifecycleNotifier) PublishEventAdded(sessionID string, event doma
 func (n sandboxLifecycleNotifier) NotifyDashboard(reason string) {
 	if n.dashboard != nil {
 		n.dashboard.Notify(reason)
-	}
-}
-
-// writeCapabilityGuideRequest bundles the provider, sandbox, capsets, and
-// warning-logging dependencies writeCapabilityGuide needs.
-type writeCapabilityGuideRequest struct {
-	Provider  capabilities.Provider
-	Store     *sandboxstore.Store
-	Streams   *sandboxes.StreamBroker
-	Session   *domain.Sandbox
-	CapsetIDs []string
-}
-
-func writeCapabilityGuide(ctx context.Context, req writeCapabilityGuideRequest) {
-	provider, session := req.Provider, req.Session
-	warnDeps := capabilityGuideWarningRequest{Store: req.Store, Streams: req.Streams}
-	ids := capabilities.NormalizeCapsetIDs(req.CapsetIDs)
-	if len(ids) == 0 || provider == nil || session == nil {
-		return
-	}
-	catalogPath := capabilities.SandboxGuidePath(session)
-	if catalogPath == "" {
-		return
-	}
-	var b strings.Builder
-	rendered := false
-	for _, id := range ids {
-		guide, err := capabilities.CapabilityGuideForScope(ctx, provider, capabilities.GuideScopeFromSandbox(session), id)
-		if err != nil {
-			slog.Warn("capability guide render skipped", "capset", id, "sandbox_id", session.Summary.ID, "error", err)
-			warnDeps.SessionID, warnDeps.Message = session.Summary.ID, fmt.Sprintf("capability guide render skipped for capset %s", id)
-			recordCapabilityGuideWarning(ctx, warnDeps)
-			continue
-		}
-		if rendered {
-			b.WriteString("\n\n")
-		}
-		b.Write(guide)
-		rendered = true
-	}
-	if !rendered {
-		return
-	}
-	content := b.String()
-	if preamble := capabilities.GuidePreamble(capabilities.ProxyTarget(provider)); preamble != "" {
-		content = preamble + content
-	}
-	if err := os.MkdirAll(filepath.Dir(catalogPath), 0o755); err != nil {
-		slog.Warn("capability guide dir create failed", "sandbox_id", session.Summary.ID, "error", err)
-		warnDeps.SessionID, warnDeps.Message = session.Summary.ID, "capability guide directory create failed"
-		recordCapabilityGuideWarning(ctx, warnDeps)
-		return
-	}
-	if err := os.WriteFile(catalogPath, []byte(content), 0o644); err != nil {
-		slog.Warn("capability guide write failed", "sandbox_id", session.Summary.ID, "error", err)
-		warnDeps.SessionID, warnDeps.Message = session.Summary.ID, "capability guide write failed"
-		recordCapabilityGuideWarning(ctx, warnDeps)
-	}
-}
-
-// capabilityGuideWarningRequest bundles the store/streams dependencies and
-// event details recordCapabilityGuideWarning needs to record a capability
-// guide failure as a sandbox event.
-type capabilityGuideWarningRequest struct {
-	Store     *sandboxstore.Store
-	Streams   *sandboxes.StreamBroker
-	SessionID string
-	Message   string
-}
-
-func recordCapabilityGuideWarning(ctx context.Context, req capabilityGuideWarningRequest) {
-	if req.Store == nil || strings.TrimSpace(req.SessionID) == "" {
-		return
-	}
-	event := domain.SandboxEvent{
-		ID:        uuid.NewString(),
-		Type:      "capability.guide.warning",
-		Level:     "warning",
-		Message:   req.Message,
-		CreatedAt: time.Now().UTC(),
-	}
-	if err := req.Store.AddEvent(ctx, req.SessionID, event); err != nil {
-		slog.Warn("capability guide warning event failed", "sandbox_id", req.SessionID, "error", err)
-		return
-	}
-	if req.Streams != nil {
-		req.Streams.PublishEventAdded(req.SessionID, event)
 	}
 }
 

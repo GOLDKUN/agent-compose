@@ -43,6 +43,17 @@ func (e *AgentExecutor) PrepareSandboxAgentEnvironmentFromTags(ctx context.Conte
 	return e.runner.PrepareSandboxAgentEnvironmentFromTags(ctx, session)
 }
 
+// GuestFileWriterFor exposes the runner's guest file push capability to
+// callers outside this package (e.g. runs.WriteCapabilityGuide) that only
+// hold an AgentExecutor. nil (safe to call as-is) if either is unset or
+// the sandbox's driver has a shared filesystem and needs no push.
+func (e *AgentExecutor) GuestFileWriterFor(session *domain.Sandbox) execution.GuestFileWriterFunc {
+	if e == nil || e.runner == nil {
+		return nil
+	}
+	return e.runner.guestFileWriterFor(session)
+}
+
 //nolint:funlen // closures share mutable state (cellMu, streamErrMu, streamErr, a later-mutated retainFacadeToken flag) across the whole request lifecycle; splitting would require threading that state back out through extra params/returns rather than reducing complexity.
 func (e *AgentExecutor) ExecuteAgentRequest(ctx context.Context, session *domain.Sandbox, request execution.ExecuteAgentRequest) (domain.NotebookCell, domain.SandboxEvent, domain.SandboxEvent, error) {
 	agent := domain.NormalizeAgentKind(request.Agent)
@@ -133,7 +144,9 @@ func (e *AgentExecutor) ExecuteAgentRequest(ctx context.Context, session *domain
 			return domain.NotebookCell{}, userEvent, domain.SandboxEvent{}, err
 		}
 		threadArtifactPath := filepath.Join(hostCellDir, "agent-thread.json")
-		resumeInfo := execution.CollectAgentResumeInfo(session, firstNonEmpty(result.Agent, cell.Agent, agent), result.ThreadID, threadArtifactPath)
+		resumeInfo := execution.CollectAgentResumeInfo(ctx, execution.AgentResumeInfoRequest{
+			Config: e.config, Sandbox: session, Agent: firstNonEmpty(result.Agent, cell.Agent, agent), ThreadID: result.ThreadID, ManifestPath: threadArtifactPath, ReadGuestFile: e.runner.guestFileReaderFor(session),
+		})
 		if err := execution.WriteAgentThreadArtifact(threadArtifactPath, resumeInfo); err != nil {
 			return domain.NotebookCell{}, userEvent, domain.SandboxEvent{}, err
 		}
@@ -234,7 +247,9 @@ func (e *AgentExecutor) ExecuteAgentRequest(ctx context.Context, session *domain
 		return domain.NotebookCell{}, userEvent, domain.SandboxEvent{}, err
 	}
 	threadArtifactPath := filepath.Join(hostCellDir, "agent-thread.json")
-	resumeInfo := execution.CollectAgentResumeInfo(session, firstNonEmpty(result.Agent, cell.Agent), result.ThreadID, threadArtifactPath)
+	resumeInfo := execution.CollectAgentResumeInfo(ctx, execution.AgentResumeInfoRequest{
+		Config: e.config, Sandbox: session, Agent: firstNonEmpty(result.Agent, cell.Agent), ThreadID: result.ThreadID, ManifestPath: threadArtifactPath, ReadGuestFile: e.runner.guestFileReaderFor(session),
+	})
 	if err := execution.WriteAgentThreadArtifact(threadArtifactPath, resumeInfo); err != nil {
 		return domain.NotebookCell{}, userEvent, domain.SandboxEvent{}, err
 	}

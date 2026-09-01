@@ -72,10 +72,13 @@ func (c *Controller) preparePromptInteractionRuntime(ctx context.Context, runCtx
 	if err != nil {
 		return preparedPromptInteraction{}, err
 	}
-	if err := execution.WriteAgentSystemPromptFile(sandbox, systemPrompt); err != nil {
+	guestFileWriter := guestFileWriterFor(runtime, sandbox, vmState)
+	if err := execution.WriteAgentSystemPromptFile(ctx, c.config, sandbox, systemPrompt, guestFileWriter); err != nil {
 		return preparedPromptInteraction{}, err
 	}
-	schemaPath, err := execution.WriteAgentOutputSchemaFile(c.config, sandbox, agentConfig.Provider, req.OutputSchemaJSON)
+	schemaPath, err := execution.WriteAgentOutputSchemaFile(ctx, execution.AgentOutputSchemaFileRequest{
+		Config: c.config, Sandbox: sandbox, Agent: agentConfig.Provider, SchemaJSON: req.OutputSchemaJSON, WriteGuestFile: guestFileWriter,
+	})
 	if err != nil {
 		return preparedPromptInteraction{}, err
 	}

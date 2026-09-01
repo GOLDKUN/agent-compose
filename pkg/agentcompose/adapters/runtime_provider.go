@@ -29,6 +29,32 @@ type SandboxGracefulStopRuntime interface {
 	PrepareSandboxStop(context.Context, *domain.Sandbox, domain.VMState, time.Duration) (sandboxes.StopPreparationResult, error)
 }
 
+// GuestFileReader and GuestDirReader are implemented only by drivers with no
+// shared filesystem between the daemon and the sandbox (currently just k8s
+// - see docs/design/k8s_pod_runtime_driver_design.md §2.1). Drivers with a
+// real mount (docker/boxlite/microsandbox) have no need for them; callers
+// that want a driver-agnostic path should type-assert and fall back to
+// reading the sandbox's local mounted path directly when unsupported.
+type GuestFileReader interface {
+	ReadGuestFile(context.Context, *domain.Sandbox, domain.VMState, string) ([]byte, error)
+}
+
+type GuestDirReader interface {
+	ReadGuestDir(context.Context, *domain.Sandbox, domain.VMState, string, string) error
+}
+
+// GuestFileWriter and GuestDirWriter are the push-side counterparts to
+// GuestFileReader/GuestDirReader, for the daemon-writes/guest-reads
+// direction (prompts, skills, generated config) - see design doc §2.1/§6.
+// Same driver support and fallback expectations as the reader interfaces.
+type GuestFileWriter interface {
+	WriteGuestFile(context.Context, *domain.Sandbox, domain.VMState, string, []byte) error
+}
+
+type GuestDirWriter interface {
+	WriteGuestDir(context.Context, *domain.Sandbox, domain.VMState, string, string) error
+}
+
 type RuntimeProvider interface {
 	ForDriver(string) (SandboxRuntime, error)
 	ForSession(*domain.Sandbox) (SandboxRuntime, error)
@@ -44,7 +70,24 @@ type driverRuntimeAdapter struct {
 	executions *sandboxExecutions
 }
 
-func NewRuntimeProvider(config *appconfig.Config) (RuntimeProvider, error) {
+// guestFileRuntimeAdapter adds the no-shared-filesystem capabilities only to
+// runtimes that actually implement them. Keeping these methods off
+// driverRuntimeAdapter is important: otherwise every wrapped runtime satisfies
+// GuestFileReader/GuestDirWriter and callers discover the unsupported
+// capability only after starting an operation.
+type guestFileRuntimeAdapter struct {
+	driverRuntimeAdapter
+}
+
+// ProxyStateGetter is the read side of sandboxstore.Store's persisted
+// ProxyState, narrowed to just what the k8s driver needs to resolve whether
+// a sandbox's Pod should launch jupyter (see driverpkg.ProxyStateReader).
+// *sandboxstore.Store satisfies this directly.
+type ProxyStateGetter interface {
+	GetProxyState(sandboxID string) (domain.ProxyState, error)
+}
+
+func NewRuntimeProvider(config *appconfig.Config, proxyStateGetter ProxyStateGetter) (RuntimeProvider, error) {
 	if config == nil {
 		return nil, fmt.Errorf("runtime provider config is required")
 	}
@@ -64,6 +107,20 @@ func NewRuntimeProvider(config *appconfig.Config) (RuntimeProvider, error) {
 	if err != nil {
 		return nil, err
 	}
+	var proxyStateReader driverpkg.ProxyStateReader
+	if proxyStateGetter != nil {
+		proxyStateReader = func(sandboxID string) (driverpkg.ProxyState, error) {
+			state, err := proxyStateGetter.GetProxyState(sandboxID)
+			if err != nil {
+				return driverpkg.ProxyState{}, err
+			}
+			return execution.ToDriverProxyState(state), nil
+		}
+	}
+	k8sRuntime, err := driverpkg.NewK8sRuntime(config, proxyStateReader)
+	if err != nil {
+		return nil, err
+	}
 	executions := newSandboxExecutions()
 	return &runtimeProvider{
 		config: config,
@@ -71,6 +128,9 @@ func NewRuntimeProvider(config *appconfig.Config) (RuntimeProvider, error) {
 			driverpkg.RuntimeDriverBoxlite:      driverRuntimeAdapter{runtime: boxliteRuntime, executions: executions},
 			driverpkg.RuntimeDriverDocker:       driverRuntimeAdapter{runtime: dockerRuntime, executions: executions},
 			driverpkg.RuntimeDriverMicrosandbox: driverRuntimeAdapter{runtime: microsandboxRuntime, executions: executions},
+			driverpkg.RuntimeDriverK8s: guestFileRuntimeAdapter{driverRuntimeAdapter{
+				runtime: k8sRuntime, executions: executions,
+			}},
 		},
 	}, nil
 }
@@ -213,4 +273,44 @@ func (r driverRuntimeAdapter) IsSandboxAlive(ctx context.Context, session *domai
 		return false, domain.ClassifyError(domain.ErrUnsupported, "runtime does not support sandbox liveness checks", nil)
 	}
 	return aliveRuntime.IsSandboxAlive(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState))
+}
+
+func (r guestFileRuntimeAdapter) ReadGuestFile(ctx context.Context, session *domain.Sandbox, vmState domain.VMState, guestPath string) ([]byte, error) {
+	reader, ok := r.runtime.(interface {
+		ReadGuestFile(context.Context, *driverpkg.Sandbox, driverpkg.VMState, string) ([]byte, error)
+	})
+	if !ok {
+		return nil, domain.ClassifyError(domain.ErrUnsupported, "runtime does not support reading guest files directly", nil)
+	}
+	return reader.ReadGuestFile(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), guestPath)
+}
+
+func (r guestFileRuntimeAdapter) ReadGuestDir(ctx context.Context, session *domain.Sandbox, vmState domain.VMState, guestDir, hostDestDir string) error {
+	reader, ok := r.runtime.(interface {
+		ReadGuestDir(context.Context, *driverpkg.Sandbox, driverpkg.VMState, string, string) error
+	})
+	if !ok {
+		return domain.ClassifyError(domain.ErrUnsupported, "runtime does not support reading guest directories directly", nil)
+	}
+	return reader.ReadGuestDir(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), guestDir, hostDestDir)
+}
+
+func (r guestFileRuntimeAdapter) WriteGuestFile(ctx context.Context, session *domain.Sandbox, vmState domain.VMState, guestPath string, content []byte) error {
+	writer, ok := r.runtime.(interface {
+		WriteGuestFile(context.Context, *driverpkg.Sandbox, driverpkg.VMState, string, []byte) error
+	})
+	if !ok {
+		return domain.ClassifyError(domain.ErrUnsupported, "runtime does not support writing guest files directly", nil)
+	}
+	return writer.WriteGuestFile(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), guestPath, content)
+}
+
+func (r guestFileRuntimeAdapter) WriteGuestDir(ctx context.Context, session *domain.Sandbox, vmState domain.VMState, hostSrcDir, guestDir string) error {
+	writer, ok := r.runtime.(interface {
+		WriteGuestDir(context.Context, *driverpkg.Sandbox, driverpkg.VMState, string, string) error
+	})
+	if !ok {
+		return domain.ClassifyError(domain.ErrUnsupported, "runtime does not support writing guest directories directly", nil)
+	}
+	return writer.WriteGuestDir(ctx, execution.ToDriverSandbox(session), execution.ToDriverVMState(vmState), hostSrcDir, guestDir)
 }

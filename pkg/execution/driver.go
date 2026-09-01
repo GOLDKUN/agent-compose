@@ -61,6 +61,8 @@ func ToDriverVMState(state domain.VMState) driverpkg.VMState {
 		StoppedAt:        state.StoppedAt,
 		LastError:        state.LastError,
 		BootstrapRef:     state.BootstrapRef,
+		K8sContext:       state.K8sContext,
+		K8sNamespace:     state.K8sNamespace,
 	}
 }
 
@@ -78,6 +80,8 @@ func FromDriverVMState(state driverpkg.VMState) domain.VMState {
 		StoppedAt:        state.StoppedAt,
 		LastError:        state.LastError,
 		BootstrapRef:     state.BootstrapRef,
+		K8sContext:       state.K8sContext,
+		K8sNamespace:     state.K8sNamespace,
 	}
 }
 

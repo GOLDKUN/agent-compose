@@ -402,10 +402,10 @@ volumes:
 | 字段 | 类型 | 默认值 | 作用 |
 | --- | --- | --- | --- |
 | `name` | string | 由项目和 key 派生 | 指定底层 Volume 名。 |
-| `driver` | string | `local` | Volume driver；当前只支持 `local`。 |
+| `driver` | string | `local` | Volume driver。`local` 使用 daemon 所在主机目录；agent 使用 k8s runtime 时，`k8s` 会创建 Kubernetes PersistentVolumeClaim。 |
 | `external` | bool | `false` | 为 `true` 时引用已经存在的 Volume，而不是由项目创建。 |
 | `labels` | map[string]string | 空 | 附加标签。key/value 会去除首尾空白。 |
-| `options` | map[string]string | 空 | 传给 local Volume driver 的选项。 |
+| `options` | map[string]string | 空 | Driver 选项。`k8s` 支持 `size`（默认 `1Gi`）、`storage_class`、`access_mode`（默认 `ReadWriteOnce`）和 `namespace`（默认 `K8S_NAMESPACE`/`default`）。PVC 使用 daemon 所在的 Kubernetes 集群。 |
 
 Volume map key 必须符合稳定标识符格式。Agent 通过 `agents.<name>.volumes` 挂载项目 Volume。
 
@@ -594,12 +594,37 @@ driver:
     profile: secure
 ```
 
+或：
+
+```yaml
+driver:
+  k8s:
+    context: production
+    namespace: agent-compose
+```
+
 | Driver | 子字段 | 当前状态 |
 | --- | --- | --- |
 | `docker` | `host` | 支持的稳定 driver。`host` 被解析和保留；daemon 的 Docker 边界仍由部署配置决定。 |
 | `boxlite` | `kernel`, `rootfs` | Linux 构建可编译支持；运行时初始化是惰性的。子字段会去除首尾空白。 |
 | `microsandbox` | `profile` | Linux 构建可编译支持；运行时初始化是惰性的。`profile` 会去除首尾空白。 |
+| `k8s` | `context`, `namespace` | 通过 Kubernetes 创建 sandbox Pod。`context` 选择 kubeconfig context；省略时由 client-go 使用 kubeconfig 当前 context 或集群内配置。`namespace` 覆盖 `K8S_NAMESPACE`，最终回退到 `default`。 |
 | `firecracker` | `kernel`, `rootfs` | 仅保留在解析 schema 中；当前规范化会明确报 `unsupported runtime driver firecracker`，不可使用。 |
+
+k8s driver 要求 daemon 运行在目标集群内部。对外支持的安装入口是
+`charts/agent-compose` Helm Chart：
+
+```bash
+helm install agent-compose ./charts/agent-compose \
+  --kube-context prod-cluster \
+  --namespace team-a \
+  --create-namespace
+```
+
+Helm release 的 namespace 会作为默认 `K8S_NAMESPACE`；Chart 也会根据这个
+namespace 渲染 daemon Service DNS 回调地址和 ClusterRoleBinding subject。Sandbox
+Pod 不会挂载 daemon 的数据 PVC，也不使用 `hostPath`；provision 好的 workspace 和
+provider home 配置通过 Kubernetes Exec 流式传入 Pod。
 
 为完整说明 schema，下面的结构可以被解析器识别，但当前会在规范化阶段失败：
 
@@ -754,6 +779,10 @@ volumes:
 
 同一 Agent 不能将多个条目挂到相同 `target`。短写使用 `:` 分隔，因此不适合包含冒号的 source/target，此时应使用长写。
 
+Kubernetes（`k8s`）driver 不支持本地 `bind` 挂载。bind 的 source 指向 daemon
+所在机器上的路径，而该路径在 Pod 内不可用。请改用 `driver: k8s` 的顶层命名
+Volume（由 PVC 提供）；配置校验阶段会直接拒绝 bind 挂载。
+
 ### `workspace`：Agent 选择或内联工作区
 
 这里是 Agent 内部的单数 `workspace`，与顶层复数 `workspaces` 不是同一个层级。
@@ -798,6 +827,8 @@ sandbox:
 
 - `retain` 保留已停止的 runtime 和私有可写层。Resume 必须使用同一个 runtime；runtime 意外丢失时不会静默重建。
 - `remove` 显式删除已停止的 Docker 容器、BoxLite box/私有磁盘，或 Microsandbox sandbox/私有 qcow2 overlay。Sandbox 元数据、事件、日志、workspace 和声明的持久挂载仍会保留。Resume 会创建新 runtime，因此只存在于私有可写层中的数据会丢失。
+
+Kubernetes driver 不接受 `retain`：Kubernetes Pod 没有“已停止但仍保留”的状态，停止 sandbox 会删除 Pod。请使用 `remove`，让 resume 根据镜像和持久挂载重新创建 Pod。若后续调度任务需要复用同一个运行中的 Pod，请使用 `sandbox_policy: sticky`；sticky 完成后会保持 Pod 运行，它与 stopped-runtime retention 是两种不同的生命周期策略。
 
 有效策略会在 sandbox 创建时生成快照；之后修改项目配置只影响新 sandbox。没有策略快照的历史 sandbox 会继续保留 runtime。`agent-compose inspect sandbox <sandbox> --json` 通过 `stopped_runtime_policy`、`stopped_runtime_state`、`stopped_runtime_last_error` 和 `stopped_runtime_released_at` 展示生命周期记录。状态含义如下：
 

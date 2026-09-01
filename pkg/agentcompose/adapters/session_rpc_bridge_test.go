@@ -21,6 +21,7 @@ import (
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/internal/testutil"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/workspaces"
@@ -559,7 +560,7 @@ func TestSandboxRPCBridgeCapabilityGuideRoutesManagedScopeAndMergesBestEffort(t 
 			{Name: domain.AgentSandboxTagID, Value: "agent-1"},
 		},
 	}}
-	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: bridge.cap, Session: sandbox, CapsetIDs: []string{"legacy", "internal/dev", "broken/fail"}})
+	runs.WriteCapabilityGuide(ctx, runs.CapabilityGuideDeps{Provider: bridge.cap}, sandbox, []string{"legacy", "internal/dev", "broken/fail"})
 
 	guide, err := os.ReadFile(capabilities.SandboxGuidePath(sandbox))
 	if err != nil {

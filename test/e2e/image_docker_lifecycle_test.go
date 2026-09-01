@@ -472,7 +472,7 @@ func waitForImageDockerVersion(t *testing.T, ctx context.Context, fixture *image
 
 func assertImageDockerBuildInfo(t *testing.T, buildInfo imageDockerBuildInfo, wantOS, wantArch string) {
 	t.Helper()
-	wantDrivers := []string{"docker", "boxlite", "microsandbox"}
+	wantDrivers := []string{"docker", "boxlite", "microsandbox", "k8s"}
 	if buildInfo.Version == "" || buildInfo.OS != wantOS || buildInfo.Arch != wantArch || !reflect.DeepEqual(buildInfo.CompiledDrivers, wantDrivers) {
 		t.Fatalf("daemon image --json version = %#v, want %s/%s with drivers %v", buildInfo, wantOS, wantArch, wantDrivers)
 	}
@@ -480,7 +480,7 @@ func assertImageDockerBuildInfo(t *testing.T, buildInfo imageDockerBuildInfo, wa
 
 func assertImageDockerVersion(t *testing.T, fixture *imageDockerFixture, envelope imageDockerVersionEnvelope, wantOS, wantArch string) {
 	t.Helper()
-	wantDrivers := []string{"docker", "boxlite", "microsandbox"}
+	wantDrivers := []string{"docker", "boxlite", "microsandbox", "k8s"}
 	if string(envelope.Err) != "null" || envelope.Msg != "OK" {
 		failImageDockerFixture(t, fixture, "/api/version envelope = err %s msg %q", envelope.Err, envelope.Msg)
 	}

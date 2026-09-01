@@ -113,6 +113,33 @@ func TestStoreCreateSessionUsesConfiguredJupyterProxyBase(t *testing.T) {
 	}
 }
 
+// TestStoreCreateSessionUsesK8sSpecificRuntimeRefPrefix guards against the
+// generic "agent-compose-" prefix silently winning back over the k8s
+// driver's distinctly-prefixed Pod name: podName's priority order picks
+// vmState.BoxName/session.Summary.RuntimeRef first (see k8sRuntime.podName),
+// and both are seeded from RuntimeRef right here at creation - if this
+// prefix ever reverted to generic, the k8s driver's own naming fallback
+// would become unreachable dead code without any test failing here.
+func TestStoreCreateSessionUsesK8sSpecificRuntimeRefPrefix(t *testing.T) {
+	ctx := context.Background()
+	store := newCoverageStore(t)
+	session, err := store.CreateSandbox(ctx, "K8s Naming", "", driverpkg.RuntimeDriverK8s, "", "", "", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	wantRef := "agent-compose-sandbox-" + session.Summary.ShortID
+	if session.Summary.RuntimeRef != wantRef {
+		t.Fatalf("k8s runtime ref = %q, want %q", session.Summary.RuntimeRef, wantRef)
+	}
+	vmState, err := store.GetVMState(session.Summary.ID)
+	if err != nil {
+		t.Fatalf("GetVMState returned error: %v", err)
+	}
+	if vmState.BoxName != wantRef {
+		t.Fatalf("k8s vm state box name = %q, want %q", vmState.BoxName, wantRef)
+	}
+}
+
 func TestSessionLockKeyUsesSessionDirName(t *testing.T) {
 	id := identity.NewID(identity.ResourceSandbox, "lock-key")
 	if got, want := sandboxLockKey(id), sandboxDirName(id); got != want {

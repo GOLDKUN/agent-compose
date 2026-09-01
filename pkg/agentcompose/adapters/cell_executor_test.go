@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,13 @@ import (
 
 type fakeCellRuntime struct {
 	result domain.ExecResult
+}
+
+type guestFileCellRuntime struct {
+	fakeCellRuntime
+	writtenPath    string
+	writtenContent []byte
+	execStarted    bool
 }
 
 func (r fakeCellRuntime) EnsureSandbox(context.Context, *domain.Sandbox, domain.VMState, domain.ProxyState) (domain.SandboxVMInfo, error) {
@@ -39,6 +47,20 @@ func (r fakeCellRuntime) ExecStream(_ context.Context, _ *domain.Sandbox, _ doma
 		stream(domain.ExecChunk{Text: r.result.Stdout})
 	}
 	return r.result, nil
+}
+
+func (r *guestFileCellRuntime) WriteGuestFile(_ context.Context, _ *domain.Sandbox, _ domain.VMState, guestPath string, content []byte) error {
+	if r.execStarted {
+		return errors.New("cell script was pushed after exec started")
+	}
+	r.writtenPath = guestPath
+	r.writtenContent = append([]byte(nil), content...)
+	return nil
+}
+
+func (r *guestFileCellRuntime) ExecStream(ctx context.Context, sandbox *domain.Sandbox, state domain.VMState, spec domain.ExecSpec, stream domain.ExecStreamWriter) (domain.ExecResult, error) {
+	r.execStarted = true
+	return r.fakeCellRuntime.ExecStream(ctx, sandbox, state, spec, stream)
 }
 
 func TestCellExecutorExecuteCellPersistsCellAndEvent(t *testing.T) {
@@ -158,5 +180,38 @@ func TestCellExecutorExecuteCellPersistsCellAndEvent(t *testing.T) {
 	events, err = store.ListEvents(ctx, session.Summary.ID)
 	if err != nil || events[len(events)-1].Type != "kernel.cell.failed" {
 		t.Fatalf("failed events=%#v err=%v", events, err)
+	}
+}
+
+func TestCellExecutorPushesScriptBeforeGuestExec(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	config := &appconfig.Config{
+		DataRoot:            root,
+		SandboxRoot:         filepath.Join(root, "sandboxes"),
+		RuntimeDriver:       driverpkg.RuntimeDriverK8s,
+		DefaultImage:        "guest:latest",
+		GuestWorkspacePath:  "/workspace",
+		GuestStateRoot:      "/state",
+		SandboxStartTimeout: 2 * time.Second,
+	}
+	store, err := sandboxstore.NewWithConfig(config)
+	if err != nil {
+		t.Fatalf("NewWithConfig returned error: %v", err)
+	}
+	session, err := store.CreateSandbox(ctx, "k8s cell", "", driverpkg.RuntimeDriverK8s, "guest:latest", "", domain.SandboxTypeManual, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateSandbox returned error: %v", err)
+	}
+	runtime := &guestFileCellRuntime{fakeCellRuntime: fakeCellRuntime{result: domain.ExecResult{Stdout: "ok\n", Output: "ok\n", Success: true}}}
+	executor := NewCellExecutor(config, store, fakeRuntimeProvider{runtime: runtime}, nil)
+	if _, err := executor.ExecuteCell(ctx, session, execution.CellTypeShell, "echo ok"); err != nil {
+		t.Fatalf("ExecuteCell returned error: %v", err)
+	}
+	if !runtime.execStarted || !strings.HasPrefix(runtime.writtenPath, "/state/cells/") || !strings.HasSuffix(runtime.writtenPath, "/cell.sh") {
+		t.Fatalf("guest script path = %q, exec started = %v", runtime.writtenPath, runtime.execStarted)
+	}
+	if string(runtime.writtenContent) != "echo ok" {
+		t.Fatalf("guest script content = %q", runtime.writtenContent)
 	}
 }

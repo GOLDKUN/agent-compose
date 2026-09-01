@@ -246,6 +246,7 @@ type DriverSpec struct {
 	Docker       *DockerDriverSpec       `yaml:"docker,omitempty" json:"docker,omitempty"`
 	Microsandbox *MicrosandboxDriverSpec `yaml:"microsandbox,omitempty" json:"microsandbox,omitempty"`
 	Firecracker  *FirecrackerDriverSpec  `yaml:"firecracker,omitempty" json:"firecracker,omitempty"`
+	K8s          *K8sDriverSpec          `yaml:"k8s,omitempty" json:"k8s,omitempty"`
 }
 
 type BoxliteDriverSpec struct {
@@ -264,6 +265,15 @@ type MicrosandboxDriverSpec struct {
 type FirecrackerDriverSpec struct {
 	Kernel string `yaml:"kernel,omitempty" json:"kernel,omitempty"`
 	Rootfs string `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`
+}
+
+// K8sDriverSpec selects which cluster and namespace an agent's sandbox Pods
+// run in. Both fields are optional overrides: an empty Context defers to the
+// kubeconfig's own current-context (or in-cluster config), and an empty
+// Namespace defers to the daemon-wide K8S_NAMESPACE default.
+type K8sDriverSpec struct {
+	Context   string `yaml:"context,omitempty" json:"context,omitempty"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 }
 
 type EnvVarSpec struct {
@@ -791,6 +801,14 @@ func validateDriver(node *yaml.Node, path string) error {
 		"docker":       validateDockerDriver,
 		"microsandbox": validateMicrosandboxDriver,
 		"firecracker":  validateFirecrackerDriver,
+		"k8s":          validateK8sDriver,
+	})
+}
+
+func validateK8sDriver(node *yaml.Node, path string) error {
+	return validateMapping(node, path, map[string]nodeValidator{
+		"context":   validateScalar,
+		"namespace": validateScalar,
 	})
 }
 

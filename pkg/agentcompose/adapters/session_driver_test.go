@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,6 +132,29 @@ func (p fakeRuntimeProvider) ForSession(*domain.Sandbox) (SandboxRuntime, error)
 		return nil, p.err
 	}
 	return p.runtime, nil
+}
+
+func TestSandboxDriverRejectsStoppedRuntimeRetentionForK8s(t *testing.T) {
+	driver := NewSandboxDriver(
+		&appconfig.Config{RuntimeDriver: driverpkg.RuntimeDriverK8s},
+		nil,
+		nil,
+		fakeRuntimeProvider{runtime: fakeSessionRuntime{}},
+	)
+	sandbox := &domain.Sandbox{
+		Summary:              domain.SandboxSummary{Driver: driverpkg.RuntimeDriverK8s},
+		StoppedRuntimePolicy: domain.StoppedRuntimePolicyRetain,
+	}
+
+	err := driver.ValidateSandboxRuntime(sandbox)
+	if !errors.Is(err, domain.ErrFailedPrecondition) || !strings.Contains(err.Error(), `does not support stopped_runtime_policy="retain"`) {
+		t.Fatalf("ValidateSandboxRuntime error = %v, want failed-precondition k8s retain error", err)
+	}
+
+	sandbox.StoppedRuntimePolicy = domain.StoppedRuntimePolicyRemove
+	if err := driver.ValidateSandboxRuntime(sandbox); err != nil {
+		t.Fatalf("ValidateSandboxRuntime with remove returned error: %v", err)
+	}
 }
 
 func TestSandboxDriverStartSandboxVMSavesRuntimeState(t *testing.T) {

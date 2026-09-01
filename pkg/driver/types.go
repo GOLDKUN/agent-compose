@@ -55,6 +55,13 @@ type VMState struct {
 	StoppedAt        time.Time `json:"stopped_at,omitempty"`
 	LastError        string    `json:"last_error,omitempty"`
 	BootstrapRef     string    `json:"bootstrap_ref,omitempty"`
+	// K8sContext and K8sNamespace override which cluster/namespace the k8s
+	// driver targets for this sandbox. Empty means "use the daemon's
+	// K8S_KUBECONFIG current-context / K8S_NAMESPACE default" (see
+	// k8sRuntime.client and k8sRuntime.namespaceFor). Other drivers ignore
+	// these fields.
+	K8sContext   string `json:"k8s_context,omitempty"`
+	K8sNamespace string `json:"k8s_namespace,omitempty"`
 }
 
 type ProxyState struct {
@@ -67,6 +74,16 @@ type ProxyState struct {
 	Enabled    bool   `json:"enabled,omitempty"`
 	Exposed    bool   `json:"exposed,omitempty"`
 }
+
+// ProxyStateReader fetches a sandbox's persisted ProxyState directly from
+// the store. The k8s driver needs this because, unlike docker/microsandbox,
+// it can't trust the proxyState an individual EnsureSandbox call happens to
+// receive: EnsureSandbox is invoked from several call sites (guest file
+// pushes, exec-ensure) that don't carry real jupyter config, and whichever
+// call creates the Pod first fixes its Command forever - so the decision of
+// whether to launch jupyter has to come from durable state, not an ad-hoc
+// parameter. See k8sRuntime.resolveProxyState.
+type ProxyStateReader func(sandboxID string) (ProxyState, error)
 
 type StdioStream string
 
@@ -215,5 +232,5 @@ func hostSandboxHome(session *Sandbox) string {
 }
 
 func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `"'"'"'`) + "'"
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }

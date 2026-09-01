@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agent-compose
+description: Agent-Compose daemon and Kubernetes runtime driver
+type: application
+version: 0.1.0
+appVersion: "dev"

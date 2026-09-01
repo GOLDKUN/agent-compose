@@ -130,8 +130,16 @@ func (b *flushBuffer) Flush() {
 
 func TestIntegrationRuntimeFacadeHTTPAndBridgeCoverage(t *testing.T) {
 	TestRuntimeFacadeHTTPAndBridgeCoverage(t)
+	TestWriteCodexAndOpenCodeMCPConfigPushToGuest(t)
+	TestWriteCodexMCPConfigClearsGuestWhenAllServersRemoved(t)
+	TestWriteCodexMCPConfigSkipsGuestPushWhenNothingWasEverWritten(t)
+	TestWriteCodexMCPConfigRetriesGuestClearAfterTransientPushFailure(t)
 }
 
 func TestE2ERuntimeFacadeHTTPAndBridgeCoverage(t *testing.T) {
 	TestRuntimeFacadeHTTPAndBridgeCoverage(t)
+	TestWriteCodexAndOpenCodeMCPConfigPushToGuest(t)
+	TestWriteCodexMCPConfigClearsGuestWhenAllServersRemoved(t)
+	TestWriteCodexMCPConfigSkipsGuestPushWhenNothingWasEverWritten(t)
+	TestWriteCodexMCPConfigRetriesGuestClearAfterTransientPushFailure(t)
 }

@@ -1,0 +1,51 @@
+name: k8s-scheduler-skills-mcp
+
+mcp_servers:
+  filesystem:
+    type: local
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+
+volumes:
+  cache:
+    driver: k8s
+
+agents:
+  scheduled:
+    provider: codex
+    image: agent-compose-guest:latest
+    driver:
+      k8s: {}
+    scheduler:
+      enabled: true
+      triggers:
+        - name: every-minute
+          cron: "* * * * *"
+          prompt: "What time is it right now? Reply with just the time."
+
+  skilled:
+    provider: codex
+    image: agent-compose-guest:latest
+    driver:
+      k8s: {}
+    skills:
+      - name: pdf
+        provider: git
+        url: https://github.com/anthropics/skills.git
+        path: skills/pdf
+
+  mcp-enabled:
+    provider: codex
+    image: agent-compose-guest:latest
+    driver:
+      k8s: {}
+    mcp_servers:
+      - filesystem
+
+  volumed:
+    provider: codex
+    image: agent-compose-guest:latest
+    driver:
+      k8s: {}
+    volumes:
+      - cache:/cache

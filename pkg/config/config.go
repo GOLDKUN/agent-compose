@@ -30,6 +30,7 @@ const (
 	RuntimeDriverBoxlite      = "boxlite"
 	RuntimeDriverDocker       = "docker"
 	RuntimeDriverMicrosandbox = "microsandbox"
+	RuntimeDriverK8s          = "k8s"
 )
 
 const (
@@ -79,6 +80,11 @@ type Config struct {
 	MicrosandboxLibPath        string
 	MicrosandboxDefaultImage   string
 	MicrosandboxInsecure       []string
+	K8sHome                    string
+	K8sKubeconfigPath          string
+	K8sNamespace               string
+	K8sDefaultImage            string
+	K8sRuntimeBaseURL          string
 	DefaultImage               string
 	BoxRootfsPath              string
 	ImageRegistry              string
@@ -136,6 +142,7 @@ func NewConfig(di do.Injector) (*Config, error) {
 		MicrosandboxHome:      sources.Drivers.MicrosandboxHome,
 		MicrosandboxMSBPath:   sources.Drivers.MicrosandboxMSBPath,
 		MicrosandboxLibPath:   sources.Drivers.MicrosandboxLibPath,
+		K8sHome:               sources.Drivers.K8sHome,
 		ImageCacheRoot:        sources.Images.ImageCacheRoot,
 		BoxRootfsPath:         sources.Images.BoxRootfsPath,
 	})
@@ -230,6 +237,7 @@ func ensureConfigDirsExist(normalized configPathsToNormalize) error {
 		"DOCKER_HOME":       normalized.DockerHome,
 		"IMAGE_CACHE_ROOT":  normalized.ImageCacheRoot,
 		"MICROSANDBOX_HOME": normalized.MicrosandboxHome,
+		"K8S_HOME":          normalized.K8sHome,
 	}
 	for name, dir := range dirs {
 		if err := ensureDirExists(dir); err != nil {
@@ -283,6 +291,11 @@ func buildConfig(sources configSources, normalized configPathsToNormalize) *Conf
 		MicrosandboxLibPath:        normalized.MicrosandboxLibPath,
 		MicrosandboxDefaultImage:   images.MicrosandboxDefaultImage,
 		MicrosandboxInsecure:       images.MicrosandboxInsecure,
+		K8sHome:                    normalized.K8sHome,
+		K8sKubeconfigPath:          drivers.K8sKubeconfigPath,
+		K8sNamespace:               drivers.K8sNamespace,
+		K8sDefaultImage:            images.K8sDefaultImage,
+		K8sRuntimeBaseURL:          drivers.K8sRuntimeBaseURL,
 		DefaultImage:               images.DefaultImage,
 		BoxRootfsPath:              normalized.BoxRootfsPath,
 		ImageRegistry:              images.ImageRegistry,
@@ -524,6 +537,10 @@ type driverHomesConfig struct {
 	MicrosandboxHome      string
 	MicrosandboxMSBPath   string
 	MicrosandboxLibPath   string
+	K8sHome               string
+	K8sKubeconfigPath     string
+	K8sNamespace          string
+	K8sRuntimeBaseURL     string
 }
 
 func loadDriverHomesConfig(logger *slog.Logger, dataRoot string) (driverHomesConfig, error) {
@@ -569,6 +586,34 @@ func loadDriverHomesConfig(logger *slog.Logger, dataRoot string) (driverHomesCon
 		microsandboxLibPath = filepath.Join(".", "build", "microsandbox", "lib", "libmicrosandbox_go_ffi.so")
 	}
 
+	k8sHome := os.Getenv("K8S_HOME")
+	if k8sHome == "" {
+		k8sHome = filepath.Join(dataRoot, "k8s")
+	}
+	// K8sKubeconfigPath is left empty unless K8S_KUBECONFIG is set, so the k8s
+	// driver falls back to client-go's own default loading rules (KUBECONFIG
+	// env, then ~/.kube/config), the same resolution kubectl uses. KUBECONFIG
+	// itself is deliberately not read here: it becomes clientcmd's
+	// ExplicitPath below (k8sRuntime.client), which only accepts a single
+	// file, while KUBECONFIG's own documented form is a PATH-list-separator-
+	// delimited list of files to merge - the default loading rules already
+	// handle that correctly, so reading it into ExplicitPath here would only
+	// break the multi-file case.
+	k8sKubeconfigPath := strings.TrimSpace(os.Getenv("K8S_KUBECONFIG"))
+	k8sNamespace := strings.TrimSpace(os.Getenv("K8S_NAMESPACE"))
+	if k8sNamespace == "" {
+		k8sNamespace = "default"
+	}
+	// K8sRuntimeBaseURL overrides AGENT_COMPOSE_RUNTIME_BASE_URL for k8s
+	// sandboxes only. It's needed whenever the daemon's own reachable
+	// address differs from what a Pod should call back to - for example a
+	// Tailscale Cluster Egress Service's in-cluster DNS name when the
+	// daemon isn't deployed inside the cluster (see
+	// docs/design/k8s_pod_runtime_driver_design.md §2.2). Left empty by
+	// default so k8s sandboxes fall back to the daemon-wide value, same as
+	// every other driver.
+	k8sRuntimeBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("K8S_RUNTIME_BASE_URL")), "/")
+
 	return driverHomesConfig{
 		RuntimeDriver:         runtimeDriver,
 		BoxliteHome:           boxliteHome,
@@ -576,8 +621,12 @@ func loadDriverHomesConfig(logger *slog.Logger, dataRoot string) (driverHomesCon
 		DockerHome:            dockerHome,
 		DockerHostSandboxRoot: dockerHostSandboxRoot,
 		MicrosandboxHome:      microsandboxHome,
+		K8sRuntimeBaseURL:     k8sRuntimeBaseURL,
 		MicrosandboxMSBPath:   microsandboxMSBPath,
 		MicrosandboxLibPath:   microsandboxLibPath,
+		K8sHome:               k8sHome,
+		K8sKubeconfigPath:     k8sKubeconfigPath,
+		K8sNamespace:          k8sNamespace,
 	}, nil
 }
 
@@ -587,6 +636,7 @@ type imageEnvConfig struct {
 	DefaultImage             string
 	MicrosandboxDefaultImage string
 	DockerDefaultImage       string
+	K8sDefaultImage          string
 	MicrosandboxInsecure     []string
 	BoxRootfsPath            string
 	ImageRegistry            string
@@ -608,6 +658,10 @@ func loadImageEnvConfig(dataRoot string) (imageEnvConfig, error) {
 	dockerDefaultImage := os.Getenv("DOCKER_DEFAULT_IMAGE")
 	if dockerDefaultImage == "" {
 		dockerDefaultImage = defaultImage
+	}
+	k8sDefaultImage := os.Getenv("K8S_DEFAULT_IMAGE")
+	if k8sDefaultImage == "" {
+		k8sDefaultImage = defaultImage
 	}
 	microsandboxInsecure := splitAndTrimEnv(os.Getenv("MICROSANDBOX_INSECURE_REGISTRIES"))
 
@@ -634,6 +688,7 @@ func loadImageEnvConfig(dataRoot string) (imageEnvConfig, error) {
 		DefaultImage:             defaultImage,
 		MicrosandboxDefaultImage: microsandboxDefaultImage,
 		DockerDefaultImage:       dockerDefaultImage,
+		K8sDefaultImage:          k8sDefaultImage,
 		MicrosandboxInsecure:     microsandboxInsecure,
 		BoxRootfsPath:            boxRootfsPath,
 		ImageRegistry:            imageRegistry,
@@ -869,6 +924,7 @@ type configPathsToNormalize struct {
 	MicrosandboxHome      string
 	MicrosandboxMSBPath   string
 	MicrosandboxLibPath   string
+	K8sHome               string
 	ImageCacheRoot        string
 	BoxRootfsPath         string
 }
@@ -891,6 +947,7 @@ func normalizeConfigPaths(paths configPathsToNormalize) (configPathsToNormalize,
 	paths.MicrosandboxHome = mustAbs(paths.MicrosandboxHome)
 	paths.MicrosandboxMSBPath = mustAbs(paths.MicrosandboxMSBPath)
 	paths.MicrosandboxLibPath = mustAbs(paths.MicrosandboxLibPath)
+	paths.K8sHome = mustAbs(paths.K8sHome)
 	paths.ImageCacheRoot = mustAbs(paths.ImageCacheRoot)
 	if paths.BoxRootfsPath != "" {
 		paths.BoxRootfsPath = mustAbs(paths.BoxRootfsPath)
@@ -1036,6 +1093,8 @@ func resolveRuntimeDriver(value string) string {
 		return RuntimeDriverDocker
 	case "msb", RuntimeDriverMicrosandbox:
 		return RuntimeDriverMicrosandbox
+	case RuntimeDriverK8s, "kubernetes", "pod":
+		return RuntimeDriverK8s
 	default:
 		return strings.ToLower(strings.TrimSpace(value))
 	}
@@ -1043,7 +1102,7 @@ func resolveRuntimeDriver(value string) string {
 
 func validateRuntimeDriver(value string) error {
 	switch resolveRuntimeDriver(value) {
-	case RuntimeDriverBoxlite, RuntimeDriverDocker, RuntimeDriverMicrosandbox:
+	case RuntimeDriverBoxlite, RuntimeDriverDocker, RuntimeDriverMicrosandbox, RuntimeDriverK8s:
 		return nil
 	default:
 		return fmt.Errorf("unsupported agent-compose runtime driver %q", strings.TrimSpace(value))

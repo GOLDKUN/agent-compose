@@ -31,6 +31,13 @@ func (d *SandboxDriver) runtimeForSession(session *domain.Sandbox) (string, Sand
 	if err != nil {
 		return "", nil, err
 	}
+	if !driverpkg.RuntimeDriverSupportsStoppedRuntimeRetention(driver) && sandboxes.EffectiveStoppedRuntimePolicy(session) == domain.StoppedRuntimePolicyRetain {
+		return "", nil, domain.ClassifyError(
+			domain.ErrFailedPrecondition,
+			fmt.Sprintf("runtime driver %q does not support stopped_runtime_policy=%q; use stopped_runtime_policy=%q and sandbox_policy=sticky when the Pod must stay running", driver, domain.StoppedRuntimePolicyRetain, domain.StoppedRuntimePolicyRemove),
+			nil,
+		)
+	}
 	runtime, err := d.Runtimes.ForDriver(driver)
 	if err != nil {
 		return "", nil, err

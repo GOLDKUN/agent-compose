@@ -2466,7 +2466,7 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 	streams := sandboxes.NewStreamBrokerForTest()
 	ch, unsubscribe := streams.Subscribe(session.Summary.ID)
 	defer unsubscribe()
-	writeCapabilityGuide(context.Background(), capabilityGuideDeps{Provider: provider, Store: guideStore, Streams: streams}, session, capabilities.SandboxCapsets(session))
+	WriteCapabilityGuide(context.Background(), CapabilityGuideDeps{Provider: provider, Store: guideStore, Streams: streams}, session, capabilities.SandboxCapsets(session))
 	guidePath := capabilities.SandboxGuidePath(session)
 	data, err := os.ReadFile(guidePath)
 	if err != nil {
@@ -2486,8 +2486,8 @@ func TestRunsControllerHelperEdgeWorkflows(t *testing.T) {
 	default:
 		t.Fatalf("missing guide warning stream event")
 	}
-	recordCapabilityGuideWarning(context.Background(), capabilityGuideDeps{Streams: streams}, session.Summary.ID, "ignored")
-	recordCapabilityGuideWarning(context.Background(), capabilityGuideDeps{Store: guideStore, Streams: streams}, " ", "ignored")
+	recordCapabilityGuideWarning(context.Background(), CapabilityGuideDeps{Streams: streams}, session.Summary.ID, "ignored")
+	recordCapabilityGuideWarning(context.Background(), CapabilityGuideDeps{Store: guideStore, Streams: streams}, " ", "ignored")
 }
 
 func TestIntegrationRunsControllerHelperEdgeWorkflows(t *testing.T) {
@@ -2496,6 +2496,14 @@ func TestIntegrationRunsControllerHelperEdgeWorkflows(t *testing.T) {
 
 func TestE2ERunsControllerHelperEdgeWorkflows(t *testing.T) {
 	TestRunsControllerHelperEdgeWorkflows(t)
+}
+
+func TestIntegrationRunsGuestFileWorkflows(t *testing.T) {
+	t.Run("command execution guest files", TestExecuteProjectRunCommandTransfersGuestRequestAndArtifacts)
+}
+
+func TestE2ERunsGuestFileWorkflows(t *testing.T) {
+	TestIntegrationRunsGuestFileWorkflows(t)
 }
 
 func containsString(values []string, want string) bool {

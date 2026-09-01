@@ -2,6 +2,7 @@ package llms
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,38 +45,38 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}, Env: map[string]compose.EnvVarSpec{"TOKEN": {Value: "secret"}}},
 		"docs":       {Type: "remote", Transport: "http", URL: "https://docs.example/mcp", Headers: map[string]compose.EnvVarSpec{"Authorization": {Value: "Bearer token"}}},
 	}
-	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+	if err := WriteCodexMCPConfig(context.Background(), &appconfig.Config{}, session, mcps, nil); err != nil {
 		t.Fatalf("WriteCodexMCPConfig returned error: %v", err)
 	}
-	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+	if err := WriteCodexMCPConfig(context.Background(), &appconfig.Config{}, session, mcps, nil); err != nil {
 		t.Fatalf("second WriteCodexMCPConfig returned error: %v", err)
 	}
 	configPath := filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")
 	if err := os.WriteFile(configPath, []byte("model = \"gpt\"\n\n"+codexManagedMCPStart+"\n[mcp_servers.stale]\ncommand = \"old\"\n"), 0o644); err != nil {
 		t.Fatalf("seed malformed codex mcp config: %v", err)
 	}
-	if err := WriteCodexMCPConfig(session, mcps); err != nil {
+	if err := WriteCodexMCPConfig(context.Background(), &appconfig.Config{}, session, mcps, nil); err != nil {
 		t.Fatalf("rewrite malformed WriteCodexMCPConfig returned error: %v", err)
 	}
 	codexConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
 	if err != nil || strings.Count(string(codexConfig), `[mcp_servers.filesystem]`) != 1 || !strings.Contains(string(codexConfig), `[mcp_servers.docs.http_headers]`) || strings.Contains(string(codexConfig), `[mcp_servers.stale]`) {
 		t.Fatalf("codex mcp config=%q err=%v", string(codexConfig), err)
 	}
-	if err := WriteOpenCodeMCPConfig(session, mcps); err != nil {
+	if err := WriteOpenCodeMCPConfig(context.Background(), &appconfig.Config{}, session, mcps, nil); err != nil {
 		t.Fatalf("WriteOpenCodeMCPConfig returned error: %v", err)
 	}
 	openCodeConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
 	if err != nil || !strings.Contains(string(openCodeConfig), `"mcp"`) || !strings.Contains(string(openCodeConfig), `"filesystem"`) {
 		t.Fatalf("opencode mcp config=%q err=%v", string(openCodeConfig), err)
 	}
-	if err := WriteCodexMCPConfig(session, nil); err != nil {
+	if err := WriteCodexMCPConfig(context.Background(), &appconfig.Config{}, session, nil, nil); err != nil {
 		t.Fatalf("clear WriteCodexMCPConfig returned error: %v", err)
 	}
 	codexConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
 	if err != nil || strings.Contains(string(codexConfig), `[mcp_servers.`) {
 		t.Fatalf("cleared codex mcp config=%q err=%v", string(codexConfig), err)
 	}
-	if err := WriteOpenCodeMCPConfig(session, nil); err != nil {
+	if err := WriteOpenCodeMCPConfig(context.Background(), &appconfig.Config{}, session, nil, nil); err != nil {
 		t.Fatalf("clear WriteOpenCodeMCPConfig returned error: %v", err)
 	}
 	openCodeConfig, err = os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".config", "opencode", "opencode.json"))
@@ -143,6 +144,163 @@ func TestRuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 
 func TestE2ERuntimeConfigAndEnvHelperWorkflows(t *testing.T) {
 	TestRuntimeConfigAndEnvHelperWorkflows(t)
+}
+
+// No-shared-mount path (k8s - see docs/design/k8s_pod_runtime_driver_design.md
+// §2.1): both codex and opencode MCP config still merge against the
+// daemon's own local copy of the file, but must also push the resulting
+// merged content to the guest path a mount would otherwise have made it
+// appear at for free.
+func TestWriteCodexAndOpenCodeMCPConfigPushToGuest(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}},
+	}
+
+	var codexPushedPath string
+	var codexPushedContent []byte
+	if err := WriteCodexMCPConfig(context.Background(), config, session, mcps, func(_ context.Context, guestPath string, content []byte) error {
+		codexPushedPath = guestPath
+		codexPushedContent = content
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteCodexMCPConfig returned error: %v", err)
+	}
+	appconfig.ApplyDefaultGuestPaths(config)
+	wantCodexPath := filepath.Join(config.GuestHomePath, ".codex", "config.toml")
+	if codexPushedPath != wantCodexPath {
+		t.Fatalf("codex pushed path = %q, want %q", codexPushedPath, wantCodexPath)
+	}
+	localCodexConfig, err := os.ReadFile(filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml"))
+	if err != nil {
+		t.Fatalf("read local codex config: %v", err)
+	}
+	if string(codexPushedContent) != string(localCodexConfig) {
+		t.Fatalf("codex pushed content = %q, want it to match the local merged file %q", codexPushedContent, localCodexConfig)
+	}
+	if !strings.Contains(string(codexPushedContent), "[mcp_servers.filesystem]") {
+		t.Fatalf("codex pushed content missing mcp block: %q", codexPushedContent)
+	}
+
+	var openCodePushedPath string
+	var openCodePushedContent []byte
+	if err := WriteOpenCodeMCPConfig(context.Background(), config, session, mcps, func(_ context.Context, guestPath string, content []byte) error {
+		openCodePushedPath = guestPath
+		openCodePushedContent = content
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteOpenCodeMCPConfig returned error: %v", err)
+	}
+	wantOpenCodePath := filepath.Join(config.GuestHomePath, ".config", "opencode", "opencode.json")
+	if openCodePushedPath != wantOpenCodePath {
+		t.Fatalf("opencode pushed path = %q, want %q", openCodePushedPath, wantOpenCodePath)
+	}
+	if !strings.Contains(string(openCodePushedContent), `"filesystem"`) {
+		t.Fatalf("opencode pushed content missing mcp entry: %q", openCodePushedContent)
+	}
+}
+
+func TestWriteCodexMCPConfigClearsGuestWhenAllServersRemoved(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}},
+	}
+
+	if err := WriteCodexMCPConfig(context.Background(), config, session, mcps, func(context.Context, string, []byte) error { return nil }); err != nil {
+		t.Fatalf("WriteCodexMCPConfig (populate) returned error: %v", err)
+	}
+	localPath := filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")
+	if _, err := os.Stat(localPath); err != nil {
+		t.Fatalf("expected local codex config to exist after populating: %v", err)
+	}
+
+	var pushCount int
+	var lastPushedPath string
+	var lastPushedContent []byte
+	// Docker/boxlite's guest sees the host file disappear for free through
+	// their shared mount; a no-shared-mount guest (k8s) only ever finds out
+	// via this callback, so removing every MCP server must still push a
+	// clearing write, not just delete the daemon's own copy.
+	if err := WriteCodexMCPConfig(context.Background(), config, session, nil, func(_ context.Context, guestPath string, content []byte) error {
+		pushCount++
+		lastPushedPath, lastPushedContent = guestPath, content
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteCodexMCPConfig (clear) returned error: %v", err)
+	}
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Fatalf("expected local codex config to be removed after clearing, stat err = %v", err)
+	}
+	if pushCount != 1 {
+		t.Fatalf("guest write callback invoked %d times, want exactly 1 (must still clear the guest)", pushCount)
+	}
+	appconfig.ApplyDefaultGuestPaths(config)
+	wantPath := filepath.Join(config.GuestHomePath, ".codex", "config.toml")
+	if lastPushedPath != wantPath {
+		t.Fatalf("cleared guest path = %q, want %q", lastPushedPath, wantPath)
+	}
+	if len(lastPushedContent) != 0 {
+		t.Fatalf("cleared guest content = %q, want empty", lastPushedContent)
+	}
+}
+
+func TestWriteCodexMCPConfigSkipsGuestPushWhenNothingWasEverWritten(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+
+	var pushCount int
+	// No prior WriteCodexRuntimeConfig/WriteCodexMCPConfig call ever touched
+	// this sandbox's .codex/config.toml (e.g. no managed LLM provider - see
+	// EnsureCodexFacadeConfig's "let Codex use its own login" no-op path).
+	// Calling with zero MCP servers must not push an empty file to a guest
+	// that never had anything pushed there in the first place.
+	if err := WriteCodexMCPConfig(context.Background(), config, session, nil, func(context.Context, string, []byte) error {
+		pushCount++
+		return nil
+	}); err != nil {
+		t.Fatalf("WriteCodexMCPConfig returned error: %v", err)
+	}
+	if pushCount != 0 {
+		t.Fatalf("guest write callback invoked %d times, want 0 (nothing to clear)", pushCount)
+	}
+}
+
+func TestWriteCodexMCPConfigRetriesGuestClearAfterTransientPushFailure(t *testing.T) {
+	root := t.TempDir()
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "workspace")}}
+	config := &appconfig.Config{}
+	mcps := map[string]compose.NormalizedMCPServerSpec{
+		"filesystem": {Type: "local", Command: "npx", Args: []string{"-y", "server"}},
+	}
+	if err := WriteCodexMCPConfig(context.Background(), config, session, mcps, func(context.Context, string, []byte) error { return nil }); err != nil {
+		t.Fatalf("WriteCodexMCPConfig (populate) returned error: %v", err)
+	}
+	localPath := filepath.Join(execution.HostSandboxHome(session), ".codex", "config.toml")
+
+	failing := func(context.Context, string, []byte) error { return fmt.Errorf("transient exec failure") }
+	if err := WriteCodexMCPConfig(context.Background(), config, session, nil, failing); err == nil {
+		t.Fatal("WriteCodexMCPConfig (clear, guest push fails) returned nil error, want the push failure")
+	}
+	if _, err := os.Stat(localPath); err != nil {
+		t.Fatalf("local codex config after a failed guest push, stat error = %v, want the file to still exist so a retry sees hadExisting=true", err)
+	}
+
+	var pushCount int
+	retry := func(context.Context, string, []byte) error {
+		pushCount++
+		return nil
+	}
+	if err := WriteCodexMCPConfig(context.Background(), config, session, nil, retry); err != nil {
+		t.Fatalf("WriteCodexMCPConfig (clear, retry) returned error: %v", err)
+	}
+	if pushCount != 1 {
+		t.Fatalf("push count on retry after a prior transient failure = %d, want 1", pushCount)
+	}
 }
 
 func TestConfigHelperEdgeBranches(t *testing.T) {

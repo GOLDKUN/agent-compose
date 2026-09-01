@@ -73,6 +73,9 @@ func TestIntegrationComposeParseNormalizeAndOutputWorkflows(t *testing.T) {
 	t.Run("normalize invalid mcp ref", TestNormalizeRejectsUndefinedMCPRef)
 	t.Run("normalize invalid mcp shape", TestNormalizeRejectsInvalidMCPShape)
 	t.Run("redacted mcp", TestRedactedOutputDoesNotLeakMCPSecrets)
+	t.Run("k8s rejects local bind mount", TestNormalizeRejectsK8sLocalBindMount)
+	t.Run("k8s rejects stopped runtime retention", TestNormalizeAgentRejectsK8sStoppedRuntimeRetention)
+	t.Run("k8s allows stopped runtime removal", TestNormalizeAgentAllowsK8sStoppedRuntimeRemoval)
 }
 
 func TestE2EComposeParseNormalizeAndOutputWorkflows(t *testing.T) {

@@ -249,6 +249,8 @@ TCP daemon), and `AGENT_COMPOSE_SOCKET` (Unix socket path). Full reference:
 
 ## Runtime drivers
 
+- **`k8s`**: runs each guest as a Kubernetes Pod; the daemon must run inside the target cluster and be installed with the Helm chart.
+
 - **`docker`** (default): runs guests in Docker containers; requires a working Docker daemon.
 - **`boxlite`**: runs guests as microVMs using BoxLite runtime artifacts.
 - **`microsandbox`**: runs guests using the Microsandbox VM runtime.
@@ -260,7 +262,7 @@ compile a subset:
 | --- | --- |
 | macOS native binary | `docker` |
 | Linux native binary | `docker`, `boxlite`, `microsandbox` |
-| Published Linux daemon image (`amd64` and `arm64`) | `docker`, `boxlite`, `microsandbox` |
+| Published Linux daemon image (`amd64` and `arm64`) | `docker`, `boxlite`, `microsandbox`, `k8s` |
 
 Inspect an artifact with `agent-compose --json version` or `/api/version`.
 The `compiled_drivers` field reports build capability only—it does not probe the
@@ -317,6 +319,21 @@ See [`.env.example`](.env.example) for the full list (timeouts, endpoint aliases
 `OPENAI_API_KEY` / `ANTHROPIC_AUTH_TOKEN`).
 
 ## Deployment & configuration
+
+For an in-cluster Kubernetes daemon, install the Helm chart and choose the
+target context and namespace at install time:
+
+```bash
+helm install agent-compose ./charts/agent-compose \
+  --kube-context prod-cluster \
+  --namespace team-a \
+  --create-namespace
+```
+
+The release namespace becomes the default sandbox namespace. The chart renders
+the Service DNS callback URL and RBAC subject from the selected namespace; see
+[`charts/agent-compose/README.md`](charts/agent-compose/README.md) for image,
+PVC, and upgrade options.
 
 For a server deployment with published images:
 

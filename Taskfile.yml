@@ -224,6 +224,7 @@ tasks:
     desc: Run deterministic installer, Compose, and release-asset deployment checks
     dir: '{{.TASKFILE_DIR}}'
     cmds:
+      - ./scripts/tests/test-k8s-manifests.sh
       - '{{.GO_TOOLCHAIN_ENV}} go -C cmd/installer test ./...'
       - ./deploy/install_bootstrap_test.sh
       - ./scripts/tests/test-compose-kvm-config.sh

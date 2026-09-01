@@ -1011,6 +1011,7 @@ message DriverSpec {
     BoxliteDriverSpec boxlite = 2;
     DockerDriverSpec docker = 3;
     MicrosandboxDriverSpec microsandbox = 4;
+    K8sDriverSpec k8s = 5;
   }
 }
 
@@ -1025,6 +1026,11 @@ message DockerDriverSpec {
 
 message MicrosandboxDriverSpec {
   string profile = 1;
+}
+
+message K8sDriverSpec {
+  string context = 1;
+  string namespace = 2;
 }
 
 message RunAgentRequest {

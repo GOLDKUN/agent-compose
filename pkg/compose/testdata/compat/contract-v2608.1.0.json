@@ -113,6 +113,21 @@
       "optional": true
     },
     {
+      "path": "agents.*.driver.k8s",
+      "go_type": "optional\u003cmapping\u003ccompose.K8sDriverSpec\u003e\u003e",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.k8s.context",
+      "go_type": "string",
+      "optional": true
+    },
+    {
+      "path": "agents.*.driver.k8s.namespace",
+      "go_type": "string",
+      "optional": true
+    },
+    {
       "path": "agents.*.driver.microsandbox",
       "go_type": "optional\u003cmapping\u003ccompose.MicrosandboxDriverSpec\u003e\u003e",
       "optional": true

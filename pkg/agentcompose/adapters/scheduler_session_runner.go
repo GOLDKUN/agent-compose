@@ -17,6 +17,7 @@ import (
 	"agent-compose/pkg/execution"
 	"agent-compose/pkg/llms"
 	domain "agent-compose/pkg/model"
+	"agent-compose/pkg/runs"
 	"agent-compose/pkg/sandboxes"
 	"agent-compose/pkg/schedulers"
 	"agent-compose/pkg/storage/configstore"
@@ -174,7 +175,7 @@ func (r *SchedulerSandboxRunner) resolveSchedulerSandboxConfig(ctx context.Conte
 		return resolvedSchedulerSandboxConfig{}, err
 	}
 	guestImage := r.guestImage(request, scheduler, agentDefinition, driver)
-	volumeMounts, volumeWarnings, err := r.resolveVolumeMounts(ctx, scheduler, request, agentDefinition)
+	volumeMounts, volumeWarnings, err := r.resolveVolumeMounts(ctx, scheduler, request, agentDefinition, driver)
 	if err != nil {
 		return resolvedSchedulerSandboxConfig{}, err
 	}
@@ -294,7 +295,13 @@ func (r *SchedulerSandboxRunner) Ensure(ctx context.Context, scheduler domain.Sc
 		_ = r.Store.UpdateSandbox(ctx, session)
 		return nil, "", ensureErr
 	}
-	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: r.Cap, Store: r.Store, Streams: r.Streams, Session: session, CapsetIDs: scheduler.Summary.CapsetIDs})
+	runs.WriteCapabilityGuide(ctx, runs.CapabilityGuideDeps{
+		Provider:       r.Cap,
+		Store:          r.Store,
+		Streams:        r.Streams,
+		Config:         r.Config,
+		WriteGuestFile: r.AgentExecutor.GuestFileWriterFor(session),
+	}, session, scheduler.Summary.CapsetIDs)
 	if r.AgentExecutor == nil {
 		session.Summary.VMStatus = domain.VMStatusFailed
 		_ = r.Store.UpdateSandbox(ctx, session)
@@ -402,12 +409,18 @@ func (r *SchedulerSandboxRunner) loadOrResumeLocked(ctx context.Context, session
 	if err != nil {
 		return nil, "", err
 	}
+	runs.WriteCapabilityGuide(ctx, runs.CapabilityGuideDeps{
+		Provider:       r.Cap,
+		Store:          r.Store,
+		Streams:        r.Streams,
+		Config:         r.Config,
+		WriteGuestFile: r.AgentExecutor.GuestFileWriterFor(session),
+	}, session, capabilities.SandboxCapsets(session))
 	if vmState.StartedAt.IsZero() || sandboxes.RuntimeReleaseIntentional(session) {
 		if err := r.AgentExecutor.PrepareSandboxAgentEnvironmentFromTags(ctx, session); err != nil {
 			return nil, "", err
 		}
 	}
-	writeCapabilityGuide(ctx, writeCapabilityGuideRequest{Provider: r.Cap, Store: r.Store, Streams: r.Streams, Session: session, CapsetIDs: capabilities.SandboxCapsets(session)})
 	if err := r.Driver.StartSandboxVM(ctx, session); err != nil {
 		return nil, "", err
 	}
@@ -549,13 +562,16 @@ func (r *SchedulerSandboxRunner) guestImage(request domain.SchedulerAgentRequest
 	return driverpkg.ResolveSandboxGuestImage(request.GuestImage, scheduler.Summary.GuestImage, agentGuestImage, driverpkg.DefaultGuestImageForDriver(r.Config, driver))
 }
 
-func (r *SchedulerSandboxRunner) resolveVolumeMounts(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition) ([]domain.SandboxVolumeMount, []string, error) {
+func (r *SchedulerSandboxRunner) resolveVolumeMounts(ctx context.Context, scheduler domain.Scheduler, request domain.SchedulerAgentRequest, agentDefinition *domain.AgentDefinition, driver string) ([]domain.SandboxVolumeMount, []string, error) {
 	specs, err := mergeSchedulerVolumeMountSpecs(agentDefinitionVolumes(agentDefinition), scheduler.Volumes, request.Volumes)
 	if err != nil {
 		return nil, nil, err
 	}
 	if len(specs) == 0 {
 		return nil, nil, nil
+	}
+	if err := volumes.ValidateDriverMountSpecs(driver, specs); err != nil {
+		return nil, nil, err
 	}
 	if r.Volumes == nil {
 		return nil, nil, fmt.Errorf("volume resolver is required")
@@ -568,10 +584,17 @@ func (r *SchedulerSandboxRunner) resolveVolumeMounts(ctx context.Context, schedu
 	if err != nil {
 		return nil, nil, err
 	}
-	return r.Volumes.ResolveMounts(ctx, specs, volumes.ResolveOptions{
+	mounts, warnings, err := r.Volumes.ResolveMounts(ctx, specs, volumes.ResolveOptions{
 		ProjectRoot:    projectRoot,
 		ProjectVolumes: projectVolumes,
 	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := volumes.ValidateResolvedDriverMounts(driver, mounts); err != nil {
+		return nil, nil, err
+	}
+	return mounts, warnings, nil
 }
 
 func (r *SchedulerSandboxRunner) schedulerProjectVolumes(ctx context.Context, scheduler domain.Scheduler) (map[string]domain.VolumeRecord, error) {

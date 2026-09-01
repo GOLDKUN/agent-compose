@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	appconfig "agent-compose/pkg/config"
 	domain "agent-compose/pkg/model"
 )
 
@@ -117,7 +119,7 @@ func TestAgentThreadLogSelectionAndResumeInfo(t *testing.T) {
 		t.Fatalf("unknown provider paths = %#v, want nil", got)
 	}
 
-	info := CollectAgentResumeInfo(session, "codex", "", "/guest/agent-thread.json")
+	info := CollectAgentResumeInfo(context.Background(), AgentResumeInfoRequest{Config: &appconfig.Config{}, Sandbox: session, Agent: "codex", ManifestPath: "/guest/agent-thread.json"})
 	if info == nil {
 		t.Fatal("CollectAgentResumeInfo returned nil")
 		return
@@ -130,8 +132,61 @@ func TestAgentThreadLogSelectionAndResumeInfo(t *testing.T) {
 	}
 
 	emptySession := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: filepath.Join(root, "empty", "workspace")}}
-	if got := CollectAgentResumeInfo(emptySession, "", "", ""); got != nil {
+	if got := CollectAgentResumeInfo(context.Background(), AgentResumeInfoRequest{Config: &appconfig.Config{}, Sandbox: emptySession}); got != nil {
 		t.Fatalf("empty resume info = %#v, want nil", got)
+	}
+}
+
+// TestCollectAgentResumeInfoWithGuestFileReader covers the no-shared-mount
+// path (k8s - see docs/design/k8s_pod_runtime_driver_design.md §2.1): the
+// thread ID comes from a GuestFileReaderFunc pull instead of a local
+// os.ReadFile, and ThreadStatePath/ProviderLogPaths - which need a
+// host-local path to mean anything - stay unset rather than pointing at
+// something that was never written to local disk.
+func TestCollectAgentResumeInfoWithGuestFileReader(t *testing.T) {
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: "/irrelevant/workspace"}}
+	config := &appconfig.Config{}
+
+	var gotPath string
+	reader := func(_ context.Context, guestPath string) ([]byte, error) {
+		gotPath = guestPath
+		return []byte(`{"threadId":"thread-remote"}`), nil
+	}
+
+	info := CollectAgentResumeInfo(context.Background(), AgentResumeInfoRequest{
+		Config: config, Sandbox: session, Agent: "codex", ManifestPath: "/guest/agent-thread.json", ReadGuestFile: reader,
+	})
+	if info == nil {
+		t.Fatal("CollectAgentResumeInfo returned nil")
+	}
+	if info.ThreadID != "thread-remote" {
+		t.Fatalf("ThreadID = %q, want %q", info.ThreadID, "thread-remote")
+	}
+	if info.ThreadStatePath != "" {
+		t.Fatalf("ThreadStatePath = %q, want empty (no local mount to point at)", info.ThreadStatePath)
+	}
+	if info.ProviderLogPaths != nil {
+		t.Fatalf("ProviderLogPaths = %#v, want nil (no directory scan without a mount)", info.ProviderLogPaths)
+	}
+	appconfig.ApplyDefaultGuestPaths(config)
+	wantPath := filepath.Join(config.GuestStateRoot, "agents", "providers", "codex.json")
+	if gotPath != wantPath {
+		t.Fatalf("guest path pulled = %q, want %q", gotPath, wantPath)
+	}
+}
+
+func TestCollectAgentResumeInfoSkipsGuestReadWhenThreadIDAlreadyKnown(t *testing.T) {
+	session := &domain.Sandbox{Summary: domain.SandboxSummary{WorkspacePath: "/irrelevant/workspace"}}
+	reader := func(context.Context, string) ([]byte, error) {
+		t.Fatal("readGuestFile should not be called when threadID is already known")
+		return nil, nil
+	}
+
+	info := CollectAgentResumeInfo(context.Background(), AgentResumeInfoRequest{
+		Config: &appconfig.Config{}, Sandbox: session, Agent: "codex", ThreadID: "thread-already-known", ManifestPath: "/guest/agent-thread.json", ReadGuestFile: reader,
+	})
+	if info == nil || info.ThreadID != "thread-already-known" {
+		t.Fatalf("resume info = %#v, want ThreadID = thread-already-known", info)
 	}
 }
 

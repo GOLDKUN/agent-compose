@@ -114,6 +114,24 @@ func TestPrepareRuntimeMountManifestForDockerIncludesRequiredMountsOnly(t *testi
 	}
 }
 
+// The k8s driver has no shared filesystem between the daemon and a sandbox
+// Pod (see docs/design/k8s_pod_runtime_driver_design.md §2.1): sandbox data
+// flows over Exec, not a mount, so its manifest declares none.
+func TestPrepareRuntimeMountManifestForK8sHasNoMounts(t *testing.T) {
+	root := t.TempDir()
+	session := testRuntimeMountSandbox(root)
+	manifest, err := prepareRuntimeMountManifest(testRuntimeMountConfig(), session, RuntimeDriverK8s)
+	if err != nil {
+		t.Fatalf("prepareRuntimeMountManifest returned error: %v", err)
+	}
+	if manifest.Driver != RuntimeDriverK8s {
+		t.Fatalf("manifest driver = %q, want %q", manifest.Driver, RuntimeDriverK8s)
+	}
+	if len(manifest.Mounts) != 0 {
+		t.Fatalf("k8s manifest mounts = %+v, want none", manifest.Mounts)
+	}
+}
+
 func TestPrepareRuntimeMountManifestForDockerIncludesSandboxVolumeMounts(t *testing.T) {
 	root := t.TempDir()
 	volumeSource := t.TempDir()

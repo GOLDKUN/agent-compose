@@ -16,16 +16,18 @@ import (
 type exampleContract struct {
 	agentCount int
 	schedulers int
+	driver     string
 }
 
 func TestExampleFilesContract(t *testing.T) {
 	root := repoRootForComposeEnvTest(t)
 	examplesRoot := filepath.Join(root, "examples", "agent-compose")
 	want := map[string]exampleContract{
-		"docker-minimal":              {agentCount: 1},
-		"docker-scheduler-cron":       {agentCount: 1, schedulers: 1},
-		"docker-scheduler-script-url": {agentCount: 1, schedulers: 1},
-		"docker-scheduler-timeout":    {agentCount: 1, schedulers: 1},
+		"docker-minimal":              {agentCount: 1, driver: "docker"},
+		"docker-scheduler-cron":       {agentCount: 1, schedulers: 1, driver: "docker"},
+		"docker-scheduler-script-url": {agentCount: 1, schedulers: 1, driver: "docker"},
+		"docker-scheduler-timeout":    {agentCount: 1, schedulers: 1, driver: "docker"},
+		"k8s-scheduler-skills-mcp":    {agentCount: 4, schedulers: 1, driver: "k8s"},
 	}
 
 	entries, err := os.ReadDir(examplesRoot)
@@ -70,8 +72,8 @@ func TestExampleFilesContract(t *testing.T) {
 				if !agent.Enabled {
 					t.Fatalf("agent %s is unexpectedly disabled", agent.Name)
 				}
-				if agent.Driver == nil || agent.Driver.Name != "docker" {
-					t.Fatalf("agent %s driver = %#v, want docker", agent.Name, agent.Driver)
+				if agent.Driver == nil || agent.Driver.Name != contract.driver {
+					t.Fatalf("agent %s driver = %#v, want %s", agent.Name, agent.Driver, contract.driver)
 				}
 				if agent.Scheduler == nil {
 					continue
