@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/chaitin/agent-compose/pkg/identity"
 	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
 	"net/http"
@@ -42,7 +41,7 @@ func TestResolveComposeAgentNameFromCandidates(t *testing.T) {
 	}
 }
 
-func TestUpRejectsPrivateScriptURLBeforeApply(t *testing.T) {
+func TestUpScriptURLFetchFailureDoesNotApply(t *testing.T) {
 	var daemonRequests int
 	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		daemonRequests++

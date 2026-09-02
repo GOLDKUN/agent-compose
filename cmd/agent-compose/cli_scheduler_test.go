@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestConfigCommandExpandsSchedulerScriptFiles(t *testing.T) {
+func TestConfigCommandExpandsSchedulerScriptURLs(t *testing.T) {
 	const script = `scheduler.interval("from-file", "1h");`
 
 	for _, tc := range []struct {
@@ -60,7 +60,7 @@ agents:
 	}
 }
 
-func TestUpResolvesSchedulerScriptFileBeforeApply(t *testing.T) {
+func TestUpResolvesSchedulerScriptURLBeforeApply(t *testing.T) {
 	const script = `scheduler.interval("from-file", "1h");`
 	composeDir := t.TempDir()
 	scriptPath := filepath.Join(composeDir, "scheduler.js")
