@@ -47,12 +47,12 @@ func NewDefaultScriptSourceResolver(env map[string]string) ScriptSourceResolver 
 	resolver := &defaultScriptSourceResolver{env: env, validateNetworkTarget: validateScriptNetworkTarget}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	// Keep the standard proxy behavior for environments that require a forward
-	// proxy. The custom dialer still validates every resolved destination before
-	// connecting, so proxy configuration cannot bypass the private-address check.
+	// proxy. Direct connections use the safe dialer; proxy endpoints are handled
+	// separately because the proxy is the trusted network boundary.
 	transport.DialContext = safeScriptDialContext
 	resolver.client = &http.Client{
 		Timeout:   defaultScriptSourceTimeout,
-		Transport: transport,
+		Transport: scriptSourceTransport{transport: transport},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) > maxScriptSourceRedirects {
 				return fmt.Errorf("too many redirects (maximum %d)", maxScriptSourceRedirects)
@@ -281,8 +281,32 @@ func validateScriptNetworkTarget(ctx context.Context, target *url.URL) error {
 	return nil
 }
 
+type scriptSourceTransport struct {
+	transport *http.Transport
+}
+
+func (t scriptSourceTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	proxyURL, err := http.ProxyFromEnvironment(req)
+	if err != nil {
+		return nil, err
+	}
+	if proxyURL == nil {
+		return t.transport.RoundTrip(req)
+	}
+	// The script target is still validated before this request and on every
+	// redirect. Only the explicitly configured forward proxy endpoint bypasses
+	// direct destination filtering.
+	ctx := context.WithValue(req.Context(), scriptProxyAddressKey{}, proxyURL.Host)
+	return t.transport.RoundTrip(req.WithContext(ctx))
+}
+
+type scriptProxyAddressKey struct{}
+
 func safeScriptDialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	dialer := net.Dialer{}
+	if proxyAddress, _ := ctx.Value(scriptProxyAddressKey{}).(string); proxyAddress == address {
+		return dialer.DialContext(ctx, network, address)
+	}
 	return safeScriptDialContextWithResolver(ctx, network, address,
 		func(ctx context.Context, host string) ([]net.IP, error) {
 			addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
