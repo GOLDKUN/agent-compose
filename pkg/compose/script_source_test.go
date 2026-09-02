@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,6 +18,28 @@ import (
 	"github.com/chaitin/agent-compose/pkg/sources"
 )
 
+func newTestScriptSourceResolver() *defaultScriptSourceResolver {
+	resolver := NewDefaultScriptSourceResolver(nil).(*defaultScriptSourceResolver)
+	resolver.validateNetworkTarget = func(context.Context, *url.URL) error { return nil }
+	transport := resolver.client.Transport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{}).DialContext
+	resolver.client.Transport = transport
+	return resolver
+}
+
+func TestDefaultScriptSourceResolverRejectsPrivateHTTPTargets(t *testing.T) {
+	resolver := NewDefaultScriptSourceResolver(nil)
+	for _, location := range []string{
+		"http://127.0.0.1/script.js",
+		"http://169.254.169.254/latest/meta-data/",
+		"http://10.0.0.1/script.js",
+	} {
+		if _, err := resolver.Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: location}); err == nil || !strings.Contains(err.Error(), "prohibited address") {
+			t.Fatalf("Resolve(%q) error = %v, want prohibited address error", location, err)
+		}
+	}
+}
+
 func TestDefaultScriptSourceResolverReadsFilesAndFileURLs(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "scheduler script.js")
@@ -27,7 +50,7 @@ func TestDefaultScriptSourceResolverReadsFilesAndFileURLs(t *testing.T) {
 	if err := os.Symlink(path, link); err != nil {
 		t.Fatal(err)
 	}
-	resolver := NewDefaultScriptSourceResolver(nil)
+	resolver := newTestScriptSourceResolver()
 	for _, location := range []string{path, (&url.URL{Scheme: "file", Path: link}).String()} {
 		data, err := resolver.Resolve(context.Background(), sources.Source{Provider: sources.ProviderFile, Path: location})
 		if err != nil || !strings.Contains(string(data), "scheduler.interval") {
@@ -65,7 +88,7 @@ func TestDefaultScriptSourceResolverReadsGitFile(t *testing.T) {
 			t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, output)
 		}
 	}
-	data, err := NewDefaultScriptSourceResolver(nil).Resolve(context.Background(), sources.Source{
+	data, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{
 		Provider: sources.ProviderGit,
 		URL:      repository,
 		Ref:      "main",
@@ -104,7 +127,7 @@ func TestDefaultScriptSourceResolverRejectsEscapingGitSymlink(t *testing.T) {
 		}
 	}
 
-	data, err := NewDefaultScriptSourceResolver(nil).Resolve(context.Background(), sources.Source{
+	data, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{
 		Provider: sources.ProviderGit,
 		URL:      repository,
 		Ref:      "main",
@@ -121,7 +144,7 @@ func TestDefaultScriptSourceResolverHTTPFailures(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 		}))
 		defer server.Close()
-		_, err := NewDefaultScriptSourceResolver(nil).Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: server.URL + "/scheduler.js?token=super-secret"})
+		_, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: server.URL + "/scheduler.js?token=super-secret"})
 		if err == nil || !strings.Contains(err.Error(), "status 502") || strings.Contains(err.Error(), "super-secret") {
 			t.Fatalf("Resolve error = %v", err)
 		}
@@ -134,7 +157,7 @@ func TestDefaultScriptSourceResolverHTTPFailures(t *testing.T) {
 		defer server.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer cancel()
-		_, err := NewDefaultScriptSourceResolver(nil).Resolve(ctx, sources.Source{Provider: sources.ProviderHTTP, URL: server.URL})
+		_, err := newTestScriptSourceResolver().Resolve(ctx, sources.Source{Provider: sources.ProviderHTTP, URL: server.URL})
 		if err == nil || !strings.Contains(err.Error(), "deadline exceeded") {
 			t.Fatalf("Resolve timeout error = %v", err)
 		}
@@ -147,7 +170,7 @@ func TestDefaultScriptSourceResolverHTTPFailures(t *testing.T) {
 			http.Redirect(w, r, fmt.Sprintf("/%d", n+1), http.StatusFound)
 		}))
 		defer server.Close()
-		_, err := NewDefaultScriptSourceResolver(nil).Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: server.URL + "/0"})
+		_, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: server.URL + "/0"})
 		if err == nil || !strings.Contains(err.Error(), "too many redirects") {
 			t.Fatalf("Resolve redirects error = %v", err)
 		}
@@ -158,7 +181,7 @@ func TestDefaultScriptSourceResolverHTTPFailures(t *testing.T) {
 			http.Redirect(w, r, "file:///tmp/scheduler.js", http.StatusFound)
 		}))
 		defer server.Close()
-		_, err := NewDefaultScriptSourceResolver(nil).Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: server.URL})
+		_, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: server.URL})
 		if err == nil || !strings.Contains(err.Error(), "not supported") {
 			t.Fatalf("Resolve redirect error = %v", err)
 		}
@@ -181,7 +204,10 @@ agents:
         provider: http
         url: %s
 `, location))
-	normalized, err := Normalize(spec, NormalizeOptions{ResolveScriptURLs: true})
+	normalized, err := Normalize(spec, NormalizeOptions{
+		ResolveScriptURLs:    true,
+		ScriptSourceResolver: newTestScriptSourceResolver(),
+	})
 	if err != nil {
 		t.Fatalf("Normalize returned error: %v", err)
 	}
@@ -198,14 +224,22 @@ func TestDefaultScriptSourceResolverLimitsDecodedHTTPContent(t *testing.T) {
 		_ = writer.Close()
 	}))
 	defer server.Close()
-	_, err := NewDefaultScriptSourceResolver(nil).Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: server.URL})
+	_, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: server.URL})
 	if err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("Resolve oversized content error = %v", err)
 	}
 }
 
-func TestDefaultScriptSourceResolverRejectsHTTPSDowngrade(t *testing.T) {
+func TestDefaultScriptSourceResolverRejectsPrivateRedirect(t *testing.T) {
 	resolver := NewDefaultScriptSourceResolver(nil).(*defaultScriptSourceResolver)
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/script.js", nil)
+	if err := resolver.client.CheckRedirect(req, nil); err == nil || !strings.Contains(err.Error(), "prohibited address") {
+		t.Fatalf("private redirect error = %v, want prohibited address error", err)
+	}
+}
+
+func TestDefaultScriptSourceResolverRejectsHTTPSDowngrade(t *testing.T) {
+	resolver := newTestScriptSourceResolver()
 	httpsRequest := httptest.NewRequest(http.MethodGet, "https://example.test/source", nil)
 	httpRequest := httptest.NewRequest(http.MethodGet, "http://example.test/target", nil)
 	err := resolver.client.CheckRedirect(httpRequest, []*http.Request{httpsRequest})

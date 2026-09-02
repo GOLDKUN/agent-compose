@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -35,16 +36,21 @@ func (f ScriptSourceResolverFunc) Resolve(ctx context.Context, source sources.So
 }
 
 type defaultScriptSourceResolver struct {
-	client *http.Client
-	env    map[string]string
+	client                *http.Client
+	env                   map[string]string
+	validateNetworkTarget func(context.Context, *url.URL) error
 }
 
 // NewDefaultScriptSourceResolver returns the bounded file and HTTP(S) resolver
 // used by CLI compose loading.
 func NewDefaultScriptSourceResolver(env map[string]string) ScriptSourceResolver {
-	resolver := &defaultScriptSourceResolver{env: env}
+	resolver := &defaultScriptSourceResolver{env: env, validateNetworkTarget: validateScriptNetworkTarget}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = safeScriptDialContext
 	resolver.client = &http.Client{
-		Timeout: defaultScriptSourceTimeout,
+		Timeout:   defaultScriptSourceTimeout,
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) > maxScriptSourceRedirects {
 				return fmt.Errorf("too many redirects (maximum %d)", maxScriptSourceRedirects)
@@ -61,7 +67,7 @@ func NewDefaultScriptSourceResolver(env map[string]string) ScriptSourceResolver 
 			if len(via) > 0 && via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme == "http" {
 				return errors.New("HTTPS redirect downgrade to HTTP is not allowed")
 			}
-			return nil
+			return resolver.validateNetworkTarget(req.Context(), req.URL)
 		},
 	}
 	return resolver
@@ -234,6 +240,9 @@ func readScriptFile(path string) ([]byte, error) {
 }
 
 func (r *defaultScriptSourceResolver) readHTTP(ctx context.Context, location *url.URL, source sources.Source) ([]byte, error) {
+	if err := r.validateNetworkTarget(ctx, location); err != nil {
+		return nil, fmt.Errorf("fetch script from %s: %w", redactedScriptURL(location), err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, location.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("create script request for %s", redactedScriptURL(location))
@@ -248,6 +257,62 @@ func (r *defaultScriptSourceResolver) readHTTP(ctx context.Context, location *ur
 		return nil, fmt.Errorf("fetch script from %s: unexpected HTTP status %d", redactedScriptURL(location), resp.StatusCode)
 	}
 	return readLimitedScript(resp.Body)
+}
+
+func validateScriptNetworkTarget(ctx context.Context, target *url.URL) error {
+	host := strings.TrimSpace(target.Hostname())
+	if host == "" {
+		return errors.New("script URL requires a valid host")
+	}
+	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return fmt.Errorf("resolve script URL host: %w", err)
+	}
+	if len(addresses) == 0 {
+		return errors.New("script URL host resolved to no addresses")
+	}
+	for _, address := range addresses {
+		if !isPublicScriptAddress(address.IP) {
+			return fmt.Errorf("script URL host resolves to prohibited address %s", address.IP)
+		}
+	}
+	return nil
+}
+
+func safeScriptDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("parse script endpoint: %w", err)
+	}
+	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve script endpoint: %w", err)
+	}
+	dialer := net.Dialer{}
+	var dialErrs error
+	for _, candidate := range addresses {
+		if !isPublicScriptAddress(candidate.IP) {
+			continue
+		}
+		conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(candidate.IP.String(), port))
+		if dialErr == nil {
+			return conn, nil
+		}
+		dialErrs = errors.Join(dialErrs, dialErr)
+	}
+	if dialErrs != nil {
+		return nil, dialErrs
+	}
+	return nil, errors.New("script endpoint has no permitted public address")
+}
+
+func isPublicScriptAddress(ip net.IP) bool {
+	if ip == nil || !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return false
+	}
+	// Go's IsPrivate intentionally excludes the carrier-grade NAT range.
+	cgnat := &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
+	return !cgnat.Contains(ip)
 }
 
 func readLimitedScript(reader io.Reader) ([]byte, error) {
