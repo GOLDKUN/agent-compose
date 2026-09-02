@@ -3,6 +3,7 @@ package compose
 import (
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -33,10 +35,55 @@ func TestDefaultScriptSourceResolverRejectsPrivateHTTPTargets(t *testing.T) {
 		"http://127.0.0.1/script.js",
 		"http://169.254.169.254/latest/meta-data/",
 		"http://10.0.0.1/script.js",
+		"http://100.64.0.1/script.js",
+		"http://[::1]/script.js",
+		"http://0.0.0.1/script.js",
+		"http://198.18.0.1/script.js",
+		"http://240.0.0.1/script.js",
+		"http://[fec0::1]/script.js",
 	} {
 		if _, err := resolver.Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: location}); err == nil || !strings.Contains(err.Error(), "prohibited address") {
 			t.Fatalf("Resolve(%q) error = %v, want prohibited address error", location, err)
 		}
+	}
+}
+
+func TestIsPublicScriptAddressRejectsSpecialUseNetworks(t *testing.T) {
+	for _, test := range []struct {
+		address string
+		public  bool
+	}{
+		{address: "8.8.8.8", public: true},
+		{address: "100.64.0.1"},
+		{address: "198.18.0.1"},
+		{address: "240.0.0.1"},
+		{address: "0.0.0.1"},
+		{address: "fec0::1"},
+		{address: "::1"},
+	} {
+		if got := isPublicScriptAddress(net.ParseIP(test.address)); got != test.public {
+			t.Errorf("isPublicScriptAddress(%q) = %t, want %t", test.address, got, test.public)
+		}
+	}
+}
+
+func TestSafeScriptDialContextSkipsPrivateAddresses(t *testing.T) {
+	var dialed []string
+	_, err := safeScriptDialContextWithResolver(
+		context.Background(), "tcp", "mixed.example:443",
+		func(context.Context, string) ([]net.IP, error) {
+			return []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("8.8.8.8")}, nil
+		},
+		func(_ context.Context, _, address string) (net.Conn, error) {
+			dialed = append(dialed, address)
+			return nil, errors.New("dial intentionally stopped")
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "dial intentionally stopped") {
+		t.Fatalf("dial error = %v, want intentional dial error", err)
+	}
+	if !reflect.DeepEqual(dialed, []string{"8.8.8.8:443"}) {
+		t.Fatalf("dialed addresses = %v, want only public address", dialed)
 	}
 }
 
