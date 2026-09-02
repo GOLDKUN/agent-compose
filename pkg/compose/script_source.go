@@ -253,13 +253,22 @@ func (r *defaultScriptSourceResolver) readHTTP(ctx context.Context, location *ur
 	sources.ApplyHTTPAuthentication(req, source, r.env)
 	resp, err := r.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch script from %s: %s", redactedScriptURL(location), sanitizeScriptFetchError(err))
+		return nil, fmt.Errorf("fetch script from %s: %s%s", redactedScriptURL(location), sanitizeScriptFetchError(err), scriptProxyDisabledDiagnostic())
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("fetch script from %s: unexpected HTTP status %d", redactedScriptURL(location), resp.StatusCode)
 	}
 	return readLimitedScript(resp.Body)
+}
+
+func scriptProxyDisabledDiagnostic() string {
+	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"} {
+		if strings.TrimSpace(os.Getenv(name)) != "" {
+			return fmt.Sprintf(" (environment %s is intentionally disabled for SSRF protection)", name)
+		}
+	}
+	return ""
 }
 
 func validateScriptNetworkTarget(ctx context.Context, target *url.URL) error {

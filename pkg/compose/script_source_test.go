@@ -68,10 +68,41 @@ func TestIsPublicScriptAddressRejectsSpecialUseNetworks(t *testing.T) {
 }
 
 func TestDefaultScriptSourceResolverDisablesEnvironmentProxy(t *testing.T) {
-	resolver := NewDefaultScriptSourceResolver(nil).(*defaultScriptSourceResolver)
-	transport := resolver.client.Transport.(*http.Transport)
-	if transport.Proxy != nil {
-		t.Fatal("script source resolver must not use environment proxies")
+	proxyRequests := 0
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		proxyRequests++
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer proxy.Close()
+	t.Setenv("HTTP_PROXY", proxy.URL)
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("ALL_PROXY", "")
+
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("scheduler.interval('direct', 1000, main);"))
+	}))
+	defer target.Close()
+
+	resolver := newTestScriptSourceResolver()
+	data, err := resolver.Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: target.URL})
+	if err != nil {
+		t.Fatalf("Resolve with configured proxy = %v", err)
+	}
+	if !strings.Contains(string(data), "direct") || proxyRequests != 0 {
+		t.Fatalf("script data=%q proxyRequests=%d, want direct fetch and zero proxy requests", data, proxyRequests)
+	}
+}
+
+func TestDefaultScriptSourceResolverDiagnosesDisabledEnvironmentProxy(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://proxy.invalid:8080")
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("ALL_PROXY", "")
+	server := httptest.NewServer(http.NotFoundHandler())
+	location := server.URL
+	server.Close()
+	_, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: location})
+	if err == nil || !strings.Contains(err.Error(), "HTTP_PROXY is intentionally disabled") {
+		t.Fatalf("Resolve error = %v, want disabled proxy diagnostic", err)
 	}
 }
 
