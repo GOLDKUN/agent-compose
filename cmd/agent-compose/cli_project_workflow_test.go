@@ -42,28 +42,24 @@ func TestResolveComposeAgentNameFromCandidates(t *testing.T) {
 	}
 }
 
-func TestUpScriptURLFetchFailureDoesNotApply(t *testing.T) {
-	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer sourceServer.Close()
+func TestUpRejectsPrivateScriptURLBeforeApply(t *testing.T) {
 	var daemonRequests int
 	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		daemonRequests++
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer daemon.Close()
-	composePath := writeComposeFile(t, t.TempDir(), fmt.Sprintf(`
+	composePath := writeComposeFile(t, t.TempDir(), `
 name: failed-script-url
 agents:
   reviewer:
     scheduler:
       script:
         provider: http
-        url: %s/scheduler.js
-`, sourceServer.URL))
+        url: http://127.0.0.1:1/scheduler.js
+`)
 	_, stderr, _, exitCode := executeCLICommand("up", "--file", composePath, "--host", daemon.URL)
-	if exitCode == 0 || !strings.Contains(stderr, "status 503") {
+	if exitCode == 0 || !strings.Contains(stderr, "prohibited address") {
 		t.Fatalf("up stderr=%q exit=%d", stderr, exitCode)
 	}
 	if daemonRequests != 0 {
