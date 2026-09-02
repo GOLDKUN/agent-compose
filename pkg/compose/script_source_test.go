@@ -75,16 +75,38 @@ func TestDefaultScriptSourceResolverDisablesEnvironmentProxy(t *testing.T) {
 	}))
 	defer proxy.Close()
 	t.Setenv("HTTP_PROXY", proxy.URL)
+	t.Setenv("http_proxy", proxy.URL)
 	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("https_proxy", "")
 	t.Setenv("ALL_PROXY", "")
+	t.Setenv("all_proxy", "")
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
 
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	target := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("scheduler.interval('direct', 1000, main);"))
 	}))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen target: %v", err)
+	}
+	target.Listener = listener
+	target.Start()
 	defer target.Close()
+	targetAddress := listener.Addr().String()
+	targetPort := strings.TrimPrefix(target.URL, "http://127.0.0.1:")
 
 	resolver := newTestScriptSourceResolver()
-	data, err := resolver.Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: target.URL})
+	transport := resolver.client.Transport.(*http.Transport).Clone()
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, _, splitErr := net.SplitHostPort(address)
+		if splitErr == nil && host == "public.test" {
+			address = targetAddress
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}
+	resolver.client.Transport = transport
+	data, err := resolver.Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: "http://public.test:" + targetPort + "/scheduler.js"})
 	if err != nil {
 		t.Fatalf("Resolve with configured proxy = %v", err)
 	}
@@ -94,15 +116,23 @@ func TestDefaultScriptSourceResolverDisablesEnvironmentProxy(t *testing.T) {
 }
 
 func TestDefaultScriptSourceResolverDiagnosesDisabledEnvironmentProxy(t *testing.T) {
-	t.Setenv("HTTP_PROXY", "http://proxy.invalid:8080")
-	t.Setenv("HTTPS_PROXY", "")
-	t.Setenv("ALL_PROXY", "")
-	server := httptest.NewServer(http.NotFoundHandler())
-	location := server.URL
-	server.Close()
-	_, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: location})
-	if err == nil || !strings.Contains(err.Error(), "HTTP_PROXY is intentionally disabled") {
-		t.Fatalf("Resolve error = %v, want disabled proxy diagnostic", err)
+	for _, proxyName := range []string{"HTTP_PROXY", "http_proxy"} {
+		t.Run(proxyName, func(t *testing.T) {
+			t.Setenv("HTTP_PROXY", "")
+			t.Setenv("http_proxy", "")
+			t.Setenv("HTTPS_PROXY", "")
+			t.Setenv("https_proxy", "")
+			t.Setenv("ALL_PROXY", "")
+			t.Setenv("all_proxy", "")
+			t.Setenv(proxyName, "http://proxy.invalid:8080")
+			server := httptest.NewServer(http.NotFoundHandler())
+			location := server.URL
+			server.Close()
+			_, err := newTestScriptSourceResolver().Resolve(context.Background(), sources.Source{Provider: sources.ProviderHTTP, URL: location})
+			if err == nil || !strings.Contains(err.Error(), proxyName+" is intentionally disabled") {
+				t.Fatalf("Resolve error = %v, want %s disabled proxy diagnostic", err, proxyName)
+			}
+		})
 	}
 }
 

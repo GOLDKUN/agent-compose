@@ -263,7 +263,7 @@ func (r *defaultScriptSourceResolver) readHTTP(ctx context.Context, location *ur
 }
 
 func scriptProxyDisabledDiagnostic() string {
-	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"} {
+	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
 		if strings.TrimSpace(os.Getenv(name)) != "" {
 			return fmt.Sprintf(" (environment %s is intentionally disabled for SSRF protection)", name)
 		}
