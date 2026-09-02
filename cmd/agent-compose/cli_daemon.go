@@ -274,7 +274,11 @@ func (a *DaemonApp) listen() (*daemonServers, error) {
 		if tlsConfig != nil {
 			tcpListener = tls.NewListener(tcpListener, tlsConfig)
 		}
-		servers.add("HTTP_LISTEN", a.Config.HttpListen, tcpListener, a.Echo, nil)
+		if tlsConfig != nil {
+			servers.addTLS("HTTP_LISTEN", a.Config.HttpListen, tcpListener, a.Echo, nil)
+		} else {
+			servers.add("HTTP_LISTEN", a.Config.HttpListen, tcpListener, a.Echo, nil)
+		}
 	}
 
 	return servers, nil
@@ -294,7 +298,14 @@ func isLoopbackListenAddress(address string) bool {
 }
 
 func (s *daemonServers) add(name, value string, listener net.Listener, handler http.Handler, cleanup func() error) {
-	_, usesTLS := listener.(*tls.Listener)
+	s.addWithTLS(name, value, listener, handler, cleanup, false)
+}
+
+func (s *daemonServers) addTLS(name, value string, listener net.Listener, handler http.Handler, cleanup func() error) {
+	s.addWithTLS(name, value, listener, handler, cleanup, true)
+}
+
+func (s *daemonServers) addWithTLS(name, value string, listener net.Listener, handler http.Handler, cleanup func() error, usesTLS bool) {
 	serverHandler := handler
 	if !usesTLS {
 		serverHandler = h2c.NewHandler(handler, &http2.Server{}) //nolint:staticcheck // h2c is required for unencrypted HTTP/2 compatibility with Connect bidi streams.
