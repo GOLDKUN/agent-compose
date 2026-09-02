@@ -345,8 +345,8 @@ func startImageDockerStartupDaemon(t *testing.T, ctx context.Context, dockerClie
 		Image: image,
 		Env: []string{
 			"AGENT_COMPOSE_AUTH_TOKEN=" + tlsConfig.authToken,
-			"HTTP_TLS_CERT_FILE=/run/agent-compose/server.crt",
-			"HTTP_TLS_KEY_FILE=/run/agent-compose/server.key",
+			"HTTP_TLS_CERT_FILE=/tmp/agent-compose-server.crt",
+			"HTTP_TLS_KEY_FILE=/tmp/agent-compose-server.key",
 		},
 		ExposedPorts: nat.PortSet{port: struct{}{}},
 		Labels:       imageDockerLabels(name),
@@ -355,8 +355,8 @@ func startImageDockerStartupDaemon(t *testing.T, ctx context.Context, dockerClie
 		PortBindings: nat.PortMap{port: []nat.PortBinding{{HostIP: "127.0.0.1"}}},
 		Tmpfs:        map[string]string{"/data": "rw"},
 		Mounts: []mountapi.Mount{
-			{Type: mountapi.TypeBind, Source: tlsConfig.certPath, Target: "/run/agent-compose/server.crt", ReadOnly: true},
-			{Type: mountapi.TypeBind, Source: tlsConfig.keyPath, Target: "/run/agent-compose/server.key", ReadOnly: true},
+			{Type: mountapi.TypeBind, Source: tlsConfig.certPath, Target: "/tmp/agent-compose-server.crt", ReadOnly: true},
+			{Type: mountapi.TypeBind, Source: tlsConfig.keyPath, Target: "/tmp/agent-compose-server.key", ReadOnly: true},
 		},
 	}, nil, nil, name)
 	if err != nil {
@@ -410,8 +410,8 @@ func startImageDockerLifecycleDaemon(t *testing.T, ctx context.Context, dockerCl
 			"DOCKER_DEFAULT_IMAGE=" + guestImage,
 			"DOCKER_HOST=unix:///var/run/docker.sock",
 			"HTTP_LISTEN=0.0.0.0:7410",
-			"HTTP_TLS_CERT_FILE=/run/agent-compose/server.crt",
-			"HTTP_TLS_KEY_FILE=/run/agent-compose/server.key",
+			"HTTP_TLS_CERT_FILE=/tmp/agent-compose-server.crt",
+			"HTTP_TLS_KEY_FILE=/tmp/agent-compose-server.key",
 			"LLM_API_ENDPOINT=",
 			"LLM_API_KEY=",
 			"OPENAI_API_KEY=",
@@ -428,8 +428,8 @@ func startImageDockerLifecycleDaemon(t *testing.T, ctx context.Context, dockerCl
 		Mounts: []mountapi.Mount{
 			{Type: mountapi.TypeBind, Source: dockerSocket, Target: "/var/run/docker.sock"},
 			{Type: mountapi.TypeVolume, Source: volume.Name, Target: "/data"},
-			{Type: mountapi.TypeBind, Source: tlsConfig.certPath, Target: "/run/agent-compose/server.crt", ReadOnly: true},
-			{Type: mountapi.TypeBind, Source: tlsConfig.keyPath, Target: "/run/agent-compose/server.key", ReadOnly: true},
+			{Type: mountapi.TypeBind, Source: tlsConfig.certPath, Target: "/tmp/agent-compose-server.crt", ReadOnly: true},
+			{Type: mountapi.TypeBind, Source: tlsConfig.keyPath, Target: "/tmp/agent-compose-server.key", ReadOnly: true},
 		},
 		PortBindings: nat.PortMap{port: []nat.PortBinding{{HostIP: "127.0.0.1"}}},
 	}, nil, nil, name)
