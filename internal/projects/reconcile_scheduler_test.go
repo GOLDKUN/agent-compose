@@ -137,6 +137,21 @@ func TestReconcileSchedulersPreservesPartialMutationSignalAcrossSchedulers(t *te
 	}
 }
 
+func TestReconcileSchedulersFailsClosedOnRemovedSchedulerWriteError(t *testing.T) {
+	project, record, _ := schedulerReconcileTestState()
+	writeErr := errors.New("disable removed scheduler failed")
+	store := &schedulerReconcileStateStore{
+		existingRecord: &record,
+		listedRecords:  []domain.ProjectSchedulerRecord{record},
+		listConfigured: true,
+		setEnabledErr:  writeErr,
+	}
+	_, _, err := ReconcileSchedulers(context.Background(), store, ReconcileSchedulersRequest{Project: project}, ReconcileSchedulerOptions{})
+	if err == nil || !errors.Is(err, writeErr) || !schedulerReconcileNeedsFailClosed(err) {
+		t.Fatalf("removed scheduler write error = %v, want fail-closed error", err)
+	}
+}
+
 func TestReconcileSchedulersTreatsMissingRemovedSchedulerAsConverged(t *testing.T) {
 	project, record, _ := schedulerReconcileTestState()
 	store := &schedulerReconcileStateStore{
