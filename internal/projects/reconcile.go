@@ -72,7 +72,7 @@ func (s *mutationTrackingSchedulerStore) SetProjectSchedulerEnabled(ctx context.
 	record, err := s.ReconcileSchedulerStore.SetProjectSchedulerEnabled(ctx, projectID, schedulerID, enabled)
 	if err == nil {
 		s.changed = true
-	} else if !(errors.Is(err, domain.ErrNotFound) && !enabled) {
+	} else if !errors.Is(err, domain.ErrNotFound) || enabled {
 		s.uncertain = true
 	}
 	return record, err
