@@ -671,6 +671,12 @@ func TestBackgroundJupyterLaunchCommandStartsBeforeJupyterLabImportProbe(t *test
 	}
 
 	backgroundCommand := jupyterLaunchCommand(config, proxyState, true)
+	if strings.Contains(backgroundCommand, "--ServerApp.allow_origin='*'") || strings.Contains(backgroundCommand, "--ServerApp.disable_check_xsrf=True") {
+		t.Fatalf("jupyter command weakens origin or xsrf protection: %s", backgroundCommand)
+	}
+	if !strings.Contains(backgroundCommand, "--ServerApp.allow_origin='' --ServerApp.disable_check_xsrf=False") {
+		t.Fatalf("jupyter command does not explicitly retain origin and xsrf protection: %s", backgroundCommand)
+	}
 	if strings.Contains(backgroundCommand, "python3 -c \"import jupyterlab;") {
 		t.Fatalf("background jupyter command should not block on import probe before nohup: %s", backgroundCommand)
 	}
