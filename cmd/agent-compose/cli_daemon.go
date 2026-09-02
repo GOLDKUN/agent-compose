@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,6 +67,7 @@ type daemonServer struct {
 	listener net.Listener
 	server   *http.Server
 	cleanup  func() error
+	tls      bool
 }
 
 type localUnixSocketRequestKey struct{}
@@ -292,7 +294,12 @@ func isLoopbackListenAddress(address string) bool {
 }
 
 func (s *daemonServers) add(name, value string, listener net.Listener, handler http.Handler, cleanup func() error) {
-	server := &http.Server{Handler: h2c.NewHandler(handler, &http2.Server{})} //nolint:staticcheck // h2c is required for unencrypted HTTP/2 compatibility with Connect bidi streams.
+	_, usesTLS := listener.(*tls.Listener)
+	serverHandler := handler
+	if !usesTLS {
+		serverHandler = h2c.NewHandler(handler, &http2.Server{}) //nolint:staticcheck // h2c is required for unencrypted HTTP/2 compatibility with Connect bidi streams.
+	}
+	server := &http.Server{Handler: serverHandler}
 	if listener.Addr().Network() == "unix" {
 		server.ConnContext = func(ctx context.Context, conn net.Conn) context.Context {
 			if isTrustedUnixSocketConn(conn) {
@@ -307,6 +314,7 @@ func (s *daemonServers) add(name, value string, listener net.Listener, handler h
 		listener: listener,
 		server:   server,
 		cleanup:  cleanup,
+		tls:      usesTLS,
 	})
 }
 
@@ -331,9 +339,11 @@ func (s *daemonServers) serve(logger *slog.Logger) <-chan error {
 	errCh := make(chan error, len(s.items))
 	for _, item := range s.items {
 		go func(item *daemonServer) {
-			if err := http2.ConfigureServer(item.server, &http2.Server{}); err != nil {
-				errCh <- fmt.Errorf("configure HTTP/2 server for %s %q: %w", item.name, item.value, err)
-				return
+			if item.tls {
+				if err := http2.ConfigureServer(item.server, &http2.Server{}); err != nil {
+					errCh <- fmt.Errorf("configure HTTP/2 server for %s %q: %w", item.name, item.value, err)
+					return
+				}
 			}
 			logger.Info("agent-compose listener started", "config", item.name, "addr", item.listener.Addr().String())
 			err := item.server.Serve(item.listener)
@@ -537,6 +547,12 @@ func newDaemonHTTPClient(clientConfig cliClientConfig) *http.Client {
 
 func newDaemonBaseRoundTripper(clientConfig cliClientConfig) http.RoundTripper {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	baseURL := strings.ToLower(strings.TrimSpace(clientConfig.BaseURL))
+	if !clientConfig.UseUnixSocket && strings.HasPrefix(baseURL, "https://") {
+		if err := configureDaemonTLSRoots(transport, os.Getenv("AGENT_COMPOSE_TLS_CA_FILE")); err != nil {
+			return daemonTransportError{err: err}
+		}
+	}
 	if clientConfig.UseUnixSocket {
 		socketPath := clientConfig.SocketPath
 		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -544,7 +560,7 @@ func newDaemonBaseRoundTripper(clientConfig cliClientConfig) http.RoundTripper {
 			return dialer.DialContext(ctx, "unix", socketPath)
 		}
 	}
-	if !clientConfig.UseUnixSocket && !strings.HasPrefix(strings.ToLower(strings.TrimSpace(clientConfig.BaseURL)), "http://") {
+	if !clientConfig.UseUnixSocket && !strings.HasPrefix(baseURL, "http://") {
 		return transport
 	}
 	h2cTransport := &http2.Transport{
@@ -562,6 +578,35 @@ func newDaemonBaseRoundTripper(clientConfig cliClientConfig) http.RoundTripper {
 		defaultTransport: transport,
 		attachTransport:  h2cTransport,
 	}
+}
+
+func configureDaemonTLSRoots(transport *http.Transport, caFile string) error {
+	caFile = strings.TrimSpace(caFile)
+	if caFile == "" {
+		return nil
+	}
+	pemBytes, err := os.ReadFile(caFile)
+	if err != nil {
+		return fmt.Errorf("read AGENT_COMPOSE_TLS_CA_FILE %q: %w", caFile, err)
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil {
+		roots = x509.NewCertPool()
+	}
+	if !roots.AppendCertsFromPEM(pemBytes) {
+		return fmt.Errorf("AGENT_COMPOSE_TLS_CA_FILE %q contains no valid certificates", caFile)
+	}
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	transport.ForceAttemptHTTP2 = true
+	return nil
+}
+
+type daemonTransportError struct {
+	err error
+}
+
+func (t daemonTransportError) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, t.err
 }
 
 type daemonAttachRoundTripper struct {

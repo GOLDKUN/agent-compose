@@ -328,7 +328,7 @@ Web UI 在独立仓库 [agent-compose-ui](https://github.com/chaitin/agent-compo
 
 - 浏览器入口通过 agent-compose-ui server 暴露，不要直连 daemon。
 - 设置稳定、高熵的 `AUTH_SECRET`；生产环境使用 HTTPS 终止。
-- 非 Loopback `HTTP_LISTEN` 必须配置 `AGENT_COMPOSE_AUTH_TOKEN`、`HTTP_TLS_CERT_FILE` 和 `HTTP_TLS_KEY_FILE`；TLS 私钥仅应允许 daemon 账户读取。
+- 非 Loopback `HTTP_LISTEN` 必须配置 `AGENT_COMPOSE_AUTH_TOKEN`、`HTTP_TLS_CERT_FILE` 和 `HTTP_TLS_KEY_FILE`；TLS 私钥仅应允许 daemon 账户读取。远程 CLI 必须使用 `https://` 地址；私有 CA 签发的证书可通过 `AGENT_COMPOSE_TLS_CA_FILE` 配置信任。
 - 浏览器入口通过 agent-compose-ui server 暴露，不要直连 daemon。
 - 把 Git 凭据、上传的 workspace、环境变量和 LLM API key 都当作 secret。
 

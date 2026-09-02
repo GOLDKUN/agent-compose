@@ -388,7 +388,7 @@ deployment to a network:
 - Expose browser access through the agent-compose-ui server, not the daemon directly.
 - Set a stable, high-entropy `AUTH_SECRET`, and terminate HTTPS in production.
 - Non-loopback `HTTP_LISTEN` requires `AGENT_COMPOSE_AUTH_TOKEN`, `HTTP_TLS_CERT_FILE`, and `HTTP_TLS_KEY_FILE`; the daemon refuses to start an exposed plaintext h2c listener.
-- Keep the TLS private key readable only by the daemon account and use a high-entropy daemon token.
+- Keep the TLS private key readable only by the daemon account and use a high-entropy daemon token. Remote CLI clients must use an `https://` host; set `AGENT_COMPOSE_TLS_CA_FILE` when the daemon certificate is signed by a private CA.
 - Treat Git credentials, uploaded workspaces, environment variables, and LLM API keys as secrets.
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and hardening notes.
