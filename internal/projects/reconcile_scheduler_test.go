@@ -122,6 +122,7 @@ func TestReconcileSchedulersFailureReportsCleanupAndPartialChanges(t *testing.T)
 	tests := []struct {
 		name           string
 		getErr         error
+		upsertErr      error
 		replaceErr     error
 		enableErr      error
 		refreshErr     error
@@ -130,6 +131,7 @@ func TestReconcileSchedulersFailureReportsCleanupAndPartialChanges(t *testing.T)
 		wantFailClosed bool
 	}{
 		{name: "read before mutation", getErr: errors.New("read failed")},
+		{name: "ambiguous scheduler write", upsertErr: errors.New("write result unknown"), wantFailClosed: true},
 		{name: "trigger replacement", replaceErr: replaceErr, wantCleanup: true, wantFailClosed: true},
 		{name: "scheduler enable", enableErr: enableErr, wantCleanup: true, wantFailClosed: true},
 		{name: "controller refresh", refreshErr: refreshErr, wantChanges: 1},
@@ -140,6 +142,7 @@ func TestReconcileSchedulersFailureReportsCleanupAndPartialChanges(t *testing.T)
 				existingRecord:     &existingRecord,
 				existingDefinition: currentDefinition,
 				getErr:             tt.getErr,
+				upsertErr:          tt.upsertErr,
 				replaceErr:         tt.replaceErr,
 				enableErr:          tt.enableErr,
 			}
@@ -212,6 +215,7 @@ type schedulerReconcileStateStore struct {
 	listConfigured     bool
 	savedRecord        domain.ProjectSchedulerRecord
 	getErr             error
+	upsertErr          error
 	replaceErr         error
 	enableErr          error
 	enableWrites       int
@@ -229,6 +233,9 @@ func (s *schedulerReconcileStateStore) GetProjectScheduler(context.Context, stri
 
 func (s *schedulerReconcileStateStore) UpsertProjectScheduler(_ context.Context, item domain.ProjectSchedulerRecord) (domain.ProjectSchedulerRecord, error) {
 	s.savedRecord = item
+	if s.upsertErr != nil {
+		return item, s.upsertErr
+	}
 	return item, nil
 }
 

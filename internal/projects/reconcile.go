@@ -38,9 +38,10 @@ type ReconcileSchedulerOptions struct {
 }
 
 type schedulerReconcileError struct {
-	err          error
-	storeChanged bool
-	refreshOnly  bool
+	err                    error
+	storeChanged           bool
+	storeMutationUncertain bool
+	refreshOnly            bool
 }
 
 func (e schedulerReconcileError) Error() string { return e.err.Error() }
@@ -48,18 +49,21 @@ func (e schedulerReconcileError) Unwrap() error { return e.err }
 
 func schedulerReconcileNeedsFailClosed(err error) bool {
 	var reconcileErr schedulerReconcileError
-	return errors.As(err, &reconcileErr) && reconcileErr.storeChanged && !reconcileErr.refreshOnly
+	return errors.As(err, &reconcileErr) && (reconcileErr.storeChanged || reconcileErr.storeMutationUncertain) && !reconcileErr.refreshOnly
 }
 
 type mutationTrackingSchedulerStore struct {
 	ReconcileSchedulerStore
-	changed bool
+	changed   bool
+	uncertain bool
 }
 
 func (s *mutationTrackingSchedulerStore) UpsertProjectScheduler(ctx context.Context, scheduler domain.ProjectSchedulerRecord) (domain.ProjectSchedulerRecord, error) {
 	record, err := s.ReconcileSchedulerStore.UpsertProjectScheduler(ctx, scheduler)
 	if err == nil {
 		s.changed = true
+	} else {
+		s.uncertain = true
 	}
 	return record, err
 }
@@ -68,6 +72,8 @@ func (s *mutationTrackingSchedulerStore) SetProjectSchedulerEnabled(ctx context.
 	record, err := s.ReconcileSchedulerStore.SetProjectSchedulerEnabled(ctx, projectID, schedulerID, enabled)
 	if err == nil {
 		s.changed = true
+	} else {
+		s.uncertain = true
 	}
 	return record, err
 }
@@ -76,6 +82,8 @@ func (s *mutationTrackingSchedulerStore) ReplaceSchedulerTriggers(ctx context.Co
 	records, err := s.ReconcileSchedulerStore.ReplaceSchedulerTriggers(ctx, schedulerID, triggers)
 	if err == nil {
 		s.changed = true
+	} else {
+		s.uncertain = true
 	}
 	return records, err
 }
@@ -95,12 +103,12 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, req
 	trackedStore := &mutationTrackingSchedulerStore{ReconcileSchedulerStore: store}
 	changes, currentByID, unchanged, err := reconcileCurrentSchedulers(ctx, trackedStore, req, options)
 	if err != nil {
-		return changes, false, schedulerReconcileError{err: err, storeChanged: trackedStore.changed}
+		return changes, false, schedulerReconcileError{err: err, storeChanged: trackedStore.changed, storeMutationUncertain: trackedStore.uncertain}
 	}
 	removedChanges, removedUnchanged, err := disableRemovedSchedulers(ctx, trackedStore, req, currentByID)
 	changes = append(changes, removedChanges...)
 	if err != nil {
-		return changes, false, schedulerReconcileError{err: err, storeChanged: trackedStore.changed}
+		return changes, false, schedulerReconcileError{err: err, storeChanged: trackedStore.changed, storeMutationUncertain: trackedStore.uncertain}
 	}
 	if !removedUnchanged {
 		unchanged = false
@@ -108,9 +116,10 @@ func ReconcileSchedulers(ctx context.Context, store ReconcileSchedulerStore, req
 	if options.RefreshSchedulers != nil {
 		if err := options.RefreshSchedulers(ctx); err != nil {
 			return changes, false, schedulerReconcileError{
-				err:          fmt.Errorf("refresh scheduler controller: %w", err),
-				storeChanged: trackedStore.changed,
-				refreshOnly:  true,
+				err:                    fmt.Errorf("refresh scheduler controller: %w", err),
+				storeChanged:           trackedStore.changed,
+				storeMutationUncertain: trackedStore.uncertain,
+				refreshOnly:            true,
 			}
 		}
 	}
