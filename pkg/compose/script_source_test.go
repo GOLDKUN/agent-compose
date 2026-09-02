@@ -23,7 +23,7 @@ import (
 func newTestScriptSourceResolver() *defaultScriptSourceResolver {
 	resolver := NewDefaultScriptSourceResolver(nil).(*defaultScriptSourceResolver)
 	resolver.validateNetworkTarget = func(context.Context, *url.URL) error { return nil }
-	transport := resolver.client.Transport.(scriptSourceTransport).transport.Clone()
+	transport := resolver.client.Transport.(*http.Transport).Clone()
 	transport.DialContext = (&net.Dialer{}).DialContext
 	resolver.client.Transport = transport
 	return resolver
@@ -67,11 +67,11 @@ func TestIsPublicScriptAddressRejectsSpecialUseNetworks(t *testing.T) {
 	}
 }
 
-func TestSafeScriptDialContextAllowsConfiguredProxyEndpoint(t *testing.T) {
-	ctx := context.WithValue(context.Background(), scriptProxyAddressKey{}, "127.0.0.1:1")
-	_, err := safeScriptDialContext(ctx, "tcp", "127.0.0.1:1")
-	if err == nil || strings.Contains(err.Error(), "no permitted public address") {
-		t.Fatalf("proxy endpoint dial error = %v, want ordinary connection error", err)
+func TestDefaultScriptSourceResolverDisablesEnvironmentProxy(t *testing.T) {
+	resolver := NewDefaultScriptSourceResolver(nil).(*defaultScriptSourceResolver)
+	transport := resolver.client.Transport.(*http.Transport)
+	if transport.Proxy != nil {
+		t.Fatal("script source resolver must not use environment proxies")
 	}
 }
 

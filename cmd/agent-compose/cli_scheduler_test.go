@@ -9,6 +9,7 @@ import (
 	"github.com/chaitin/agent-compose/pkg/compose"
 	"github.com/chaitin/agent-compose/pkg/identity"
 	agentcomposev2 "github.com/chaitin/agent-compose/proto/agentcompose/v2"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
