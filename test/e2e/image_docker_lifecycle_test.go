@@ -533,17 +533,22 @@ func assertImageDockerAuthEnforced(t *testing.T, ctx context.Context, fixture *i
 	}
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
 	client := &http.Client{Timeout: 5 * time.Second, Transport: transport}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fixture.baseURL+"/api/version", nil)
-	if err != nil {
-		t.Fatalf("create unauthenticated request: %v", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		failImageDockerFixture(t, fixture, "unauthenticated /api/version request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
-		failImageDockerFixture(t, fixture, "unauthenticated /api/version status = %d, want 401 or 403", resp.StatusCode)
+	for _, token := range []string{"", "wrong-image-docker-token"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fixture.baseURL+"/api/version", nil)
+		if err != nil {
+			t.Fatalf("create unauthenticated request: %v", err)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			failImageDockerFixture(t, fixture, "unauthenticated /api/version request: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
+			failImageDockerFixture(t, fixture, "unauthenticated /api/version status = %d, want 401 or 403", resp.StatusCode)
+		}
 	}
 }
 
