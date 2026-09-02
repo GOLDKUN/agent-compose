@@ -33,6 +33,9 @@ func TestDaemonServerConfiguresConnectionLimits(t *testing.T) {
 	if server.ReadHeaderTimeout != 5*time.Second || server.IdleTimeout != 2*time.Minute || server.MaxHeaderBytes != 64<<10 {
 		t.Fatalf("server limits = header %s idle %s max-header %d", server.ReadHeaderTimeout, server.IdleTimeout, server.MaxHeaderBytes)
 	}
+	if server.WriteTimeout != 0 {
+		t.Fatalf("server WriteTimeout = %s, want zero for long-running streams", server.WriteTimeout)
+	}
 	if err := servers.shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown server: %v", err)
 	}
