@@ -3,13 +3,17 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"math/big"
+	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -313,27 +317,43 @@ func runImageDockerVersionCommand(t *testing.T, ctx context.Context, dockerClien
 
 func newImageDockerTLSConfig(t *testing.T) imageDockerTLSConfig {
 	t.Helper()
-	server := httptest.NewTLSServer(http.NotFoundHandler())
-	t.Cleanup(server.Close)
-	certificate := server.TLS.Certificates[0]
-	keyPEM, err := x509.MarshalPKCS8PrivateKey(certificate.PrivateKey)
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate test TLS private key: %v", err)
+	}
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		t.Fatalf("generate test TLS certificate serial: %v", err)
+	}
+	now := time.Now()
+	template := &x509.Certificate{
+		SerialNumber:          serialNumber,
+		NotBefore:             now.Add(-time.Minute),
+		NotAfter:              now.Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		t.Fatalf("create test TLS certificate: %v", err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
 	if err != nil {
 		t.Fatalf("marshal test TLS private key: %v", err)
 	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	certPath := filepath.Join(t.TempDir(), "server.crt")
 	keyPath := filepath.Join(filepath.Dir(certPath), "server.key")
-	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Certificate[0]}), 0o600); err != nil {
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
 		t.Fatalf("write test TLS certificate: %v", err)
 	}
-	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyPEM}), 0o600); err != nil {
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
 		t.Fatalf("write test TLS private key: %v", err)
 	}
-	return imageDockerTLSConfig{
-		certPath:  certPath,
-		keyPath:   keyPath,
-		caPEM:     pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Certificate[0]}),
-		authToken: "image-docker-test-token",
-	}
+	return imageDockerTLSConfig{certPath: certPath, keyPath: keyPath, caPEM: certPEM, authToken: "image-docker-test-token"}
 }
 
 func startImageDockerStartupDaemon(t *testing.T, ctx context.Context, dockerClient *client.Client, image string) *imageDockerFixture {
@@ -503,6 +523,30 @@ func (t imageDockerAuthTransport) RoundTrip(req *http.Request) (*http.Response, 
 	return t.base.RoundTrip(request)
 }
 
+func assertImageDockerAuthEnforced(t *testing.T, ctx context.Context, fixture *imageDockerFixture) {
+	t.Helper()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(fixture.tls.caPEM) {
+		t.Fatal("invalid image Docker E2E CA certificate")
+	}
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	client := &http.Client{Timeout: 5 * time.Second, Transport: transport}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fixture.baseURL+"/api/version", nil)
+	if err != nil {
+		t.Fatalf("create unauthenticated request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		failImageDockerFixture(t, fixture, "unauthenticated /api/version request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
+		failImageDockerFixture(t, fixture, "unauthenticated /api/version status = %d, want 401 or 403", resp.StatusCode)
+	}
+}
+
 func waitForImageDockerVersion(t *testing.T, ctx context.Context, fixture *imageDockerFixture) imageDockerVersionEnvelope {
 	t.Helper()
 	client := imageDockerHTTPClient(time.Second, fixture.tls)
@@ -520,6 +564,7 @@ func waitForImageDockerVersion(t *testing.T, ctx context.Context, fixture *image
 				if resp.StatusCode == http.StatusOK {
 					var envelope imageDockerVersionEnvelope
 					if decodeErr := json.Unmarshal(lastBody.Bytes(), &envelope); decodeErr == nil {
+						assertImageDockerAuthEnforced(t, ctx, fixture)
 						return envelope
 					} else {
 						lastErr = decodeErr
