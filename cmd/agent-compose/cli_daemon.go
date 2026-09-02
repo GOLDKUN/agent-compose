@@ -271,7 +271,12 @@ func isLoopbackListenAddress(address string) bool {
 }
 
 func (s *daemonServers) add(name, value string, listener net.Listener, handler http.Handler, cleanup func() error) {
-	server := &http.Server{Handler: h2c.NewHandler(handler, &http2.Server{})} //nolint:staticcheck // h2c is required for unencrypted HTTP/2 compatibility with Connect bidi streams.
+	server := &http.Server{
+		Handler:           h2c.NewHandler(handler, &http2.Server{IdleTimeout: 2 * time.Minute, ReadIdleTimeout: 30 * time.Second, PingTimeout: 15 * time.Second, WriteByteTimeout: 30 * time.Second}), //nolint:staticcheck // h2c is required for unencrypted HTTP/2 compatibility with Connect bidi streams.
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    64 << 10,
+	}
 	if listener.Addr().Network() == "unix" {
 		server.ConnContext = func(ctx context.Context, conn net.Conn) context.Context {
 			if isTrustedUnixSocketConn(conn) {
