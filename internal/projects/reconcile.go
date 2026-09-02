@@ -72,7 +72,7 @@ func (s *mutationTrackingSchedulerStore) SetProjectSchedulerEnabled(ctx context.
 	record, err := s.ReconcileSchedulerStore.SetProjectSchedulerEnabled(ctx, projectID, schedulerID, enabled)
 	if err == nil {
 		s.changed = true
-	} else {
+	} else if !(errors.Is(err, domain.ErrNotFound) && !enabled) {
 		s.uncertain = true
 	}
 	return record, err
@@ -221,6 +221,17 @@ func disableRemovedSchedulers(ctx context.Context, store ReconcileSchedulerStore
 		}
 		disabled, err := store.SetProjectSchedulerEnabled(ctx, existing.ProjectID, existing.SchedulerID, false)
 		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				unchanged = false
+				changes = append(changes, Change{
+					Action:       ChangeActionRemoved,
+					ResourceType: "scheduler",
+					ResourceID:   existing.ID,
+					Name:         existing.AgentName,
+					Message:      "already absent while disabling removed scheduler",
+				})
+				continue
+			}
 			return changes, false, fmt.Errorf("disable removed project scheduler %s/%s: %w", existing.ProjectID, existing.SchedulerID, err)
 		}
 		unchanged = false
