@@ -36,6 +36,10 @@ func TestDaemonServerConfiguresConnectionLimits(t *testing.T) {
 	if server.WriteTimeout != 0 {
 		t.Fatalf("server WriteTimeout = %s, want zero for long-running streams", server.WriteTimeout)
 	}
+	config := servers.items[0].h2c
+	if config == nil || config.IdleTimeout != 0 || config.ReadIdleTimeout != 0 || config.PingTimeout != 0 || config.WriteByteTimeout != 0 {
+		t.Fatalf("h2c connection limits = %#v, want all zero for long-running streams", config)
+	}
 	if err := servers.shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown server: %v", err)
 	}
