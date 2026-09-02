@@ -120,15 +120,18 @@ func TestReconcileSchedulersFailureReportsCleanupAndPartialChanges(t *testing.T)
 	enableErr := errors.New("enable failed")
 	refreshErr := errors.New("refresh failed")
 	tests := []struct {
-		name        string
-		replaceErr  error
-		enableErr   error
-		refreshErr  error
-		wantCleanup bool
-		wantChanges int
+		name           string
+		getErr         error
+		replaceErr     error
+		enableErr      error
+		refreshErr     error
+		wantCleanup    bool
+		wantChanges    int
+		wantFailClosed bool
 	}{
-		{name: "trigger replacement", replaceErr: replaceErr, wantCleanup: true},
-		{name: "scheduler enable", enableErr: enableErr, wantCleanup: true},
+		{name: "read before mutation", getErr: errors.New("read failed")},
+		{name: "trigger replacement", replaceErr: replaceErr, wantCleanup: true, wantFailClosed: true},
+		{name: "scheduler enable", enableErr: enableErr, wantCleanup: true, wantFailClosed: true},
 		{name: "controller refresh", refreshErr: refreshErr, wantChanges: 1},
 	}
 	for _, tt := range tests {
@@ -136,6 +139,7 @@ func TestReconcileSchedulersFailureReportsCleanupAndPartialChanges(t *testing.T)
 			store := &schedulerReconcileStateStore{
 				existingRecord:     &existingRecord,
 				existingDefinition: currentDefinition,
+				getErr:             tt.getErr,
 				replaceErr:         tt.replaceErr,
 				enableErr:          tt.enableErr,
 			}
@@ -151,6 +155,9 @@ func TestReconcileSchedulersFailureReportsCleanupAndPartialChanges(t *testing.T)
 			}
 			if unchanged || len(changes) != tt.wantChanges {
 				t.Fatalf("unchanged/changes = %t/%#v, want false/%d", unchanged, changes, tt.wantChanges)
+			}
+			if got := schedulerReconcileNeedsFailClosed(err); got != tt.wantFailClosed {
+				t.Fatalf("schedulerReconcileNeedsFailClosed = %t, want %t for %v", got, tt.wantFailClosed, err)
 			}
 			if (cleanupID != "") != tt.wantCleanup {
 				t.Fatalf("cleanup scheduler id = %q, want cleanup %t", cleanupID, tt.wantCleanup)
@@ -204,12 +211,16 @@ type schedulerReconcileStateStore struct {
 	listedRecords      []domain.ProjectSchedulerRecord
 	listConfigured     bool
 	savedRecord        domain.ProjectSchedulerRecord
+	getErr             error
 	replaceErr         error
 	enableErr          error
 	enableWrites       int
 }
 
 func (s *schedulerReconcileStateStore) GetProjectScheduler(context.Context, string, string) (domain.ProjectSchedulerRecord, error) {
+	if s.getErr != nil {
+		return domain.ProjectSchedulerRecord{}, s.getErr
+	}
 	if s.existingRecord == nil {
 		return domain.ProjectSchedulerRecord{}, domain.ResourceError(domain.ErrNotFound, "scheduler", "scheduler-1", "scheduler not found", nil)
 	}

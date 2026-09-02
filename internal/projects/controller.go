@@ -406,8 +406,10 @@ func (c *Controller) applyProject(ctx context.Context, req ApplyRequest, lifecyc
 	})
 	if err != nil {
 		changes = append(changes, schedulerChanges...)
-		if failClosedErr := c.disableProjectSchedulersAfterReconcileFailure(ctx, project.ID); failClosedErr != nil {
-			err = errors.Join(err, failClosedErr)
+		if schedulerReconcileNeedsFailClosed(err) {
+			if failClosedErr := c.disableProjectSchedulersAfterReconcileFailure(ctx, project.ID); failClosedErr != nil {
+				err = errors.Join(err, failClosedErr)
+			}
 		}
 		agents, listAgentsErr := c.store.ListProjectAgents(ctx, project.ID)
 		if listAgentsErr != nil {
