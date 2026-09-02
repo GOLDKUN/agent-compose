@@ -348,6 +348,14 @@ func TestManagerCreateCleansManagedPathWhenStoreCreateFails(t *testing.T) {
 	}
 }
 
+func TestLocalDriverRemoveIsIdempotentForMissingPaths(t *testing.T) {
+	if err := (LocalDriver{DataRoot: t.TempDir()}).Remove(context.Background(), domain.VolumeRecord{
+		ID: "missing-volume",
+	}); err != nil {
+		t.Fatalf("Remove missing volume = %v, want nil", err)
+	}
+}
+
 func TestLocalDriverRemoveRejectsPathOutsideManagedRoot(t *testing.T) {
 	dataRoot := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dataRoot, "volumes", domain.VolumeDriverLocal), 0o700); err != nil {
@@ -367,6 +375,26 @@ func TestLocalDriverRemoveRejectsPathOutsideManagedRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err != nil {
 		t.Fatalf("outside marker stat error = %v, path may have been removed", err)
+	}
+}
+
+func TestLocalDriverRemoveDoesNotEscalateSymlinkedDataPath(t *testing.T) {
+	dataRoot := t.TempDir()
+	volumeRoot := filepath.Join(dataRoot, "volumes", domain.VolumeDriverLocal, "volume-id")
+	if err := os.MkdirAll(volumeRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(".", filepath.Join(volumeRoot, "data")); err != nil {
+		t.Fatal(err)
+	}
+	if err := (LocalDriver{DataRoot: dataRoot}).Remove(context.Background(), domain.VolumeRecord{
+		ID:   "volume-id",
+		Path: filepath.Join(volumeRoot, "data"),
+	}); err != nil {
+		t.Fatalf("Remove symlinked data path = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dataRoot, "volumes", domain.VolumeDriverLocal)); err != nil {
+		t.Fatalf("managed volume root stat error = %v, entire root may have been removed", err)
 	}
 }
 
