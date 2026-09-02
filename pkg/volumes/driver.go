@@ -69,12 +69,30 @@ func (d LocalDriver) Remove(_ context.Context, record domain.VolumeRecord) error
 	if path == "" {
 		return fmt.Errorf("local volume path is required")
 	}
-	removePath := path
+	absPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return fmt.Errorf("resolve local volume path %s: %w", path, err)
+	}
+	managedRoot, err := filepath.Abs(filepath.Clean(filepath.Join(strings.TrimSpace(d.DataRoot), "volumes", domain.VolumeDriverLocal)))
+	if err != nil || strings.TrimSpace(d.DataRoot) == "" {
+		return fmt.Errorf("local volume data root is required")
+	}
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return fmt.Errorf("resolve local volume path %s: %w", absPath, err)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(managedRoot)
+	if err != nil {
+		return fmt.Errorf("resolve local volume data root %s: %w", managedRoot, err)
+	}
+	if err := pathWithinRoot(resolvedRoot, resolvedPath); err != nil {
+		return fmt.Errorf("refuse to remove local volume path %s: %w", absPath, err)
+	}
+	removePath := resolvedPath
 	if managedPath := d.dataPath(record.ID); managedPath != "" {
-		absPath, pathErr := filepath.Abs(path)
-		absManagedPath, managedErr := filepath.Abs(managedPath)
-		if pathErr == nil && managedErr == nil && absPath == absManagedPath {
-			removePath = filepath.Dir(absManagedPath)
+		resolvedManagedPath, managedErr := filepath.EvalSymlinks(managedPath)
+		if managedErr == nil && resolvedPath == resolvedManagedPath {
+			removePath = filepath.Dir(resolvedManagedPath)
 		}
 	}
 	if err := os.RemoveAll(removePath); err != nil {
@@ -103,6 +121,17 @@ func (d LocalDriver) ResolveMountSource(_ context.Context, record domain.VolumeR
 		return "", fmt.Errorf("local volume path %s is not a directory", absPath)
 	}
 	return absPath, nil
+}
+
+func pathWithinRoot(root, candidate string) error {
+	relative, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return err
+	}
+	if filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || relative == "." {
+		return fmt.Errorf("path is outside managed root")
+	}
+	return nil
 }
 
 func (d LocalDriver) dataPath(volumeID string) string {
